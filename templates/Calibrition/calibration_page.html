@@ -1,0 +1,840 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Advanced Calibration Management System - Equiper National Hospital{% endblock %}
+
+{% block extra_css %}
+<link href="{% static 'css/theme.css' %}" rel="stylesheet">
+{% endblock %}
+
+{% block page_title %}Advanced Calibration Management System{% endblock %}
+
+{% block content %}
+<div class="container">
+
+
+        <div class="nav-tabs">
+            <button class="nav-tab active" onclick="switchTab('setup')">Setup Procedure</button>
+            <button class="nav-tab" onclick="switchTab('calibrate')">Perform Calibration</button>
+            <button class="nav-tab" onclick="switchTab('analysis')">Statistical Analysis</button>
+            <button class="nav-tab" onclick="switchTab('reports')">Reports</button>
+        </div>
+
+        <div class="content">
+            <!-- Setup Procedure Tab -->
+            <div id="setup-tab" class="tab-content active">
+                <h2>Setup Calibration Procedure</h2>
+
+                <div class="form-group">
+                    <label for="procedureName">Procedure Name</label>
+                    <input type="text" id="procedureName" class="form-control" placeholder="Enter procedure name">
+                </div>
+
+                <div class="environmental-conditions">
+                    <h3>Environmental Conditions</h3>
+                    <div class="row">
+                        <div class="col">
+                            <label>Temperature (°C)</label>
+                            <input type="number" id="envTemp" class="form-control" value="23" step="0.1">
+                        </div>
+                        <div class="col">
+                            <label>Humidity (%RH)</label>
+                            <input type="number" id="envHumidity" class="form-control" value="50" step="0.1">
+                        </div>
+                        <div class="col">
+                            <label>Pressure (kPa)</label>
+                            <input type="number" id="envPressure" class="form-control" value="101.325" step="0.001">
+                        </div>
+                    </div>
+                </div>
+
+                <div id="parametersContainer">
+                    <h3>Parameters</h3>
+                    <button type="button" class="btn btn-primary" onclick="addParameter()">Add Parameter</button>
+                    <div id="parametersList"></div>
+                </div>
+
+                <div style="margin-top: 30px;">
+                    <button type="button" class="btn btn-success" onclick="saveProcedure()">Save Procedure</button>
+                    <button type="button" class="btn btn-secondary" onclick="clearForm()">Clear Form</button>
+                </div>
+            </div>
+
+            <!-- Perform Calibration Tab -->
+            <div id="calibrate-tab" class="tab-content">
+                <h2>Perform Calibration</h2>
+
+                <div class="form-group">
+                    <label>Select Procedure</label>
+                    <div id="procedureSelection"></div>
+                </div>
+
+                <div id="calibrationContent" style="display: none;">
+                    <div class="alert alert-success">
+                        <strong>Instructions:</strong> Enter your measurement readings. The system will automatically calculate uncertainties, statistics, and pass/fail status.
+                    </div>
+
+                    <div id="calibrationTables"></div>
+
+                    <button type="button" class="btn btn-primary" onclick="calculateResults()">Calculate Results</button>
+                    <button type="button" class="btn btn-success" onclick="showAnalysis()" style="display: none;" id="showAnalysisBtn">Show Analysis</button>
+                </div>
+            </div>
+
+            <!-- Statistical Analysis Tab -->
+            <div id="analysis-tab" class="tab-content">
+                <h2>Statistical Analysis & Uncertainty Calculation</h2>
+                <div id="analysisResults"></div>
+            </div>
+
+            <!-- Reports Tab -->
+            <div id="reports-tab" class="tab-content">
+                <h2>Calibration Reports</h2>
+                <div id="reportContent"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let procedures = [];
+        let currentProcedure = null;
+        let currentCalibrationData = null;
+        let parameterCount = 0;
+
+        window.onload = function() {
+            addParameter();
+        };
+
+        function switchTab(tabName) {
+            const tabs = document.querySelectorAll('.tab-content');
+            tabs.forEach(tab => tab.classList.remove('active'));
+
+            const navTabs = document.querySelectorAll('.nav-tab');
+            navTabs.forEach(tab => tab.classList.remove('active'));
+
+            document.getElementById(tabName + '-tab').classList.add('active');
+            event.target.classList.add('active');
+
+            if (tabName === 'calibrate') {
+                loadProcedureSelection();
+            }
+        }
+
+        function addParameter() {
+            parameterCount++;
+            const container = document.getElementById('parametersList');
+
+            const parameterDiv = document.createElement('div');
+            parameterDiv.className = 'parameter-card';
+            parameterDiv.id = `parameter-${parameterCount}`;
+
+            parameterDiv.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h4>Parameter ${parameterCount}</h4>
+                    <button type="button" class="btn btn-danger" onclick="removeParameter(${parameterCount})">Remove</button>
+                </div>
+
+                <div class="row">
+                    <div class="col">
+                        <label>Parameter Name</label>
+                        <input type="text" class="form-control parameter-name" placeholder="e.g., Pressure, Temperature">
+                    </div>
+                    <div class="col">
+                        <label>Unit</label>
+                        <input type="text" class="form-control parameter-unit" placeholder="e.g., Pa, °C, V">
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col">
+                        <label>Number of Readings</label>
+                        <input type="number" class="form-control parameter-inputs" min="3" max="10" value="5">
+                    </div>
+                    <div class="col">
+                        <label>Resolution</label>
+                        <input type="number" class="form-control parameter-resolution" step="0.0001" placeholder="0.001">
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col">
+                        <label>Standard Reference</label>
+                        <input type="text" class="form-control standard-reference" placeholder="e.g., NIST Standard XYZ">
+                    </div>
+                    <div class="col">
+                        <label>Reference Uncertainty (k=2)</label>
+                        <input type="number" class="form-control reference-uncertainty" step="0.0001" placeholder="0.001">
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col">
+                        <label>Tolerance (±)</label>
+                        <input type="number" class="form-control tolerance" step="0.01" placeholder="1.0">
+                    </div>
+                    <div class="col">
+                        <label>Coverage Factor (k)</label>
+                        <input type="number" class="form-control coverage-factor" value="2" step="0.1">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Set Values</label>
+                    <button type="button" class="btn btn-primary" onclick="addSetValue(${parameterCount})">Add Set Value</button>
+                    <div id="setValues-${parameterCount}" class="set-values-container"></div>
+                </div>
+            `;
+
+            container.appendChild(parameterDiv);
+            addSetValue(parameterCount);
+        }
+
+        function removeParameter(paramId) {
+            const element = document.getElementById(`parameter-${paramId}`);
+            if (element) {
+                element.remove();
+            }
+        }
+
+        function addSetValue(paramId) {
+            const container = document.getElementById(`setValues-${paramId}`);
+            const setValueCount = container.children.length + 1;
+
+            const setValueDiv = document.createElement('div');
+            setValueDiv.className = 'input-group';
+
+            setValueDiv.innerHTML = `
+                <input type="number" class="form-control set-value" placeholder="Set Value ${setValueCount}" step="0.001">
+                <button type="button" class="btn btn-danger" onclick="this.parentElement.remove()">Remove</button>
+            `;
+
+            container.appendChild(setValueDiv);
+        }
+
+        function saveProcedure() {
+            const procedureName = document.getElementById('procedureName').value;
+
+            if (!procedureName) {
+                alert('Please enter a procedure name');
+                return;
+            }
+
+            const environmentalConditions = {
+                temperature: parseFloat(document.getElementById('envTemp').value) || 23,
+                humidity: parseFloat(document.getElementById('envHumidity').value) || 50,
+                pressure: parseFloat(document.getElementById('envPressure').value) || 101.325
+            };
+
+            const parameters = [];
+            const parameterElements = document.querySelectorAll('.parameter-card');
+
+            parameterElements.forEach((paramElement) => {
+                const paramName = paramElement.querySelector('.parameter-name').value;
+                const paramUnit = paramElement.querySelector('.parameter-unit').value;
+                const paramInputs = parseInt(paramElement.querySelector('.parameter-inputs').value) || 5;
+                const resolution = parseFloat(paramElement.querySelector('.parameter-resolution').value) || 0.001;
+                const standardRef = paramElement.querySelector('.standard-reference').value;
+                const refUncertainty = parseFloat(paramElement.querySelector('.reference-uncertainty').value) || 0;
+                const tolerance = parseFloat(paramElement.querySelector('.tolerance').value) || 0;
+                const coverageFactor = parseFloat(paramElement.querySelector('.coverage-factor').value) || 2;
+
+                const setValues = [];
+                const setValueElements = paramElement.querySelectorAll('.set-value');
+                setValueElements.forEach(element => {
+                    const value = parseFloat(element.value);
+                    if (!isNaN(value)) {
+                        setValues.push(value);
+                    }
+                });
+
+                if (paramName && setValues.length > 0) {
+                    parameters.push({
+                        name: paramName,
+                        unit: paramUnit,
+                        numInputs: paramInputs,
+                        resolution: resolution,
+                        standardReference: standardRef,
+                        referenceUncertainty: refUncertainty,
+                        tolerance: tolerance,
+                        coverageFactor: coverageFactor,
+                        setValues: setValues
+                    });
+                }
+            });
+
+            if (parameters.length === 0) {
+                alert('Please add at least one parameter with set values');
+                return;
+            }
+
+            const procedure = {
+                id: Date.now(),
+                name: procedureName,
+                environmentalConditions: environmentalConditions,
+                parameters: parameters,
+                createdDate: new Date().toISOString()
+            };
+
+            procedures.push(procedure);
+            alert('Procedure saved successfully!');
+            clearForm();
+        }
+
+        function clearForm() {
+            document.getElementById('procedureName').value = '';
+            document.getElementById('parametersList').innerHTML = '';
+            parameterCount = 0;
+            addParameter();
+        }
+
+        function loadProcedureSelection() {
+            const container = document.getElementById('procedureSelection');
+            container.innerHTML = '';
+
+            if (procedures.length === 0) {
+                container.innerHTML = '<p>No procedures available. Please create a procedure first.</p>';
+                return;
+            }
+
+            procedures.forEach(procedure => {
+                const card = document.createElement('div');
+                card.className = 'procedure-card';
+                card.onclick = () => selectProcedure(procedure);
+
+                card.innerHTML = `
+                    <h4>${procedure.name}</h4>
+                    <p><strong>Parameters:</strong> ${procedure.parameters.length}</p>
+                    <p><strong>Environmental:</strong> ${procedure.environmentalConditions.temperature}°C, ${procedure.environmentalConditions.humidity}%RH, ${procedure.environmentalConditions.pressure}kPa</p>
+                    <p><strong>Created:</strong> ${new Date(procedure.createdDate).toLocaleDateString()}</p>
+                `;
+
+                container.appendChild(card);
+            });
+        }
+
+        function selectProcedure(procedure) {
+            currentProcedure = procedure;
+
+            document.querySelectorAll('.procedure-card').forEach(card => {
+                card.classList.remove('selected');
+            });
+            event.target.classList.add('selected');
+
+            document.getElementById('calibrationContent').style.display = 'block';
+            generateCalibrationTables();
+        }
+
+        function generateCalibrationTables() {
+            const container = document.getElementById('calibrationTables');
+            container.innerHTML = '';
+
+            currentProcedure.parameters.forEach((parameter, paramIndex) => {
+                const paramDiv = document.createElement('div');
+                paramDiv.innerHTML = `<h3>${parameter.name} (${parameter.unit})</h3>`;
+
+                const table = createParameterTable(parameter, paramIndex);
+                paramDiv.appendChild(table);
+                container.appendChild(paramDiv);
+            });
+        }
+
+        function createParameterTable(parameter, paramIndex) {
+            const table = document.createElement('table');
+            table.className = 'calibration-table';
+
+            let headerRow = '<tr><th>Set Value</th>';
+            for (let i = 1; i <= parameter.numInputs; i++) {
+                headerRow += `<th>Reading ${i}</th>`;
+            }
+            headerRow += '<th>Mean</th><th>Std Dev</th><th>Uncertainty</th><th>Error</th><th>Status</th></tr>';
+
+            let tbody = '';
+            parameter.setValues.forEach((setValue, setIndex) => {
+                tbody += `<tr>
+                    <td>${setValue}</td>`;
+
+                for (let i = 1; i <= parameter.numInputs; i++) {
+                    tbody += `<td><input type="number" class="form-control reading-input"
+                                data-param="${paramIndex}"
+                                data-set="${setIndex}"
+                                data-input="${i-1}"
+                                step="${parameter.resolution}"
+                                placeholder="0.000"
+                                onchange="updateRowCalculations(${paramIndex}, ${setIndex})"></td>`;
+                }
+
+                tbody += `<td id="mean-${paramIndex}-${setIndex}">-</td>
+                         <td id="stddev-${paramIndex}-${setIndex}">-</td>
+                         <td id="uncertainty-${paramIndex}-${setIndex}">-</td>
+                         <td id="error-${paramIndex}-${setIndex}">-</td>
+                         <td id="status-${paramIndex}-${setIndex}">-</td>
+                       </tr>`;
+            });
+
+            table.innerHTML = `<thead>${headerRow}</thead><tbody>${tbody}</tbody>`;
+            return table;
+        }
+
+        function updateRowCalculations(paramIndex, setIndex) {
+            const parameter = currentProcedure.parameters[paramIndex];
+            const setValue = parameter.setValues[setIndex];
+
+            // Get all readings for this row
+            const readings = [];
+            for (let i = 0; i < parameter.numInputs; i++) {
+                const input = document.querySelector(`[data-param="${paramIndex}"][data-set="${setIndex}"][data-input="${i}"]`);
+                const value = parseFloat(input.value);
+                if (!isNaN(value)) {
+                    readings.push(value);
+                }
+            }
+
+            if (readings.length === parameter.numInputs) {
+                // Calculate statistics
+                const mean = readings.reduce((a, b) => a + b, 0) / readings.length;
+                const variance = readings.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / (readings.length - 1);
+                const stdDev = Math.sqrt(variance);
+
+                // Calculate uncertainties
+                const typeAUncertainty = stdDev / Math.sqrt(readings.length); // Standard uncertainty of the mean
+                const typeBUncertainty = parameter.resolution / Math.sqrt(12); // Resolution uncertainty
+                const refUncertainty = parameter.referenceUncertainty / parameter.coverageFactor; // Reference standard uncertainty
+
+                // Combined uncertainty
+                const combinedUncertainty = Math.sqrt(
+                    Math.pow(typeAUncertainty, 2) +
+                    Math.pow(typeBUncertainty, 2) +
+                    Math.pow(refUncertainty, 2)
+                );
+
+                // Expanded uncertainty
+                const expandedUncertainty = combinedUncertainty * parameter.coverageFactor;
+
+                // Error (bias)
+                const error = mean - setValue;
+
+                // Pass/fail check
+                const isWithinTolerance = Math.abs(error) <= parameter.tolerance;
+
+                // Update display
+                document.getElementById(`mean-${paramIndex}-${setIndex}`).textContent = mean.toFixed(6);
+                document.getElementById(`stddev-${paramIndex}-${setIndex}`).textContent = stdDev.toFixed(6);
+                document.getElementById(`uncertainty-${paramIndex}-${setIndex}`).textContent = `±${expandedUncertainty.toFixed(6)}`;
+                document.getElementById(`error-${paramIndex}-${setIndex}`).textContent = error.toFixed(6);
+
+                const statusElement = document.getElementById(`status-${paramIndex}-${setIndex}`);
+                statusElement.innerHTML = `<span class="pass-fail-indicator ${isWithinTolerance ? 'pass' : 'fail'}">
+                    ${isWithinTolerance ? 'PASS' : 'FAIL'}
+                </span>`;
+            }
+        }
+
+        function calculateResults() {
+            // Update all calculations
+            currentProcedure.parameters.forEach((parameter, paramIndex) => {
+                parameter.setValues.forEach((setValue, setIndex) => {
+                    updateRowCalculations(paramIndex, setIndex);
+                });
+            });
+
+            document.getElementById('showAnalysisBtn').style.display = 'inline-block';
+
+            // Store calibration data for analysis
+            currentCalibrationData = {
+                procedure: currentProcedure,
+                timestamp: new Date().toISOString(),
+                environmentalConditions: currentProcedure.environmentalConditions
+            };
+        }
+
+        function showAnalysis() {
+            switchTab('analysis');
+            generateAnalysisReport();
+        }
+
+        function generateAnalysisReport() {
+            const container = document.getElementById('analysisResults');
+
+            if (!currentCalibrationData) {
+                container.innerHTML = '<p>No calibration data available. Please perform a calibration first.</p>';
+                return;
+            }
+
+            let html = `
+                <div class="report-section">
+                    <h3>Calibration Summary</h3>
+                    <p><strong>Procedure:</strong> ${currentCalibrationData.procedure.name}</p>
+                    <p><strong>Date:</strong> ${new Date(currentCalibrationData.timestamp).toLocaleString()}</p>
+                    <p><strong>Environmental Conditions:</strong></p>
+                    <ul>
+                        <li>Temperature: ${currentCalibrationData.environmentalConditions.temperature}°C</li>
+                        <li>Humidity: ${currentCalibrationData.environmentalConditions.humidity}%RH</li>
+                        <li>Pressure: ${currentCalibrationData.environmentalConditions.pressure}kPa</li>
+                    </ul>
+                </div>
+            `;
+
+            currentCalibrationData.procedure.parameters.forEach((parameter, paramIndex) => {
+                html += `
+                    <div class="report-section">
+                        <h3>${parameter.name} Analysis</h3>
+                        <div class="stats-grid">
+                            <div class="stat-card">
+                                <div class="stat-value">${parameter.setValues.length}</div>
+                                <div class="stat-label">Test Points</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value">${parameter.numInputs}</div>
+                                <div class="stat-label">Readings per Point</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value">±${parameter.tolerance}</div>
+                                <div class="stat-label">Tolerance</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value">${parameter.resolution}</div>
+                                <div class="stat-label">Resolution</div>
+                            </div>
+                        </div>
+
+                        <h4>Uncertainty Budget</h4>
+                        <table class="calibration-table">
+                            <thead>
+                                <tr>
+                                    <th>Source</th>
+                                    <th>Type</th>
+                                    <th>Value</th>
+                                    <th>Distribution</th>
+                                    <th>Divisor</th>
+                                    <th>Standard Uncertainty</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>Repeatability</td>
+                                    <td>A</td>
+                                    <td>σ (from readings)</td>
+                                    <td>Normal</td>
+                                    <td>√n</td>
+                                    <td>σ/√n</td>
+                                </tr>
+                                <tr>
+                                    <td>Resolution</td>
+                                    <td>B</td>
+                                    <td>${parameter.resolution}</td>
+                                    <td>Rectangular</td>
+                                    <td>√12</td>
+                                    <td>${(parameter.resolution / Math.sqrt(12)).toFixed(6)}</td>
+                                </tr>
+                                <tr>
+                                    <td>Reference Standard</td>
+                                    <td>B</td>
+                                    <td>${parameter.referenceUncertainty}</td>
+                                    <td>Normal</td>
+                                    <td>${parameter.coverageFactor}</td>
+                                    <td>${(parameter.referenceUncertainty / parameter.coverageFactor).toFixed(6)}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+
+                        <p><strong>Coverage Factor (k):</strong> ${parameter.coverageFactor} (≈95% confidence level)</p>
+                        <p><strong>Standard Reference:</strong> ${parameter.standardReference}</p>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        // Additional utility functions for comprehensive analysis
+        function generateCalibrationCertificate() {
+            if (!currentCalibrationData) {
+                alert('No calibration data available');
+                return;
+            }
+
+            switchTab('reports');
+            const container = document.getElementById('reportContent');
+
+            let overallPass = true;
+            let certificateHtml = `
+                <div class="report-section">
+                    <div style="text-align: center; margin-bottom: 30px;">
+                        <h2>CALIBRATION CERTIFICATE</h2>
+                        <p><strong>Certificate No:</strong> CAL-${Date.now()}</p>
+                        <p><strong>Date of Calibration:</strong> ${new Date(currentCalibrationData.timestamp).toLocaleDateString()}</p>
+                    </div>
+
+                    <div class="row">
+                        <div class="col">
+                            <h4>Device Under Test (DUT)</h4>
+                            <p><strong>Description:</strong> ${currentCalibrationData.procedure.name}</p>
+                            <p><strong>Model:</strong> [Enter Model]</p>
+                            <p><strong>Serial No:</strong> [Enter Serial]</p>
+                            <p><strong>Manufacturer:</strong> [Enter Manufacturer]</p>
+                        </div>
+                        <div class="col">
+                            <h4>Environmental Conditions</h4>
+                            <p><strong>Temperature:</strong> ${currentCalibrationData.environmentalConditions.temperature}°C ± 2°C</p>
+                            <p><strong>Relative Humidity:</strong> ${currentCalibrationData.environmentalConditions.humidity}% ± 10%</p>
+                            <p><strong>Atmospheric Pressure:</strong> ${currentCalibrationData.environmentalConditions.pressure}kPa ± 5kPa</p>
+                        </div>
+                    </div>
+
+                    <h4>Calibration Results</h4>
+            `;
+
+            currentCalibrationData.procedure.parameters.forEach((parameter, paramIndex) => {
+                certificateHtml += `
+                    <h5>${parameter.name} (${parameter.unit})</h5>
+                    <table class="calibration-table">
+                        <thead>
+                            <tr>
+                                <th>Set Value</th>
+                                <th>Mean Reading</th>
+                                <th>Error</th>
+                                <th>Expanded Uncertainty (k=${parameter.coverageFactor})</th>
+                                <th>Specification</th>
+                                <th>Result</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+
+                parameter.setValues.forEach((setValue, setIndex) => {
+                    const meanElement = document.getElementById(`mean-${paramIndex}-${setIndex}`);
+                    const errorElement = document.getElementById(`error-${paramIndex}-${setIndex}`);
+                    const uncertaintyElement = document.getElementById(`uncertainty-${paramIndex}-${setIndex}`);
+                    const statusElement = document.getElementById(`status-${paramIndex}-${setIndex}`);
+
+                    const mean = meanElement ? meanElement.textContent : '-';
+                    const error = errorElement ? errorElement.textContent : '-';
+                    const uncertainty = uncertaintyElement ? uncertaintyElement.textContent : '-';
+                    const status = statusElement ? statusElement.textContent.trim() : 'UNKNOWN';
+
+                    if (status === 'FAIL') overallPass = false;
+
+                    certificateHtml += `
+                        <tr>
+                            <td>${setValue}</td>
+                            <td>${mean}</td>
+                            <td>${error}</td>
+                            <td>${uncertainty}</td>
+                            <td>±${parameter.tolerance}</td>
+                            <td><span class="pass-fail-indicator ${status.toLowerCase()}">${status}</span></td>
+                        </tr>
+                    `;
+                });
+
+                certificateHtml += `
+                        </tbody>
+                    </table>
+                    <p><strong>Reference Standard:</strong> ${parameter.standardReference}</p>
+                    <p><strong>Reference Uncertainty:</strong> ±${parameter.referenceUncertainty} (k=${parameter.coverageFactor})</p>
+                `;
+            });
+
+            certificateHtml += `
+                    <div class="row" style="margin-top: 30px;">
+                        <div class="col">
+                            <h4>Overall Result</h4>
+                            <div class="pass-fail-indicator ${overallPass ? 'pass' : 'fail'}" style="font-size: 1.2em; padding: 15px;">
+                                ${overallPass ? 'CALIBRATION PASSED' : 'CALIBRATION FAILED'}
+                            </div>
+                        </div>
+                        <div class="col">
+                            <h4>Traceability</h4>
+                            <p>All measurements are traceable to national/international standards through an unbroken chain of calibrations.</p>
+                            <p><strong>Next Calibration Due:</strong> ${new Date(Date.now() + 365*24*60*60*1000).toLocaleDateString()}</p>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 40px; border-top: 1px solid var(--border-color); padding-top: 20px;">
+                        <div class="row">
+                            <div class="col">
+                                <p><strong>Calibrated by:</strong> _________________</p>
+                                <p>Technician Name</p>
+                                <p>Date: ${new Date().toLocaleDateString()}</p>
+                            </div>
+                            <div class="col">
+                                <p><strong>Reviewed by:</strong> _________________</p>
+                                <p>Quality Manager</p>
+                                <p>Date: ${new Date().toLocaleDateString()}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 30px; font-size: 0.9em; color: var(--text-muted);">
+                        <p><strong>Notes:</strong></p>
+                        <ul>
+                            <li>Uncertainty values are stated with a coverage factor k=${currentCalibrationData.procedure.parameters[0]?.coverageFactor || 2}, providing a coverage probability of approximately 95%</li>
+                            <li>This certificate relates only to the items calibrated and the results are valid at the time and under the conditions of calibration</li>
+                            <li>This certificate shall not be reproduced except in full, without written approval of the calibration laboratory</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div style="margin-top: 20px; text-align: center;">
+                    <button class="btn btn-primary" onclick="printCertificate()">Print Certificate</button>
+                    <button class="btn btn-secondary" onclick="downloadPDF()">Download PDF</button>
+                </div>
+            `;
+
+            container.innerHTML = certificateHtml;
+        }
+
+        function calculateLinearityAnalysis() {
+            if (!currentCalibrationData) return;
+
+            const container = document.getElementById('analysisResults');
+            let linearityHtml = '<div class="report-section"><h3>Linearity Analysis</h3>';
+
+            currentCalibrationData.procedure.parameters.forEach((parameter, paramIndex) => {
+                const setValues = parameter.setValues;
+                const errors = [];
+
+                setValues.forEach((setValue, setIndex) => {
+                    const errorElement = document.getElementById(`error-${paramIndex}-${setIndex}`);
+                    if (errorElement && errorElement.textContent !== '-') {
+                        errors.push(parseFloat(errorElement.textContent));
+                    }
+                });
+
+                if (errors.length > 2) {
+                    // Calculate best fit line using least squares
+                    const n = setValues.length;
+                    const sumX = setValues.reduce((a, b) => a + b, 0);
+                    const sumY = errors.reduce((a, b) => a + b, 0);
+                    const sumXY = setValues.reduce((acc, x, i) => acc + x * errors[i], 0);
+                    const sumXX = setValues.reduce((acc, x) => acc + x * x, 0);
+
+                    const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+                    const intercept = (sumY - slope * sumX) / n;
+
+                    // Calculate correlation coefficient
+                    const meanX = sumX / n;
+                    const meanY = sumY / n;
+                    const numerator = setValues.reduce((acc, x, i) => acc + (x - meanX) * (errors[i] - meanY), 0);
+                    const denomX = Math.sqrt(setValues.reduce((acc, x) => acc + (x - meanX) ** 2, 0));
+                    const denomY = Math.sqrt(errors.reduce((acc, y) => acc + (y - meanY) ** 2, 0));
+                    const correlation = numerator / (denomX * denomY);
+
+                    linearityHtml += `
+                        <h4>${parameter.name} Linearity</h4>
+                        <div class="stats-grid">
+                            <div class="stat-card">
+                                <div class="stat-value">${slope.toFixed(6)}</div>
+                                <div class="stat-label">Slope</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value">${intercept.toFixed(6)}</div>
+                                <div class="stat-label">Y-Intercept</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value">${correlation.toFixed(4)}</div>
+                                <div class="stat-label">Correlation (R)</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value">${(correlation ** 2).toFixed(4)}</div>
+                                <div class="stat-label">R²</div>
+                            </div>
+                        </div>
+                        <p><strong>Linear Equation:</strong> Error = ${slope.toFixed(6)} × SetValue + ${intercept.toFixed(6)}</p>
+                    `;
+                }
+            });
+
+            linearityHtml += '</div>';
+            container.innerHTML += linearityHtml;
+        }
+
+        function calculateDriftAnalysis() {
+            // Placeholder for drift analysis - would compare with previous calibrations
+            const container = document.getElementById('analysisResults');
+            const driftHtml = `
+                <div class="report-section">
+                    <h3>Drift Analysis</h3>
+                    <div class="alert alert-warning">
+                        <strong>Note:</strong> Drift analysis requires historical calibration data.
+                        This feature would compare current results with previous calibrations to identify
+                        systematic changes in device performance over time.
+                    </div>
+                    <p>Key metrics for drift analysis:</p>
+                    <ul>
+                        <li><strong>Bias Drift:</strong> Change in systematic error over time</li>
+                        <li><strong>Precision Drift:</strong> Change in measurement repeatability</li>
+                        <li><strong>Stability:</strong> Rate of drift per unit time</li>
+                    </ul>
+                </div>
+            `;
+            container.innerHTML += driftHtml;
+        }
+
+        function printCertificate() {
+            window.print();
+        }
+
+        function downloadPDF() {
+            // In a real application, this would generate a proper PDF
+            alert('PDF download functionality would be implemented using a library like jsPDF or server-side PDF generation.');
+        }
+
+        // Enhanced calculation with comprehensive uncertainty analysis
+        function performComprehensiveAnalysis() {
+            calculateResults();
+            generateCalibrationCertificate();
+            calculateLinearityAnalysis();
+            calculateDriftAnalysis();
+        }
+
+        // Add this function to the calibration button
+        function enhancedCalculateResults() {
+            calculateResults();
+
+            // Add enhanced analysis button
+            const container = document.getElementById('calibrationTables');
+            const analysisButtonDiv = document.createElement('div');
+            analysisButtonDiv.style.marginTop = '20px';
+            analysisButtonDiv.innerHTML = `
+                <button type="button" class="btn btn-primary" onclick="performComprehensiveAnalysis()">
+                    Generate Complete Analysis & Certificate
+                </button>
+            `;
+
+            // Remove existing analysis button if present
+            const existingButton = container.querySelector('.analysis-button-container');
+            if (existingButton) {
+                existingButton.remove();
+            }
+
+            analysisButtonDiv.className = 'analysis-button-container';
+            container.appendChild(analysisButtonDiv);
+        }
+
+        // Update the main calculate button to use enhanced version
+        function calculateResults() {
+            // Update all calculations
+            currentProcedure.parameters.forEach((parameter, paramIndex) => {
+                parameter.setValues.forEach((setValue, setIndex) => {
+                    updateRowCalculations(paramIndex, setIndex);
+                });
+            });
+
+            document.getElementById('showAnalysisBtn').style.display = 'inline-block';
+
+            // Store calibration data for analysis
+            currentCalibrationData = {
+                procedure: currentProcedure,
+                timestamp: new Date().toISOString(),
+                environmentalConditions: currentProcedure.environmentalConditions
+            };
+
+            // Add comprehensive analysis option
+            enhancedCalculateResults();
+        }
+    </script>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Page-specific JavaScript -->
+{% endblock %}

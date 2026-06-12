@@ -1,0 +1,356 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ procedure.name }} - Procedure Details - Equiper National Hospital{% endblock %}
+
+{% block extra_css %}
+<!-- Page-specific CSS -->
+{% endblock %}
+
+{% block page_title %} {{ procedure.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+        <!-- Header Section -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h1 class="h3 text-gray-800 mb-0"><i class="fas fa-clipboard-list mr-2"></i> {{ procedure.name }}</h1>
+                <p class="text-muted">{{ procedure.description }}</p>
+            </div>
+            <div class="btn-group">
+                <a href="{% url 'calibration:procedure_edit' pk=procedure.pk %}" class="btn btn-primary">
+                    <i class="fas fa-edit"></i> Edit Procedure
+                </a>
+                <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteModal">
+                    <i class="fas fa-trash"></i> Delete
+                </button>
+            </div>
+        </div>
+
+        <!-- Basic Info Card -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-info-circle mr-2"></i>Basic Information</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <table class="table table-borderless">
+                            <tr>
+                                <th width="40%">Status:</th>
+                                <td>
+                                    {% if procedure.is_active %}
+                                        <span class="badge badge-success">Active</span>
+                                    {% else %}
+                                        <span class="badge badge-danger">Inactive</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>Created By:</th>
+                                <td>{{ procedure.created_by.get_full_name|default:procedure.created_by.username }}</td>
+                            </tr>
+                            <tr>
+                                <th>Created Date:</th>
+                                <td>{{ procedure.created_date|date:"M d, Y H:i" }}</td>
+                            </tr>
+                            <tr>
+                                <th>Last Modified:</th>
+                                <td>{{ procedure.modified_date|date:"M d, Y H:i" }}</td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <table class="table table-borderless">
+                            <tr>
+                                <th width="40%">Temperature:</th>
+                                <td>{{ procedure.temperature|default:"Not specified" }} °C</td>
+                            </tr>
+                            <tr>
+                                <th>Humidity:</th>
+                                <td>{{ procedure.humidity|default:"Not specified" }}% RH</td>
+                            </tr>
+                            <tr>
+                                <th>Pressure:</th>
+                                <td>{{ procedure.pressure|default:"Not specified" }} kPa</td>
+                            </tr>
+                            <tr>
+                                <th>Parameters:</th>
+                                <td>{{ procedure.parameters.count }}</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabs Navigation -->
+        <ul class="nav nav-tabs mb-4" id="procedureTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="parameters-tab" data-bs-toggle="tab" data-bs-target="#parameters" type="button" role="tab">
+                    <i class="fas fa-sliders-h mr-2"></i>Parameters
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="sessions-tab" data-bs-toggle="tab" data-bs-target="#sessions" type="button" role="tab">
+                    <i class="fas fa-calendar-check mr-2"></i>Recent Sessions ({{ recent_sessions|length }})
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="history-tab" data-bs-toggle="tab" data-bs-target="#history" type="button" role="tab">
+                    <i class="fas fa-history mr-2"></i>Revision History
+                </button>
+            </li>
+        </ul>
+
+        <!-- Tab Content -->
+        <div class="tab-content" id="procedureTabsContent">
+            <!-- Parameters Tab -->
+            <div class="tab-pane fade show active" id="parameters" role="tabpanel">
+                {% for parameter in parameters %}
+                <div class="card parameter-card mb-3">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-sliders-h mr-2"></i>{{ parameter.name }}
+                            <small class="text-muted">({{ parameter.unit }})</small>
+                        </h5>
+                        <div>
+                            <span class="badge bg-primary me-2">Readings: {{ parameter.num_readings }}</span>
+                            {% if parameter.tolerance %}
+                                <span class="badge bg-info">Tolerance: ±{{ parameter.tolerance }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <table class="table table-sm table-borderless">
+                                    <tr>
+                                        <th width="40%">Standard Reference:</th>
+                                        <td>{{ parameter.standard_reference|default:"Not specified" }}</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Reference Uncertainty:</th>
+                                        <td>{{ parameter.reference_uncertainty|default:"Not specified" }}</td>
+                                    </tr>
+                                </table>
+                            </div>
+                            <div class="col-md-6">
+                                <table class="table table-sm table-borderless">
+                                    <tr>
+                                        <th width="40%">Coverage Factor:</th>
+                                        <td>{{ parameter.coverage_factor|default:"2.0" }}</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Order:</th>
+                                        <td>{{ parameter.order }}</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Set Values (for main parameter) -->
+                        {% if parameter.main_set_values %}
+                        <div class="mb-4">
+                            <h6><i class="fas fa-list-ol mr-2"></i>Set Values</h6>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Value</th>
+                                            <th>Order</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for sv in parameter.main_set_values %}
+                                        <tr>
+                                            <td>{{ forloop.counter }}</td>
+                                            <td>{{ sv.value }}</td>
+                                            <td>{{ sv.order }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <!-- Sub Parameters -->
+                        {% if parameter.sub_parameters %}
+                        <div class="mb-3">
+                            <h6><i class="fas fa-layer-group mr-2"></i>Sub Parameters</h6>
+                            {% for sub_param in parameter.sub_parameters %}
+                            <div class="card sub-parameter-card mb-3">
+                                <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                                    <h6 class="mb-0">{{ sub_param.name }}</h6>
+                                    {% if sub_param.tolerance %}
+                                        <span class="badge bg-info">Tolerance: ±{{ sub_param.tolerance }}</span>
+                                    {% endif %}
+                                </div>
+                                <div class="card-body py-2">
+                                    {% if sub_param.set_values %}
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-striped">
+                                            <thead>
+                                                <tr>
+                                                    <th>#</th>
+                                                    <th>Value</th>
+                                                    <th>Order</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for sv in sub_param.set_values %}
+                                                <tr>
+                                                    <td>{{ forloop.counter }}</td>
+                                                    <td>{{ sv.value }}</td>
+                                                    <td>{{ sv.order }}</td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    {% else %}
+                                    <p class="text-muted mb-0">No set values defined for this sub-parameter.</p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% empty %}
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle mr-2"></i>No parameters defined for this procedure.
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- Sessions Tab -->
+            <div class="tab-pane fade" id="sessions" role="tabpanel">
+                {% if recent_sessions %}
+                <div class="card">
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Certificate #</th>
+                                        <th>Equipment</th>
+                                        <th>Date</th>
+                                        <th>Performed By</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for session in recent_sessions %}
+                                    <tr>
+                                        <td>{{ session.certificate_number|truncatechars:12 }}</td>
+                                        <td>{{ session.device_model }} ({{ session.device_serial|truncatechars:8 }})</td>
+                                        <td>{{ session.timestamp|date:"M d, Y" }}</td>
+                                        <td>{{ session.performed_by.get_full_name|default:session.performed_by.username }}</td>
+                                        <td>
+                                            {% if session.overall_pass %}
+                                                <span class="badge bg-success">Pass</span>
+                                            {% else %}
+                                                <span class="badge bg-danger">Fail</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <a href="{% url 'calibration:session_detail' pk=session.pk %}" class="btn btn-sm btn-outline-primary">
+                                                <i class="fas fa-eye"></i> View
+                                            </a>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle mr-2"></i>No calibration sessions found using this procedure.
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- History Tab -->
+            <div class="tab-pane fade" id="history" role="tabpanel">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="timeline">
+                            <!-- Example history item - you would replace with actual history data -->
+                            <div class="timeline-item">
+                                <div class="timeline-item-marker">
+                                    <div class="timeline-item-marker-indicator bg-success"></div>
+                                </div>
+                                <div class="timeline-item-content">
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span class="fw-bold">Procedure Created</span>
+                                        <span class="text-muted">{{ procedure.created_date|date:"M d, Y H:i" }}</span>
+                                    </div>
+                                    <p class="mb-0">Procedure was created by {{ procedure.created_by.get_full_name|default:procedure.created_by.username }}</p>
+                                </div>
+                            </div>
+                            <div class="timeline-item">
+                                <div class="timeline-item-marker">
+                                    <div class="timeline-item-marker-indicator bg-primary"></div>
+                                </div>
+                                <div class="timeline-item-content">
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span class="fw-bold">Last Modified</span>
+                                        <span class="text-muted">{{ procedure.modified_date|date:"M d, Y H:i" }}</span>
+                                    </div>
+                                    <p class="mb-0">Procedure details were updated</p>
+                                </div>
+                            </div>
+                            <!-- Add more history items as needed -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="deleteModalLabel">Confirm Deletion</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to delete the procedure <strong>"{{ procedure.name }}"</strong>?</p>
+                    <p class="text-danger">This action cannot be undone. All associated parameters and settings will be removed.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <form method="post" action="{% url 'calibration:procedure_delete' pk=procedure.pk %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-danger">Delete Procedure</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap Bundle with Popper -->
+    <script src="{% static 'js/bootstrap.bundle.min.js' %}"></script>
+    <script>
+        // Initialize tooltips
+        document.addEventListener('DOMContentLoaded', function() {
+            var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+            var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl)
+            });
+        });
+    </script>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Page-specific JavaScript -->
+{% endblock %}

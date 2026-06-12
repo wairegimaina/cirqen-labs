@@ -1,0 +1,231 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Create Department - Equiper National Hospital{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'Inventory/theme.css' %}" />
+<link rel="stylesheet" href="{% static 'Inventory/create_department.css' %}" />
+{% endblock %}
+
+{% block page_title %}Create Department{% endblock %}
+
+{% block content %}
+<div id="loadingOverlay" class="loading-overlay">
+    <div class="loading-content card">
+        <div class="loading-spinner"></div>
+        <h4 class="text-primary mt-3">Saving Department...</h4>
+        <p class="text-muted">Please wait while we process your request.</p>
+    </div>
+</div>
+
+<div id="successMessage" class="loading-overlay">
+    <div class="success-message card">
+        <div class="success-icon mb-3">
+            <i class="fas fa-check-circle text-success" style="font-size: 4rem;"></i>
+        </div>
+        <h4 class="text-success">Success!</h4>
+        <p class="text-muted mb-4">Department created successfully.</p>
+        <div class="d-flex justify-content-center gap-2">
+            <button id="createAnother" class="btn btn-primary">
+                <i class="fas fa-plus me-1"></i> Create Another
+            </button>
+            <button id="viewList" class="btn btn-secondary">
+                <i class="fas fa-list me-1"></i> View All
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="main-container container-fluid p-4">
+    <div class="department-messages mb-4">
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert {% if 'success' in message.tags %}alert-success{% elif 'error' in message.tags %}alert-danger{% else %}alert-warning{% endif %} alert-dismissible fade show shadow-sm" role="alert">
+                    <i class="fas {% if 'success' in message.tags %}fa-check-circle{% else %}fa-exclamation-triangle{% endif %} me-2"></i>
+                    <strong>{{ message.tags|title }}!</strong> {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    </div>
+
+    <div class="d-flex justify-content-center mb-4">
+        <button type="button" id="toggleFormBtn" class="btn btn-primary btn-lg shadow-md" onclick="toggleAddForm()">
+            <i class="fas fa-plus me-2"></i>
+            <span>Add New Department</span>
+        </button>
+    </div>
+
+    <div id="addDepartmentForm" class="card shadow-md mb-5" style="display: none;">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 text-primary"><i class="fas fa-building me-2"></i> Create New Department</h5>
+            <button type="button" class="btn-close" onclick="closeAddForm()"></button>
+        </div>
+        <div class="card-body">
+            <form method="post" action="{% if selected_workshop %}{% url 'create_department_for_hod' selected_workshop.id %}{% endif %}">
+                {% csrf_token %}
+                <div class="mb-4">
+                    <label for="department_name" class="form-label">Department Name</label>
+                    <input type="text" id="department_name" name="department_name" class="form-control" required placeholder="Enter department name...">
+                </div>
+
+                {% if selected_workshop %}
+                <div class="alert alert-info d-flex align-items-center mb-4">
+                    <i class="fas fa-industry me-3 fs-4"></i>
+                    <div>
+                        <small class="text-uppercase fw-bold">Workshop</small>
+                        <div class="fw-bold">{{ selected_workshop.name }}</div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <div class="d-flex justify-content-end gap-2">
+                    <button type="button" class="btn btn-secondary" onclick="closeAddForm()">Cancel</button>
+                    <button type="submit" class="btn btn-success shadow-sm">
+                        <i class="fas fa-save me-2"></i> Create Department
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% if departments_in_workshop %}
+    <div class="card shadow-md">
+        <div class="card-header">
+            <h5 class="mb-0 text-primary"><i class="fas fa-list me-2"></i> Existing Departments</h5>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th style="width: 40%;">Name</th>
+                        <th style="width: 30%;">Equipment</th>
+                        <th style="width: 30%;" class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for dept in departments_in_workshop %}
+                    <tr>
+                        <td>
+                            <span class="fw-bold text-primary">{{ dept.name }}</span>
+                        </td>
+                        <td>
+                            <span class="badge {% if dept.equipment_set.count > 0 %}badge-info{% else %}badge-secondary{% endif %}">
+                                {{ dept.equipment_set.count }} Units
+                            </span>
+                        </td>
+                        <td class="text-end">
+                            <button class="btn btn-sm btn-outline-primary me-1" onclick="editDepartment('{{ dept.id }}', '{{ dept.name }}')">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            {% if all_workshops|length > 1 %}
+                            <button class="btn btn-sm btn-outline-info me-1" onclick="transferDepartment('{{ dept.id }}', '{{ dept.name }}', {{ dept.equipment_set.count }})">
+                                <i class="fas fa-exchange-alt"></i>
+                            </button>
+                            {% endif %}
+                            <button class="btn btn-sm btn-outline-danger" onclick="confirmDelete('{{ dept.id }}', '{{ dept.name }}', {{ dept.equipment_set.count }})">
+                                <i class="fas fa-trash-alt"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<div id="deleteModal" class="modal-overlay">
+    <div class="modal-content card border-danger">
+        <div class="card-header bg-danger text-white">
+            <h5 class="mb-0"><i class="fas fa-exclamation-triangle me-2"></i> Delete Department</h5>
+            <button type="button" class="btn-close btn-close-white" onclick="closeDeleteModal()"></button>
+        </div>
+        <div class="card-body">
+            <div class="alert alert-secondary mb-3">
+                <strong>Department:</strong> <span id="deleteDepartmentName" class="text-primary fw-bold"></span>
+            </div>
+
+            <div id="warningBox" class="alert alert-warning" style="display: none;">
+                <strong><i class="fas fa-exclamation-circle"></i> Dependencies Detected!</strong>
+                <p class="mb-0 mt-1">This department has <strong id="equipmentCount"></strong> associated records.</p>
+            </div>
+
+            <div id="transferSection" class="mt-3" style="display: none;">
+                <label class="form-label text-danger fw-bold">Transfer dependencies to:</label>
+                <select id="transferDepartment" class="form-select mb-3">
+                    <option value="">-- Select Target Department --</option>
+                    {% for dept in departments_in_workshop %}
+                        <option value="{{ dept.id }}">{{ dept.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div id="successBox" class="alert alert-success" style="display: none;"></div>
+        </div>
+        <div class="card-footer bg-tertiary d-flex justify-content-end gap-2">
+            <button type="button" class="btn btn-secondary" onclick="closeDeleteModal()">Cancel</button>
+            <button type="button" class="btn btn-info text-white" id="transferEquipmentBtn" style="display: none;" onclick="handleEquipmentTransfer()">
+                <i class="fas fa-exchange-alt me-2"></i> Transfer
+            </button>
+            <button type="button" class="btn btn-danger" id="confirmDeleteBtn" onclick="handleDepartmentDelete()">
+                <i class="fas fa-trash-alt me-2"></i> Delete
+            </button>
+        </div>
+    </div>
+</div>
+
+<div id="editModal" class="modal-overlay">
+    <div class="modal-content card">
+        <div class="card-header">
+            <h5 class="mb-0 text-primary"><i class="fas fa-edit me-2"></i> Edit Department</h5>
+            <button type="button" class="btn-close" onclick="closeEditModal()"></button>
+        </div>
+        <div class="card-body">
+            <form id="editForm" method="post">
+                {% csrf_token %}
+                <div class="mb-3">
+                    <label for="edit_department_name" class="form-label">Department Name</label>
+                    <input type="text" id="edit_department_name" name="department_name" class="form-control" required>
+                </div>
+            </form>
+        </div>
+        <div class="card-footer bg-tertiary d-flex justify-content-end gap-2">
+            <button type="button" class="btn btn-secondary" onclick="closeEditModal()">Cancel</button>
+            <button type="button" class="btn btn-primary" onclick="submitEdit()">Save Changes</button>
+        </div>
+    </div>
+</div>
+
+<div id="transferModal" class="modal-overlay">
+    <div class="modal-content card">
+        <div class="card-header bg-info text-white">
+            <h5 class="mb-0"><i class="fas fa-exchange-alt me-2"></i> Move to Workshop</h5>
+            <button type="button" class="btn-close btn-close-white" onclick="closeTransferModal()"></button>
+        </div>
+        <div class="card-body">
+            <p id="transferMessage" class="fw-bold mb-3"></p>
+            <form id="transferForm" method="post">
+                {% csrf_token %}
+                <label class="form-label">Select New Workshop</label>
+                <select id="target_workshop" name="target_workshop" class="form-select" required>
+                    <option value="">Select Workshop...</option>
+                    {% for workshop in all_workshops %}
+                        <option value="{{ workshop.id }}">{{ workshop.name }}</option>
+                    {% endfor %}
+                </select>
+            </form>
+        </div>
+        <div class="card-footer bg-tertiary d-flex justify-content-end gap-2">
+            <button type="button" class="btn btn-secondary" onclick="closeTransferModal()">Cancel</button>
+            <button type="button" class="btn btn-info text-white" onclick="submitTransfer()">Move Department</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'Inventory/department_logic.js' %}"></script>
+{% endblock %}

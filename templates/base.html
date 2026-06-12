@@ -1,0 +1,285 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Equiper — Computerized Maintenance Management System" />
+  <meta name="csrf-token" content="{{ csrf_token }}" />
+  <title>{% block title %}Equiper — National Hospital{% endblock %}</title>
+
+  <!-- ═══════════════════════════════════════
+       ANTI-FLASH: runs before ANY paint
+       Must be first, before all link/style tags
+       ═══════════════════════════════════════ -->
+  <style>
+    /* Kill transitions during theme init so no white flash occurs */
+    .no-transition,
+    .no-transition *,
+    .no-transition *::before,
+    .no-transition *::after {
+      transition: none !important;
+      animation: none !important;
+    }
+
+    /* Prevent FOUC — hide body until CSS loads */
+    body { visibility: hidden; }
+  </style>
+  <script>
+    (function () {
+      try {
+        // 1. Read saved theme immediately
+        var t = localStorage.getItem('equiper-theme') || 'light';
+        document.documentElement.setAttribute('data-theme', t);
+
+        // 2. Freeze all transitions so browser doesn't animate light→dark
+        document.documentElement.classList.add('no-transition');
+
+        // 3. Show body as soon as possible
+        document.addEventListener('DOMContentLoaded', function () {
+          document.body.style.visibility = 'visible';
+        });
+
+        // 4. Unfreeze transitions after two paint frames (double rAF = safest)
+        window.addEventListener('load', function () {
+          requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+              document.documentElement.classList.remove('no-transition');
+            });
+          });
+        });
+      } catch (e) {
+        // Fallback — just show body
+        document.addEventListener('DOMContentLoaded', function () {
+          document.body.style.visibility = 'visible';
+        });
+      }
+    })();
+  </script>
+
+  <!-- ═══════════════════════════════════════
+       PRELOAD CRITICAL CSS
+       ═══════════════════════════════════════ -->
+  <link rel="preload" href="{% static 'css/bootstrap.min.css' %}" as="style" />
+  <link rel="preload" href="{% static 'css/all.min.css' %}"       as="style" />
+  <link rel="preload" href="{% static 'css/base.css' %}"          as="style" />
+  <link rel="preload" href="{% static 'css/sidebar.css' %}"       as="style" />
+  <link rel="preload" href="{% static 'css/theme.css' %}"         as="style" />
+
+  <!-- ═══════════════════════════════════════
+       STYLESHEETS
+       ═══════════════════════════════════════ -->
+  <link href="{% static 'css/bootstrap.min.css' %}" rel="stylesheet" />
+  <link href="{% static 'css/boxicons.min.css' %}"  rel="stylesheet" />
+
+  <!-- Font Awesome — LOCAL (not CDN) -->
+  <!-- webfonts/ folder must sit alongside all.min.css at static/webfonts/ -->
+  <link href="{% static 'css/all.min.css' %}"       rel="stylesheet" />
+
+  <link rel="stylesheet" href="{% static 'css/base.css' %}"    />
+  <link rel="stylesheet" href="{% static 'css/sidebar.css' %}"  />
+  <link rel="stylesheet" href="{% static 'css/theme.css' %}"    />
+  <link rel="stylesheet" href="{% static 'css/enhancements.css' %}" />
+  <link rel="stylesheet" href="{% static 'dashboards/dashboard-common.css' %}" />
+
+  <!-- Page-specific CSS -->
+  {% block extra_css %}{% endblock %}
+
+  <!-- jQuery — available globally before body renders -->
+  <script src="{% static 'js/jquery-3.6.0.min.js' %}"></script>
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%231a1a1a'/><text y='24' x='4' font-size='22'>⚕</text></svg>" />
+</head>
+
+<body class="{% block body_class %}{% endblock %}">
+
+  {% block page_wrapper %}
+
+  <!-- ═══════════════════════════════════════
+       SIDEBAR BACKDROP (mobile overlay)
+       ═══════════════════════════════════════ -->
+  {% if show_sidebar %}
+    <div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
+    {% include 'includes/sidebar.html' %}
+  {% endif %}
+
+  <!-- ═══════════════════════════════════════
+       MAIN WRAPPER
+       ═══════════════════════════════════════ -->
+  <div class="main-wrapper {% if show_sidebar %}with-sidebar{% endif %}" id="mainWrapper">
+
+    <!-- ═══════════════ HEADER ═══════════════ -->
+    {% block header %}
+    <header class="app-header" role="banner">
+
+      <div class="header-left">
+        <!-- Hamburger — only when sidebar is active -->
+        {% if show_sidebar %}
+        <button class="hamburger-menu"
+                id="sidebarToggle"
+                aria-label="Toggle navigation"
+                aria-expanded="false"
+                aria-controls="equiperSidebar">
+          <span class="hamburger-line"></span>
+          <span class="hamburger-line"></span>
+          <span class="hamburger-line"></span>
+        </button>
+        {% endif %}
+
+        <!-- Page title — child templates override this block -->
+        <h1 class="page-title">{% block page_title %}Dashboard{% endblock %}</h1>
+      </div>
+
+      <div class="header-right">
+
+        <!-- Theme toggle -->
+        <button class="icon-btn" id="themeToggle" aria-label="Toggle theme" title="Toggle theme">
+          <i class="fas fa-sun  light-icon" aria-hidden="true"></i>
+          <i class="fas fa-moon dark-icon"  aria-hidden="true"></i>
+        </button>
+
+        <!-- Notifications (optional — remove if unused) -->
+        {% block header_notifications %}{% endblock %}
+
+        <!-- User info -->
+
+
+        <!-- Logout -->
+        {% if user.is_authenticated %}
+        <a href="{% url 'logout' %}"
+           class="icon-btn logout-btn"
+           aria-label="Logout"
+           title="Sign out">
+          <i class="fas fa-sign-out-alt" aria-hidden="true"></i>
+        </a>
+        {% endif %}
+
+        <!-- Extra header actions from child templates -->
+        {% block header_actions %}{% endblock %}
+
+      </div>
+    </header>
+    {% endblock %}{# /header #}
+
+    <!-- ═══════════════ ALERTS / MESSAGES ═══════════════ -->
+    {% if messages %}
+    <div class="messages-container" role="alert" aria-live="polite">
+      {% for message in messages %}
+      <div class="alert alert-{{ message.tags }} alert-dismissible fade show equiper-alert" role="alert">
+        <div class="alert-inner">
+          {% if 'success' in message.tags %}
+            <i class="fas fa-check-circle alert-icon" aria-hidden="true"></i>
+          {% elif 'error' in message.tags or 'danger' in message.tags %}
+            <i class="fas fa-exclamation-circle alert-icon" aria-hidden="true"></i>
+          {% elif 'warning' in message.tags %}
+            <i class="fas fa-exclamation-triangle alert-icon" aria-hidden="true"></i>
+          {% else %}
+            <i class="fas fa-info-circle alert-icon" aria-hidden="true"></i>
+          {% endif %}
+          <span class="alert-text">{{ message }}</span>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- ═══════════════ BREADCRUMB (optional) ═══════════════ -->
+    {% block breadcrumb %}{% endblock %}
+
+    <!-- ═══════════════ MAIN CONTENT ═══════════════ -->
+    <main class="app-main" id="mainContent" role="main">
+      {% block content %}{% endblock %}
+    </main>
+
+
+
+  </div>
+
+  {% endblock %}
+
+  <!-- ═══════════════════════════════════════
+       SCRIPTS
+       Order matters: Bootstrap → Theme → Sidebar → page extras
+       ═══════════════════════════════════════ -->
+  <script src="{% static 'js/bootstrap.bundle.min.js' %}"></script>
+  <script src="{% static 'js/theme.js' %}"></script>
+  <script src="{% static 'js/sidebar.js' %}"></script>
+
+  <!-- Auto-fill year everywhere -->
+  <script>
+    (function () {
+      var y = new Date().getFullYear();
+      document.querySelectorAll('#footerYear, #copyrightYear').forEach(function (el) {
+        el.textContent = y;
+      });
+    })();
+  </script>
+
+  <!-- Auto-dismiss Django alerts after 5s -->
+  <script>
+    (function () {
+      document.addEventListener('DOMContentLoaded', function () {
+        var alerts = document.querySelectorAll('.equiper-alert');
+        alerts.forEach(function (alert) {
+          setTimeout(function () {
+            var bsAlert = bootstrap.Alert.getOrCreateInstance(alert);
+            if (bsAlert) bsAlert.close();
+          }, 1000);
+        });
+      });
+    })();
+  </script>
+
+  <!-- Session expiry handler — global AJAX intercept -->
+  <script>
+    (function () {
+      var SESSION_EXPIRED_MODAL_SHOWN = false;
+      function handleSessionExpiry() {
+        if (SESSION_EXPIRED_MODAL_SHOWN) return;
+        SESSION_EXPIRED_MODAL_SHOWN = true;
+        var loginUrl = '/users/login/';
+        var intended = window.location.pathname + window.location.search;
+
+        var modalHtml =
+          '<div class="modal fade" id="sessionExpModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">' +
+          '<div class="modal-dialog"><div class="modal-content">' +
+          '<div class="modal-header"><h5 class="modal-title">Session Expired</h5></div>' +
+          '<div class="modal-body"><p>Your session has expired due to inactivity. Please log in again to continue.</p></div>' +
+          '<div class="modal-footer">' +
+          '<a href="' + loginUrl + '?next=' + encodeURIComponent(intended) + '" class="btn btn-primary w-100">Log In</a>' +
+          '</div></div></div></div>';
+
+        var container = document.createElement('div');
+        container.innerHTML = modalHtml;
+        document.body.appendChild(container);
+        var modal = new bootstrap.Modal(document.getElementById('sessionExpModal'));
+        modal.show();
+      }
+
+      // Intercept jQuery AJAX calls
+      $(document).ajaxComplete(function (event, xhr) {
+        if (xhr && xhr.status === 401) {
+          try {
+            var resp = xhr.responseJSON || JSON.parse(xhr.responseText);
+            if (resp && resp.error && resp.error.toLowerCase().includes('session expired')) {
+              handleSessionExpiry();
+            }
+          } catch (e) {
+            // ignore JSON parse errors; fall back to redirect
+            if (xhr.responseURL && xhr.responseURL.includes('/users/login/')) {
+              window.location.href = xhr.responseURL;
+            }
+          }
+        }
+      });
+    })();
+  </script>
+
+  <!-- Page-specific JS -->
+  {% block extra_js %}{% endblock %}
+
+</body>
+</html>

@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Document - Equiper National Hospital{% endblock %}
+
+{% block extra_css %}
+<!-- Page-specific CSS -->
+{% endblock %}
+
+{% block page_title %}Document{% endblock %}
+
+{% block content %}
+<div class="card mt-4">
+  <div class="card-header bg-light">
+    <h4>Equipment Repair History</h4>
+  </div>
+  <div class="card-body">
+    <p><strong>Total Repairs:</strong> {{ repair_count }}</p>
+
+    {% if repair_count > 0 %}
+      <ul class="list-group">
+        {% for repair in repair_summary %}
+          <li class="list-group-item">
+            <strong>{{ repair.date|date:"M d, Y" }}:</strong>
+            {{ repair.description }}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="text-muted">No repairs recorded for this equipment.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Page-specific JavaScript -->
+{% endblock %}

@@ -1,0 +1,429 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Calibration Schedules - Equiper National Hospital{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'calibrition/pending-calibration.css' %}" />
+{% endblock %}
+
+{% block page_title %}Perform Calibration{% endblock %}
+
+{% block content %}
+<div class="container">
+
+
+
+        <!-- Instructions Section -->
+        <div class="instructions">
+            <h4>🎯 Equipment Selection Instructions</h4>
+            <p>Use the <span class="highlight">"🎯 Select & Calibrate"</span> button to directly start calibration for the selected equipment.</p>
+        </div>
+
+        <!-- Filters -->
+        <div class="filters">
+            <form method="GET" style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap; width: 100%;" id="filterForm">
+                <!-- Preserve search term -->
+                {% if request.GET.search %}
+                <input type="hidden" name="search" value="{{ request.GET.search }}">
+                {% endif %}
+
+                {% if access_context.access_type == 'workshop' %}
+                <div class="filter-group">
+                    <label for="department">Department:</label>
+                    <select name="department" id="department" class="filter-select">
+                        <option value="">All Departments</option>
+                        {% for dept in departments %}
+                        <option value="{{ dept.id }}" {% if dept.id|stringformat:"s" == selected_department_id %}selected{% endif %}>
+                            {{ dept.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+
+                <div class="filter-group">
+                    <label for="month">Month:</label>
+                    <select name="month" id="month" class="filter-select">
+                        <option value="1" {% if current_month == 1 %}selected{% endif %}>January</option>
+                        <option value="2" {% if current_month == 2 %}selected{% endif %}>February</option>
+                        <option value="3" {% if current_month == 3 %}selected{% endif %}>March</option>
+                        <option value="4" {% if current_month == 4 %}selected{% endif %}>April</option>
+                        <option value="5" {% if current_month == 5 %}selected{% endif %}>May</option>
+                        <option value="6" {% if current_month == 6 %}selected{% endif %}>June</option>
+                        <option value="7" {% if current_month == 7 %}selected{% endif %}>July</option>
+                        <option value="8" {% if current_month == 8 %}selected{% endif %}>August</option>
+                        <option value="9" {% if current_month == 9 %}selected{% endif %}>September</option>
+                        <option value="10" {% if current_month == 10 %}selected{% endif %}>October</option>
+                        <option value="11" {% if current_month == 11 %}selected{% endif %}>November</option>
+                        <option value="12" {% if current_month == 12 %}selected{% endif %}>December</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label for="year">Year:</label>
+                    <select name="year" id="year" class="filter-select">
+                        {% for y in years %}
+                            <option value="{{ y }}" {% if current_year == y %}selected{% endif %}>
+                                {{ y }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <button type="submit" class="filter-btn">Apply Filters</button>
+            </form>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats">
+            <div class="card">
+                <div class="stat-number pending">{{ schedules.paginator.count }}</div>
+                <div class="stat-label">
+                    {% if request.GET.search %}
+                        Search Results
+                    {% else %}
+                        Total Pending
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Search Section -->
+        <div class="search-section">
+            <form method="GET" id="searchForm">
+                <div class="search-container">
+                    <div class="search-input-group">
+                        <input
+                            type="text"
+                            name="search"
+                            class="search-input"
+                            placeholder="Search equipment by name, model, or serial number..."
+                            value="{{ request.GET.search }}"
+                            id="searchInput"
+                        >
+                        <span class="search-icon">🔍</span>
+                    </div>
+                    {% if request.GET.search %}
+                    <button type="button" class="search-clear" id="clearSearchBtn">
+                        Clear Search
+                    </button>
+                    {% endif %}
+                </div>
+
+                <!-- Hidden fields to preserve other filters -->
+                {% if request.GET.department %}
+                <input type="hidden" name="department" value="{{ request.GET.department }}">
+                {% endif %}
+                {% if request.GET.month %}
+                <input type="hidden" name="month" value="{{ request.GET.month }}">
+                {% endif %}
+                {% if request.GET.year %}
+                <input type="hidden" name="year" value="{{ request.GET.year }}">
+                {% endif %}
+            </form>
+
+            {% if request.GET.search %}
+            <div class="search-results-info">
+                <strong>Search Results:</strong>
+                {% if schedules %}
+                    Showing {{ schedules.paginator.count }} result{{ schedules.paginator.count|pluralize }} for "<span class="highlight">{{ request.GET.search }}</span>"
+                {% else %}
+                    No results found for "<span class="highlight">{{ request.GET.search }}</span>"
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Table -->
+        <div class="table-container">
+            {% if schedules %}
+            <table class="schedule-table">
+                <thead>
+                    <tr>
+                        <th>Equipment</th>
+                        <th>Serial Number</th>
+                        <th>Department</th>
+                        <th>Status</th>
+                        <th>Scheduled Month</th>
+                        <th>Period</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for schedule in schedules %}
+                    <tr data-schedule-id="{{ schedule.id }}" data-equipment-id="{{ schedule.equipment.id }}">
+                        <td>
+                            <div class="equipment-name">
+                                {{ schedule.equipment.description.name|default:"N/A" }}
+                            </div>
+                            <div class="equipment-model">
+                                Model: {{ schedule.equipment.model|default:"N/A" }}
+                            </div>
+                        </td>
+                        <td>
+                            <span class="serial-number">
+                                {{ schedule.equipment.serial_number|default:"N/A" }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="department-tag">
+                                {{ schedule.equipment.department.name|default:"N/A" }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="status-badge status-{{ schedule.status }}">
+                                {{ schedule.status|title }}
+                            </span>
+                        </td>
+                        <td class="scheduled-month">
+                            {{ schedule.scheduled_month|date:"F Y" }}
+                        </td>
+                        <td class="period-info">
+                            {{ schedule.calibration_period }} Months
+                        </td>
+                        <td>
+                            <div class="action-buttons">
+                                {% if access_context.can_edit %}
+                                    <button class="quick-select-btn" data-schedule-id="{{ schedule.id }}" data-equipment-id="{{ schedule.equipment.id }}">
+                                        🎯 Select & Calibrate
+                                    </button>
+                                {% else %}
+                                    <span class="btn btn-secondary" style="cursor: default;">
+                                        View Only
+                                    </span>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <!-- Pagination -->
+            {% if schedules.has_other_pages %}
+            <div class="pagination">
+                {% if schedules.has_previous %}
+                    <a href="?page=1{% if request.GET.department %}&department={{ request.GET.department }}{% endif %}{% if request.GET.month %}&month={{ request.GET.month }}{% endif %}{% if request.GET.year %}&year={{ request.GET.year }}{% endif %}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">&laquo; First</a>
+                    <a href="?page={{ schedules.previous_page_number }}{% if request.GET.department %}&department={{ request.GET.department }}{% endif %}{% if request.GET.month %}&month={{ request.GET.month }}{% endif %}{% if request.GET.year %}&year={{ request.GET.year }}{% endif %}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">Previous</a>
+                {% endif %}
+
+                <span class="current">
+                    Page {{ schedules.number }} of {{ schedules.paginator.num_pages }}
+                </span>
+
+                {% if schedules.has_next %}
+                    <a href="?page={{ schedules.next_page_number }}{% if request.GET.department %}&department={{ request.GET.department }}{% endif %}{% if request.GET.month %}&month={{ request.GET.month }}{% endif %}{% if request.GET.year %}&year={{ request.GET.year }}{% endif %}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">Next</a>
+                    <a href="?page={{ schedules.paginator.num_pages }}{% if request.GET.department %}&department={{ request.GET.department }}{% endif %}{% if request.GET.month %}&month={{ request.GET.month }}{% endif %}{% if request.GET.year %}&year={{ request.GET.year }}{% endif %}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">Last &raquo;</a>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {% else %}
+            {% if request.GET.search %}
+                <!-- No search results state -->
+                <div class="no-search-results">
+                    <div class="search-icon-large">🔍</div>
+                    <h3>No Results Found</h3>
+                    <p>No equipment found matching "<strong>{{ request.GET.search }}</strong>". Try adjusting your search terms or clearing the search to see all equipment.</p>
+                </div>
+            {% else %}
+                <!-- No pending calibrations state -->
+                <div class="empty-state">
+                    <div class="empty-state-icon">✅</div>
+                    <h3>No Pending Calibrations</h3>
+                    <p>Great! There are no pending calibrations for the selected month. All equipment appears to be up to date.</p>
+                </div>
+            {% endif %}
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        // Store current filters in sessionStorage for return navigation
+        function storeCurrentFilters() {
+            const filters = {
+                page: '{{ schedules.number }}',
+                department: '{{ request.GET.department|default:"" }}',
+                month: '{{ request.GET.month|default:current_month }}',
+                year: '{{ request.GET.year|default:current_year }}',
+                search: '{{ request.GET.search|default:"" }}'
+            };
+            sessionStorage.setItem('pendingCalibrationFilters', JSON.stringify(filters));
+        }
+
+        // Search functionality
+        let searchTimeout;
+        const searchInput = document.getElementById('searchInput');
+        const searchForm = document.getElementById('searchForm');
+        const clearSearchBtn = document.getElementById('clearSearchBtn');
+
+        // Auto-search with debounce (search as user types, but wait 500ms after they stop)
+        searchInput.addEventListener('input', function() {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                searchForm.submit();
+            }, 500);
+        });
+
+        // Immediate search on Enter key
+        searchInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                clearTimeout(searchTimeout);
+                searchForm.submit();
+            }
+        });
+
+        // Clear search function
+        function clearSearch() {
+            searchInput.value = '';
+            // Remove search parameter and submit
+            const url = new URL(window.location);
+            url.searchParams.delete('search');
+            window.location.href = url.toString();
+        }
+
+        // Clear search button event listener
+        if (clearSearchBtn) {
+            clearSearchBtn.addEventListener('click', clearSearch);
+        }
+
+        // Auto-submit form when filters change (preserve search)
+        document.querySelectorAll('.filter-select').forEach(select => {
+            select.addEventListener('change', function() {
+                document.getElementById('filterForm').submit();
+            });
+        });
+
+        // Equipment selection function with filter preservation
+        function selectEquipment(scheduleId, equipmentId) {
+            // Store current state before navigation
+            storeCurrentFilters();
+
+            // Use data attributes to safely pass values
+            const baseUrl = "{% url 'calibration:perform_calibration' %}";
+            const url = `${baseUrl}?schedule=${scheduleId}&equipment=${equipmentId}&quick_select=true&return_to=pending`;
+            window.location.href = url;
+        }
+
+        // Add event listeners to all quick select buttons
+        document.addEventListener('DOMContentLoaded', function() {
+            // Add click event listeners to all quick select buttons
+            document.querySelectorAll('.quick-select-btn').forEach(button => {
+                button.addEventListener('click', function() {
+                    const scheduleId = this.getAttribute('data-schedule-id');
+                    const equipmentId = this.getAttribute('data-equipment-id');
+                    selectEquipment(scheduleId, equipmentId);
+                });
+            });
+
+            // Focus search input if there's a search term
+            if (searchInput.value) {
+                searchInput.focus();
+                // Put cursor at end of text
+                searchInput.setSelectionRange(searchInput.value.length, searchInput.value.length);
+            }
+
+            // Check if we're returning from calibration and restore state
+            const urlParams = new URLSearchParams(window.location.search);
+            const returnedFrom = urlParams.get('returned_from');
+
+            if (returnedFrom === 'calibration') {
+                // Try to restore filters from sessionStorage
+                const savedFilters = sessionStorage.getItem('pendingCalibrationFilters');
+                if (savedFilters) {
+                    const filters = JSON.parse(savedFilters);
+                    // If current URL doesn't have the saved filters, redirect with them
+                    if (!window.location.search.includes('page=') && filters.page) {
+                        let newUrl = window.location.pathname + '?';
+                        const params = [];
+                        if (filters.page) params.push(`page=${filters.page}`);
+                        if (filters.department) params.push(`department=${filters.department}`);
+                        if (filters.month) params.push(`month=${filters.month}`);
+                        if (filters.year) params.push(`year=${filters.year}`);
+                        if (filters.search) params.push(`search=${encodeURIComponent(filters.search)}`);
+                        newUrl += params.join('&');
+                        window.location.href = newUrl;
+                        return;
+                    }
+                }
+            }
+
+            // Highlight previously selected equipment
+            const selectedScheduleId = urlParams.get('selected');
+            if (selectedScheduleId) {
+                const row = document.querySelector(`tr[data-schedule-id="${selectedScheduleId}"]`);
+                if (row) {
+                    row.classList.add('selected');
+
+                    // Scroll to the row
+                    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+                    setTimeout(() => {
+                        row.classList.remove('selected');
+                    }, 3000);
+                }
+            }
+
+            // Highlight search terms in results
+            const searchTerm = "{{ request.GET.search|default:''|escapejs }}";
+            if (searchTerm && searchTerm.length > 2) {
+                highlightSearchTerms(searchTerm);
+            }
+        });
+
+        // Function to highlight search terms in the table
+        function highlightSearchTerms(term) {
+            const cells = document.querySelectorAll('.schedule-table td');
+            const regex = new RegExp(`(${escapeRegex(term)})`, 'gi');
+
+            cells.forEach(cell => {
+                const text = cell.innerHTML;
+                // Only highlight text nodes, avoid HTML tags
+                if (text.toLowerCase().includes(term.toLowerCase()) && !text.includes('<button') && !text.includes('<span class="status-badge"')) {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = text;
+
+                    // Walk through text nodes
+                    highlightTextNodes(tempDiv, regex);
+                    cell.innerHTML = tempDiv.innerHTML;
+                }
+            });
+        }
+
+        // Helper function to escape regex special characters
+        function escapeRegex(string) {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+        // Helper function to highlight text nodes only
+        function highlightTextNodes(element, regex) {
+            const walker = document.createTreeWalker(
+                element,
+                NodeFilter.SHOW_TEXT,
+                null,
+                false
+            );
+
+            const nodesToReplace = [];
+            let node;
+
+            while (node = walker.nextNode()) {
+                if (regex.test(node.textContent)) {
+                    nodesToReplace.push(node);
+                }
+            }
+
+            nodesToReplace.forEach(node => {
+                const span = document.createElement('span');
+                span.innerHTML = node.textContent.replace(regex, '<mark>$1</mark>');
+                node.parentNode.replaceChild(span, node);
+            });
+        }
+    </script>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Page-specific JavaScript -->
+{% endblock %}

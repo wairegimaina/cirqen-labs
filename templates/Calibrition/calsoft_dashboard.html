@@ -1,0 +1,361 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}CalSoft — Calibration Dashboard {% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'calibrition/calsoft.css' %}" />
+{% endblock %}
+
+{% block page_title %}Workshop: {{ request.user.userprofile.workshop.name }}{% endblock %}
+
+{% block content %}
+
+<div class="stats-grid">
+
+  <div class="stat-card pending">
+    <div class="stat-header">
+      <div class="stat-icon">📋</div>
+      <span class="status-indicator status-pending"></span>
+    </div>
+    <div class="stat-number">{{ schedule_counts.pending|default:0 }}</div>
+    <div class="stat-label">Pending Calibrations</div>
+    <div class="stat-change">{{ current_month|default:"This Month" }}</div>
+  </div>
+
+  <div class="stat-card pushed">
+    <div class="stat-header">
+      <div class="stat-icon">📌</div>
+      <span class="status-indicator status-overdue"></span>
+    </div>
+    <div class="stat-number">{{ schedule_counts.pushed|default:0 }}</div>
+    <div class="stat-label">Pushed Schedules</div>
+    <div class="stat-change negative">From Previous Period</div>
+  </div>
+
+  <div class="stat-card overdue">
+    <div class="stat-header">
+      <div class="stat-icon">⚠️</div>
+      <span class="status-indicator status-overdue"></span>
+    </div>
+    <div class="stat-number">{{ schedule_counts.overdue|default:0 }}</div>
+    <div class="stat-label">Overdue Items</div>
+    <div class="stat-change negative">Need immediate attention</div>
+  </div>
+
+  <div class="stat-card completed">
+    <div class="stat-header">
+      <div class="stat-icon">✅</div>
+      <span class="status-indicator status-completed"></span>
+    </div>
+    <div class="stat-number">{{ schedule_counts.completed|default:0 }}</div>
+    <div class="stat-label">Completed</div>
+    <div class="stat-change positive">{{ current_month|default:"This Month" }}</div>
+  </div>
+
+</div>
+
+<div class="performance-metrics">
+
+  <div class="metric-card">
+    <div class="metric-value">{{ week_pass_rate|default:0 }}%</div>
+    <div class="metric-label">Week Pass Rate</div>
+    <div class="metric-details">{{ week_total|default:0 }} calibrations</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-value">{{ month_pass_rate|default:0 }}%</div>
+    <div class="metric-label">Month Pass Rate</div>
+    <div class="metric-details">{{ month_total|default:0 }} calibrations</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-value">{{ equipment_needing_calibration|default:0 }}</div>
+    <div class="metric-label">Equipment Need Calibration</div>
+    <div class="metric-details">of {{ total_equipment|default:0 }} total</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-value">{{ total_sessions|default:0 }}</div>
+    <div class="metric-label">Total Sessions</div>
+    <div class="metric-details">All time</div>
+  </div>
+
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <div>
+      <h3 class="card-title">
+        <i class="fas fa-clipboard-check" style="color:var(--warning-color);margin-right:.4rem;"></i>
+        Pending Approval Sessions
+      </h3>
+      <span class="card-subtitle">Calibration sessions submitted and awaiting review</span>
+    </div>
+    <a href="{% url 'calibration:sessions_pending_approval' %}" class="btn btn-warning">
+      <i class="fas fa-arrow-right"></i> Review All
+    </a>
+  </div>
+
+  <div class="pending-sessions-summary">
+
+
+    <div class="pending-count-row">
+      <div class="pending-count-block">
+        <span class="pending-big-number">{{ pending_sessions_count|default:0 }}</span>
+        <span class="pending-count-label">Sessions Awaiting Approval</span>
+      </div>
+      {% if pending_sessions_count %}
+        <div class="pending-urgency
+          {% if pending_sessions_count > 10 %}urgency-high
+          {% elif pending_sessions_count > 5 %}urgency-medium
+          {% else %}urgency-low{% endif %}">
+          {% if pending_sessions_count > 10 %}
+            <i class="fas fa-exclamation-circle"></i> High Volume — Act Now
+          {% elif pending_sessions_count > 5 %}
+            <i class="fas fa-exclamation-triangle"></i> Needs Attention
+          {% else %}
+            <i class="fas fa-check-circle"></i> Under Control
+          {% endif %}
+        </div>
+      {% endif %}
+    </div>
+
+
+    {% if pending_approval_sessions %}
+      <div class="pending-sessions-list">
+
+        {% for session in pending_approval_sessions %}
+          <div class="schedule-item pending">
+            <div class="schedule-info">
+
+              <div class="schedule-equipment">
+                {{ session.device_model|default:"Unknown Device" }}
+                <span class="serial-number">({{ session.device_serial|default:"N/A" }})</span>
+              </div>
+
+              <div class="schedule-details">
+                <i class="fas fa-clipboard-list" style="width:14px;opacity:.6;"></i>
+                Procedure: {{ session.procedure.name|default:"No procedure assigned" }}<br>
+                <i class="fas fa-user" style="width:14px;opacity:.6;"></i>
+                Performed by: {{ session.performed_by.get_full_name|default:session.performed_by.username }}<br>
+                <i class="fas fa-clock" style="width:14px;opacity:.6;"></i>
+                Submitted: {{ session.timestamp|date:"M d, Y  H:i" }}
+              </div>
+
+            </div>
+            <div class="action-buttons">
+              <a href="{% url 'calibration:sessions_pending_approval' %}" class="btn btn-warning">
+                <i class="fas fa-eye"></i> Review
+              </a>
+            </div>
+          </div>
+        {% endfor %}
+
+        {% if pending_sessions_count > 5 %}
+          <div class="more-items-indicator">
+            <p>… and {{ pending_sessions_count|add:"-5" }} more sessions awaiting approval</p>
+            <a href="{% url 'calibration:sessions_pending_approval' %}" class="btn btn-outline">
+              View All Pending Approvals
+            </a>
+          </div>
+        {% endif %}
+
+      </div>
+
+    {% else %}
+      <div class="empty-state">
+        <div class="empty-icon">🎉</div>
+        <h4>No pending approvals</h4>
+        <p>All calibration sessions have been reviewed. You are up to date.</p>
+      </div>
+    {% endif %}
+
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <h3 class="card-title">Upcoming Schedules</h3>
+  </div>
+
+  <div id="upcoming-schedules">
+
+    {% if overdue_schedules %}
+      <h4 class="section-title overdue-title">⚠️ Overdue Items</h4>
+      {% for schedule in overdue_schedules|slice:":10" %}
+        <div class="schedule-item overdue">
+          <div class="schedule-info">
+            <div class="schedule-equipment">
+              {{ schedule.equipment.description|default:"N/A" }}
+              <span class="serial-number">({{ schedule.equipment.serial_number }})</span>
+            </div>
+            <div class="schedule-details">
+              Due: {{ schedule.scheduled_month|date:"M d, Y" }} |
+              Workshop: {{ schedule.workshop.name|default:"Not assigned" }}
+              {% if schedule.calibration_procedure %}
+                <br>Procedure: {{ schedule.calibration_procedure.name }}
+              {% endif %}
+            </div>
+          </div>
+          <div class="action-buttons">
+            {% if access_context.can_edit %}
+              <button class="quick-select-btn"
+                      data-schedule-id="{{ schedule.id }}"
+                      data-equipment-id="{{ schedule.equipment.id }}">
+                🎯 Select &amp; Calibrate
+              </button>
+            {% else %}
+              <span class="btn btn-secondary">View Only</span>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+
+      {% if overdue_schedules|length > 10 %}
+        <div class="more-items-indicator">
+          <p>… and {{ overdue_schedules|length|add:"-10" }} more overdue items</p>
+          <a href="{% url 'schedule:pending_calibrations' %}?status=overdue" class="btn btn-outline">
+            View All Overdue Items
+          </a>
+        </div>
+      {% endif %}
+    {% endif %}
+
+    {% if pending_schedules %}
+      <h4 class="section-title pending-title">📋 This Month</h4>
+      {% for schedule in pending_schedules|slice:":5" %}
+        <div class="schedule-item pending">
+          <div class="schedule-info">
+            <div class="schedule-equipment">
+              {{ schedule.equipment.description|default:"N/A" }}
+              <span class="serial-number">({{ schedule.equipment.serial_number }})</span>
+            </div>
+            <div class="schedule-details">
+              Due: {{ schedule.scheduled_month|date:"M d, Y" }} |
+              Workshop: {{ schedule.workshop.name|default:"Not assigned" }}
+              {% if schedule.calibration_procedure %}
+                <br>Procedure: {{ schedule.calibration_procedure.name }}
+              {% endif %}
+            </div>
+          </div>
+          <div class="action-buttons">
+            {% if access_context.can_edit %}
+              <button class="quick-select-btn"
+                      data-schedule-id="{{ schedule.id }}"
+                      data-equipment-id="{{ schedule.equipment.id }}">
+                🎯 Select &amp; Calibrate
+              </button>
+            {% else %}
+              <span class="btn btn-secondary">View Only</span>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    {% endif %}
+
+    {% if in_progress_schedules %}
+      <h4 class="section-title progress-title">⚡ In Progress</h4>
+      {% for schedule in in_progress_schedules|slice:":3" %}
+        <div class="schedule-item progress">
+          <div class="schedule-info">
+            <div class="schedule-equipment">
+              {{ schedule.equipment.description|default:"N/A" }}
+              <span class="serial-number">({{ schedule.equipment.serial_number }})</span>
+            </div>
+            <div class="schedule-details">
+              Started: {{ schedule.updated|date:"M d, Y H:i" }} |
+              Workshop: {{ schedule.workshop.name|default:"Not assigned" }}<br>
+              Procedure: {{ schedule.calibration_procedure.name|default:"No procedure" }}
+            </div>
+          </div>
+          <div class="action-buttons">
+            <span class="btn btn-warning">In Progress</span>
+          </div>
+        </div>
+      {% endfor %}
+    {% endif %}
+
+    {% if not overdue_schedules and not pending_schedules and not in_progress_schedules %}
+      <div class="empty-state">
+        <h4>No upcoming schedules</h4>
+        <p>All calibrations are up to date!</p>
+        <a href="{% url 'schedule:pending_calibrations' %}" class="btn btn-primary">
+          View All Schedules
+        </a>
+      </div>
+    {% endif %}
+
+  </div>
+</div>
+
+
+
+<div class="card">
+  <div class="card-header">
+    <div>
+      <h3 class="card-title">Recent Calibration Sessions</h3>
+      <span class="card-subtitle">Last 5 sessions from this week</span>
+    </div>
+  </div>
+
+  <div id="recent-sessions">
+    {% if recent_sessions %}
+      {% for session in recent_sessions|slice:":5" %}
+        <div class="schedule-item {% if session.overall_pass %}completed{% else %}failed{% endif %}">
+          <div class="schedule-info">
+            <div class="schedule-equipment">
+              {% if session.equipment %}
+                {{ session.equipment.description }} —
+                <span class="serial-number">{{ session.device_serial|default:"N/A" }}</span>
+              {% else %}
+                {{ session.device_model|default:"Unknown Model" }} —
+                <span class="serial-number">{{ session.device_serial|default:"N/A" }}</span>
+              {% endif %}
+            </div>
+            <div class="schedule-details">
+              Procedure: {{ session.procedure.name|default:"No procedure assigned" }}<br>
+              Performed by: {{ session.performed_by.get_full_name|default:session.performed_by.username }}<br>
+              Status: <strong>{{ session.overall_pass|yesno:"PASSED,FAILED" }}</strong>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill"
+                   style="width:{{ session.overall_pass|yesno:'100,50' }}%;"></div>
+            </div>
+          </div>
+          <div class="schedule-actions">
+            <div class="schedule-date">
+              {{ session.timestamp|date:"M d, Y H:i" }}
+              <div class="time-ago">{{ session.timestamp|timesince }} ago</div>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+
+      <div class="sessions-summary">
+        <p class="text-muted">
+          Showing {{ recent_sessions|length }} of
+          {{ total_week_sessions|default:recent_sessions|length }} sessions this week
+        </p>
+      </div>
+
+    {% else %}
+      <div class="empty-state">
+        <div class="empty-icon">📋</div>
+        <h4>No recent calibration sessions</h4>
+        <p>No calibration sessions have been performed this week.</p>
+        <a href="{% url 'calibration:perform_calibration' %}" class="btn btn-primary">
+          Start Calibration
+        </a>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-sankey@0.10.2/build/Chart.Sankey.min.js"></script>
+<script src="{% static 'calibrition/calsoft.js' %}"></script>
+
+{% endblock %}

@@ -1,0 +1,453 @@
+/* =================================================
+   PPM DASHBOARD STYLES
+   Version: 3.0 (Theme Adaptive)
+   ================================================= */
+
+:root {
+  /* Component-Specific Mappings to Global Theme */
+  --ppm-bg-card: var(--bg-card);
+  --ppm-bg-nav: var(--bg-tertiary);
+  --ppm-border: var(--border-color);
+  --ppm-text-main: var(--text-primary);
+  --ppm-text-sub: var(--text-secondary);
+}
+
+/* Base Layout */
+.main-container {
+  background-color: var(--bg-primary);
+  min-height: 100vh;
+  padding: 4px 8px;
+  color: var(--ppm-text-main);
+}
+
+/* ------------------------------------------------
+   FLATTENED CARD COMPONENTS
+   ------------------------------------------------ */
+.theme-card {
+  background: var(--ppm-bg-card);
+  border: 1px solid var(--ppm-border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 1.5rem;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  overflow: hidden;
+}
+
+.theme-card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.theme-card-header {
+  padding: 0.6rem;
+  border-bottom: 1px solid var(--ppm-border);
+  background-color: var(--ppm-bg-nav);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.theme-card-body {
+  padding: 0.75rem;
+}
+
+/* ------------------------------------------------
+   SPA NAVIGATION
+   ------------------------------------------------ */
+.spa-nav {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.375rem;
+  background: var(--ppm-bg-card);
+  border: 1px solid var(--ppm-border);
+  border-radius: 12px;
+  margin-bottom: 1.5rem;
+  overflow-x: auto;
+}
+
+.spa-nav-item {
+  flex: 1;
+  /* each item claims equal width */
+  min-width: 0;
+  /* allow shrink on small screens */
+  padding: 0.65rem 1rem;
+  border-radius: 8px;
+  color: var(--ppm-text-sub);
+  text-decoration: none;
+  font-weight: 600;
+  transition: all 0.2s;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* icon + label centred */
+  gap: 0.5rem;
+  border: 1px solid transparent;
+  text-align: center;
+}
+
+.spa-nav-item:hover {
+  background-color: var(--bg-hover);
+  color: var(--primary-color);
+}
+
+.spa-nav-item.active {
+  background: var(--primary-gradient);
+  color: var(--bg-card) !important;
+  box-shadow: var(--shadow-sm);
+}
+
+/* On very small screens keep items usable, allow horizontal scroll */
+@media (max-width: 480px) {
+  .spa-nav-item {
+    flex: 0 0 auto;
+    padding: 0.6rem 1.1rem;
+  }
+}
+
+/* ------------------------------------------------
+   DATA TABLES (THEMED)
+   ------------------------------------------------ */
+.table-responsive {
+  border: 1px solid var(--ppm-border);
+  border-radius: 8px;
+}
+
+.theme-table {
+  width: 100%;
+  margin-bottom: 0;
+  color: var(--ppm-text-main);
+  vertical-align: middle;
+}
+
+.theme-table thead th {
+  background-color: var(--ppm-bg-nav);
+  color: var(--ppm-text-main);
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.5px;
+  padding: 1rem;
+  border-bottom: 2px solid var(--ppm-border);
+  white-space: nowrap;
+}
+
+/* Light mode: mint-white header */
+:root:not([data-theme="dark"]) .theme-table thead th,
+[data-theme="light"] .theme-table thead th {
+  background-color: var(--bg-tertiary) !important; /* #e8f5ee mint white */
+  color: var(--text-primary) !important;
+}
+
+.theme-table tbody td {
+  padding: 1rem;
+  border-bottom: 1px solid var(--ppm-border);
+  color: var(--ppm-text-main);
+}
+
+.theme-table tbody tr:hover {
+  background-color: var(--bg-hover);
+}
+
+/* ------------------------------------------------
+   FORM CONTROLS
+   ------------------------------------------------ */
+.form-control,
+.form-select {
+  background-color: var(--input-bg);
+  border: 1px solid var(--input-border);
+  color: var(--ppm-text-main);
+  padding: 0.6rem 1rem;
+}
+
+.form-control:focus,
+.form-select:focus {
+  background-color: var(--input-bg);
+  border-color: var(--primary-color);
+  color: var(--ppm-text-main);
+  box-shadow: 0 0 0 0.25rem rgba(0,0,0,.0);
+}
+
+/* ------------------------------------------------
+   STATUS BADGES
+   ------------------------------------------------ */
+.status-badge {
+  padding: 0.4em 0.8em;
+  border-radius: 50px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+}
+
+.badge-pending {
+  background: color-mix(in srgb, var(--warning-color) 10%, var(--bg-card));
+  color: var(--warning-color);
+  border: 1px solid rgba(0,0,0,.0);
+}
+
+.badge-completed {
+  background: color-mix(in srgb, var(--success-color) 10%, var(--bg-card));
+  color: var(--success-color);
+  border: 1px solid rgba(0,0,0,.0);
+}
+
+.badge-pushed {
+  background: color-mix(in srgb, var(--info-color) 10%, var(--bg-card));
+  color: #0891b2;
+  border: 1px solid rgba(0,0,0,.0);
+}
+
+.badge-overdue {
+  background: color-mix(in srgb, var(--danger-color) 10%, var(--bg-card));
+  color: var(--danger-color);
+  border: 1px solid rgba(0,0,0,.0);
+}
+
+/* Dark Mode Badges */
+[data-theme="dark"] .badge-pending {
+  color: var(--warning-color);
+  border-color: var(--warning-color);
+}
+
+[data-theme="dark"] .badge-completed {
+  color: #34d399;
+  border-color: #34d399;
+}
+
+[data-theme="dark"] .badge-pushed {
+  color: #22d3ee;
+  border-color: #22d3ee;
+}
+
+[data-theme="dark"] .badge-overdue {
+  color: var(--danger-color);
+  border-color: var(--danger-color);
+}
+
+/* ------------------------------------------------
+   MODAL & PLANNING CARDS
+   ------------------------------------------------ */
+.planning-option-card {
+  display: block;
+  position: relative;
+  cursor: pointer;
+  border: 2px solid var(--ppm-border);
+  border-radius: 12px;
+  padding: 0.6rem;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  background: var(--ppm-bg-card);
+  height: 100%;
+}
+
+.planning-option-card:hover {
+  border-color: var(--primary-color);
+  background-color: var(--bg-hover);
+  transform: translateY(-2px);
+}
+
+.planning-option-card.selected {
+  border-color: var(--primary-color);
+  background-color: rgba(0,0,0,.0);
+}
+
+.check-circle {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  width: 26px;
+  height: 26px;
+  background: var(--primary-color);
+  color: var(--bg-card);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  opacity: 0;
+  transform: scale(0.5);
+  transition: all 0.2s ease;
+  z-index: 2;
+  box-shadow: 0 2px 4px rgba(0,0,0,.0);
+}
+
+.planning-option-card.selected .check-circle {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.period-btn {
+  border: 1px solid var(--ppm-border);
+  background-color: var(--ppm-bg-card);
+  color: var(--ppm-text-sub);
+  padding: 4px 8px 1rem;
+  transition: all 0.2s;
+  border-radius: 8px;
+}
+
+.period-btn:hover {
+  background-color: var(--bg-hover);
+  color: var(--ppm-text-main);
+}
+
+.period-btn.active {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+  color: var(--bg-card) !important;
+}
+
+.period-btn.active span {
+  color: var(--bg-card) !important;
+}
+
+/* ------------------------------------------------
+   DEPARTMENT DROPDOWN TOGGLE BUTTON
+   theme.css owns .dropdown-menu / .dropdown-item;
+   we only handle the toggle button + overflow fix here.
+   ------------------------------------------------ */
+
+/* ROOT CAUSE FIX: theme.css sets overflow:hidden on .btn which clips
+   the absolutely-positioned dropdown menu to the button's bounds.
+   Setting overflow:visible on the .dropdown wrapper lets the menu escape. */
+.dropdown {
+  overflow: visible !important;
+}
+
+/* Toggle button styled to blend with theme cards */
+.dropdown>.btn-outline-secondary {
+  background-color: var(--ppm-bg-card);
+  border-color: var(--ppm-border);
+  color: var(--ppm-text-main);
+  text-align: left;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  overflow: visible !important;
+}
+
+.dropdown>.btn-outline-secondary:hover,
+.dropdown>.btn-outline-secondary:focus {
+  background-color: var(--bg-hover);
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+  box-shadow: 0 0 0 0.2rem rgba(0,0,0,.0);
+}
+
+/* ------------------------------------------------
+   ANIMATIONS
+   ------------------------------------------------ */
+.view-section {
+  display: none;
+  animation: slideUp 0.3s ease-out;
+}
+
+.view-section.active {
+  display: block;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ════════════════════════════════════════════════
+    DARK MODE — TABLE BACKGROUNDS
+    ════════════════════════════════════════════════ */
+[data-theme="dark"] .theme-table {
+  background-color: var(--bg-card) !important;
+  --bs-table-bg: var(--bg-card);
+  --bs-table-striped-bg: var(--bg-tertiary);
+  --bs-table-hover-bg: var(--bg-hover);
+  --bs-table-color: var(--text-primary);
+}
+
+[data-theme="dark"] .theme-table thead th {
+  background-color: var(--bg-tertiary) !important;
+  color: var(--text-muted) !important;
+  border-bottom-color: var(--border-color) !important;
+  border-left: none !important;
+}
+
+[data-theme="dark"] .theme-table thead th:first-child {
+  border-left: 3px solid var(--secondary-color) !important;
+}
+
+[data-theme="dark"] .theme-table tbody tr {
+  border-bottom-color: var(--border-light) !important;
+  background-color: var(--bg-card);
+}
+
+[data-theme="dark"] .theme-table tbody tr:nth-child(even) {
+  background-color: var(--bg-tertiary) !important;
+}
+
+[data-theme="dark"] .theme-table tbody tr:hover {
+  background-color: var(--bg-hover) !important;
+}
+
+[data-theme="dark"] .theme-table tbody td {
+  color: var(--text-primary) !important;
+  border-bottom-color: var(--border-light) !important;
+}
+
+[data-theme="dark"] .theme-table code {
+  color: var(--text-muted) !important;
+  background: var(--primary-muted) !important;
+}
+
+/* Department Breakdown table in Summary view */
+[data-theme="dark"] .table-responsive {
+  border-color: var(--border-color) !important;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+[data-theme="dark"] .table {
+  background-color: var(--bg-card) !important;
+  --bs-table-bg: var(--bg-card);
+  --bs-table-color: var(--text-primary);
+  --bs-table-hover-bg: var(--bg-hover);
+  --bs-table-striped-bg: var(--bg-tertiary);
+}
+
+[data-theme="dark"] .table thead th,
+[data-theme="dark"] .table thead td {
+  background-color: var(--bg-tertiary) !important;
+  color: var(--text-muted) !important;
+  border-color: var(--border-color) !important;
+}
+
+[data-theme="dark"] .table tbody tr {
+  border-bottom-color: var(--border-light) !important;
+}
+
+[data-theme="dark"] .table tbody tr:hover > * {
+  background-color: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .table tbody td {
+  color: var(--text-primary) !important;
+  border-color: var(--border-light) !important;
+}
+
+/* Bootstrap table-light override in dark mode */
+[data-theme="dark"] .table-light,
+[data-theme="dark"] thead.table-light,
+[data-theme="dark"] .table-light th,
+[data-theme="dark"] .table-light td {
+  --bs-table-bg: var(--bg-tertiary) !important;
+  --bs-table-color: var(--text-muted) !important;
+  background-color: var(--bg-tertiary) !important;
+  color: var(--text-muted) !important;
+  border-color: var(--border-color) !important;
+}

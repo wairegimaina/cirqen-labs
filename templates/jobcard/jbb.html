@@ -1,0 +1,471 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Job Cards - Medical Equipment Management{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/select2.min.css' %}" />
+<link rel="stylesheet" href="{% static 'css/flatpickr.min.css' %}" />
+<link rel="stylesheet" href="{% static 'jobcards/jobcards.css' %}" />
+{% endblock %}
+{% block page_title %} Create Jobcards {% endblock %}
+{% block content %}
+<div class="job-card-wrapper">
+
+    <!-- TECHNICIAN SECTION -->
+    <section class="job-section {% if not is_technician %}disabled-overlay{% endif %} fade-in">
+
+        {% if is_technician %}
+        <div class="section-header">
+            <h2><i class='fas fa-tools'></i> Job Card - Technician</h2>
+            <div class="job-nav">
+                <a href="{% url 'jobcard:waiting_jobcards' %}" class="btn btn-sm btn-outline-primary">
+                    <i class='fas fa-clock'></i> Waiting
+                </a>
+                <a href="{% url 'jobcard:approved_jobcards' %}" class="btn btn-sm btn-outline-success">
+                    <i class='fas fa-check'></i> Approved
+                </a>
+                <a href="{% url 'jobcard:declined_jobcards' %}" class="btn btn-sm btn-outline-danger">
+                    <i class='fas fa-times'></i> Declined
+                </a>
+            </div>
+        </div>
+
+        <form method="POST" action="{% url 'jobcard:create_job_card' %}" id="technician-form" autocomplete="off">
+            {% csrf_token %}
+
+            <!-- Priority & Department Row -->
+            <div class="form-grid two-col">
+                <div class="form-group">
+                    <label for="priority_level"><i class='fas fa-flag'></i> Priority Level</label>
+                    <select name="priority_level" id="priority_level" class="form-control select2-single" required>
+                        <option value="">Select Priority</option>
+                        <option value="Low" {% if form_data.priority_level == "Low" %}selected{% endif %}>🟢 Low</option>
+                        <option value="Medium" {% if form_data.priority_level == "Medium" %}selected{% endif %}>🟡 Medium</option>
+                        <option value="High" {% if form_data.priority_level == "High" %}selected{% endif %}>🟠 High</option>
+                        <option value="Urgent" {% if form_data.priority_level == "Urgent" %}selected{% endif %}>🔴 Urgent</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="department"><i class='fas fa-building'></i> Department</label>
+                    <select name="department" id="department" class="form-control select2-single" required>
+                        <option value="">Select Department</option>
+                        {% for dept in departments %}
+                        <option value="{{ dept.id }}" {% if form_data.department == dept.id|stringformat:"s" %}selected{% endif %}>
+                            {{ dept.name|default:"Unknown" }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <!-- Equipment Selection -->
+            <div class="form-group">
+                <label for="equipment"><i class='fas fa-tools'></i> Equipment</label>
+                <select name="equipment" id="equipment" class="form-control select2-single" required>
+                    <option value="">Select Equipment</option>
+                </select>
+            </div>
+
+            <!-- Equipment Details Panel -->
+            <div class="info-box" id="equipment-details" style="display: none;">
+                <h5><i class='fas fa-info-circle'></i> Equipment Details</h5>
+                <div class="details-grid">
+                    <span><strong>Description:</strong> <span id="eq-desc">-</span></span>
+                    <span><strong>Serial:</strong> <span id="eq-serial">-</span></span>
+                    <span><strong>Model:</strong> <span id="eq-model">-</span></span>
+                    <span><strong>Status:</strong> <span id="eq-status">-</span></span>
+                </div>
+            </div>
+
+            <!-- Job Description -->
+            <div class="form-group">
+                <label for="job_description"><i class='fas fa-edit'></i> Job Description</label>
+                <textarea name="job_description" id="job_description" class="form-control" rows="3"
+                          placeholder="Describe the work performed..." required>{{ form_data.job_description|default:"" }}</textarea>
+            </div>
+
+            <!-- Action & Times Row -->
+            <div class="form-grid three-col">
+                <div class="form-group">
+                    <label for="action_taken"><i class='fas fa-tasks'></i> Action Taken</label>
+                    <select name="action_taken" id="action_taken" class="form-control select2-single" required>
+                        <option value="">Select Action</option>
+                        {% if workshop.category == 'maintenance' %}
+                            <option value="PPM" {% if form_data.action_taken == "PPM" %}selected{% endif %}>🔧 PPM</option>
+                            <option value="Repair" {% if form_data.action_taken == "Repair" %}selected{% endif %}>🔨 Repair</option>
+                            <option value="Others" {% if form_data.action_taken == "Others" %}selected{% endif %}>📋 Others</option>
+                        {% elif workshop.category == 'calibration_center' %}
+                            <option value="Calibration" {% if form_data.action_taken == "Calibration" %}selected{% endif %}>⚖️ Calibration</option>
+                            <option value="Others" {% if form_data.action_taken == "Others" %}selected{% endif %}>📋 Others</option>
+                        {% else %}
+                            <option value="PPM" {% if form_data.action_taken == "PPM" %}selected{% endif %}>🔧 PPM</option>
+                            <option value="Calibration" {% if form_data.action_taken == "Calibration" %}selected{% endif %}>⚖️ Calibration</option>
+                            <option value="Repair" {% if form_data.action_taken == "Repair" %}selected{% endif %}>🔨 Repair</option>
+                            <option value="Others" {% if form_data.action_taken == "Others" %}selected{% endif %}>📋 Others</option>
+                        {% endif %}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="time_started"><i class='fas fa-clock'></i> Time Started</label>
+                    <input type="text" name="time_started" id="time_started" class="form-control"
+                           placeholder="HH:MM" value="{{ form_data.time_started|default:"" }}" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="time_completed"><i class='fas fa-check-circle'></i> Time Completed</label>
+                    <input type="text" name="time_completed" id="time_completed" class="form-control"
+                           placeholder="HH:MM:SS" value="{{ form_data.time_completed|default:"" }}">
+                </div>
+            </div>
+
+            <!-- PPM Schedule Panel -->
+            <div class="card-panel" id="ppm-schedule-container" style="display: none;">
+                <div class="panel-header">
+                    <h5><i class='fas fa-calendar-check'></i> Link to PPM Schedule</h5>
+                    <span class="badge badge-info">Optional</span>
+                </div>
+                <select name="ppm_schedule_id" id="ppm_schedule_id" class="form-control select2-single">
+                    <option value="">Loading schedules...</option>
+                </select>
+                <small class="text-muted">
+                    Select a pending PPM schedule to auto-complete it. Leave blank for manual work.
+                </small>
+                <div id="ppm-no-schedules" class="alert alert-warning mt-2" style="display: none;">
+                    <i class='fas fa-exclamation-triangle'></i>
+                    <strong>No pending schedules</strong> for this equipment. Will be recorded as manual PPM.
+                </div>
+            </div>
+
+            <!-- Spare Parts Panel -->
+            <div class="card-panel">
+                <div class="panel-header">
+                    <h5><i class='fas fa-wrench'></i> Spare Parts Used</h5>
+                    <button type="button" onclick="addPartRow()" class="btn btn-sm btn-primary">
+                        <i class='fas fa-plus'></i> Add Part
+                    </button>
+                </div>
+                <div id="parts-container"></div>
+                <input type="hidden" name="spare_parts_data" id="spare_parts_data"
+                       value='{{ form_data.spare_parts_data|safe|default:"[]" }}'>
+            </div>
+
+            <!-- Cost Breakdown Panel -->
+            <div class="card-panel">
+                <div class="panel-header">
+                    <h5><i class='fas fa-dollar-sign'></i> Cost Breakdown</h5>
+                </div>
+
+                <div class="form-grid two-col">
+                    <div class="form-group">
+                        <label for="labor_cost"><i class='fas fa-wrench'></i> Labor Cost (KSh)</label>
+                        <input type="number" name="labor_cost" id="labor_cost" class="form-control"
+                               min="0" step="0.01" placeholder="0.00" value="{{ form_data.labor_cost|default:"0.00" }}">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="additional_costs"><i class='fas fa-plus-circle'></i> Additional Costs (KSh)</label>
+                        <input type="number" name="additional_costs" id="additional_costs" class="form-control"
+                               min="0" step="0.01" placeholder="0.00" value="{{ form_data.additional_costs|default:"0.00" }}">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="additional_costs_description"><i class='fas fa-sticky-note'></i> Additional Costs Description</label>
+                    <textarea name="additional_costs_description" id="additional_costs_description"
+                              class="form-control" rows="2" placeholder="Travel, external services, etc.">{{ form_data.additional_costs_description|default:"" }}</textarea>
+                </div>
+
+                <!-- Cost Summary -->
+                <div class="grand-total-box">
+                    <div>Parts: <span class="cost-display" id="total_parts_cost_display">0.00</span> KSh</div>
+                    <div style="margin-top: 0.5rem;">Grand Total: <span id="grand_total_display">0.00</span> KSh</div>
+                </div>
+            </div>
+
+            <!-- Signature Section -->
+            <div class="signature-section">
+                <h5><i class='fas fa-signature'></i> Technician Signature</h5>
+
+                {% if user_signature_available %}
+                <div class="custom-checkbox signature-toggle">
+                    <input type="checkbox" name="use_auto_signature" id="use_auto_signature_tech" value="true">
+                    <label for="use_auto_signature_tech">Use my saved signature</label>
+                </div>
+                {% endif %}
+
+                <div id="manual-signature-tech">
+                    <p style="color: var(--text-muted); margin-bottom: 0.5rem;">Sign below to confirm:</p>
+                    <div class="signature-pad-wrapper">
+                        <canvas id="signature-pad-tech" width="500" height="200"></canvas>
+                    </div>
+                    <button type="button" onclick="clearSignatureTech()" class="btn btn-danger btn-sm mt-2">
+                        <i class='fas fa-trash'></i> Clear
+                    </button>
+                </div>
+
+                {% if user_signature_available %}
+                <div id="auto-signature-preview-tech" class="signature-preview" style="display: none;">
+                    <p style="color: var(--text-muted);">Your saved signature:</p>
+                    <img id="signature-preview-img-tech" src="" alt="Signature">
+                </div>
+                {% endif %}
+
+                <input type="hidden" name="signature_data" id="signature_data" value="{{ form_data.signature_data|safe|default:"" }}">
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" name="submit" class="btn btn-primary full-width-btn">
+                    <i class='fas fa-check'></i> Submit Job Card
+                </button>
+            </div>
+        </form>
+
+        {% else %}
+        <!-- Technician Read-Only View -->
+        {% if selected_job_card %}
+        <div class="section-header">
+            <h2><i class='fas fa-eye'></i> Job Card Details</h2>
+        </div>
+
+        <div class="info-box">
+            <h5>Job Information</h5>
+            <div class="grid-table">
+                <div class="row">
+                    <strong>Priority:</strong>
+                    <span>{{ selected_job_card.priority_level|default:"N/A" }}</span>
+                </div>
+                <div class="row">
+                    <strong>Department:</strong>
+                    <span>{{ selected_job_card.department.name|default:"N/A" }}</span>
+                </div>
+                <div class="row">
+                    <strong>Equipment:</strong>
+                    <span>{{ selected_job_card.equipment.description|default:"N/A" }} ({{ selected_job_card.equipment.serial_number|default:"" }})</span>
+                </div>
+                <div class="row full">
+                    <strong>Description:</strong>
+                    <span>{{ selected_job_card.job_description|default:"N/A" }}</span>
+                </div>
+                <div class="row">
+                    <strong>Technician:</strong>
+                    <span>{{ selected_job_card.performed_by.get_full_name|default:"N/A" }}</span>
+                </div>
+            </div>
+        </div>
+
+        {% if selected_job_card.spare_parts.all %}
+        <div class="card-panel">
+            <h5><i class='fas fa-wrench'></i> Spare Parts Used</h5>
+            {% for sp in selected_job_card.spare_parts.all %}
+            <div class="part-row">
+                <span>{{ sp.part.accessory|default:"Unknown" }}</span>
+                <span>Qty: {{ sp.quantity }}</span>
+                <span>{{ sp.remarks|default:"No remarks" }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if selected_job_card.tech_signature %}
+        <div class="signature-section">
+            <h5><i class='fas fa-signature'></i> Technician Signature</h5>
+            <div class="signature-preview">
+                <img src="{{ selected_job_card.tech_signature }}" alt="Tech Signature">
+            </div>
+        </div>
+        {% endif %}
+
+        {% else %}
+        <div class="empty-state">
+            <i class='fas fa-info-circle'></i>
+            <p>Select a job card to view details</p>
+        </div>
+        {% endif %}
+        {% endif %}
+
+    </section>
+
+    <!-- NURSE SECTION -->
+    <section class="job-section fade-in">
+
+        <div class="section-header">
+            <h2><i class='fas fa-check-double'></i> Nurse Approval</h2>
+            {% if not is_nurse %}
+            <div class="text-danger">
+                <i class='fas fa-lock fa-2x'></i>
+                <small class="d-block mt-1">Access Restricted</small>
+            </div>
+            {% endif %}
+        </div>
+
+        {% if is_nurse %}
+        <form method="POST" action="{% url 'jobcard:create_job_card' %}" id="nurse-approval-form">
+            {% csrf_token %}
+            <input type="hidden" name="jobcard_id" value="{{ selected_job_card.id }}">
+
+            {% if selected_job_card %}
+            <div class="info-summary info-box">
+                <h5>Job Card Summary</h5>
+                <div class="info-row">
+                    <strong>Job Card ID:</strong>
+                    <span>JC-{{ selected_job_card.id }}</span>
+                </div>
+                <div class="info-row">
+                    <strong>Department:</strong>
+                    <span>{{ selected_job_card.department.name|default:"N/A" }}</span>
+                </div>
+                <div class="info-row">
+                    <strong>Equipment:</strong>
+                    <span>{{ selected_job_card.equipment.description|default:"N/A" }}</span>
+                </div>
+                <div class="info-row">
+                    <strong>Technician:</strong>
+                    <span>{{ selected_job_card.performed_by.get_full_name|default:"N/A" }}</span>
+                </div>
+                <div class="info-row" style="border: none;">
+                    <strong>Job Description:</strong>
+                    <span>{{ selected_job_card.job_description|default:"N/A" }}</span>
+                </div>
+            </div>
+
+            <!-- Cost Summary for Nurse -->
+            <div class="card-panel">
+                <div class="panel-header">
+                    <h5><i class='fas fa-dollar-sign'></i> Cost Breakdown</h5>
+                </div>
+                <div class="grid-table">
+                    <div class="row">
+                        <strong>Labor Cost:</strong>
+                        <span class="cost-display">{{ selected_job_card.labor_cost|default:"0.00" }} KSh</span>
+                    </div>
+                    <div class="row">
+                        <strong>Parts Cost:</strong>
+                        <span class="cost-display">{{ selected_job_card.total_parts_cost|default:"0.00" }} KSh</span>
+                    </div>
+                    <div class="row">
+                        <strong>Additional:</strong>
+                        <span class="cost-display">{{ selected_job_card.additional_costs|default:"0.00" }} KSh</span>
+                    </div>
+                </div>
+                <div class="grand-total-box">
+                    TOTAL COST: {{ selected_job_card.get_total_cost|default:"0.00" }} KSh
+                </div>
+            </div>
+
+            <!-- In-charge Name -->
+            <div class="form-group">
+                <label for="nurse_name"><i class='fas fa-user'></i> In-charge Name</label>
+                <input type="text" name="nurse_name" id="nurse_name" class="form-control"
+                       value="{{ request.user.first_name }} {{ request.user.last_name }}" required>
+            </div>
+
+            <!-- Signature Section -->
+            <div class="signature-section">
+                <h5><i class='fas fa-signature'></i> In-charge Signature</h5>
+
+                {% if user_signature_available %}
+                <div class="custom-checkbox signature-toggle">
+                    <input type="checkbox" name="use_auto_signature" id="use_auto_signature_nurse" value="true">
+                    <label for="use_auto_signature_nurse">Use my saved signature</label>
+                </div>
+                {% endif %}
+
+                <div id="manual-signature-nurse">
+                    <p style="color: var(--text-muted); margin-bottom: 0.5rem;">Sign to approve/decline:</p>
+                    <div class="signature-pad-wrapper">
+                        <canvas id="signature-pad-nurse" width="400" height="180"></canvas>
+                    </div>
+                    <button type="button" onclick="clearSignatureNurse()" class="btn btn-danger btn-sm mt-2">
+                        <i class='fas fa-trash'></i> Clear
+                    </button>
+                </div>
+
+                {% if user_signature_available %}
+                <div id="auto-signature-preview-nurse" class="signature-preview" style="display: none;">
+                    <p style="color: var(--text-muted);">Your saved signature:</p>
+                    <img id="signature-preview-img-nurse" src="" alt="Signature">
+                </div>
+                {% endif %}
+
+                <input type="hidden" name="nurse_signature_data" id="nurse_signature_data" value="">
+            </div>
+
+            <!-- Decline Reason (Hidden by default) -->
+            <div class="form-group" id="decline-reason-group" style="display:none;">
+                <label for="decline_reason"><i class='fas fa-exclamation-triangle'></i> Reason for Decline</label>
+                <textarea name="decline_reason" id="decline_reason" class="form-control" rows="3"
+                          placeholder="Provide reason for declining..."></textarea>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="form-actions">
+                <div class="dual-actions">
+                    <button type="submit" name="approve" class="btn btn-success full-width-btn">
+                        <i class='fas fa-check'></i> Approve
+                    </button>
+                    <button type="submit" name="decline" class="btn btn-danger full-width-btn"
+                            onclick="document.getElementById('decline-reason-group').style.display='block'">
+                        <i class='fas fa-times'></i> Decline
+                    </button>
+                </div>
+            </div>
+
+            {% else %}
+            <div class="empty-state">
+                <i class='fas fa-clipboard-list'></i>
+                <p>Select a job card from 'Waiting Approval' to review</p>
+            </div>
+            {% endif %}
+        </form>
+
+        {% else %}
+        <div class="empty-state">
+            <i class='fas fa-lock fa-3x' style="color: var(--danger-color);"></i>
+            <h4 style="margin-top: 1rem;">Access Restricted</h4>
+            <p>You do not have permission to access the nurse approval section.</p>
+        </div>
+        {% endif %}
+
+    </section>
+
+</div>
+
+<script>
+    // API URLs
+    window.LOAD_EQUIPMENT_URL = "{% url 'jobcard:load_equipment' %}";
+    window.LOAD_ACCESSORIES_URL = "{% url 'jobcard:load_accessories' %}";
+    window.CHECK_STOCK_URL = "{% url 'jobcard:check_stock_availability' %}";
+    window.GET_SIGNATURE_URL = "{% url 'jobcard:get_user_signature_data' %}";
+    window.GET_PPM_SCHEDULES_URL = "{% url 'jobcard:get_pending_ppm_schedules' %}";
+    window.WORKSHOP_ID = "{{ workshop.id|default:'' }}";
+
+    // Form Data
+    window.FORM_DATA = {
+        department: "{{ form_data.department|default:'' }}",
+        equipment: "{{ form_data.equipment|default:'' }}"
+    };
+
+    // Accessories Data
+    window.ACCESSORIES_DATA = [
+        {% for part in accessories %}
+        {
+            id: "{{ part.id }}",
+            name: "{{ part.name.name|default:'Unknown' }}",
+            manufacturer: "{{ part.manufacturer.name|default:'Unknown' }}",
+            stock_count: {{ part.stock_count|default:0 }},
+            display_name: "{{ part.name.name|default:'Unknown' }} (Stock: {{ part.stock_count|default:0 }})"
+        }{% if not forloop.last %},{% endif %}
+        {% endfor %}
+    ];
+</script>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/signature_pad.umd.min.js' %}"></script>
+<script src="{% static 'js/select2.min.js' %}"></script>
+<script src="{% static 'js/flatpickr.min.js' %}"></script>
+<script src="{% static 'jobcards/jobcards.js' %}"></script>
+{% endblock %}

@@ -1,0 +1,283 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{% if department %}{{ department.name }}{% else %}Calibration Certificates{% endif %} - Equiper National Hospital{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'calibrition/certificate-list.css' %}" />
+{% endblock %}
+
+{% block page_title %}{% if department %}{{ department.name }}{% else %}Calibration Certificates{% endif %}{% endblock %}
+
+{% block content %}
+<div class="main-container">
+
+        <!-- Filters -->
+        <div class="filter-section">
+            <form method="GET" action="{% if department %}{% url 'calibration:department_certificates' department.pk %}{% else %}{% url 'calibration:certificate_list' %}{% endif %}">
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="equipment" class="form-label">Equipment/Certificate</label>
+                        <input type="text" class="form-control" id="equipment" name="equipment"
+                            placeholder="Search by equipment name, serial, model or certificate number"
+                            value="{{ current_filters.equipment|default:'' }}">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="status" class="form-label">Status</label>
+                        <select class="form-select" id="status" name="status">
+                            <option value="">All Statuses</option>
+                            <option value="pass" {% if current_filters.status == 'pass' %}selected{% endif %}>Pass</option>
+                            <option value="fail" {% if current_filters.status == 'fail' %}selected{% endif %}>Fail</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="text-end">
+                    <button type="submit" class="btn btn-primary me-2">
+                        <i class="fas fa-filter"></i> Apply Filters
+                    </button>
+                    <a href="{% if department %}{% url 'calibration:department_certificates' department.pk %}{% else %}{% url 'calibration:certificate_list' %}{% endif %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-redo"></i> Reset
+                    </a>
+                </div>
+            </form>
+
+
+
+        <!-- Certificates List -->
+        <div id="certificatesList">
+            {% if certificates %}
+                {% for session in certificates %}
+                <div class="certificate-card">
+                    <div class="certificate-header d-flex justify-content-between align-items-center">
+                        <h4 class="mb-0">Certificate NO:{{ session.certificate_number|default:session.pk }}</h4>
+                        <span class="certificate-status {% if session.overall_pass %}status-pass{% else %}status-fail{% endif %}">
+                            {% if session.overall_pass %}PASS{% else %}FAIL{% endif %}
+                        </span>
+                    </div>
+                    <div class="certificate-details">
+                        <div class="flex-fill">
+                            <div class="detail-label">Equipment</div>
+                            <div class="detail-value">{{ session.device_description|default:"Unknown" }}</div>
+                        </div>
+                        <div class="flex-fill">
+                            <div class="detail-label">Serial</div>
+                            <div class="detail-value">{{ session.device_serial|default:"N/A" }}</div>
+                        </div>
+                        <div class="flex-fill">
+                            <div class="detail-label">Model</div>
+                            <div class="detail-value">{{ session.device_model|default:"N/A" }}</div>
+                        </div>
+                        <div class="flex-fill">
+                            <div class="detail-label">Calibration Date</div>
+                            <div class="detail-value">{{ session.timestamp|date:"d M Y" }}</div>
+                        </div>
+                        <div class="flex-fill">
+                            <div class="detail-label">Performed By</div>
+                            <div class="detail-value">{{ session.performed_by.get_full_name|default:session.performed_by.username }}</div>
+                        </div>
+                        <div class="flex-fill">
+                            <div class="detail-label">Procedure</div>
+                            <div class="detail-value">{{ session.procedure.name|default:"N/A" }}</div>
+                        </div>
+                        <div class="action-buttons">
+                            <a href="{% url 'calibration:generate_comprehensive_certificate' session.pk %}" class="btn btn-sm btn-outline-success">
+                                <i class="fas fa-file-pdf"></i> Download PDF
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="no-certificates text-center my-5">
+                    <i class="fas fa-file-excel" style="font-size: 3rem;"></i>
+                    <h3>No Certificates Found</h3>
+                    <p>No approved calibration certificates match the current filters.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Local Bootstrap JS -->
+    <script src="{% static 'js/bootstrap.bundle.min.js' %}"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // Get CSRF token
+            function getCookie(name) {
+                let cookieValue = null;
+                if (document.cookie && document.cookie !== '') {
+                    const cookies = document.cookie.split(';');
+                    for (let i = 0; i < cookies.length; i++) {
+                        const cookie = cookies[i].trim();
+                        if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                            break;
+                        }
+                    }
+                }
+                return cookieValue;
+            }
+
+            const csrftoken = getCookie('csrftoken');
+
+            // Show overlay on bulk download
+            const bulkForm = document.getElementById("bulk-download-form");
+            if (bulkForm) {
+                bulkForm.addEventListener("submit", function (e) {
+                    e.preventDefault();
+                    const overlay = document.getElementById("loading-overlay");
+                    overlay.style.display = "flex";
+                    overlay.style.flexDirection = "column";
+                    overlay.style.justifyContent = "center";
+                    overlay.style.alignItems = "center";
+
+                    const dateFrom = document.getElementById("bulk_date_from").value;
+                    const dateTo = document.getElementById("bulk_date_to").value;
+
+                    if (!dateFrom || !dateTo) {
+                        alert("Please select both start and end dates.");
+                        overlay.style.display = "none";
+                        return;
+                    }
+
+                    const departmentId = {% if department %}{{ department.pk }}{% else %}0{% endif %};
+                    // Build URL - don't include department parameter if it's 0
+                    let url = `{% url 'calibration:bulk_certificates_download' %}?date_from=${dateFrom}&date_to=${dateTo}`;
+                    if (departmentId && departmentId !== 0) {
+                        url += `&department=${departmentId}`;
+                    }
+
+                    // First check if certificates exist
+                    fetch(url + '&check_only=1', {
+                        method: 'GET',
+                        headers: {
+                            'X-CSRFToken': csrftoken,
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        credentials: 'same-origin'
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            // Handle HTTP errors
+                            return response.text().then(text => {
+                                let errorMsg = text;
+
+                                // Try to extract meaningful error message
+                                if (text.includes('No Department') || text.includes('No department')) {
+                                    errorMsg = "No department assigned to your account. Please contact your administrator.";
+                                } else if (text.includes('Permission') || text.includes('permission')) {
+                                    errorMsg = "You don't have permission to download certificates. Please contact your administrator.";
+                                } else if (text.includes('PermissionError')) {
+                                    errorMsg = "Access denied. Please ensure your account is properly configured.";
+                                }
+
+                                throw new Error(`Access Error (${response.status}): ${errorMsg}`);
+                            });
+                        }
+
+                        const contentType = response.headers.get('content-type');
+                        if (contentType && contentType.includes('application/json')) {
+                            return response.json();
+                        }
+
+                        // If it's not JSON, treat it as an error
+                        return response.text().then(text => {
+                            throw new Error('Unexpected response format: ' + text.substring(0, 100));
+                        });
+                    })
+                    .then(data => {
+                        if (!data || data.count === 0) {
+                            alert("No approved certificates found in the selected date range.");
+                            overlay.style.display = "none";
+                            return null;
+                        }
+
+                        // Proceed with download
+                        return fetch(url, {
+                            method: 'GET',
+                            headers: {
+                                'X-CSRFToken': csrftoken,
+                                'X-Requested-With': 'XMLHttpRequest'
+                            },
+                            credentials: 'same-origin'
+                        });
+                    })
+                    .then(response => {
+                        if (!response) return null; // No certificates found
+
+                        if (!response.ok) {
+                            return response.text().then(text => {
+                                let errorMsg = text.substring(0, 200);
+
+                                if (text.includes('No Department') || text.includes('No department')) {
+                                    errorMsg = "No department assigned to your account.";
+                                } else if (text.includes('Permission') || text.includes('permission')) {
+                                    errorMsg = "You don't have permission to download certificates.";
+                                }
+
+                                throw new Error(`Download failed (${response.status}): ${errorMsg}`);
+                            });
+                        }
+
+                        // Check if response is JSON (error) or blob (success)
+                        const contentType = response.headers.get('content-type');
+                        if (contentType && contentType.includes('application/json')) {
+                            return response.json().then(data => {
+                                if (data.error) {
+                                    throw new Error(data.error);
+                                }
+                                throw new Error('No certificates available for download');
+                            });
+                        }
+
+                        if (contentType && contentType.includes('application/zip')) {
+                            return response.blob();
+                        }
+
+                        // Unexpected content type
+                        return response.text().then(text => {
+                            throw new Error('Unexpected response format. Expected ZIP file.');
+                        });
+                    })
+                    .then(blob => {
+                        if (!blob) return; // No certificates found
+
+                        const a = document.createElement("a");
+                        a.href = URL.createObjectURL(blob);
+                        a.download = `certificates_${dateFrom}_to_${dateTo}.zip`;
+                        document.body.appendChild(a);
+                        a.click();
+                        a.remove();
+                        URL.revokeObjectURL(a.href);
+                        overlay.style.display = "none";
+                    })
+                    .catch(err => {
+                        console.error("Download error:", err);
+                        let errorMsg = err.message;
+
+                        // Clean up error message
+                        if (errorMsg.includes('No Department') || errorMsg.includes('No department')) {
+                            errorMsg = "⚠️ Account Setup Required\n\nYour account doesn't have a department assigned. Please contact your system administrator to complete your account setup.";
+                        } else if (errorMsg.includes('403')) {
+                            errorMsg = "⚠️ Access Denied\n\nYou don't have permission to download these certificates. Please contact your administrator.";
+                        } else if (errorMsg.includes('PermissionError')) {
+                            errorMsg = "⚠️ Permission Error\n\nYour account may not be properly configured. Please contact your administrator.";
+                        } else if (errorMsg.includes('404')) {
+                            errorMsg = "No certificates found for the selected date range.";
+                        } else if (errorMsg.includes('SyntaxError') || errorMsg.includes('JSON')) {
+                            errorMsg = "⚠️ Server Error\n\nThere was a problem with the server response. Please contact your administrator.";
+                        }
+
+                        alert(errorMsg);
+                        overlay.style.display = "none";
+                    });
+                });
+            }
+        });
+    </script>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Page-specific JavaScript -->
+{% endblock %}

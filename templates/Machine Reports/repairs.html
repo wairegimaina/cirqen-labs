@@ -1,0 +1,257 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Repair History Analytics - Equiper National Hospital{% endblock %}
+
+{% block extra_css %}
+<!-- Page-specific CSS -->
+{% endblock %}
+
+{% block page_title %}Repair History Analytics{% endblock %}
+
+{% block content %}
+<div class="container">
+        <!-- Header -->
+        
+
+        <!-- Filters -->
+        <div class="filters-section">
+            <form method="GET" id="filterForm">
+                <div class="filters-grid">
+                    <div class="filter-group">
+                        <label for="year">Year</label>
+                        <select name="year" id="year">
+                            <option value="">All Years</option>
+                            {% for y in years %}
+                            <option value="{{ y }}" {% if y == selected_year %}selected{% endif %}>{{ y }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="filter-group">
+                        <label for="month">Month</label>
+                        <select name="month" id="month">
+                            <option value="">All Months</option>
+                            {% for m in months %}
+                            <option value="{{ m.0 }}" {% if m.0 == selected_month %}selected{% endif %}>{{ m.1 }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="filter-group">
+                        <label for="workshop">Workshop</label>
+                        <select name="workshop" id="workshop">
+                            <option value="">All Workshops</option>
+                            {% for workshop in workshops %}
+                            <option value="{{ workshop.id }}" {% if workshop.id == selected_workshop %}selected{% endif %}>{{ workshop.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="filter-group">
+                        <button type="submit" class="filter-btn">
+                            <i class="fas fa-filter"></i> Apply Filters
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- Summary Cards -->
+        <div class="summary-cards">
+            <div class="summary-card">
+                <div class="summary-value">{{ total_repairs.total_count|default:0 }}</div>
+                <div class="summary-label">Total Repairs</div>
+            </div>
+            
+            <div class="summary-card">
+                <div class="summary-value">{{ total_repairs.total_downtime|floatformat:0|default:0 }}</div>
+                <div class="summary-label">Total Downtime (Hours)</div>
+            </div>
+            
+            <div class="summary-card">
+                <div class="summary-value">${{ total_repairs.total_cost|floatformat:0|default:0 }}</div>
+                <div class="summary-label">Total Parts Cost</div>
+            </div>
+            
+            <div class="summary-card">
+                <div class="summary-value">
+                    {% if total_repairs.total_count and total_repairs.total_cost %}
+                        ${{ total_repairs.total_cost|div:total_repairs.total_count|floatformat:0 }}
+                    {% else %}
+                        $0
+                    {% endif %}
+                </div>
+                <div class="summary-label">Avg Cost per Repair</div>
+            </div>
+        </div>
+
+        <!-- Top Equipment by Repairs -->
+        <div class="top-equipment-section">
+            <h3 class="table-title">
+                <i class="fas fa-chart-bar"></i> Equipment Requiring Most Repairs
+            </h3>
+            <div class="top-equipment-grid">
+                {% for equipment in top_repair_equipment %}
+                <div class="equipment-item">
+                    <h4>{{ equipment.equipment__name }}</h4>
+                    <div class="equipment-stats">
+                        <span><strong>{{ equipment.total_repairs }}</strong> repairs</span>
+                        <span><strong>{{ equipment.total_downtime|floatformat:1 }}</strong>h downtime</span>
+                    </div>
+                    <div class="workshop-badge">{{ equipment.equipment__workshop__name }}</div>
+                </div>
+                {% empty %}
+                <p>No repair data available for the selected filters.</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Repair History Table -->
+        <div class="data-table">
+            <div class="table-header">
+                <h3 class="table-title">
+                    <i class="fas fa-list"></i> Detailed Repair History
+                </h3>
+                <input type="text" class="search-box" placeholder="Search equipment..." id="searchBox">
+            </div>
+            
+            <div class="table-responsive">
+                <table id="repairTable">
+                    <thead>
+                        <tr>
+                            <th>Equipment</th>
+                            <th>Workshop</th>
+                            <th>Period</th>
+                            <th>Repair Count</th>
+                            <th>Downtime (Hours)</th>
+                            <th>Parts Cost</th>
+                            <th>Avg Cost/Repair</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for history in repair_history %}
+                        <tr class="table-row">
+                            <td class="equipment-name">{{ history.equipment.name }}</td>
+                            <td>
+                                <span class="workshop-badge">{{ history.equipment.workshop.name }}</span>
+                            </td>
+                            <td>{{ history.year }}-{{ history.month|stringformat:"02d" }}</td>
+                            <td>
+                                <span class="repair-count">{{ history.repair_count }}</span>
+                            </td>
+                            <td class="metric-value downtime-value">{{ history.total_downtime_hours|floatformat:1 }}</td>
+                            <td class="metric-value cost-value">${{ history.spare_parts_cost|floatformat:2 }}</td>
+                            <td class="metric-value">
+                                {% if history.repair_count > 0 %}
+                                    ${{ history.spare_parts_cost|div:history.repair_count|floatformat:2 }}
+                                {% else %}
+                                    $0.00
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center" style="padding: 50px; color: var(--text-muted);">
+                                No repair history found for the selected filters.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            {% if repair_history.has_other_pages %}
+            <div class="pagination">
+                {% if repair_history.has_previous %}
+                    <a href="?page=1{% if request.GET.year %}&year={{ request.GET.year }}{% endif %}{% if request.GET.month %}&month={{ request.GET.month }}{% endif %}{% if request.GET.workshop %}&workshop={{ request.GET.workshop }}{% endif %}">&laquo; First</a>
+                    <a href="?page={{ repair_history.previous_page_number }}{% if request.GET.year %}&year={{ request.GET.year }}{% endif %}{% if request.GET.month %}&month={{ request.GET.month }}{% endif %}{% if request.GET.workshop %}&workshop={{ request.GET.workshop }}{% endif %}">&lsaquo; Previous</a>
+                {% endif %}
+
+                <span class="current">
+                    Page {{ repair_history.number }} of {{ repair_history.paginator.num_pages }}
+                </span>
+
+                {% if repair_history.has_next %}
+                    <a href="?page={{ repair_history.next_page_number }}{% if request.GET.year %}&year={{ request.GET.year }}{% endif %}{% if request.GET.month %}&month={{ request.GET.month }}{% endif %}{% if request.GET.workshop %}&workshop={{ request.GET.workshop }}{% endif %}">Next &rsaquo;</a>
+                    <a href="?page={{ repair_history.paginator.num_pages }}{% if request.GET.year %}&year={{ request.GET.year }}{% endif %}{% if request.GET.month %}&month={{ request.GET.month }}{% endif %}{% if request.GET.workshop %}&workshop={{ request.GET.workshop }}{% endif %}">Last &raquo;</a>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeSearch();
+            initializeFilters();
+        });
+
+        function initializeSearch() {
+            const searchBox = document.getElementById('searchBox');
+            const table = document.getElementById('repairTable');
+            const rows = table.getElementsByClassName('table-row');
+
+            searchBox.addEventListener('input', function() {
+                const searchTerm = this.value.toLowerCase();
+                
+                Array.from(rows).forEach(row => {
+                    const equipmentName = row.querySelector('.equipment-name').textContent.toLowerCase();
+                    const workshopName = row.querySelector('.workshop-badge').textContent.toLowerCase();
+                    
+                    if (equipmentName.includes(searchTerm) || workshopName.includes(searchTerm)) {
+                        row.style.display = '';
+                    } else {
+                        row.style.display = 'none';
+                    }
+                });
+            });
+        }
+
+        function initializeFilters() {
+            // Auto-submit form when filters change
+            const filterInputs = document.querySelectorAll('#filterForm select');
+            filterInputs.forEach(input => {
+                input.addEventListener('change', function() {
+                    document.getElementById('filterForm').submit();
+                });
+            });
+        }
+
+        // Export functionality
+        function exportToCSV() {
+            const table = document.getElementById('repairTable');
+            const rows = Array.from(table.querySelectorAll('tr'));
+            
+            const csvContent = rows.map(row => {
+                const cells = Array.from(row.querySelectorAll('th, td'));
+                return cells.map(cell => {
+                    const text = cell.textContent.trim();
+                    return `"${text.replace(/"/g, '""')}"`;
+                }).join(',');
+            }).join('\n');
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', 'repair_history.csv');
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // Add export button
+        document.querySelector('.table-header').insertAdjacentHTML('beforeend', `
+            <button onclick="exportToCSV()" class="filter-btn" style="margin-left: 15px;">
+                <i class="fas fa-download"></i> Export CSV
+            </button>
+        `);
+    </script>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Page-specific JavaScript -->
+{% endblock %}

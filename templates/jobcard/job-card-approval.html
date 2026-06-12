@@ -1,0 +1,109 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'jobcards/jobcards-approved.css' %}" />
+{% endblock %}
+{% block page_title %}Approved Jobcards {% endblock %}
+{% block content %}
+<div class="main-container" data-search-query="{{ search_query|default:'' }}">
+ <div class="stats-bar">
+        <div class="stat-item card">
+            <div class="stat-number text-primary">{{ paginator.count }}</div>
+            <div class="stat-label">Total Database</div>
+        </div>
+        <div class="stat-item card">
+            <div class="stat-number" id="displayedCount">0</div>
+            <div class="stat-label">On This Page</div>
+        </div>
+        <div class="stat-item card">
+            <div class="stat-number text-success" id="todayCount">0</div>
+            <div class="stat-label">Approved Today</div>
+        </div>
+    </div>
+
+    <div class="content">
+        <div class="card p-3 mb-4">
+            <form method="get" class="row g-3">
+                <div class="col-lg-6">
+                    <input type="text" name="search" id="searchInput" class="form-control"
+                           placeholder="Search by ID, Serial, or Equipment..." value="{{ search_query|default:'' }}">
+                </div>
+                <div class="col-lg-3">
+                    <input type="date" name="date" id="dateFilter" class="form-control" value="{{ selected_date }}">
+                </div>
+                <div class="col-lg-3 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary w-100">Filter</button>
+                    <button type="button" onclick="clearAllFilters()" class="btn btn-secondary">Reset</button>
+                </div>
+            </form>
+        </div>
+
+        <div id="resultsInfo" class="alert alert-info mb-4">
+            <i class="fas fa-info-circle me-2"></i><span id="resultsText">Initializing...</span>
+        </div>
+
+        <div class="job-cards-grid" id="jobcardsList">
+            {% for job_card in job_cards %}
+            <div class="job-card-item card"
+                 data-search="{{ job_card.id }} {{ job_card.equipment.serial_number }} {{ job_card.job_description }}"
+                 data-date="{{ job_card.nurse_signed_date|date:'Y-m-d' }}">
+
+                <div class="card-header d-flex justify-content-between">
+                    <span class="fw-bold">#{{ job_card.id }}</span>
+                    <span class="badge badge-success">Approved</span>
+                </div>
+
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <label class="text-muted small d-block">Equipment</label>
+                            <span class="text-primary fw-bold">{{ job_card.equipment.description }}</span>
+                        </div>
+                        <div class="col-6">
+                            <label class="text-muted small d-block">Serial No.</label>
+                            <span class="text-primary">{{ job_card.equipment.serial_number }}</span>
+                        </div>
+                        <div class="col-12 border-top pt-2">
+                            <label class="text-muted small d-block">Approval Details</label>
+                            <p class="mb-0 small">By: {{ job_card.verified_by_nurse }} on {{ job_card.nurse_signed_date|date:"d M Y" }}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-footer bg-transparent border-0">
+                    <a href="{% url 'jobcard:download_jobcard_pdf' job_card.id %}" class="btn btn-outline-primary btn-sm w-100">
+                        <i class="fas fa-file-pdf me-1"></i> Download PDF
+                    </a>
+                </div>
+            </div>
+            {% empty %}
+            <div class="text-center py-5 w-100">
+                <i class="fas fa-folder-open fa-3x text-muted mb-3"></i>
+                <p class="text-secondary">No approved job cards found matching your criteria.</p>
+            </div>
+            {% endfor %}
+        </div>
+
+        {% if is_paginated %}
+        <nav class="mt-5">
+            <ul class="pagination justify-content-center">
+                {% if job_cards.has_previous %}
+                <li class="page-item"><a class="page-link" href="?page={{ job_cards.previous_page_number }}">Previous</a></li>
+                {% endif %}
+
+                <li class="page-item active"><span class="page-link">{{ job_cards.number }}</span></li>
+
+                {% if job_cards.has_next %}
+                <li class="page-item"><a class="page-link" href="?page={{ job_cards.next_page_number }}">Next</a></li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'jobcards/jobcard-approved.js' %}"></script>
+{% endblock %}

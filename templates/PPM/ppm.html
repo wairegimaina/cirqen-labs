@@ -1,0 +1,950 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}PPM Planning - Equiper{% endblock %}
+{% block page_title %}PPM Schedules {% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'ppm/ppm.css' %}" />
+<link rel="stylesheet" href="{% static 'ppm/ppm-dropdown.css' %}" />
+<meta name="csrf-token" content="{{ csrf_token }}">
+{% endblock %}
+
+{% block content %}
+<div class="main-container">
+
+    <!-- Header -->
+
+
+    <!-- Navigation -->
+    <nav class="spa-nav">
+        <a href="#" class="spa-nav-item active" data-view="schedules">
+            <i class="fas fa-calendar-check"></i> Schedules
+        </a>
+        <a href="#" class="spa-nav-item" data-view="summary">
+            <i class="fas fa-chart-pie"></i> Summary
+        </a>
+        <a href="#" class="spa-nav-item" data-view="analytics">
+            <i class="fas fa-chart-line"></i> Analytics
+        </a>
+        <a href="#" class="spa-nav-item" data-view="reports">
+            <i class="fas fa-file-alt"></i> Reports
+        </a>
+    </nav>
+
+    <!-- Content Views -->
+    <div class="spa-content">
+
+        <!-- SCHEDULES VIEW -->
+        <div id="schedulesView" class="view-section active">
+
+            <!-- Filters Card -->
+            <div class="theme-card p-3 mb-4">
+                <div class="row g-3 align-items-end">
+                    <!-- Department Dropdown (Modern Custom) -->
+                    <div class="col-lg-3">
+                        <label class="form-label small fw-bold text-muted">DEPARTMENT</label>
+                        <div class="ppm-dept-dropdown" id="deptDropdown">
+                            <button class="ppm-dept-btn" type="button" id="deptDropdownBtn" onclick="toggleDeptDropdown(event)">
+                                <span class="ppm-dept-icon">
+                                    {% if selected_department %}<i class="fas fa-building"></i>{% else %}<i class="fas fa-layer-group"></i>{% endif %}
+                                </span>
+                                <span class="ppm-dept-label" id="deptDropdownLabel">
+                                    {% if selected_department %}{{ selected_department.name|default:"Unknown" }}{% else %}All Departments{% endif %}
+                                </span>
+                                <i class="fas fa-chevron-down ppm-dept-chevron" id="deptChevron"></i>
+                            </button>
+                            <div class="ppm-dept-panel" id="deptDropdownPanel">
+                                <div class="ppm-dept-search-wrap">
+                                    <i class="fas fa-search ppm-dept-search-icon"></i>
+                                    <input type="text" class="ppm-dept-search" id="deptSearchInput" placeholder="Search departments..." oninput="filterDepts(this.value)" autocomplete="off">
+                                </div>
+                                <div class="ppm-dept-list" id="deptList">
+                                    <a class="ppm-dept-item {% if not selected_department_id %}ppm-dept-item--active{% endif %}" href="{% url 'ppm_dashboard' %}" data-name="all departments">
+                                        <span class="ppm-dept-item-icon bg-primary"><i class="fas fa-layer-group"></i></span>
+                                        <span class="ppm-dept-item-text">All Departments</span>
+                                        {% if not selected_department_id %}<i class="fas fa-check ppm-dept-check"></i>{% endif %}
+                                    </a>
+                                    {% for dept in departments %}
+                                    <a class="ppm-dept-item {% if selected_department_id == dept.id|stringformat:'s' %}ppm-dept-item--active{% endif %}" href="{% url 'ppm_by_department' dept.id %}" data-name="{{ dept.name|lower|default:'unknown' }}">
+                                        <span class="ppm-dept-item-icon" style="background: hsl({{ forloop.counter0|add:1 }}00deg 60% 45%)"><i class="fas fa-building"></i></span>
+                                        <span class="ppm-dept-item-text">{{ dept.name|default:"Unknown" }}</span>
+                                        {% if selected_department_id == dept.id|stringformat:'s' %}<i class="fas fa-check ppm-dept-check"></i>{% endif %}
+                                    </a>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Search -->
+                    <div class="col-lg-4">
+                        <label class="form-label small fw-bold text-muted">SEARCH</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-transparent border-end-0"><i class="fas fa-search text-muted"></i></span>
+                            <input type="text" id="searchInput" class="form-control border-start-0 ps-0" placeholder="Equipment, Serial, Model...">
+                        </div>
+                    </div>
+
+                    <!-- Month -->
+                    <div class="col-lg-2">
+                        <label class="form-label small fw-bold text-muted">MONTH</label>
+                        <select class="form-select" id="monthFilter">
+                            <option value="1" {% if selected_month == '1' %}selected{% endif %}>January</option>
+                            <option value="2" {% if selected_month == '2' %}selected{% endif %}>February</option>
+                            <option value="3" {% if selected_month == '3' %}selected{% endif %}>March</option>
+                            <option value="4" {% if selected_month == '4' %}selected{% endif %}>April</option>
+                            <option value="5" {% if selected_month == '5' %}selected{% endif %}>May</option>
+                            <option value="6" {% if selected_month == '6' %}selected{% endif %}>June</option>
+                            <option value="7" {% if selected_month == '7' %}selected{% endif %}>July</option>
+                            <option value="8" {% if selected_month == '8' %}selected{% endif %}>August</option>
+                            <option value="9" {% if selected_month == '9' %}selected{% endif %}>September</option>
+                            <option value="10" {% if selected_month == '10' %}selected{% endif %}>October</option>
+                            <option value="11" {% if selected_month == '11' %}selected{% endif %}>November</option>
+                            <option value="12" {% if selected_month == '12' %}selected{% endif %}>December</option>
+                        </select>
+                    </div>
+
+                    <!-- Year -->
+                    <div class="col-lg-1">
+                        <label class="form-label small fw-bold text-muted">YEAR</label>
+                        <select class="form-select" id="yearFilter"></select>
+                    </div>
+
+                    <!-- Week filter (within the selected month) -->
+                    <div class="col-lg-2">
+                        <label class="form-label small fw-bold text-muted">WEEK</label>
+                        <select class="form-select" id="weekFilter">
+                            <option value="">All Weeks</option>
+                            {% for wk in weeks_in_month %}
+                            <option value="{{ wk }}" {% if selected_week == wk|stringformat:"s" %}selected{% endif %}>Week {{ wk }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- Auto-Schedule Button -->
+                    <div class="col-lg-2">
+                        <label class="form-label small fw-bold text-muted d-block">&nbsp;</label>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-primary flex-fill" data-bs-toggle="modal" data-bs-target="#planningModal">
+                                <i class="fas fa-magic me-1"></i> Auto-Schedule
+                            </button>
+                            {% if access_context.can_schedule %}
+                            <button class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#smartReorganizePpmModal" title="Smart Reorganize">
+                                <i class="fas fa-random"></i>
+                            </button>
+                            <button class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#normalizePpmModal" title="Normalize Schedules">
+                                <i class="fas fa-layer-group"></i>
+                            </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Buttons Row -->
+                <div class="d-flex justify-content-between align-items-center mt-3">
+                    <div class="d-flex gap-2">
+                        {% if selected_department %}
+                        <a href="{% url 'clear_department_filter' %}" class="btn btn-sm btn-outline-secondary">
+                            <i class="fas fa-times me-1"></i>Clear Filter
+                        </a>
+                        {% endif %}
+                        <button type="button" class="btn btn-sm btn-info" onclick="goToCurrentMonth()">
+                            <i class="fas fa-calendar-day me-1"></i>Current Month
+                        </button>
+                        <div class="theme-card px-3 py-2 mb-0 shadow-sm">
+                            <i class="fas fa-calendar-alt text-primary me-2"></i>
+                            <span class="fw-bold">
+                                {% if selected_month == '1' %}January{% elif selected_month == '2' %}February{% elif selected_month == '3' %}March{% elif selected_month == '4' %}April{% elif selected_month == '5' %}May{% elif selected_month == '6' %}June{% elif selected_month == '7' %}July{% elif selected_month == '8' %}August{% elif selected_month == '9' %}September{% elif selected_month == '10' %}October{% elif selected_month == '11' %}November{% elif selected_month == '12' %}December{% endif %}
+                                {{ selected_year }}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-sm btn-success" id="bulkMarkCompleted" disabled>
+                            <i class="fas fa-check me-1"></i>Mark Completed
+                        </button>
+                        <button type="button" class="btn btn-sm btn-warning" id="bulkPushSchedules" disabled>
+                            <i class="fas fa-arrow-right me-1"></i>Push
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Scheduled Equipment Table -->
+            <div class="theme-card">
+                <div class="theme-card-header">
+                    <h5 class="mb-0 fw-bold">
+                        <i class="fas fa-calendar-check me-2"></i>Scheduled Equipment
+                        <span class="badge bg-primary rounded-pill ms-2">{{ schedules|length }}</span>
+                    </h5>
+                </div>
+
+                {% if schedules %}
+                <form id="bulkActionForm" method="post">
+                    {% csrf_token %}
+                    <div class="table-responsive">
+                        <table class="table theme-table mb-0" id="schedulesTable">
+                            <thead>
+                                <tr>
+                                    <th width="40" class="text-center">
+                                        <input type="checkbox" id="selectAll" class="form-check-input">
+                                    </th>
+                                    <th>Department</th>
+                                    <th>Equipment Details</th>
+                                    <th>Serial Number</th>
+                                    <th>Model</th>
+                                    <th>Scheduled For</th>
+                                    <th>Status</th>
+
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for schedule in schedules %}
+                                <tr class="equipment-row" data-search="{{ schedule.equipment.description.name }} {{ schedule.equipment.serial_number }} {{ schedule.equipment.model }} {{ schedule.equipment.department.name }}">
+                                    <td class="text-center">
+                                        <input type="checkbox" name="schedule_ids" value="{{ schedule.id }}" class="form-check-input schedule-checkbox">
+                                    </td>
+                                    <td><span class="badge bg-secondary">{{ schedule.equipment.department.name|default:"No Dept" }}</span></td>
+                                    <td><strong>{{ schedule.equipment.description.name|default:"No Description" }}</strong></td>
+                                    <td><code class="small">{{ schedule.equipment.serial_number|default:"N/A" }}</code></td>
+                                    <td>{{ schedule.equipment.model|default:"N/A" }}</td>
+                                    <td>
+                                        <i class="far fa-calendar me-1 text-muted"></i>
+                                        <strong>{{ schedule.scheduled_month|date:"F Y" }}</strong>
+                                    </td>
+                                    <td>
+                                        <span class="status-badge badge-{{ schedule.status }}">
+                                            {% if schedule.status == 'pending' %}<i class="fas fa-clock"></i>{% elif schedule.status == 'completed' %}<i class="fas fa-check"></i>{% elif schedule.status == 'pushed' %}<i class="fas fa-arrow-right"></i>{% endif %}
+                                            {{ schedule.status|title }}
+                                        </span>
+                                    </td>
+                                    <td></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </form>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="fas fa-calendar-times fa-3x text-muted mb-3 opacity-50"></i>
+                    <h4 class="text-muted">No Scheduled Equipment</h4>
+                    <p class="text-muted">
+                        {% if selected_department %}No equipment scheduled in {{ selected_department.name|default:"Unknown" }} for this period.
+                        {% else %}No equipment currently scheduled for maintenance for this period.{% endif %}
+                    </p>
+                    <button class="btn btn-primary me-2" data-bs-toggle="modal" data-bs-target="#planningModal">
+                        <i class="fas fa-plus me-1"></i>Initialize Schedule
+                    </button>
+                    <button class="btn btn-outline-secondary" onclick="goToCurrentMonth()">
+                        <i class="fas fa-calendar-day me-1"></i>Go to Current Month
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Unscheduled Equipment Table -->
+            {% if unscheduled_equipment %}
+            <div class="theme-card mt-4">
+                <div class="theme-card-header bg-danger text-white">
+                    <h5 class="mb-0 fw-bold">
+                        <i class="fas fa-exclamation-circle me-2"></i>Unscheduled Equipment
+                        <span class="badge bg-light text-danger ms-2">{{ unscheduled_equipment|length }}</span>
+                    </h5>
+                    <button type="button" class="btn btn-light btn-sm" id="scheduleSelectedBtn" disabled>
+                        <i class="fas fa-calendar-plus me-1"></i>Schedule Selected
+                    </button>
+                </div>
+
+                <form id="unscheduledForm" method="post" action="{% url 'bulk_schedule_unscheduled' %}">
+                    {% csrf_token %}
+                    <div class="table-responsive">
+                        <table class="table theme-table mb-0" id="unscheduledTable">
+                            <thead>
+                                <tr>
+                                    <th width="40" class="text-center">
+                                        <input type="checkbox" id="selectAllUnscheduled" class="form-check-input">
+                                    </th>
+                                    <th>Department</th>
+                                    <th>Equipment</th>
+                                    <th>Serial Number</th>
+                                    <th>Model</th>
+                                    <th class="text-end">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for equipment in unscheduled_equipment %}
+                                <tr class="equipment-row">
+                                    <td class="text-center">
+                                        <input type="checkbox" name="equipment_ids" value="{{ equipment.id }}" class="form-check-input unscheduled-checkbox">
+                                    </td>
+                                    <td><span class="badge bg-secondary">{{ equipment.department.name|default:"No Dept" }}</span></td>
+                                    <td><strong>{{ equipment.description.name|default:"No Description" }}</strong></td>
+                                    <td><code class="small">{{ equipment.serial_number|default:"N/A" }}</code></td>
+                                    <td>{{ equipment.model|default:"N/A" }}</td>
+                                    <td class="text-end">
+                                        <button type="button" class="btn btn-sm btn-primary schedule-single-btn" data-equipment-id="{{ equipment.id }}">
+                                            <i class="fas fa-calendar-plus me-1"></i>Schedule
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </form>
+            </div>
+            {% endif %}
+
+        </div>
+
+        <!-- SUMMARY VIEW -->
+        <div id="summaryView" class="view-section">
+            <h2 class="h4 fw-bold mb-1"><i class="fas fa-chart-pie me-2"></i>PPM Summary Dashboard</h2>
+            <p class="text-muted mb-4">Overview of maintenance schedules and equipment status</p>
+
+            <!-- Stats Grid -->
+            <div class="row g-4 mb-4">
+                <div class="col-md-3">
+                    <div class="theme-card p-4 text-center">
+                        <i class="fas fa-calendar-check fa-2x text-primary mb-2"></i>
+                        <div class="display-6 fw-bold text-primary">{{ statistics.total_scheduled|default:"0" }}</div>
+                        <div class="text-muted small mt-2">Total Schedules</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="theme-card p-4 text-center">
+                        <i class="fas fa-exclamation-triangle fa-2x text-warning mb-2"></i>
+                        <div class="display-6 fw-bold text-warning">{{ statistics.unscheduled|default:"0" }}</div>
+                        <div class="text-muted small mt-2">Unscheduled</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="theme-card p-4 text-center">
+                        <i class="fas fa-building fa-2x text-info mb-2"></i>
+                        <div class="display-6 fw-bold text-info">{{ departments|length }}</div>
+                        <div class="text-muted small mt-2">Departments</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="theme-card p-4 text-center">
+                        <i class="fas fa-percent fa-2x text-success mb-2"></i>
+                        <div class="display-6 fw-bold text-success">{{ statistics.completion_rate|default:"0" }}%</div>
+                        <div class="text-muted small mt-2">Completion Rate</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Status Distribution -->
+            <div class="theme-card mb-4">
+                <div class="theme-card-header">
+                    <h5 class="mb-0 fw-bold"><i class="fas fa-chart-bar me-2"></i>Status Distribution</h5>
+                </div>
+                <div class="theme-card-body">
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span><i class="fas fa-clock text-warning me-2"></i>Pending ({{ statistics.pending_count|default:"0" }})</span>
+                            <strong>{{ statistics.pending_percentage|default:"0" }}%</strong>
+                        </div>
+                        <div class="progress" style="height: 25px;">
+                            <div class="progress-bar bg-warning" style="width: {{ statistics.pending_percentage|default:"0" }}%">
+                                {{ statistics.pending_percentage|default:"0" }}%
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span><i class="fas fa-check text-success me-2"></i>Completed ({{ statistics.completed_count|default:"0" }})</span>
+                            <strong>{{ statistics.completed_percentage|default:"0" }}%</strong>
+                        </div>
+                        <div class="progress" style="height: 25px;">
+                            <div class="progress-bar bg-success" style="width: {{ statistics.completed_percentage|default:"0" }}%">
+                                {{ statistics.completed_percentage|default:"0" }}%
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span><i class="fas fa-arrow-right text-info me-2"></i>Pushed ({{ statistics.pushed_count|default:"0" }})</span>
+                            <strong>{{ statistics.pushed_percentage|default:"0" }}%</strong>
+                        </div>
+                        <div class="progress" style="height: 25px;">
+                            <div class="progress-bar bg-info" style="width: {{ statistics.pushed_percentage|default:"0" }}%">
+                                {{ statistics.pushed_percentage|default:"0" }}%
+                            </div>
+                        </div>
+                    </div>
+                    {% if statistics.overdue_count > 0 %}
+                    <div class="alert alert-danger mb-0">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>Alert:</strong> {{ statistics.overdue_count }} schedule(s) past scheduled date.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Department Breakdown -->
+            <div class="theme-card">
+                <div class="theme-card-header">
+                    <h5 class="mb-0 fw-bold"><i class="fas fa-building me-2"></i>Department Breakdown</h5>
+                </div>
+                <div class="table-responsive">
+                    <table class="table theme-table mb-0">
+                        <thead>
+                            <tr>
+                                <th>Department</th>
+                                <th>Total Equipment</th>
+                                <th>Scheduled</th>
+                                <th>Pending</th>
+                                <th>Completed</th>
+                                <th>Completion Rate</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for dept in departments %}
+                            <tr>
+                                <td><strong>{{ dept.name }}</strong></td>
+                                <td><span class="badge bg-secondary">0</span></td>
+                                <td><span class="badge bg-primary">0</span></td>
+                                <td><span class="badge bg-warning text-dark">0</span></td>
+                                <td><span class="badge bg-success">0</span></td>
+                                <td>
+                                    <div class="progress" style="height: 20px;">
+                                        <div class="progress-bar bg-success" style="width: 0%">0%</div>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="6" class="text-center text-muted py-4">No departments found</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ANALYTICS VIEW -->
+        <div id="analyticsView" class="view-section">
+            <h2 class="h4 fw-bold mb-1"><i class="fas fa-chart-line me-2"></i>PPM Analytics</h2>
+            <p class="text-muted mb-4">Advanced analytics and performance metrics</p>
+
+            <!-- Monthly Trend -->
+            <div class="theme-card mb-4">
+                <div class="theme-card-header">
+                    <h5 class="mb-0 fw-bold"><i class="fas fa-chart-area me-2"></i>Monthly Maintenance Trend</h5>
+                </div>
+                <div class="theme-card-body">
+                    <canvas id="monthlyTrendChart" height="80"></canvas>
+                </div>
+            </div>
+
+            <!-- Compliance Stats -->
+            <div class="row g-4 mb-4">
+                <div class="col-md-6">
+                    <div class="theme-card">
+                        <div class="theme-card-header">
+                            <h5 class="mb-0 fw-bold"><i class="fas fa-check-circle me-2"></i>Compliance Rate</h5>
+                        </div>
+                        <div class="text-center py-5">
+                            <div class="display-1 fw-bold text-primary" id="complianceRate">Loading...</div>
+                            <p class="text-muted">Overall compliance this year</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="theme-card">
+                        <div class="theme-card-header">
+                            <h5 class="mb-0 fw-bold"><i class="fas fa-clock me-2"></i>Overdue Schedules</h5>
+                        </div>
+                        <div class="text-center py-5">
+                            <div class="display-1 fw-bold text-danger" id="overdueCount">{{ statistics.overdue_count|default:"0" }}</div>
+                            <p class="text-muted">Items past scheduled date</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Equipment Distribution -->
+            <div class="theme-card mb-4">
+                <div class="theme-card-header">
+                    <h5 class="mb-0 fw-bold"><i class="fas fa-tools me-2"></i>Equipment Type Distribution</h5>
+                </div>
+                <div class="theme-card-body">
+                    <canvas id="equipmentTypeChart" height="80"></canvas>
+                </div>
+            </div>
+
+            <!-- Activity Timeline -->
+            <div class="theme-card">
+                <div class="theme-card-header">
+                    <h5 class="mb-0 fw-bold"><i class="fas fa-history me-2"></i>Recent Activity</h5>
+                </div>
+                <div class="theme-card-body" id="activityTimeline">
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="text-muted mt-3">Loading activity...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- REPORTS VIEW -->
+        <div id="reportsView" class="view-section">
+            <h2 class="h4 fw-bold mb-1"><i class="fas fa-file-alt me-2"></i>PPM Reports</h2>
+            <p class="text-muted mb-4">Generate and download maintenance reports</p>
+
+            <div class="row g-4">
+                <!-- Monthly Report -->
+                <div class="col-md-6 col-lg-3">
+                    <div class="theme-card p-4 text-center">
+                        <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 64px; height: 64px;">
+                            <i class="fas fa-calendar-alt fa-2x"></i>
+                        </div>
+                        <h5 class="fw-bold">Monthly Report</h5>
+                        <p class="text-muted small">Comprehensive monthly summary</p>
+                        <a href="{% url 'export_ppm_pdf' %}?month={{ selected_month }}&year={{ selected_year }}" class="btn btn-primary w-100">
+                            <i class="fas fa-download me-1"></i>Download PDF
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Excel Export -->
+                <div class="col-md-6 col-lg-3">
+                    <div class="theme-card p-4 text-center">
+                        <div class="bg-success bg-opacity-10 text-success rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 64px; height: 64px;">
+                            <i class="fas fa-file-excel fa-2x"></i>
+                        </div>
+                        <h5 class="fw-bold">Excel Export</h5>
+                        <p class="text-muted small">Complete schedule data</p>
+                        <a href="{% url 'export_ppm_excel' %}" class="btn btn-success w-100">
+                            <i class="fas fa-download me-1"></i>Export Excel
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Annual Report -->
+                <div class="col-md-6 col-lg-3">
+                    <div class="theme-card p-4 text-center">
+                        <div class="bg-warning bg-opacity-10 text-warning rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 64px; height: 64px;">
+                            <i class="fas fa-chart-line fa-2x"></i>
+                        </div>
+                        <h5 class="fw-bold">Annual Report</h5>
+                        <p class="text-muted small">Full year statistics</p>
+                        <a href="{% url 'export_ppm_pdf' %}?year={{ selected_year }}" class="btn btn-primary w-100">
+                            <i class="fas fa-download me-1"></i>Generate PDF
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Custom Report -->
+                <div class="col-md-6 col-lg-3">
+                    <div class="theme-card p-4 text-center">
+                        <div class="bg-info bg-opacity-10 text-info rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 64px; height: 64px;">
+                            <i class="fas fa-filter fa-2x"></i>
+                        </div>
+                        <h5 class="fw-bold">Custom Report</h5>
+                        <p class="text-muted small">Custom filters</p>
+                        <button class="btn btn-outline-primary w-100" data-bs-toggle="modal" data-bs-target="#customReportModal">
+                            <i class="fas fa-cog me-1"></i>Configure
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- MODALS -->
+
+<!-- Planning Modal -->
+<div class="modal fade" id="planningModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-magic me-2"></i>Configure PPM Planning</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="{% url 'trigger_initialization' %}" id="initializationForm">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <!-- Planning Logic -->
+                    <h6 class="fw-bold mb-3"><i class="fas fa-tools me-2"></i>Planning Logic</h6>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <label class="planning-option-card selected" data-logic="department">
+                                <i class="fas fa-building display-4 text-primary d-block mb-3"></i>
+                                <h6 class="fw-bold">Department-Based</h6>
+                                <p class="text-muted small mb-0">Schedule by department, balanced across months</p>
+                                <span class="check-circle"><i class="fas fa-check"></i></span>
+                            </label>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="planning-option-card" data-logic="description">
+                                <i class="fas fa-tools display-4 text-primary d-block mb-3"></i>
+                                <h6 class="fw-bold">Description-Based</h6>
+                                <p class="text-muted small mb-0">Schedule by equipment type grouping</p>
+                                <span class="check-circle"><i class="fas fa-check"></i></span>
+                            </label>
+                        </div>
+                    </div>
+                    <input type="hidden" name="planning_logic" id="planningLogic" value="department">
+
+                    <!-- Maintenance Period -->
+                    <h6 class="fw-bold mb-3"><i class="fas fa-calendar me-2"></i>Maintenance Period</h6>
+                    <div class="btn-group w-100 mb-4">
+                        <button type="button" class="period-btn" data-period="3">3 Months</button>
+                        <button type="button" class="period-btn active" data-period="6">6 Months</button>
+                        <button type="button" class="period-btn" data-period="9">9 Months</button>
+                        <button type="button" class="period-btn" data-period="12">12 Months</button>
+                    </div>
+                    <input type="hidden" name="maintenance_period" id="maintenancePeriod" value="6">
+
+                    <!-- Base Date -->
+                    <h6 class="fw-bold mb-3"><i class="fas fa-calendar-alt me-2"></i>Base Month and Year</h6>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <label class="form-label">Start Month</label>
+                            <select class="form-select" name="base_month" required>
+                                <option value="1" {% if current_month == 1 %}selected{% endif %}>January</option>
+                                <option value="2" {% if current_month == 2 %}selected{% endif %}>February</option>
+                                <option value="3" {% if current_month == 3 %}selected{% endif %}>March</option>
+                                <option value="4" {% if current_month == 4 %}selected{% endif %}>April</option>
+                                <option value="5" {% if current_month == 5 %}selected{% endif %}>May</option>
+                                <option value="6" {% if current_month == 6 %}selected{% endif %}>June</option>
+                                <option value="7" {% if current_month == 7 %}selected{% endif %}>July</option>
+                                <option value="8" {% if current_month == 8 %}selected{% endif %}>August</option>
+                                <option value="9" {% if current_month == 9 %}selected{% endif %}>September</option>
+                                <option value="10" {% if current_month == 10 %}selected{% endif %}>October</option>
+                                <option value="11" {% if current_month == 11 %}selected{% endif %}>November</option>
+                                <option value="12" {% if current_month == 12 %}selected{% endif %}>December</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Start Year</label>
+                            <input type="number" class="form-control" name="base_year" value="{{ current_year }}" min="2025" max="2080" required>
+                        </div>
+                    </div>
+
+                    <!-- Max Groups -->
+                    <h6 class="fw-bold mb-3"><i class="fas fa-sliders-h me-2"></i>Max Consecutive Groups per Month</h6>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <label class="form-label">Max Departments</label>
+                            <input type="number" class="form-control" name="max_departments" value="20" min="1" max="100" required>
+                            <small class="text-muted">Range: 1-100</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Max Descriptions</label>
+                            <input type="number" class="form-control" name="max_descriptions" value="20" min="1" max="100" required>
+                            <small class="text-muted">Range: 1-100</small>
+                        </div>
+                    </div>
+
+                    <!-- Preserve Checkbox -->
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" name="preserve_existing" value="true" checked>
+                        <label class="form-check-label">
+                            <strong>Preserve Existing Schedules</strong><br>
+                            <small class="text-muted">Keep existing schedules, only schedule new equipment</small>
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-play-circle me-1"></i>Initialize Schedule
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Custom Report Modal -->
+<div class="modal fade" id="customReportModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-filter me-2"></i>Custom Report</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="get" action="{% url 'export_ppm_pdf' %}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Date Range</label>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <select class="form-select" name="month">
+                                    <option value="">All Months</option>
+                                    <option value="1">January</option>
+                                    <option value="2">February</option>
+                                    <option value="3">March</option>
+                                    <option value="4">April</option>
+                                    <option value="5">May</option>
+                                    <option value="6">June</option>
+                                    <option value="7">July</option>
+                                    <option value="8">August</option>
+                                    <option value="9">September</option>
+                                    <option value="10">October</option>
+                                    <option value="11">November</option>
+                                    <option value="12">December</option>
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <input type="number" class="form-control" name="year" value="{{ current_year }}" min="2020" max="2030">
+                            </div>
+                        </div>
+                    </div>
+                    {% if departments|length > 1 %}
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Department</label>
+                        <select class="form-select" name="department">
+                            <option value="">All Departments</option>
+                            {% for dept in departments %}
+                            <option value="{{ dept.id }}">{{ dept.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% endif %}
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Status Filter</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="status" value="pending" checked>
+                            <label class="form-check-label">Pending</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="status" value="completed" checked>
+                            <label class="form-check-label">Completed</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="status" value="pushed" checked>
+                            <label class="form-check-label">Pushed</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-download me-1"></i>Generate Report
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     PPM SMART REORGANIZE MODAL
+══════════════════════════════════════════════════════════ -->
+{% if access_context.can_schedule %}
+<div class="modal fade" id="smartReorganizePpmModal" tabindex="-1" aria-labelledby="smartReorganizePpmModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title" id="smartReorganizePpmModalLabel">
+                    <i class="fas fa-random me-2"></i>Smart Reorganize PPM Schedules
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="{% url 'trigger_smart_reorganize_ppm' %}">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <div class="alert alert-info small mb-3">
+                        <i class="fas fa-info-circle me-1"></i>
+                        The Smart Reorganizer detects schedules using a <strong>different planning logic</strong>
+                        and safely moves them to align with the new grouping.
+                        Only <em>pending / pushed</em> schedules in the active year are affected.
+                        <strong>Completed schedules are never touched.</strong>
+                    </div>
+
+                    <!-- New Planning Logic -->
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Target Planning Logic</label>
+                        <select name="new_planning_logic" class="form-select" id="smartReorgPpmLogic">
+                            <option value="department">Department — group all equipment per department</option>
+                            <option value="description">Description — group all equipment of the same type</option>
+                        </select>
+                        <div class="form-text">
+                            All normalizable schedules will be reorganized under this logic.
+                        </div>
+                    </div>
+
+                    <!-- Base Month -->
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Starting Month</label>
+                        <select name="base_month" class="form-select">
+                            {% for m in months_list %}
+                            <option value="{{ m.number }}" {% if m.number == current_month %}selected{% endif %}>{{ m.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">First month groups will be reallocated to.</div>
+                    </div>
+
+                    <!-- Max groups per month -->
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Max Depts / Month</label>
+                            <input type="number" name="max_departments" class="form-control" value="100" min="1" max="200">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Max Descriptions / Month</label>
+                            <input type="number" name="max_descriptions" class="form-control" value="100" min="1" max="200">
+                        </div>
+                    </div>
+
+                    <!-- Dry Run -->
+                    <div class="form-check mt-3">
+                        <input class="form-check-input" type="checkbox" name="dry_run" value="true" id="smartReorgDryRun">
+                        <label class="form-check-label fw-semibold" for="smartReorgDryRun">
+                            Dry Run Only
+                        </label>
+                        <div class="form-text ms-4">
+                            Preview what would change without modifying any schedules.
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning">
+                        <i class="fas fa-random me-1"></i>Run Smart Reorganizer
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- ══════════════════════════════════════════════════════════
+     PPM NORMALIZE MODAL
+══════════════════════════════════════════════════════════ -->
+{% if access_context.can_schedule %}
+<div class="modal fade" id="normalizePpmModal" tabindex="-1" aria-labelledby="normalizePpmModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="normalizePpmModalLabel">
+                    <i class="fas fa-layer-group me-2"></i>Normalize PPM Schedules
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="{% url 'trigger_normalize_ppm' %}">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <div class="alert alert-info small mb-3">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Normalization ensures every <strong>group</strong>
+                        (all equipment in the same department <em>or</em> the same type)
+                        lands in the <strong>same month</strong>.
+                        Only <em>pending / pushed</em> schedules in the active planning year
+                        are affected — completed schedules are never touched.
+                    </div>
+
+                    <!-- Planning Logic -->
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Group By</label>
+                        <select name="planning_logic" class="form-select" id="normPpmLogic">
+                            <option value="department">Department — all equipment per department → one month</option>
+                            <option value="description">Description — all equipment of the same type → one month</option>
+                        </select>
+                    </div>
+
+                    <!-- Maintenance Period -->
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Maintenance Period</label>
+                        <select name="maintenance_period" class="form-select">
+                            <option value="3">3 Months (Quarterly)</option>
+                            <option value="6" selected>6 Months (Semi-annual)</option>
+                            <option value="9">9 Months</option>
+                            <option value="12">12 Months (Annual)</option>
+                        </select>
+                    </div>
+
+                    <!-- Base Month -->
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Starting Month</label>
+                        <select name="base_month" class="form-select">
+                            {% for m in months_list %}
+                            <option value="{{ m.number }}" {% if m.number == current_month %}selected{% endif %}>{{ m.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">First month groups will be allocated to.</div>
+                    </div>
+
+                    <!-- Max groups per month -->
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <label class="form-label fw-semibold" id="normLabelDept">Max Departments / Month</label>
+                            <input type="number" name="max_departments" class="form-select" value="100" min="1" max="200">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold" id="normLabelDesc">Max Descriptions / Month</label>
+                            <input type="number" name="max_descriptions" class="form-select" value="100" min="1" max="200">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-layer-group me-1"></i>Run Normalization
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Loading Overlay -->
+<div id="loadingOverlay" class="position-fixed top-0 start-0 w-100 h-100 d-none" style="background: rgba(0,0,0,0.7); z-index: 9999;">
+    <div class="position-absolute top-50 start-50 translate-middle text-center">
+        <div class="spinner-border text-light mb-3" style="width: 3rem; height: 3rem;">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <h5 class="text-white">Initializing Schedule</h5>
+        <div class="progress mx-auto mt-3" style="width: 300px; height: 25px;">
+            <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 0%" id="initProgress"></div>
+        </div>
+        <div class="text-white mt-3" id="statusMessage">Preparing...</div>
+        <small class="text-white-50 d-block mt-2">Please wait...</small>
+    </div>
+</div>
+
+
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/chart.min.js' %}"></script>
+<script>
+  // Django template URLs — must stay in HTML since they need server-side rendering.
+  // ppm.js reads window.PPM_URLS to avoid hard-coded URL prefixes.
+  window.PPM_URLS = {
+    analytics: "{% url 'get_analytics_data' %}",
+    summary:   "{% url 'ppm_summary_api' %}"
+  };
+
+  // Pass current week selection so ppm.js can pre-select the dropdown on page load
+  window.PPM_SELECTED_WEEK = "{{ selected_week|default:'' }}";
+</script>
+<script src="{% static 'ppm/ppm.js' %}"></script>
+<script>
+  // ── Normalize modal: update label text when logic changes ────────────
+  (function () {
+    var logicSel = document.getElementById('normPpmLogic');
+    if (!logicSel) return;
+    logicSel.addEventListener('change', function () {
+      var isDept = this.value === 'department';
+      var lblDept = document.getElementById('normLabelDept');
+      var lblDesc = document.getElementById('normLabelDesc');
+      if (lblDept) lblDept.textContent = isDept ? 'Max Departments / Month' : 'Max Groups / Month';
+      if (lblDesc) lblDesc.textContent = isDept ? 'Max Descriptions / Month' : 'Max Types / Month';
+    });
+  })();
+</script>
+{% endblock %}

@@ -1,0 +1,644 @@
+/* ============================================================
+   EQUIPER — UNIFIED DASHBOARD CSS
+   Fully theme-aware via CSS custom properties from theme.css.
+   Covers: engineer dashboard, HOD dashboard, nurse dashboard.
+   No hardcoded colours — every value references a theme token.
+   ============================================================ */
+
+/* ============================================================
+   LAYOUT TOKENS (spacing / radius only — no colour)
+   ============================================================ */
+:root {
+  --d-xs: 0.25rem;
+  --d-sm: 0.25rem;
+  --d-md: 0.5rem;
+  --d-lg: 0.75rem;
+  --d-xl: 1rem;
+  --d-2xl: 1.25rem;
+  --d-3xl: 2.5rem;
+  --d-4xl: 3rem;
+
+  --d-r-sm: 0.375rem;
+  --d-r-md: 0.5rem;
+  --d-r-lg: 0.75rem;
+  --d-r-xl: 1rem;
+
+  --d-z-sticky: 1020;
+}
+
+/* ============================================================
+   GREETING BANNER
+   ============================================================ */
+#greeting {
+  background: var(--bg-card);
+  padding: var(--d-xl) var(--d-2xl);
+  border-radius: var(--d-r-lg);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: var(--d-2xl);
+  border-left: 4px solid var(--primary-color);
+  border: 1px solid var(--border-color);
+  border-left: 4px solid var(--primary-color);
+}
+
+#greeting h2 {
+  font-size: clamp(1.4rem, 3vw, 2rem);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--d-md);
+}
+
+#greeting h2 i {
+  color: var(--primary-color);
+  font-size: 0.9em;
+}
+
+/* ============================================================
+   TOTALS / SYSTEM OVERVIEW SECTION
+   ============================================================ */
+.totals-section {
+  background: var(--bg-card);
+  padding: var(--d-2xl);
+  border-radius: var(--d-r-lg);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: var(--d-2xl);
+  border: 1px solid var(--border-color);
+  border-left: 4px solid var(--success-color);
+}
+
+.totals-section h2 {
+  font-size: clamp(1.25rem, 3vw, 1.75rem);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--d-xl);
+  display: flex;
+  align-items: center;
+  gap: var(--d-md);
+}
+
+.totals-section h2 i {
+  color: var(--success-color);
+}
+
+/* ============================================================
+   DATA GRID (stat counters)
+   ============================================================ */
+.data-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--d-lg);
+  margin-top: var(--d-lg);
+}
+
+.data-item {
+  background: var(--bg-secondary);
+  padding: var(--d-xl);
+  border-radius: var(--d-r-lg);
+  text-align: center;
+  transition: box-shadow 0.2s ease, transform 0.2s ease,
+    background-color 0.22s ease, border-color 0.22s ease;
+  border: 1px solid var(--border-light);
+}
+
+.data-item:hover {
+  background: var(--bg-card);
+  border-color: var(--primary-color);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.data-item h5 {
+  font-size: clamp(0.8rem, 1.8vw, 0.9rem);
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: var(--d-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--d-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.data-item h5 i {
+  color: var(--primary-color);
+  font-size: 1.05em;
+}
+
+.data-item .count {
+  font-size: clamp(1.8rem, 4vw, 2.5rem);
+  font-weight: 700;
+  color: var(--primary-color);
+  margin: var(--d-md) 0;
+  line-height: 1;
+}
+
+.data-item .count a,
+.equipment-link-button {
+  color: var(--primary-color);
+  text-decoration: none;
+  transition: color 0.14s ease, opacity 0.14s ease;
+}
+
+.data-item .count a:hover,
+.equipment-link-button:hover {
+  color: var(--primary-hover);
+  text-decoration: underline;
+  opacity: 0.85;
+}
+
+.data-item small {
+  font-size: clamp(0.7rem, 1.4vw, 0.8rem);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 500;
+}
+
+/* ============================================================
+   SECTIONS CONTAINER (navigation cards grid)
+   ============================================================ */
+.sections-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--d-xl);
+  margin-bottom: var(--d-2xl);
+}
+
+.sections-container section {
+  background: var(--bg-card);
+  padding: var(--d-2xl);
+  border-radius: var(--d-r-lg);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.2s ease, transform 0.2s ease,
+    background-color 0.22s ease, border-color 0.22s ease;
+  border: 1px solid var(--border-color);
+  border-top: 3px solid var(--primary-color);
+  display: flex;
+  flex-direction: column;
+}
+
+.sections-container section:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-4px);
+  border-top-color: var(--primary-hover);
+}
+
+.sections-container section h2 {
+  font-size: clamp(1rem, 2.5vw, 1.3rem);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--d-md);
+  display: flex;
+  align-items: center;
+  gap: var(--d-md);
+}
+
+.sections-container section h2 i {
+  color: var(--primary-color);
+  font-size: 1.1em;
+}
+
+.sections-container section p {
+  color: var(--text-secondary);
+  font-size: clamp(0.875rem, 1.8vw, 0.9375rem);
+  margin-bottom: var(--d-xl);
+  line-height: 1.6;
+  flex: 1;
+}
+
+.sections-container section .btn-primary {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--d-sm);
+}
+
+/* Section colour accents — differentiate module cards */
+#ppm {
+  border-top-color: var(--primary-color);
+}
+
+#reports {
+  border-top-color: var(--info-color);
+}
+
+#job-cards {
+  border-top-color: var(--warning-color);
+}
+
+#machine-reports {
+  border-top-color: var(--secondary-color);
+}
+
+#inventory {
+  border-top-color: var(--success-color);
+}
+
+#calibration-reports {
+  border-top-color: var(--danger-color);
+}
+
+#parts-tools {
+  border-top-color: var(--accent-mid);
+}
+
+#manage-users {
+  border-top-color: var(--primary-color);
+}
+
+#management {
+  border-top-color: var(--warning-color);
+}
+
+#accessories {
+  border-top-color: var(--success-color);
+}
+
+#ppm h2 i {
+  color: var(--primary-color);
+}
+
+#reports h2 i {
+  color: var(--info-color);
+}
+
+#job-cards h2 i {
+  color: var(--warning-color);
+}
+
+#machine-reports h2 i {
+  color: var(--secondary-color);
+}
+
+#inventory h2 i {
+  color: var(--success-color);
+}
+
+#calibration-reports h2 i {
+  color: var(--danger-color);
+}
+
+#parts-tools h2 i {
+  color: var(--accent-mid);
+}
+
+#manage-users h2 i {
+  color: var(--primary-color);
+}
+
+#management h2 i {
+  color: var(--warning-color);
+}
+
+#accessories h2 i {
+  color: var(--success-color);
+}
+
+/* ============================================================
+   WORKSHOPS SECTION (HOD view)
+   ============================================================ */
+.workshops-section {
+  margin-top: var(--d-3xl);
+}
+
+.workshops-section>h2 {
+  font-size: clamp(1.4rem, 3.5vw, 2rem);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--d-2xl);
+  display: flex;
+  align-items: center;
+  gap: var(--d-md);
+  padding-bottom: var(--d-md);
+  border-bottom: 2px solid var(--border-color);
+}
+
+.workshops-section>h2 i {
+  color: var(--primary-color);
+}
+
+.workshop-card {
+  background: var(--bg-card);
+  border-radius: var(--d-r-lg);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: var(--d-2xl);
+  overflow: hidden;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+  border: 1px solid var(--border-color);
+}
+
+.workshop-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.workshop-header {
+  background: var(--bg-secondary);
+  padding: var(--d-xl) var(--d-2xl);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--d-lg);
+  border-bottom: 1px solid var(--border-color);
+  border-left: 4px solid var(--primary-color);
+}
+
+.workshop-header h3 {
+  font-size: clamp(1.05rem, 2.5vw, 1.4rem);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--d-md);
+}
+
+.workshop-header h3 i {
+  color: var(--primary-color);
+}
+
+.status-indicators {
+  display: flex;
+  align-items: center;
+  gap: var(--d-sm);
+  background: var(--bg-card);
+  padding: var(--d-xs) var(--d-md);
+  border-radius: var(--d-r-md);
+  border: 1px solid var(--border-color);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--success-color);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--success-color) 25%, transparent);
+}
+
+.status-indicators span {
+  font-size: clamp(0.7rem, 1.4vw, 0.8rem);
+  font-weight: 600;
+  color: var(--success-color);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.workshop-card .data-grid {
+  padding: var(--d-2xl);
+}
+
+/* ============================================================
+   ALERT OVERRIDES (dashboard-specific)
+   ============================================================ */
+.alert-info {
+  background: color-mix(in srgb, var(--info-color) 12%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--info-color) 40%, transparent);
+  border-left: 4px solid var(--info-color);
+  border-radius: var(--d-r-md);
+  padding: var(--d-xl);
+  margin: var(--d-xl) 0;
+}
+
+.alert-info h4 {
+  color: var(--info-color);
+  font-size: clamp(1rem, 2vw, 1.25rem);
+  font-weight: 600;
+  margin-bottom: var(--d-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--d-sm);
+}
+
+.alert-info p {
+  color: var(--text-secondary);
+  margin: 0;
+  font-size: clamp(0.875rem, 1.8vw, 0.9375rem);
+}
+
+/* ============================================================
+   NOTIFICATION TOAST (from dashboard.js)
+   ============================================================ */
+.notification-toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 12px 24px;
+  border-radius: var(--d-r-md);
+  color: var(--text-white);
+  font-weight: 500;
+  z-index: 10000;
+  max-width: 300px;
+  box-shadow: var(--shadow-md);
+  transform: translateX(400px);
+  transition: transform 0.3s ease;
+}
+
+.notification-toast.success {
+  background-color: var(--success-color);
+}
+
+.notification-toast.error {
+  background-color: var(--danger-color);
+}
+
+.notification-toast.warning {
+  background-color: var(--warning-color);
+}
+
+.notification-toast.info {
+  background-color: var(--info-color);
+}
+
+/* ============================================================
+   ACCESSIBILITY — focus ring
+   ============================================================ */
+a:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+/* ============================================================
+   UTILITY SHIMS
+   ============================================================ */
+.mt-5 {
+  margin-top: var(--d-3xl) !important;
+}
+
+.mb-4 {
+  margin-bottom: var(--d-xl) !important;
+}
+
+/* ============================================================
+   RESPONSIVE — BREAKPOINTS
+   ============================================================ */
+
+/* XL — extra wide screens */
+@media (min-width: 1400px) {
+  .sections-container {
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  }
+
+  .data-grid {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  }
+}
+
+/* LG — standard desktop */
+@media (max-width: 1200px) {
+  .sections-container {
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  }
+}
+
+/* MD — tablet landscape */
+@media (max-width: 992px) {
+  .workshop-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .status-indicators {
+    align-self: flex-start;
+  }
+}
+
+/* SM — tablet portrait */
+@media (max-width: 768px) {
+
+  #greeting,
+  .totals-section {
+    padding: var(--d-lg);
+  }
+
+  .sections-container {
+    grid-template-columns: 1fr;
+    gap: var(--d-lg);
+  }
+
+  .sections-container section {
+    padding: var(--d-xl);
+  }
+
+  .data-grid {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: var(--d-md);
+  }
+
+  .workshop-card .data-grid {
+    padding: var(--d-xl);
+  }
+
+  .workshop-header {
+    padding: var(--d-lg);
+  }
+}
+
+/* XS — large mobile */
+@media (max-width: 576px) {
+  #greeting {
+    padding: var(--d-md);
+  }
+
+  .sections-container section {
+    padding: var(--d-lg);
+  }
+
+  .data-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .workshops-section>h2 {
+    font-size: 1.3rem;
+  }
+
+  .workshop-card .data-grid {
+    padding: var(--d-lg);
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .workshop-header {
+    padding: var(--d-md);
+  }
+}
+
+/* XXS — small mobile */
+@media (max-width: 375px) {
+  .data-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .workshop-card .data-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sections-container section .btn-primary {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* Touch-device minimum tap targets */
+@media (max-width: 768px) {
+
+  .btn,
+  button,
+  a.btn,
+  input[type="button"],
+  input[type="submit"] {
+    min-height: 44px;
+  }
+
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  input[type="date"],
+  select,
+  textarea {
+    min-height: 44px;
+    font-size: 16px;
+    /* prevents iOS zoom on focus */
+  }
+}
+
+/* Landscape mobile */
+@media (max-height: 500px) and (orientation: landscape) {
+  #greeting {
+    padding: var(--d-md) var(--d-lg);
+  }
+
+  #greeting h2 {
+    font-size: 1.2rem;
+  }
+}
+
+/* Print */
+@media print {
+  .sections-container section .btn-primary {
+    display: none !important;
+  }
+
+  .sections-container section,
+  .workshop-card {
+    page-break-inside: avoid;
+    box-shadow: none;
+    border: 1px solid var(--border-color);
+  }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

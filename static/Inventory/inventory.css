@@ -1,0 +1,236 @@
+/* inventory.css */
+
+/* --- Layout --- */
+.inventory-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 10px 0;
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* --- SPA Navigation --- */
+.spa-nav-container {
+  display: flex;
+  background-color: var(--bg-card);
+  padding: 0.5rem;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+  gap: 0.5rem;
+}
+
+.spa-nav-item {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 0.4rem;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.spa-nav-item:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.spa-nav-item.active {
+  background: var(--primary-gradient);
+  color: var(--text-white);
+  box-shadow: var(--shadow-sm);
+}
+
+/* --- Filter Grid --- */
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  align-items: end;
+}
+
+.search-item {
+  flex-grow: 2; /* Search bar takes more space */
+  min-width: 250px;
+}
+
+/* --- Tables (Theme Adapted & Enhanced) --- */
+.table-card {
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-card);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+}
+
+.table {
+  /* Force Bootstrap to use theme variables for its internal styling */
+  --bs-table-bg: var(--bg-card) !important;
+  --bs-table-color: var(--text-primary) !important;
+  --bs-table-hover-bg: var(--bg-hover) !important;
+  --bs-table-hover-color: var(--text-primary) !important;
+  --bs-table-border-color: var(--border-color) !important;
+
+  background-color: var(--bg-card) !important;
+  color: var(--text-primary) !important;
+  margin-bottom: 0;
+  width: 100%;
+  border-collapse: collapse;
+}
+
+/* Table Headers - Fixed for Dark Mode */
+.table thead th,
+#summaryTable thead th {
+  background-color: var(--bg-tertiary) !important;
+  color: var(--text-primary) !important;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  border-bottom: 2px solid var(--border-color) !important;
+  padding: 0.5rem;
+}
+
+/* Table Body Cells */
+.table tbody td,
+#summaryTable tbody td {
+  padding: 0.5rem;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--border-light) !important;
+  color: var(--text-primary) !important;
+  background-color: transparent !important; /* Inherits from row/card */
+}
+
+/* Row Hover Effect */
+.table-hover tbody tr:hover td {
+  background-color: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Summary Table Specific Fixes */
+#summaryTable {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* Progress bar background for Dark Mode visibility */
+.progress {
+  background-color: var(--bg-tertiary) !important;
+}
+
+/* Typography Utilities */
+.text-primary { color: var(--primary-color) !important; }
+.font-monospace {
+  font-family: 'SF Mono', 'Courier New', monospace;
+  letter-spacing: 0.5px;
+  font-size: 0.85rem;
+}
+/* Specific text colors */
+.text-primary { color: var(--primary-color) !important; }
+.font-monospace { font-family: 'Courier New', monospace; letter-spacing: 0.5px; }
+
+/* Loading Overlay */
+.loading-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: var(--bg-card);
+  opacity: 0.85;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary-color);
+}
+
+/* --- Modals (Theme Adapted) --- */
+.modal-content {
+  background-color: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-xl);
+}
+
+.modal-header,
+.modal-footer {
+  background-color: var(--bg-tertiary);
+  border-color: var(--border-color);
+}
+
+/* Transfer Modal Specific Styling */
+.modal-header.bg-info-subtle {
+  background-color: rgba(0,0,0,.0) !important;
+  border-bottom: 2px solid rgba(0,0,0,.0);
+}
+
+.modal-header.bg-warning-subtle {
+  background-color: rgba(0,0,0,.0) !important;
+  border-bottom: 2px solid rgba(0,0,0,.0);
+}
+
+/* Transfer modal table styling */
+#transferModal .table td {
+  padding: 0.5rem 0.25rem;
+  border: none;
+}
+
+#transferModal .border-end {
+  border-right: 1px solid var(--border-color) !important;
+  padding-right: 1.5rem;
+}
+
+.btn-close {
+  /* Inverts close button color in dark mode so it's visible */
+  filter: var(--btn-close-filter);
+}
+
+/* Input group icons */
+.input-group-text {
+  background-color: var(--bg-tertiary);
+  border-color: var(--input-border);
+  color: var(--text-primary);
+}
+
+/* Select options visibility in dark mode */
+select.form-select option {
+  background-color: var(--bg-card);
+  color: var(--text-primary);
+}
+
+/* Responsive Table */
+@media (max-width: 768px) {
+  .spa-nav-container { flex-direction: column; }
+  .table thead { display: none; }
+  .table tbody tr {
+    display: block;
+    border: 1px solid var(--border-color);
+    margin-bottom: 1rem;
+    padding: 0.5rem;
+    border-radius: 8px;
+  }
+  .table tbody td {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+    border: none;
+  }
+  .table tbody td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+}

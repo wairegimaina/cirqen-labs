@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Reference Modules - Equiper National Hospital{% endblock %}
+
+{% block extra_css %}
+<!-- Page-specific CSS -->
+{% endblock %}
+
+{% block page_title %}Reference Modules{% endblock %}
+
+{% block content %}
+<div class="container">
+
+
+        <div class="module-list">
+            {% for ref_module in ref_modules %}
+            <div class="module-card">
+                <div class="module-details">
+                    <h2>{{ ref_module.module_name }}</h2>
+                    <div class="detail-row">
+                        <span class="detail-label">Standard:</span>
+                        <span class="detail-value">{{ ref_module.standard.name }}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Certificate #:</span>
+                        <span class="detail-value">{{ ref_module.standard.certificate_number }}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Calibration Due:</span>
+                        <span class="detail-value">{{ ref_module.standard.calibration_due|date:"M d, Y" }}</span>
+                    </div>
+
+                    <h3>Uncertainties:</h3>
+                    <ul class="uncertainties-list">
+                        {% for uncertainty in ref_module.standardparameteruncertainty_set.all %}
+                        <li>
+                            <span>{{ uncertainty.parameter.name }}</span>
+                            <span>{{ uncertainty.uncertainty }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            {% empty %}
+            <div class="empty-state">
+                <h3>No Reference Modules Found</h3>
+                <p>Add a new reference standard to get started.</p>
+                <a href="{% url 'create_reference_module' %}" class="btn" style="margin-top: 1rem;">Add New Reference Module</a>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Page-specific JavaScript -->
+{% endblock %}

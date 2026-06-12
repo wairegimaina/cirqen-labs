@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block body_class %}dark-theme{% endblock %}
+
+{% block extra_css %}
+ 
+  <link rel="stylesheet" href="{% static 'users_login/login.css' %}">
+  {% block auth_extra_css %}{% endblock %}
+{% endblock %}
+
+{# Theme toggle floating button — visible on all auth pages #}
+<button class="icon-btn auth-theme-toggle" id="themeToggle" aria-label="Toggle theme" title="Toggle theme">
+  <i class="fas fa-sun  light-icon" aria-hidden="true"></i>
+  <i class="fas fa-moon dark-icon"  aria-hidden="true"></i>
+</button>
+
+{# Replace the entire default layout (sidebar + header + main) #}
+{% block page_wrapper %}
+
+  {% block auth_content %}{% endblock %}
+
+{% endblock %}
+
+{% block extra_js %}
+  <script src="{% static 'js/theme.js' %}"></script>
+  {% block auth_extra_js %}{% endblock %}
+{% endblock %}

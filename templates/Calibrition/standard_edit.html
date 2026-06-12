@@ -1,0 +1,168 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Edit Calibration Standard - Equiper National Hospital{% endblock %}
+
+{% block extra_css %}
+<!-- Page-specific CSS -->
+{% endblock %}
+
+{% block page_title %}Edit Calibration Standard{% endblock %}
+
+{% block content %}
+<div class="container mx-auto p-6">
+        <h1 class="text-2xl font-bold mb-6">Edit Calibration Standard</h1>
+        
+        <!-- Standard Form -->
+        <form id="standardForm" method="POST" action="/calibration/standards/{{ standard.pk }}/edit/" class="bg-white p-6 rounded-lg shadow-md">
+            {% csrf_token %}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Standard Fields -->
+                <div>
+                    <label for="id_name" class="block text-sm font-medium text-gray-700">Name</label>
+                    {{ form.name|add_class:"mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" }}
+                    {% if form.name.errors %}
+                        <p class="text-red-600 text-sm mt-1">{{ form.name.errors }}</p>
+                    {% endif %}
+                </div>
+                <div>
+                    <label for="id_model_number" class="block text-sm font-medium text-gray-700">Model Number</label>
+                    {{ form.model_number|add_class:"mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" }}
+                    {% if form.model_number.errors %}
+                        <p class="text-red-600 text-sm mt-1">{{ form.model_number.errors }}</p>
+                    {% endif %}
+                </div>
+                <div>
+                    <label for="id_serial_number" class="block text-sm font-medium text-gray-700">Serial Number</label>
+                    {{ form.serial_number|add_class:"mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" }}
+                    {% if form.serial_number.errors %}
+                        <p class="text-red-600 text-sm mt-1">{{ form.serial_number.errors }}</p>
+                    {% endif %}
+                </div>
+                <div>
+                    <label for="id_manufacturer" class="block text-sm font-medium text-gray-700">Manufacturer</label>
+                    {{ form.manufacturer|add_class:"mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" }}
+                    {% if form.manufacturer.errors %}
+                        <p class="text-red-600 text-sm mt-1">{{ form.manufacturer.errors }}</p>
+                    {% endif %}
+                </div>
+                <div>
+                    <label for="id_calibration_date" class="block text-sm font-medium text-gray-700">Calibration Date</label>
+                    {{ form.calibration_date|add_class:"mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" }}
+                    {% if form.calibration_date.errors %}
+                        <p class="text-red-600 text-sm mt-1">{{ form.calibration_date.errors }}</p>
+                    {% endif %}
+                </div>
+                <div>
+                    <label for="id_calibration_due_date" class="block text-sm font-medium text-gray-700">Calibration Due Date</label>
+                    {{ form.calibration_due_date|add_class:"mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" }}
+                    {% if form.calibration_due_date.errors %}
+                        <p class="text-red-600 text-sm mt-1">{{ form.calibration_due_date.errors }}</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Standard Parameters Formset -->
+            <h2 class="text-xl font-semibold mt-6 mb-4">Parameters</h2>
+            {{ formset.management_form }}
+            <div id="parameter-formset" class="space-y-4">
+                {% for param_form in formset %}
+                    <div class="parameter-form bg-gray-50 p-4 rounded-md border border-gray-200">
+                        {{ param_form.id }}
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label for="{{ param_form.parameter.id_for_label }}" class="block text-sm font-medium text-gray-700">Parameter</label>
+                                {{ param_form.parameter|add_class:"mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" }}
+                                {% if param_form.parameter.errors %}
+                                    <p class="text-red-600 text-sm mt-1">{{ param_form.parameter.errors }}</p>
+                                {% endif %}
+                            </div>
+                            <div>
+                                <label for="{{ param_form.uncertainty.id_for_label }}" class="block text-sm font-medium text-gray-700">Uncertainty</label>
+                                {{ param_form.uncertainty|add_class:"mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" }}
+                                {% if param_form.uncertainty.errors %}
+                                    <p class="text-red-600 text-sm mt-1">{{ param_form.uncertainty.errors }}</p>
+                                {% endif %}
+                            </div>
+                            {{ param_form.DELETE|add_class:"hidden" }}
+                        </div>
+                        <button type="button" class="delete-parameter mt-2 text-red-600 hover:text-red-800 text-sm">Delete Parameter</button>
+                    </div>
+                {% endfor %}
+            </div>
+
+            <!-- Add Parameter Button -->
+            <button type="button" id="add-parameter" class="mt-4 bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700">Add Parameter</button>
+
+            <!-- Form Actions -->
+            <div class="mt-6 flex space-x-4">
+                <button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700">Save Changes</button>
+                <a href="{% url 'calibration:StandardsParameters_lists' %}" class="bg-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-400">Cancel</a>
+            </div>
+        </form>
+
+        <!-- Success/Error Messages -->
+        {% if messages %}
+            <div class="mt-4">
+                {% for message in messages %}
+                    <div class="p-4 rounded-md {% if message.tags == 'success' %}bg-green-100 text-green-700{% else %}bg-red-100 text-red-700{% endif %}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    </div>
+
+    <script>
+        // Add Parameter Form
+        $('#add-parameter').click(function() {
+            const formIdx = $('#id_parameters-TOTAL_FORMS').val();
+            const newForm = $('.parameter-form:first').clone(true);
+            
+            newForm.find(':input').each(function() {
+                const name = $(this).attr('name').replace('-0-', `-${formIdx}-`);
+                const id = 'id_' + name;
+                $(this).attr({'name': name, 'id': id}).val('');
+                $(this).prop('checked', false); // Reset DELETE checkbox
+            });
+            
+            newForm.find('select').val('');
+            $('#parameter-formset').append(newForm);
+            $('#id_parameters-TOTAL_FORMS').val(parseInt(formIdx) + 1);
+        });
+
+        // Delete Parameter Form
+        $('.delete-parameter').click(function() {
+            const form = $(this).closest('.parameter-form');
+            form.find('input[name$="-DELETE"]').prop('checked', true);
+            form.hide();
+        });
+
+        // AJAX Form Submission
+        $('#standardForm').submit(function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            
+            axios.post(this.action, formData, {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => {
+                if (response.data.success) {
+                    window.location.href = '{% url 'calibration:StandardsParameters_lists' %}';
+                } else {
+                    alert('Error: ' + (response.data.error || 'Please correct the errors in the form.'));
+                }
+            })
+            .catch(error => {
+                console.error('Error submitting form:', error);
+                alert('An error occurred while saving the standard.');
+            });
+        });
+    </script>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Page-specific JavaScript -->
+{% endblock %}

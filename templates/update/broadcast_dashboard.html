@@ -1,0 +1,256 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Update Broadcast — Equiper{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'update/broadcast-dashboard.css' %}" />
+{% endblock %}
+
+{% block content %}
+<div class="bc-wrap">
+
+  <!-- ─── header ─────────────────────────────────────────── -->
+  <div class="bc-head">
+    <div>
+      <div class="bc-title">Deployment Broadcast</div>
+      <div class="bc-sub" id="bc-subtitle">Loading machine data…</div>
+    </div>
+    <div class="bc-actions">
+      <button class="btn btn-outline" onclick="loadData()">↺ Refresh</button>
+    </div>
+  </div>
+
+  <!-- ─── stat strip ─────────────────────────────────────── -->
+  <div class="stat-strip" id="stat-strip">
+    <div class="stat-box pulsing"><div class="stat-val">—</div><div class="stat-lbl">Total Machines</div></div>
+    <div class="stat-box pulsing"><div class="stat-val">—</div><div class="stat-lbl">Updated</div></div>
+    <div class="stat-box pulsing"><div class="stat-val">—</div><div class="stat-lbl">Need Update</div></div>
+    <div class="stat-box pulsing"><div class="stat-val">—</div><div class="stat-lbl">Online Now</div></div>
+  </div>
+
+  <!-- ─── deployment progress ────────────────────────────── -->
+  <div class="deploy-bar">
+    <div class="deploy-bar-label">
+      <span>Deployment Progress <span id="dp-version" style="color:var(--muted);"></span></span>
+      <span id="dp-pct" style="font-weight:700;">0%</span>
+    </div>
+    <div class="deploy-track">
+      <div class="deploy-fill" id="dp-fill" style="width:0%"></div>
+    </div>
+  </div>
+
+  <!-- ─── staged rollout controls ────────────────────────── -->
+  <div class="rollout-panel" id="rollout-panel">
+    <h3>⚡ Staged Rollout</h3>
+    <div class="rollout-row">
+      <span style="font-family:var(--mono);font-size:.82rem;color:var(--muted);">
+        Release to:
+      </span>
+      <div class="rollout-pct">
+        <button class="pct-btn" onclick="setRollout(10)">10%</button>
+        <button class="pct-btn" onclick="setRollout(25)">25%</button>
+        <button class="pct-btn" onclick="setRollout(50)">50%</button>
+        <button class="pct-btn" onclick="setRollout(75)">75%</button>
+        <button class="pct-btn" onclick="setRollout(100)">100% Everyone</button>
+      </div>
+      <span id="rollout-status" style="font-family:var(--mono);font-size:.75rem;color:var(--muted);"></span>
+    </div>
+    <p style="font-size:.78rem;color:var(--muted);margin:.75rem 0 0;font-family:var(--mono);">
+      Machines are assigned deterministically — the same machine always ends up in the same group.
+      Increase percentage gradually after confirming no issues.
+    </p>
+  </div>
+
+  <!-- ─── machine list ─────────────────────────────────────  -->
+  <div class="bc-controls">
+    <input class="bc-search" type="text" id="search-box" placeholder="Search hostname or ID…"
+           oninput="renderMachines()">
+    <button class="bc-filter active" id="f-all"      onclick="setFilter('all', this)">All</button>
+    <button class="bc-filter"        id="f-updated"  onclick="setFilter('updated', this)">Updated</button>
+    <button class="bc-filter"        id="f-outdated" onclick="setFilter('outdated', this)">Need Update</button>
+    <button class="bc-filter"        id="f-online"   onclick="setFilter('online', this)">Online Now</button>
+  </div>
+
+  <div id="machine-grid" class="machine-grid">
+    <div class="bc-loading pulsing">Loading machines…</div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const API_KEY = '{{ api_key|default:"" }}';  // populated from view context
+const SERVER_URL = '{{ server_url|default:"" }}';
+
+let allMachines = [];
+let currentFilter = 'all';
+let latestVersion = null;
+
+// ── data loading ────────────────────────────────────────────
+async function loadData() {
+  try {
+    const resp = await fetch(`${SERVER_URL}/api/updates/machines/`, {
+      headers: { 'X-Api-Key': API_KEY }
+    });
+    if (!resp.ok) throw new Error(`Server returned ${resp.status}`);
+    const data = await resp.json();
+
+    allMachines = data.machines || [];
+    latestVersion = data.stats?.target_version || '?';
+
+    updateStats(data.stats);
+    updateProgress(data.stats);
+    updateSubtitle(data.stats);
+    renderMachines();
+    loadRollout();
+
+  } catch (e) {
+    document.getElementById('bc-subtitle').textContent = '⚠ Cannot reach HQ server: ' + e.message;
+  }
+}
+
+function updateStats(s) {
+  if (!s) return;
+  document.getElementById('stat-strip').innerHTML = `
+    <div class="stat-box"><div class="stat-val">${s.total}</div><div class="stat-lbl">Total Machines</div></div>
+    <div class="stat-box accent"><div class="stat-val">${s.updated}</div><div class="stat-lbl">Updated</div></div>
+    <div class="stat-box"><div class="stat-val">${s.needs_update}</div><div class="stat-lbl">Need Update</div></div>
+    <div class="stat-box"><div class="stat-val">${s.online_now}</div><div class="stat-lbl">Online Now</div></div>
+  `;
+}
+
+function updateProgress(s) {
+  if (!s) return;
+  const pct = s.percent_updated || 0;
+  document.getElementById('dp-fill').style.width = pct + '%';
+  document.getElementById('dp-pct').textContent = pct + '%';
+  document.getElementById('dp-version').textContent = s.target_version ? `→ v${s.target_version}` : '';
+}
+
+function updateSubtitle(s) {
+  const now = new Date().toLocaleTimeString();
+  document.getElementById('bc-subtitle').textContent =
+    `${s?.updated || 0} of ${s?.total || 0} machines updated · refreshed ${now}`;
+}
+
+// ── machine render ───────────────────────────────────────────
+function setFilter(f, btn) {
+  currentFilter = f;
+  document.querySelectorAll('.bc-filter').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderMachines();
+}
+
+function renderMachines() {
+  const q = document.getElementById('search-box').value.toLowerCase();
+
+  let filtered = allMachines.filter(m => {
+    const matchSearch = !q ||
+      (m.hostname || '').toLowerCase().includes(q) ||
+      (m.client_id || '').toLowerCase().includes(q);
+    if (!matchSearch) return false;
+
+    if (currentFilter === 'updated')  return m.is_updated;
+    if (currentFilter === 'outdated') return m.needs_update;
+    if (currentFilter === 'online')   return m.is_online;
+    return true;
+  });
+
+  const grid = document.getElementById('machine-grid');
+
+  if (!filtered.length) {
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">
+      <span class="icon">🖥</span>
+      <div>No machines match the current filter.</div>
+    </div>`;
+    return;
+  }
+
+  grid.innerHTML = filtered.map(m => {
+    const cls = m.is_updated ? 'updated' : m.needs_update ? 'outdated' : '';
+    const offlineCls = !m.is_online ? 'offline' : '';
+    const dotCls = m.is_online ? 'dot-green' : 'dot-grey';
+
+    let statusChip = '';
+    if (m.is_updated)          statusChip = '<span class="chip chip-ok">✓ Updated</span>';
+    else if (m.needs_update)   statusChip = '<span class="chip chip-warn">⟳ Needs update</span>';
+    else                       statusChip = '<span class="chip chip-grey">—</span>';
+
+    const onlineChip = m.is_online
+      ? '<span class="chip chip-blue">● Online</span>'
+      : `<span class="chip chip-grey">Offline · ${m.minutes_since_seen != null ? m.minutes_since_seen + 'm ago' : 'unknown'}</span>`;
+
+    const seen = m.last_seen ? new Date(m.last_seen).toLocaleString() : '?';
+    const updated = m.last_updated ? new Date(m.last_updated).toLocaleDateString() : '—';
+
+    return `
+    <div class="machine-card ${cls} ${offlineCls}">
+      <div class="mc-top">
+        <div>
+          <div class="mc-host"><span class="dot ${dotCls}"></span>${m.hostname || 'Unknown host'}</div>
+          <div class="mc-id">${m.client_id || '—'}</div>
+        </div>
+        <span class="chip chip-grey" style="white-space:nowrap;">v${m.current_version || '?'}</span>
+      </div>
+      <div class="mc-chips">
+        ${statusChip}
+        ${onlineChip}
+        ${m.update_status === 'failed' ? '<span class="chip chip-err">✗ Failed</span>' : ''}
+      </div>
+      <div class="mc-meta">
+        <span>IP: ${m.ip || '?'}</span>
+        <span>Last seen: ${seen}</span>
+        ${m.last_updated ? `<span>Updated: ${updated}</span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── staged rollout ────────────────────────────────────────────
+async function loadRollout() {
+  if (!SERVER_URL || !latestVersion) return;
+  try {
+    const resp = await fetch(`${SERVER_URL}/api/updates/rollout/`, {
+      headers: { 'X-Api-Key': API_KEY }
+    });
+    const data = await resp.json();
+    const pct = data[latestVersion]?.percent ?? 100;
+    document.getElementById('rollout-status').textContent =
+      `Current: ${pct}% of machines eligible for v${latestVersion}`;
+    document.querySelectorAll('.pct-btn').forEach(btn => {
+      btn.classList.toggle('active', parseInt(btn.textContent) === pct);
+    });
+  } catch (e) {
+    console.warn('Rollout fetch failed', e);
+  }
+}
+
+async function setRollout(pct) {
+  if (!SERVER_URL || !latestVersion) {
+    alert('Cannot connect to HQ server.');
+    return;
+  }
+  try {
+    const resp = await fetch(`${SERVER_URL}/api/updates/rollout/`, {
+      method: 'PATCH',
+      headers: { 'X-Api-Key': API_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ version: latestVersion, percent: pct }),
+    });
+    if (!resp.ok) throw new Error(await resp.text());
+    document.getElementById('rollout-status').textContent =
+      `✓ Set to ${pct}% for v${latestVersion}`;
+    document.querySelectorAll('.pct-btn').forEach(btn => {
+      btn.classList.toggle('active', parseInt(btn.textContent) === pct);
+    });
+  } catch (e) {
+    alert('Failed to set rollout: ' + e.message);
+  }
+}
+
+// ── auto-refresh every 30s ────────────────────────────────────
+loadData();
+setInterval(loadData, 30000);
+</script>
+{% endblock %}

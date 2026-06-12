@@ -1,0 +1,58 @@
+<!-- templates/Reporthub/partials/report_filters.html -->
+<div class="card mb-4">
+    <div class="card-body">
+        <h3><i class="fas fa-filter"></i> Report Filters</h3>
+        <form method="GET" id="filter-form" action="{% url 'report_hub:report_hub' %}">
+            <div class="row">
+                <!-- Report Type -->
+                <div class="col-md-3 mb-3">
+                    <label for="id_report_type" class="form-label">Report Type</label>
+                    {{ form.report_type }}
+                </div>
+
+                <!-- Year -->
+                <div class="col-md-3 mb-3">
+                    <label for="id_year" class="form-label">Year</label>
+                    {{ form.year }}
+                </div>
+
+                <!-- Week (for weekly reports) -->
+                <div class="col-md-3 mb-3 weekly-fields" style="display: none;">
+                    <label for="id_week" class="form-label">Week</label>
+                    {{ form.week }}
+                </div>
+
+                <!-- Month (for monthly reports) -->
+                <div class="col-md-3 mb-3 monthly-fields" style="display: none;">
+                    <label for="id_month" class="form-label">Month</label>
+                    {{ form.month }}
+                </div>
+
+                <!-- Quarter (for quarterly reports) -->
+                <div class="col-md-3 mb-3 quarterly-fields" style="display: none;">
+                    <label for="id_quarter" class="form-label">Quarter</label>
+                    {{ form.quarter }}
+                </div>
+
+                <!-- Workshop (only for HOD) -->
+                {% if is_hod and form.workshop %}
+                <div class="col-md-3 mb-3">
+                    <label for="id_workshop" class="form-label">Workshop</label>
+                    {{ form.workshop }}
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="row">
+                <div class="col-12">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-search"></i> Generate Report
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="window.location.href='{% url 'report_hub:report_hub' %}'">
+                        <i class="fas fa-redo"></i> Reset
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>

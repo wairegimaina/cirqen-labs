@@ -1,0 +1,716 @@
+/* ============================================================
+   HOD REPORT HUB — STYLES
+   Fully integrated with Equiper theme.css variables.
+   No hardcoded colour values — all resolved through CSS custom
+   properties defined in theme.css (light + dark tokens).
+   ============================================================ */
+
+/* ============================================================
+   RESET
+   ============================================================ */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* ============================================================
+   SPACING TOKENS  (layout-only, no colour)
+   ============================================================ */
+:root {
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+  --space-2xl: 3rem;
+
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+
+  --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-fast: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ============================================================
+   BODY
+   ============================================================ */
+body {
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.6;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+}
+
+/* ============================================================
+   MAIN CONTAINER
+   ============================================================ */
+.main-container {
+  background-color: var(--bg-card);
+  border-radius: 15px;
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+  min-height: calc(100vh - 40px);
+}
+
+/* ============================================================
+   HEADER SECTION
+   ============================================================ */
+.header {
+  background: var(--primary-gradient);
+  color: var(--text-white);
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: var(--shadow-md);
+  position: relative;
+  margin: 15px;
+  border-radius: var(--radius-xl);
+}
+
+.header h2 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin-bottom: var(--space-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-md);
+  color: var(--text-white);
+}
+
+.header h2 i {
+  color: var(--text-white);
+  font-size: 0.9em;
+}
+
+.header p {
+  font-size: 1rem;
+  opacity: 0.9;
+  margin-bottom: 0;
+
+  color: var(--text-white);
+}
+
+/* ============================================================
+   BACK BUTTON
+   ============================================================ */
+.back-btn {
+  background: rgba(0,0,0,.0);
+  border: 1px solid rgba(0,0,0,.0);
+  color: var(--text-white);
+  padding: 8px 16px;
+  font-size: 0.9em;
+  font-weight: 500;
+  border-radius: 8px;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: var(--transition);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow-md);
+  margin-top: 20px;
+}
+
+.back-btn:hover {
+  background: rgba(0,0,0,.0);
+  transform: translateY(-2px);
+  color: var(--text-white);
+  text-decoration: none;
+  box-shadow: var(--shadow-lg);
+}
+
+.back-btn i {
+  font-size: 1em;
+  transition: transform 0.3s ease;
+}
+
+.back-btn:hover i {
+  transform: translateX(-2px);
+}
+
+/* ============================================================
+   FILTER FORM
+   ============================================================ */
+.filter-form-container {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  padding: 8px;
+  border-radius: 8px;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 30px;
+}
+
+.filter-form-container .form-group {
+  margin-bottom: 15px;
+}
+
+.filter-form-container label {
+  font-weight: 700;
+  margin-bottom: 5px;
+  display: block;
+  color: var(--text-primary);
+}
+
+.filter-form-container .form-control {
+  border-radius: 5px;
+  background-color: var(--input-bg);
+  border-color: var(--input-border);
+  color: var(--text-primary);
+}
+
+.filter-form-container .form-control:focus {
+  background-color: var(--input-bg);
+  border-color: var(--input-focus-border);
+  box-shadow: var(--input-focus-shadow);
+  color: var(--text-primary);
+}
+
+/* ============================================================
+   TABLE — REPORTS
+   ============================================================ */
+.table-responsive {
+  margin-top: 20px;
+  background-color: var(--bg-card);
+  border-color: var(--border-color) !important;
+}
+
+.table {
+  color: var(--text-primary);
+  margin-bottom: 0;
+}
+
+.table thead th {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 700;
+  border-bottom: 2px solid var(--border-color);
+  white-space: nowrap;
+}
+
+.table tbody td {
+  vertical-align: middle;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+
+.table-striped>tbody>tr:nth-of-type(odd)>* {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.table-hover tbody tr:hover {
+  background-color: var(--bg-hover) !important;
+  cursor: pointer;
+}
+
+/* ============================================================
+   NO-DATA STATE
+   ============================================================ */
+.no-data-message {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: var(--text-muted);
+}
+
+.no-data-message i {
+  color: var(--border-color);
+}
+
+.no-data-message h5 {
+  color: var(--text-secondary);
+  margin-top: 1rem;
+}
+
+.no-data-message p {
+  color: var(--text-muted);
+}
+
+/* ============================================================
+   RESPONSIVE — LARGE (≥ 1400px)
+   ============================================================ */
+@media (min-width: 1400px) {
+  body {
+    padding: 0;
+  }
+
+  .main-container,
+  .container {
+    max-width: calc(100% - 10px);
+    margin: 0;
+    padding: 4px 8px;
+  }
+
+  .header {
+    margin: 5px;
+    padding: 20px 25px;
+  }
+
+  .content,
+  .main-content {
+    padding: 4px 8px;
+  }
+
+  .card,
+  .section-card,
+  .filter-section {
+    margin: 10px 5px;
+    padding: 18px;
+  }
+
+  .table-container,
+  .performance-section {
+    margin: 15px 5px;
+    padding: 8px;
+  }
+
+  .search-form,
+  .filter-form-container {
+    margin: 10px 5px;
+  }
+}
+
+/* ============================================================
+   RESPONSIVE — STANDARD DESKTOP (1200–1399px)
+   ============================================================ */
+@media (min-width: 1200px) and (max-width: 1399px) {
+  body {
+    padding: 0;
+  }
+
+  .main-container,
+  .container {
+    max-width: calc(100% - 10px);
+    margin: 5px;
+    padding: 4px 8px;
+  }
+
+  .header {
+    margin: 5px;
+    padding: 20px 25px;
+  }
+
+  .content,
+  .main-content {
+    padding: 4px 8px;
+  }
+
+  .card,
+  .section-card,
+  .filter-section {
+    margin: 10px 5px;
+    padding: 18px;
+  }
+
+  .header h1 {
+    font-size: clamp(1.8rem, 4vw, 2.5rem);
+  }
+
+  .stats-bar,
+  .info-grid,
+  .equipment-info-grid {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+  }
+
+  .table,
+  .schedule-table,
+  .sessions-table,
+  .calibration-table {
+    font-size: 14px;
+  }
+
+  .table th,
+  .table td {
+    padding: 12px 10px;
+  }
+}
+
+/* ============================================================
+   RESPONSIVE — TABLET LANDSCAPE (1024–1199px)
+   ============================================================ */
+@media (min-width: 1024px) and (max-width: 1199px) {
+  body {
+    padding: 0;
+    font-size: clamp(14px, 1.5vw, 16px);
+  }
+
+  .main-container,
+  .container {
+    margin: 4px;
+    padding: 4px 8px;
+  }
+
+  .header {
+    padding: 18px 20px;
+    margin: 4px;
+  }
+
+  .header h1 {
+    font-size: clamp(1.7rem, 4vw, 2.3rem);
+  }
+
+  .content,
+  .main-content {
+    padding: 4px 8px;
+  }
+
+  .card,
+  .section-card,
+  .filter-section {
+    margin: 8px 4px;
+    padding: 16px;
+  }
+
+  .stats-bar,
+  .info-grid,
+  .equipment-info-grid {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+  }
+
+  .table th,
+  .table td {
+    padding: 10px 8px;
+  }
+}
+
+/* ============================================================
+   RESPONSIVE — TABLET PORTRAIT (768–1023px)
+   ============================================================ */
+@media (min-width: 768px) and (max-width: 1023px) {
+  body {
+    padding: 0;
+  }
+
+  .main-container,
+  .container {
+    margin: 4px;
+    padding: 4px 8px;
+  }
+
+  .header {
+    margin: 4px;
+    padding: 15px 18px;
+  }
+
+  .sections-container,
+  .content-grid {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 12px;
+  }
+
+  .card,
+  .section-card,
+  .filter-section {
+    margin: 8px 4px;
+    padding: 15px;
+  }
+}
+
+/* ============================================================
+   RESPONSIVE — LARGE MOBILE (577–767px)
+   ============================================================ */
+@media (min-width: 577px) and (max-width: 767px) {
+  body {
+    padding: 0;
+    font-size: 14px;
+  }
+
+  .main-container,
+  .container {
+    margin: 4px;
+    border-radius: 10px;
+    padding: 4px 8px;
+  }
+
+  .header {
+    margin: 4px;
+    padding: 15px 12px;
+    flex-direction: column;
+    text-align: center;
+    gap: 8px;
+  }
+
+  .header h1 {
+    font-size: clamp(1.5rem, 5vw, 1.8rem);
+  }
+
+  .header h2 {
+    font-size: clamp(1.3rem, 4vw, 1.6rem);
+  }
+
+  .header p {
+    font-size: 0.9rem;
+  }
+
+  .back-btn {
+    position: static !important;
+    margin: 6px auto !important;
+    width: fit-content !important;
+  }
+}
+
+/* ============================================================
+   RESPONSIVE — MOBILE (≤ 576px)
+   ============================================================ */
+@media (max-width: 576px) {
+  body {
+    padding: 0;
+    font-size: 14px;
+  }
+
+  .main-container,
+  .container {
+    margin: 3px;
+    border-radius: 10px;
+    padding: 4px 8px;
+  }
+
+  .header {
+    margin: 3px;
+    padding: 12px 10px;
+    flex-direction: column;
+    text-align: center;
+    gap: 8px;
+  }
+
+  .header h1 {
+    font-size: clamp(1.4rem, 5vw, 1.8rem);
+  }
+
+  .header h2 {
+    font-size: clamp(1.2rem, 4vw, 1.5rem);
+  }
+
+  .header p {
+    font-size: 0.85rem;
+  }
+
+  .back-btn {
+    position: static !important;
+    margin: 6px auto !important;
+    width: fit-content !important;
+  }
+
+  .table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Stack table rows as cards on mobile */
+  .table,
+  .schedule-table {
+    display: block;
+    overflow-x: visible;
+    min-width: 100%;
+  }
+
+  .table thead {
+    display: none;
+  }
+
+  .table tbody {
+    display: block;
+  }
+
+  .table tbody tr {
+    display: block;
+    margin-bottom: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 10px;
+    background-color: var(--bg-card);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .table tbody td {
+    display: block;
+    text-align: left;
+    padding: 6px 0;
+    border: none;
+    position: relative;
+    padding-left: 45%;
+    color: var(--text-primary);
+  }
+
+  .table tbody td::before {
+    content: attr(data-label);
+    position: absolute;
+    left: 0;
+    width: 40%;
+    padding-right: 10px;
+    font-weight: 700;
+    text-align: left;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+  }
+
+  .table tbody td:last-child {
+    padding-bottom: 0;
+    padding-left: 0;
+  }
+
+  .table tbody td:last-child::before {
+    display: none;
+  }
+
+  .btn {
+    padding: 11px 18px;
+    font-size: 14px;
+    min-height: 44px;
+  }
+
+  .btn-sm {
+    padding: 6px 10px;
+    font-size: 12px;
+    min-height: 36px;
+  }
+
+  .form-control,
+  input,
+  select,
+  textarea {
+    padding: 10px 12px;
+    font-size: 14px;
+    min-height: 44px;
+  }
+}
+
+/* ============================================================
+   RESPONSIVE — VERY SMALL (≤ 375px)
+   ============================================================ */
+@media (max-width: 375px) {
+
+  .main-container,
+  .container {
+    margin: 2px;
+  }
+
+  .header {
+    margin: 2px;
+    padding: 10px 8px;
+  }
+
+  .header h1 {
+    font-size: 1.3rem;
+  }
+
+  .header h2 {
+    font-size: 1.15rem;
+  }
+}
+
+/* ============================================================
+   TOUCH-FRIENDLY
+   ============================================================ */
+@media (max-width: 768px) {
+
+  button,
+  .btn,
+  a.btn,
+  input[type="button"],
+  input[type="submit"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  input[type="tel"],
+  input[type="date"],
+  select,
+  textarea {
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  input[type="checkbox"],
+  input[type="radio"] {
+    min-width: 20px;
+    min-height: 20px;
+  }
+}
+
+/* ============================================================
+   LANDSCAPE MOBILE
+   ============================================================ */
+@media (max-height: 500px) and (orientation: landscape) {
+  .header {
+    padding: 10px 15px;
+  }
+
+  .header h1 {
+    font-size: 1.2rem;
+    margin-bottom: 3px;
+  }
+
+  .header h2 {
+    font-size: 1.1rem;
+    margin-bottom: 3px;
+  }
+
+  .header p {
+    display: none;
+  }
+}
+
+/* ============================================================
+   PRINT
+   ============================================================ */
+@media print {
+  body {
+    padding: 0;
+    background: #fff;
+  }
+
+  .header,
+  .back-btn,
+  .nav-links,
+  .btn,
+  button,
+  .action-buttons,
+  .modal {
+    display: none !important;
+  }
+
+  .main-container,
+  .container {
+    box-shadow: none;
+    border: 1px solid #000;
+    margin: 0;
+    padding: 4px 8px;
+  }
+
+  .table,
+  .card {
+    page-break-inside: avoid;
+  }
+}
+
+/* ============================================================
+   REDUCED MOTION
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

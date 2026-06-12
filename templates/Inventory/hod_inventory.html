@@ -1,0 +1,509 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Inventory Management - Equiper National Hospital{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/material-icons.css' %}" />
+<link rel="stylesheet" href="{% static 'Inventory/inventory.css' %}" />
+{% endblock %}
+
+{% block page_title %}Equipment Reports Dashboard{% endblock %}
+
+{% block content %}
+
+<script id="django-data" type="application/json">
+{
+  "urls": {
+    "inventory": "{% url 'inventory' %}",
+    "equipmentAnalytics": "{% url 'equipment_analytics_api' %}",
+    "inventorySummary": "{% url 'inventory_summary_api' %}",
+    "exportExcel": "{% url 'export_equipment_excel' %}",
+    "exportPdf": "{% url 'export_equipment_to_pdf' %}",
+    "createManufacturer": "{% url 'create_manufacturer' %}",
+    "createEquipmentDescription": "{% url 'create_equipment_description' %}",
+    "checkEquipmentAvailability": "{% url 'check_equipment_availability' %}",
+    "editInventory": "/Inventory/edit_inventory/"
+  },
+  "currentDepartment": {% if current_department %}"{{ current_department.id }}"{% else %}null{% endif %},
+  "selectedWorkshop": {% if selected_workshop %}"{{ selected_workshop.id }}"{% else %}null{% endif %},
+  "userRole": "{{ user_role }}"
+}
+</script>
+
+<!-- Main Content Container -->
+<div class="main-container">
+
+  <!-- SPA Navigation (replaces Bootstrap tabs for JS/CSS compatibility) -->
+  <div class="spa-nav-container mb-4">
+    <button class="spa-nav-item active" data-section="inventory">
+      <i class="fas fa-list"></i> Equipment List
+    </button>
+    <button class="spa-nav-item" data-section="summary">
+      <i class="fas fa-chart-bar"></i> Summary
+    </button>
+    <button class="spa-nav-item" data-section="analytics">
+      <i class="fas fa-chart-line"></i> Analytics &amp; Reports
+    </button>
+  </div>
+
+  <!-- Inventory Section -->
+  <div id="inventorySection" class="content-section active">
+
+    <!-- Filter Section -->
+    <div class="filter-section mb-4">
+      <h3><i class="fas fa-filter"></i> Filter Equipment</h3>
+
+      <!-- Filter Controls -->
+      <div class="filter-grid mb-3">
+        <div>
+          <label for="departmentFilter" class="form-label">Department</label>
+          <select name="department" id="departmentFilter" class="form-select">
+            <option value="">Show All Departments</option>
+            {% for dept in departments %}
+            <option value="{{ dept.id }}" data-workshop-id="{{ dept.workshop.id }}">
+              {{ dept.name }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div>
+          <label for="statusFilter" class="form-label">Status</label>
+          <select name="status" id="statusFilter" class="form-select">
+            <option value="">All Status</option>
+            {% for status in status_choices %}
+            <option value="{{ status }}" {% if status_filter == status %}selected{% endif %}>
+              {{ status }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="search-item">
+          <label for="searchInput" class="form-label">Search</label>
+          <div class="input-group">
+            <span class="input-group-text"><i class="fas fa-search"></i></span>
+            <input type="text" name="search" id="searchInput" class="form-control"
+              placeholder="Search by description, manufacturer, model, serial number, or department..."
+              value="{{ search_query }}" autocomplete="off">
+          </div>
+        </div>
+
+        <div class="d-flex align-items-end">
+          <button type="button" class="btn btn-outline-secondary w-100" id="clearFiltersBtn" title="Clear all filters">
+            <i class="fas fa-times me-1"></i> Clear
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Equipment Table Container -->
+    <div class="table-card">
+      <!-- Loading Indicator -->
+      <div id="loadingIndicator" class="text-center py-4" style="display: none;">
+        <div class="spinner-border text-primary" role="status">
+          <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-2 text-muted">Loading equipment data...</p>
+      </div>
+
+      <!-- Equipment Table — read-only, no Actions column -->
+      <div class="table-responsive">
+        <table class="table table-hover">
+          <thead>
+            <tr>
+              <th scope="col">No</th>
+              <th scope="col"><i class="fas fa-box me-1"></i>Description</th>
+              <th scope="col"><i class="fas fa-industry me-1"></i>Manufacturer</th>
+              <th scope="col"><i class="fas fa-tag me-1"></i>Model</th>
+              <th scope="col"><i class="fas fa-barcode me-1"></i>Serial Number</th>
+              <th scope="col"><i class="fas fa-building me-1"></i>Department</th>
+              <th scope="col">
+                <i class="fas fa-check-circle me-1"></i>Status
+              </th>
+            </tr>
+          </thead>
+          <tbody id="equipmentTableBody">
+            {% for equipment in equipments %}
+            <tr class="fade-in table-row-fade-in" style="animation-delay: {{ forloop.counter0|floatformat:1 }}00ms">
+              <td>{{ forloop.counter }}</td>
+              <td class="fw-bold text-primary">{{ equipment.description.name }}</td>
+              <td>{{ equipment.manufacturer.name|default:"-" }}</td>
+              <td>{{ equipment.model|default:"-" }}</td>
+              <td class="font-monospace">{{ equipment.serial_number|default:"-" }}</td>
+              <td>{{ equipment.department.name }}</td>
+              <td>
+                <span class="badge {% if equipment.status == 'Working' %}bg-success{% elif equipment.status == 'Not working' %}bg-danger{% else %}bg-warning text-dark{% endif %}">
+                  {{ equipment.status }}
+                </span>
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="7" class="text-center text-muted py-5">
+                <i class="fas fa-search fa-3x mb-3" style="opacity: 0.5;"></i>
+                <h5>No equipment found</h5>
+                <p>Try adjusting your search criteria or filters.</p>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      <div id="paginationWrapper">
+        {% if is_paginated %}
+        <div class="card-footer d-flex justify-content-between align-items-center">
+          <small class="text-muted">
+            Showing <strong>{{ page_obj.start_index }}</strong> to <strong>{{ page_obj.end_index }}</strong>
+            of <strong>{{ page_obj.paginator.count }}</strong> entries
+          </small>
+          <nav>
+            <div class="btn-group">
+              {% if page_obj.has_previous %}
+              <button class="btn btn-sm btn-outline-secondary ajax-page-btn" data-page="1" title="First page">
+                <i class="fas fa-angle-double-left"></i>
+              </button>
+              <button class="btn btn-sm btn-outline-secondary ajax-page-btn" data-page="{{ page_obj.previous_page_number }}">
+                <i class="fas fa-chevron-left"></i>
+              </button>
+              {% endif %}
+
+              {% for num in page_obj.paginator.page_range %}
+                {% if page_obj.number == num %}
+                <button class="btn btn-sm btn-primary ajax-page-btn active" data-page="{{ num }}">{{ num }}</button>
+                {% else %}
+                <button class="btn btn-sm btn-outline-secondary ajax-page-btn" data-page="{{ num }}">{{ num }}</button>
+                {% endif %}
+              {% endfor %}
+
+              {% if page_obj.has_next %}
+              <button class="btn btn-sm btn-outline-secondary ajax-page-btn" data-page="{{ page_obj.next_page_number }}">
+                <i class="fas fa-chevron-right"></i>
+              </button>
+              <button class="btn btn-sm btn-outline-secondary ajax-page-btn" data-page="{{ page_obj.paginator.num_pages }}" title="Last page">
+                <i class="fas fa-angle-double-right"></i>
+              </button>
+              {% endif %}
+            </div>
+          </nav>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Summary Section -->
+  <div id="summarySection" class="content-section" style="display: none;">
+    <div class="row mb-4">
+      <div class="col-md-3">
+        <div class="card text-white bg-primary">
+          <div class="card-body text-center">
+            <h2 class="mb-0" id="totalEquipment">{{ total_equipment }}</h2>
+            <p class="mb-0">Total Equipment</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card text-white bg-success">
+          <div class="card-body text-center">
+            <h2 class="mb-0" id="workingEquipment">{{ status_summary.Working|default:0 }}</h2>
+            <p class="mb-0">Working</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card text-white bg-danger">
+          <div class="card-body text-center">
+            <h2 class="mb-0" id="notWorkingEquipment">{{ status_summary.Not_working|default:0 }}</h2>
+            <p class="mb-0">Not Working</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card text-dark bg-warning">
+          <div class="card-body text-center">
+            <h2 class="mb-0" id="underRepairEquipment">{{ status_summary.Under_repair|default:0 }}</h2>
+            <p class="mb-0">Under Repair</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Summary Table -->
+    <div class="table-card">
+      <div class="alert alert-info mb-0 rounded-0 border-start-0 border-end-0" role="alert">
+        <i class="fas fa-info-circle me-2"></i>
+        <strong>Tip:</strong> Data below reflects current filter/workshop selection.
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover" id="summaryTable">
+          <thead>
+            <tr>
+              <th>Equipment Description</th>
+              <th>Working</th>
+              <th>Not Working</th>
+              <th>Under Repair</th>
+              <th>Total</th>
+              <th>Working %</th>
+            </tr>
+          </thead>
+          <tbody id="summaryTableBody">
+            <tr>
+              <td colspan="6" class="text-center text-muted py-4">
+                <div class="spinner-border spinner-border-sm me-2" role="status">
+                  <span class="visually-hidden">Loading...</span>
+                </div>
+                Loading summary data...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Analytics Section with Reports Dashboard -->
+  <div id="analyticsSection" class="content-section" style="display: none;">
+
+    <!-- Analytics Sub-Navigation -->
+    <div class="d-flex gap-2 mb-4">
+      <button class="btn btn-primary analytics-nav-btn active" data-analytics="charts">
+        <i class="fas fa-chart-bar me-1"></i> Charts &amp; Analytics
+      </button>
+      <button class="btn btn-outline-secondary analytics-nav-btn" data-analytics="reports">
+        <i class="fas fa-file-pdf me-1"></i> Equipment Reports
+      </button>
+    </div>
+
+    <!-- Charts Analytics Content -->
+    <div id="chartsAnalytics" class="analytics-content">
+      <div class="row mb-4">
+        <div class="col-md-12">
+          <h3><i class="fas fa-chart-bar me-2"></i>Equipment Analytics</h3>
+        </div>
+      </div>
+      <div class="row">
+        <div class="col-md-6">
+          <div class="card">
+            <div class="card-header bg-primary text-white">
+              <h5 class="mb-0">Equipment Status Distribution</h5>
+            </div>
+            <div class="card-body" style="height: 300px;">
+              <canvas id="statusChart"></canvas>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card">
+            <div class="card-header bg-info text-white">
+              <h5 class="mb-0">Equipment by Department</h5>
+            </div>
+            <div class="card-body" style="height: 300px;">
+              <canvas id="departmentChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Reports Dashboard Content -->
+    <div id="reportsAnalytics" class="analytics-content" style="display: none;">
+
+      <!-- Reports Dashboard Header -->
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+          <h3 class="mb-0">Equipment Reports Dashboard</h3>
+          <p class="text-muted mb-0">Generate comprehensive PDF reports for equipment inventory</p>
+        </div>
+      </div>
+
+      <!-- Workshop Selection (HOD only) -->
+      {% if user_role == 'HOD' %}
+      <div class="card shadow-sm mb-4">
+        <div class="card-body">
+          <h5 class="card-title"><i class="fas fa-building me-2"></i>Workshop Selection</h5>
+          <form method="GET" class="d-flex align-items-center gap-3">
+            <select name="workshop" class="form-select" style="width: auto;" onchange="this.form.submit()">
+              <option value="">Select Workshop</option>
+              {% for workshop in all_workshops %}
+              <option value="{{ workshop.id }}" {% if workshop == selected_workshop %}selected{% endif %}>
+                {{ workshop.name }}
+              </option>
+              {% endfor %}
+            </select>
+          </form>
+        </div>
+      </div>
+      {% endif %}
+
+      {% if selected_workshop %}
+      <!-- Workshop Statistics -->
+      <div class="card mb-4">
+        <div class="card-body">
+          <div class="row align-items-center">
+            <div class="col-md-8">
+              <h2 class="mb-2">{{ selected_workshop.name }}</h2>
+              <div class="row">
+                <div class="col-md-6">
+                  <h4 class="mb-1">{{ total_equipment|floatformat:0 }}</h4>
+                  <p class="mb-0 text-muted">Total Equipment Items</p>
+                </div>
+                <div class="col-md-6">
+                  <h4 class="mb-1">{{ departments.count }}</h4>
+                  <p class="mb-0 text-muted">Active Departments</p>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4 text-end">
+              {% for status, count in status_stats.items %}
+              <div class="badge {% if status == 'Working' %}bg-success{% elif status == 'Not working' %}bg-danger{% else %}bg-warning text-dark{% endif %} me-1 mb-1 p-2 fs-6">
+                {{ status }}: {{ count }}
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Report Types -->
+      <h4 class="mb-3">Available Report Types</h4>
+      <div class="row mb-4">
+        {% for report in report_types %}
+        <div class="col-lg-3 col-md-6 mb-4">
+          <div class="card h-100">
+            <div class="card-body text-center">
+              <div class="fs-1 text-primary mb-3">
+                <i class="{{ report.icon }}"></i>
+              </div>
+              <h5 class="card-title">{{ report.name }}</h5>
+              <p class="card-text text-muted">{{ report.description }}</p>
+              <button type="button" class="btn btn-primary btn-sm"
+                onclick="showReportModal('{{ report.key }}', '{{ report.name }}')">
+                <i class="fas fa-file-pdf me-1"></i> Generate Report
+              </button>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <!-- Quick Export Section -->
+      <div class="card mb-4">
+        <div class="card-body">
+          <h5 class="mb-3"><i class="fas fa-download me-2"></i>Quick Exports</h5>
+          <div class="row">
+            <div class="col-md-4">
+              <a href="{% url 'export_equipment_to_pdf' %}?workshop={{ selected_workshop.id }}&report_type=detailed"
+                class="btn btn-outline-danger w-100 mb-2">
+                <i class="fas fa-file-pdf me-2"></i>All Equipment (Detailed)
+              </a>
+            </div>
+            <div class="col-md-4">
+              <a href="{% url 'export_equipment_to_pdf' %}?workshop={{ selected_workshop.id }}&report_type=summary"
+                class="btn btn-outline-info w-100 mb-2">
+                <i class="fas fa-chart-bar me-2"></i>Summary Report
+              </a>
+            </div>
+            <div class="col-md-4">
+              {% if user_role == 'HOD' %}
+              <a href="{% url 'bulk_export_departments_pdf' %}?workshop={{ selected_workshop.id }}"
+                class="btn btn-outline-warning w-100 mb-2">
+                <i class="fas fa-archive me-2"></i>All Departments (ZIP)
+              </a>
+              {% else %}
+              <a href="{% url 'export_equipment_to_pdf' %}?workshop={{ selected_workshop.id }}&report_type=department"
+                class="btn btn-outline-success w-100 mb-2">
+                <i class="fas fa-building me-2"></i>Department Analysis
+              </a>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {% else %}
+      <div class="alert alert-warning text-center py-5">
+        <i class="fas fa-exclamation-triangle fa-3x mb-3"></i>
+        <h4>No Workshop Selected</h4>
+        <p>Please select a workshop to view available reports.</p>
+      </div>
+      {% endif %}
+
+      <!-- Report Generation Modal -->
+      <div class="modal fade" id="reportModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="reportModalTitle">Generate Report</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <form id="reportForm" method="GET" action="{% url 'export_equipment_to_pdf' %}">
+                <input type="hidden" name="workshop" value="{{ selected_workshop.id }}">
+                <input type="hidden" name="report_type" id="reportType">
+                <div class="row">
+                  <div class="col-md-6 mb-3">
+                    <label for="departmentFilterModal" class="form-label">
+                      <i class="fas fa-building me-1"></i>Department (Optional)
+                    </label>
+                    <select name="department" id="departmentFilterModal" class="form-select">
+                      <option value="">All Departments</option>
+                      {% for dept in departments %}
+                      <option value="{{ dept.id }}">{{ dept.name }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                  <div class="col-md-6 mb-3">
+                    <label for="statusFilterModal" class="form-label">
+                      <i class="fas fa-stethoscope me-1"></i>Status (Optional)
+                    </label>
+                    <select name="status" id="statusFilterModal" class="form-select">
+                      <option value="">All Statuses</option>
+                      <option value="Working">Working</option>
+                      <option value="Not working">Not Working</option>
+                      <option value="Under repair">Under Repair</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="mb-3">
+                  <label for="customNotes" class="form-label">
+                    <i class="fas fa-sticky-note me-1"></i>Custom Notes (Optional)
+                  </label>
+                  <textarea name="notes" id="customNotes" class="form-control" rows="3"
+                    placeholder="Add any specific notes or observations for this report..."></textarea>
+                </div>
+              </form>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+              <button type="button" class="btn btn-primary" onclick="generateReport()" id="generateBtn">
+                <i class="fas fa-file-pdf me-1"></i>Generate PDF
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Loading Overlay -->
+      <div id="loadingOverlay" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+        style="background: rgba(0,0,0,0.7); z-index: 9999; display: none !important;">
+        <div class="text-center text-white">
+          <div class="spinner-border spinner-border-lg mb-3" role="status"></div>
+          <h4>Generating PDF Report...</h4>
+          <p>This may take a few moments depending on the amount of data.</p>
+        </div>
+      </div>
+
+    </div><!-- end reportsAnalytics -->
+  </div><!-- end analyticsSection -->
+
+</div>
+
+<!-- Chart.js -->
+<script src="{% static 'js/chart.min.js' %}"></script>
+<!-- HOD Inventory JavaScript -->
+<script src="{% static 'Inventory/hod-inventory.js' %}"></script>
+{% endblock %}

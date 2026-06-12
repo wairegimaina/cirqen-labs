@@ -1,0 +1,196 @@
+{% load static %}
+
+  <div class="row mt-4" id="chart-container">
+    <!-- Status Distribution Chart -->
+    <div class="col-md-6 mb-4">
+      <div class="chart-card">
+        <div class="card-header bg-primary text-white">
+          <h5 class="mb-0">
+            <i class="fas fa-chart-bar me-2"></i>Job Card Status Distribution
+          </h5>
+        </div>
+        <div class="card-body">
+          <div class="chart-wrapper" style="position: relative; height: 300px;">
+            <canvas id="statusChart"></canvas>
+          </div>
+        </div>
+        <div class="card-footer text-muted small">
+          <i class="fas fa-info-circle me-1"></i>Current period breakdown
+        </div>
+      </div>
+    </div>
+
+    <!-- Annual Trend Chart (shown only for annual reports) -->
+    <div class="col-md-6 mb-4" id="annual-chart-column" style="{% if report_type != 'annual' %}display: none;{% endif %}">
+      <div class="chart-card">
+        <div class="card-header bg-info text-white">
+          <h5 class="mb-0">
+            <i class="fas fa-chart-line me-2"></i>Annual Performance Trends
+          </h5>
+        </div>
+        <div class="card-body">
+          <div class="chart-wrapper" style="position: relative; height: 300px;">
+            <canvas id="annualTrendChart"></canvas>
+          </div>
+        </div>
+        <div class="card-footer text-muted small">
+          <i class="fas fa-info-circle me-1"></i>Monthly activity trends
+        </div>
+      </div>
+    </div>
+
+    <!-- Performance Metrics (shown for non-annual reports) -->
+    <div class="col-md-6 mb-4" id="metrics-column" style="{% if report_type == 'annual' %}display: none;{% endif %}">
+      <div class="chart-card">
+        <div class="card-header bg-success text-white">
+          <h5 class="mb-0">
+            <i class="fas fa-tachometer-alt me-2"></i>Performance Metrics
+          </h5>
+        </div>
+        <div class="card-body">
+          <!-- Key Metrics Grid -->
+          <div class="row g-3 mb-3">
+            <div class="col-6">
+              <div class="metric-box mb-success text-center p-3 border rounded">
+                <small class="text-muted d-block mb-1">APPROVAL RATE</small>
+                <h3 class="mb-0" style="color: var(--success-color);">
+                  {% widthratio total_approved|default:0 total_waiting_approval|default:0|add:total_approved|default:0|add:total_declined|default:0 100 %}%
+                </h3>
+              </div>
+            </div>
+            <div class="col-6">
+              <div class="metric-box mb-warning text-center p-3 border rounded">
+                <small class="text-muted d-block mb-1">PENDING RATE</small>
+                <h3 class="mb-0" style="color: var(--warning-color);">
+                  {% widthratio total_waiting_approval|default:0 total_waiting_approval|default:0|add:total_approved|default:0|add:total_declined|default:0 100 %}%
+                </h3>
+              </div>
+            </div>
+            <div class="col-6">
+              <div class="metric-box mb-danger text-center p-3 border rounded">
+                <small class="text-muted d-block mb-1">DECLINE RATE</small>
+                <h3 class="mb-0" style="color: var(--danger-color);">
+                  {% widthratio total_declined|default:0 total_waiting_approval|default:0|add:total_approved|default:0|add:total_declined|default:0 100 %}%
+                </h3>
+              </div>
+            </div>
+            <div class="col-6">
+              <div class="metric-box mb-primary text-center p-3 border rounded">
+                <small class="text-muted d-block mb-1">TOTAL CARDS</small>
+                <h3 class="mb-0" style="color: var(--primary-color);">
+                  {{ total_waiting_approval|default:0|add:total_approved|default:0|add:total_declined|default:0 }}
+                </h3>
+              </div>
+            </div>
+          </div>
+
+          <!-- Status Progress Bars -->
+          <div class="mt-3">
+            <h6 class="text-muted small mb-3">STATUS BREAKDOWN</h6>
+
+            <!-- Waiting Approval -->
+            <div class="mb-3">
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="small"><i class="fas fa-clock text-warning me-1"></i>Waiting Approval</span>
+                <strong class="small">{{ total_waiting_approval|default:0 }}</strong>
+              </div>
+              <div class="progress" style="height: 10px;">
+                <div class="progress-bar" role="progressbar" style="background: var(--warning-color); width: {% widthratio total_waiting_approval|default:0 total_waiting_approval|default:0|add:total_approved|default:0|add:total_declined|default:0 100 %}%"
+                     aria-valuenow="{{ total_waiting_approval|default:0 }}"
+                     aria-valuemin="0"
+                     aria-valuemax="{{ total_waiting_approval|default:0|add:total_approved|default:0|add:total_declined|default:0 }}">
+                </div>
+              </div>
+            </div>
+
+            <!-- Approved -->
+            <div class="mb-3">
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="small"><i class="fas fa-check-circle text-success me-1"></i>Approved</span>
+                <strong class="small">{{ total_approved|default:0 }}</strong>
+              </div>
+              <div class="progress" style="height: 10px;">
+                <div class="progress-bar" role="progressbar" style="background: var(--success-color); width: {% widthratio total_approved|default:0 total_waiting_approval|default:0|add:total_approved|default:0|add:total_declined|default:0 100 %}%"
+                     aria-valuenow="{{ total_approved|default:0 }}"
+                     aria-valuemin="0"
+                     aria-valuemax="{{ total_waiting_approval|default:0|add:total_approved|default:0|add:total_declined|default:0 }}">
+                </div>
+              </div>
+            </div>
+
+            <!-- Declined -->
+            <div class="mb-2">
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="small"><i class="fas fa-times-circle text-danger me-1"></i>Declined</span>
+                <strong class="small">{{ total_declined|default:0 }}</strong>
+              </div>
+              <div class="progress" style="height: 10px;">
+                <div class="progress-bar" role="progressbar" style="background: var(--danger-color); width: {% widthratio total_declined|default:0 total_waiting_approval|default:0|add:total_approved|default:0|add:total_declined|default:0 100 %}%"
+                     aria-valuenow="{{ total_declined|default:0 }}"
+                     aria-valuemin="0"
+                     aria-valuemax="{{ total_waiting_approval|default:0|add:total_approved|default:0|add:total_declined|default:0 }}">
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="card-footer text-muted small">
+          <i class="fas fa-info-circle me-1"></i>Real-time performance indicators
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+<script>
+  // Initialize chart data configuration
+  window.reportConfig = window.reportConfig || {};
+  window.reportConfig.totalWaitingApproval = {{ total_waiting_approval|default:0 }};
+  window.reportConfig.totalApproved = {{ total_approved|default:0 }};
+  window.reportConfig.totalDeclined = {{ total_declined|default:0 }};
+  window.reportConfig.reportType = '{{ report_type }}';
+
+  {% if report_type == 'annual' and annual_data %}
+  window.reportConfig.annualData = {
+    {% for month, data in annual_data.monthly_breakdown.items %}
+    {{ month }}: {
+      waiting: {{ data.waiting|default:0 }},
+      approved: {{ data.approved|default:0 }},
+      declined: {{ data.declined|default:0 }},
+      total: {{ data.total|default:0 }}
+    }{% if not forloop.last %},{% endif %}
+    {% endfor %}
+  };
+  {% endif %}
+
+  // Toggle chart visibility based on report type
+  document.addEventListener('DOMContentLoaded', function() {
+    function updateChartVisibility(reportType) {
+      const annualColumn = document.getElementById('annual-chart-column');
+      const metricsColumn = document.getElementById('metrics-column');
+
+      if (reportType === 'annual') {
+        if (annualColumn) annualColumn.style.display = 'block';
+        if (metricsColumn) metricsColumn.style.display = 'none';
+      } else {
+        if (annualColumn) annualColumn.style.display = 'none';
+        if (metricsColumn) metricsColumn.style.display = 'block';
+      }
+    }
+
+    // Initial setup
+    const reportTypeElement = document.getElementById('id_report_type');
+    if (reportTypeElement) {
+      updateChartVisibility(reportTypeElement.value);
+
+      // Listen for changes
+      reportTypeElement.addEventListener('change', function() {
+        updateChartVisibility(this.value);
+      });
+    } else {
+      // Fallback to checking a data attribute or config
+      const reportType = '{{ report_type }}';
+      updateChartVisibility(reportType);
+    }
+  });
+</script>

@@ -1,0 +1,455 @@
+{% load static %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/select2.min.css' %}" />
+<link rel="stylesheet" href="{% static 'css/flatpickr.min.css' %}" />
+{% endblock %}
+
+<aside class="equiper-sidebar" id="equiperSidebar" aria-label="Main navigation">
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- BRAND                                                           -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div class="sidebar-brand">
+    <div class="brand-identity">
+      <!-- Dark logo: shown on light theme -->
+      <img src="{% static 'images/dark.png' %}" alt="Cirqen" class="sidebar-logo sidebar-logo--dark">
+      <!-- White logo: shown on dark theme -->
+      <img src="{% static 'images/white.png' %}" alt="Cirqen" class="sidebar-logo sidebar-logo--white">
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- NAVIGATION                                                      -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <nav class="sidebar-navigation" aria-label="Sidebar navigation">
+    <ul class="menu-list" role="menubar">
+
+      <!-- ╔═══════════════════════════════════════════════════════╗ -->
+      <!-- ║  CORE BLOCK                                           ║ -->
+      <!-- ╚═══════════════════════════════════════════════════════╝ -->
+      <li class="menu-section-header" role="none">
+        <span class="section-label">Core</span>
+      </li>
+
+      <!-- Dashboard
+           Routing priority:
+             1. HOD            → hod_dashboard   (always, regardless of workshop)
+             2. calibration_center workshop → cal-dashboard
+             3. Tech, no ws    → workshop_dashboard
+             4. NIC, no ws     → nic_dashboard
+             5. fallback       → dashboard-main
+      -->
+      <li class="menu-entry" role="none">
+        {% if user.userprofile.role == 'HOD' %}
+        <a href="{% url 'dashboard:hod_dashboard' %}"
+          class="menu-link {% if request.resolver_match.url_name == 'hod_dashboard' %}active-link{% endif %}"
+          role="menuitem">
+          {% else %}
+          {% with ws=selected_workshop|default:user.userprofile.workshop %}
+          {% if ws.category == 'calibration_center' %}
+          <a href="{% url 'calibration:cal-dashboard' %}"
+            class="menu-link {% if request.resolver_match.url_name == 'cal-dashboard' %}active-link{% endif %}"
+            role="menuitem">
+            {% elif user.userprofile.role == 'Tech' and not ws %}
+            <a href="{% url 'workshop_dashboard' %}"
+              class="menu-link {% if request.resolver_match.url_name == 'workshop_dashboard' %}active-link{% endif %}"
+              role="menuitem">
+              {% elif user.userprofile.role == 'NIC' and not ws %}
+              <a href="{% url 'dashboard:nic_dashboard' %}"
+                class="menu-link {% if request.resolver_match.url_name == 'nurse_dashboard' %}active-link{% endif %}"
+                role="menuitem">
+                {% else %}
+                <a href="{% url 'dashboard:dashboard-main' %}"
+                  class="menu-link {% if request.resolver_match.url_name == 'dashboard-main' %}active-link{% endif %}"
+                  role="menuitem">
+                  {% endif %}
+                  {% endwith %}
+                  {% endif %}
+                  <div class="link-icon" aria-hidden="true">
+                    <i class="fas fa-tachometer-alt"></i>
+                  </div>
+                  <span class="link-label">Dashboard</span>
+                </a>
+      </li>
+
+      <!-- Inventory -->
+      <li class="menu-entry" role="none">
+        <a href="{% url 'inventory' %}" class="menu-link {% if 'inventory' in request.path %}active-link{% endif %}"
+          role="menuitem">
+          <div class="link-icon" aria-hidden="true">
+            <i class="fas fa-boxes"></i>
+          </div>
+          <span class="link-label">Inventory</span>
+        </a>
+      </li>
+
+      <!-- ╔═══════════════════════════════════════════════════════╗ -->
+      <!-- ║  HOD BLOCK                                            ║ -->
+      <!-- ║  Visible to: HOD only                                 ║ -->
+      <!-- ╚═══════════════════════════════════════════════════════╝ -->
+      {% if user.userprofile.role == 'HOD' %}
+
+      <li class="menu-section-header" role="none">
+        <span class="section-label">Administration</span>
+      </li>
+
+      <!-- Manage Users -->
+      <li class="menu-entry" role="none">
+        <a href="{% url 'manage_users' %}"
+          class="menu-link {% if request.resolver_match.url_name == 'manage_users' %}active-link{% endif %}"
+          role="menuitem">
+          <div class="link-icon" aria-hidden="true">
+            <i class="fas fa-users-cog"></i>
+          </div>
+          <span class="link-label">Manage Users</span>
+        </a>
+      </li>
+
+      <!-- Check Updates -->
+      <li class="menu-entry" role="none">
+        <a href="{% url 'updates:dashboard' %}"
+          class="menu-link {% if 'updates' in request.path %}active-link{% endif %}" role="menuitem">
+          <div class="link-icon" aria-hidden="true">
+            <i class="fas fa-cloud-download-alt"></i>
+          </div>
+          <span class="link-label">Check Updates</span>
+        </a>
+      </li>
+
+      <!-- Workshop Management (dropdown) -->
+      <li class="menu-entry" role="none">
+        <a href="{% url 'workshop:create_workshop' %}"
+          class="menu-link {% if request.resolver_match.url_name == 'create_workshop' %}active-link{% endif %}"
+          role="menuitem">
+          <div class="link-icon" aria-hidden="true">
+            <i class="fas fa-industry"></i>
+          </div>
+          <span class="link-label">Manage workshop</span>
+        </a>
+      </li>
+
+    </ul>
+    </li>
+
+    <!-- Parts & Tools -->
+    <li class="menu-entry" role="none">
+      <a href="{% url 'partstools:accessories_dashboard' %}"
+        class="menu-link {% if 'parts' in request.path or 'accessories' in request.path %}active-link{% endif %}"
+        role="menuitem">
+        <div class="link-icon" aria-hidden="true">
+          <i class="fas fa-wrench"></i>
+        </div>
+        <span class="link-label">Parts &amp; Tools</span>
+      </a>
+    </li>
+
+    {% endif %}
+    {# ── END HOD BLOCK ── #}
+
+    <!-- ╔═══════════════════════════════════════════════════════╗ -->
+    <!-- ║  MAINTENANCE BLOCK                                    ║ -->
+    <!-- ║  Visible to: Tech in maintenance workshop only        ║ -->
+    <!-- ╚═══════════════════════════════════════════════════════╝ -->
+    {% if user.userprofile.role == 'Tech' %}
+    {% with ws=selected_workshop|default:user.userprofile.workshop %}
+    {% if ws.category == 'maintenance' or not ws %}
+
+    <li class="menu-section-header" role="none">
+      <span class="section-label">Maintenance</span>
+    </li>
+
+    <li class="menu-entry" role="none">
+      <a href="{% url 'equipment_dashboard' %}"
+        class="menu-link {% if 'equipment_dashboard' in request.path %}active-link{% endif %}" role="menuitem">
+        <div class="link-icon" aria-hidden="true">
+          <i class="fas fa-microchip"></i>
+        </div>
+        <span class="link-label">Machine Reports</span>
+      </a>
+    </li>
+
+    {% endif %}
+    {% endwith %}
+    {% endif %}
+
+    <!-- ╔═══════════════════════════════════════════════════════╗ -->
+    <!-- ║  OPERATIONS BLOCK                                     ║ -->
+    <!-- ║  Visible to: Tech & NIC                               ║ -->
+    <!-- ╚═══════════════════════════════════════════════════════╝ -->
+    {% if user.userprofile.role in 'Tech,NIC' %}
+
+    <li class="menu-section-header" role="none">
+      <span class="section-label">Operations</span>
+    </li>
+
+    {% with ws=selected_workshop|default:user.userprofile.workshop %}
+    {% if user.userprofile.role == 'NIC' or ws.category == 'maintenance' %}
+    <li class="menu-entry" role="none">
+      <a href="{% url 'ppm_dashboard' %}"
+        class="menu-link {% if request.resolver_match.url_name == 'ppm_dashboard' %}active-dropdown{% endif %}"
+        role="menuitem">
+        <div class="link-icon" aria-hidden="true">
+          <i class="fas fa-clipboard-list"></i>
+        </div>
+        <span class="link-label">PPM Schedules</span>
+      </a>
+    </li>
+    {% endif %}
+    {% endwith %}
+
+    <!-- Job Cards (Tech & NIC) -->
+    <li class="menu-entry" role="none">
+      <a href="#" class="menu-link {% if 'jobcard' in request.path %}active-link{% endif %}" data-toggle="submenu"
+        role="menuitem" aria-haspopup="true" aria-expanded="false">
+        <div class="link-icon" aria-hidden="true">
+          <i class="fas fa-file-alt"></i>
+        </div>
+        <span class="link-label">Job Cards</span>
+        <i class="fas fa-chevron-down submenu-toggle-arrow" aria-hidden="true"></i>
+      </a>
+      <ul class="dropdown-menu" role="menu">
+
+        <li class="dropdown-entry" role="none">
+          <a href="{% url 'jobcard:create_job_card' %}"
+            class="dropdown-link {% if request.resolver_match.url_name == 'create_job_card' %}active-dropdown{% endif %}"
+            role="menuitem">
+            <i class="fas fa-plus-circle" aria-hidden="true"></i>
+            <span class="link-label">Create Job Card</span>
+          </a>
+        </li>
+
+        <li class="dropdown-entry" role="none">
+          <a href="{% url 'jobcard:waiting_jobcards' %}"
+            class="dropdown-link {% if request.resolver_match.url_name == 'waiting_jobcards' %}active-dropdown{% endif %}"
+            role="menuitem">
+            <i class="fas fa-hourglass-half" aria-hidden="true"></i>
+            <span class="link-label">Waiting Job Cards</span>
+          </a>
+        </li>
+
+        <li class="dropdown-entry" role="none">
+          <a href="{% url 'jobcard:approved_jobcards' %}"
+            class="dropdown-link {% if request.resolver_match.url_name == 'approved_jobcards' %}active-dropdown{% endif %}"
+            role="menuitem">
+            <i class="fas fa-check-circle" aria-hidden="true"></i>
+            <span class="link-label">Approved Job Cards</span>
+          </a>
+        </li>
+
+        <li class="dropdown-entry" role="none">
+          <a href="{% url 'jobcard:declined_jobcards' %}"
+            class="dropdown-link {% if request.resolver_match.url_name == 'declined_jobcards' %}active-dropdown{% endif %}"
+            role="menuitem">
+            <i class="fas fa-times-circle" aria-hidden="true"></i>
+            <span class="link-label">Declined Job Cards</span>
+          </a>
+        </li>
+
+      </ul>
+    </li>
+
+    {% if user.userprofile.role == 'Tech' %}
+    <li class="menu-entry" role="none">
+      <a href="{% url 'report_hub:report_hub' %}"
+        class="menu-link {% if 'report_hub' in request.path %}active-link{% endif %}" role="menuitem">
+        <div class="link-icon" aria-hidden="true">
+          <i class="fas fa-chart-line"></i>
+        </div>
+        <span class="link-label">Report Hub</span>
+      </a>
+    </li>
+    {% endif %}
+
+    {% endif %}
+    {# ── END OPERATIONS BLOCK ── #}
+
+    <!-- ╔═══════════════════════════════════════════════════════╗ -->
+    <!-- ║  CALIBRATION BLOCK                                    ║ -->
+    <!-- ║  Visible to: Tech in calibration_center only          ║ -->
+    <!-- ╚═══════════════════════════════════════════════════════╝ -->
+    {% if user.userprofile.role == 'Tech' %}
+    {% with ws=selected_workshop|default:user.userprofile.workshop %}
+    {% if ws.category == 'calibration_center' %}
+
+    <li class="menu-section-header" role="none">
+      <span class="section-label">Calibration</span>
+    </li>
+
+    <li class="menu-entry" role="none">
+      <a href="#" class="menu-link {% if 'calibration' in request.path %}active-link{% endif %}" data-toggle="submenu"
+        role="menuitem" aria-haspopup="true" aria-expanded="false">
+        <div class="link-icon" aria-hidden="true">
+          <i class="fas fa-drafting-compass"></i>
+        </div>
+        <span class="link-label">Calibration</span>
+        <i class="fas fa-chevron-down submenu-toggle-arrow" aria-hidden="true"></i>
+      </a>
+      <ul class="dropdown-menu" role="menu">
+
+        <!-- Procedures -->
+        <li class="dropdown-entry" role="none">
+          <a href="#" class="dropdown-link" data-toggle="nested-submenu" role="menuitem" aria-haspopup="true"
+            aria-expanded="false">
+            <i class="fas fa-book-open" aria-hidden="true"></i>
+            <span class="link-label">Procedures</span>
+            <i class="fas fa-chevron-down nested-toggle-arrow" aria-hidden="true"></i>
+          </a>
+          <ul class="nested-dropdown" role="menu">
+            <li class="nested-entry" role="none">
+              <a href="{% url 'calibration:procedure_list' %}"
+                class="nested-link {% if request.resolver_match.url_name == 'procedure_list' %}active-nested{% endif %}"
+                role="menuitem">
+                <i class="fas fa-list-ul" aria-hidden="true"></i>
+                <span class="link-label">View Procedures</span>
+              </a>
+            </li>
+            <li class="nested-entry" role="none">
+              <a href="{% url 'calibration:procedure_create' %}"
+                class="nested-link {% if request.resolver_match.url_name == 'procedure_create' %}active-nested{% endif %}"
+                role="menuitem">
+                <i class="fas fa-plus" aria-hidden="true"></i>
+                <span class="link-label">Create Procedure</span>
+              </a>
+            </li>
+          </ul>
+        </li>
+
+        <!-- Standards -->
+        <li class="dropdown-entry" role="none">
+          <a href="#" class="dropdown-link" data-toggle="nested-submenu" role="menuitem" aria-haspopup="true"
+            aria-expanded="false">
+            <i class="fas fa-ruler-combined" aria-hidden="true"></i>
+            <span class="link-label">Standards</span>
+            <i class="fas fa-chevron-down nested-toggle-arrow" aria-hidden="true"></i>
+          </a>
+          <ul class="nested-dropdown" role="menu">
+            <li class="nested-entry" role="none">
+              <a href="{% url 'calibration:StandardsParameters_lists' %}"
+                class="nested-link {% if request.resolver_match.url_name == 'StandardsParameters_lists' %}active-nested{% endif %}"
+                role="menuitem">
+                <i class="fas fa-list-ul" aria-hidden="true"></i>
+                <span class="link-label">View Standards</span>
+              </a>
+            </li>
+            <li class="nested-entry" role="none">
+              <a href="{% url 'calibration:standard_create' %}"
+                class="nested-link {% if request.resolver_match.url_name == 'standard_create' %}active-nested{% endif %}"
+                role="menuitem">
+                <i class="fas fa-plus" aria-hidden="true"></i>
+                <span class="link-label">Create Standard</span>
+              </a>
+            </li>
+          </ul>
+        </li>
+
+        <!-- Pending Approval -->
+        <li class="dropdown-entry" role="none">
+          <a href="{% url 'calibration:sessions_pending_approval' %}"
+            class="dropdown-link {% if request.resolver_match.url_name == 'sessions_pending_approval' %}active-dropdown{% endif %}"
+            role="menuitem">
+            <i class="fas fa-tasks" aria-hidden="true"></i>
+            <span class="link-label">Pending Approval</span>
+          </a>
+        </li>
+
+        <!-- Calibration Schedules -->
+        <li class="dropdown-entry" role="none">
+          <a href="{% url 'schedule:calibration_dashboard' %}"
+            class="dropdown-link {% if request.resolver_match.url_name == 'calibration_dashboard' %}active-dropdown{% endif %}"
+            role="menuitem">
+            <i class="fas fa-calendar-check" aria-hidden="true"></i>
+            <span class="link-label">Calibration Schedules</span>
+          </a>
+        </li>
+
+        <!-- Perform Calibration -->
+        <li class="dropdown-entry" role="none">
+          <a href="{% url 'schedule:pending_calibrations' %}"
+            class="dropdown-link {% if request.resolver_match.url_name == 'pending_calibrations' %}active-dropdown{% endif %}"
+            role="menuitem">
+            <i class="fas fa-clock" aria-hidden="true"></i>
+            <span class="link-label">Perform Calibration</span>
+          </a>
+        </li>
+
+        <!-- Certificates -->
+        <li class="dropdown-entry" role="none">
+          <a href="{% url 'calibration:certificate_list' %}"
+            class="dropdown-link {% if request.resolver_match.url_name == 'certificate_list' %}active-dropdown{% endif %}"
+            role="menuitem">
+            <i class="fas fa-award" aria-hidden="true"></i>
+            <span class="link-label">Certificates</span>
+          </a>
+        </li>
+
+      </ul>
+    </li>
+
+    {% endif %}
+    {% endwith %}
+    {% endif %}
+    {# ── END CALIBRATION BLOCK ── #}
+
+    <!-- ╔═══════════════════════════════════════════════════════╗ -->
+    <!-- ║  RESOURCES BLOCK                                      ║ -->
+    <!-- ║  Visible to: Tech only                                ║ -->
+    <!-- ╚═══════════════════════════════════════════════════════╝ -->
+    {% if user.userprofile.role == 'Tech' %}
+
+    <li class="menu-section-header" role="none">
+      <span class="section-label">Resources</span>
+    </li>
+
+    <li class="menu-entry" role="none">
+      <a href="{% url 'partstools:accessories_dashboard' %}"
+        class="menu-link {% if 'parts' in request.path or 'accessories' in request.path %}active-link{% endif %}"
+        role="menuitem">
+        <div class="link-icon" aria-hidden="true">
+          <i class="fas fa-wrench"></i>
+        </div>
+        <span class="link-label">Parts &amp; Tools</span>
+      </a>
+    </li>
+
+    {% endif %}
+    {# ── END RESOURCES BLOCK ── #}
+
+    </ul>
+  </nav>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- SIDEBAR FOOTER — User Profile + Copyright                       -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div class="sidebar-footer">
+
+    {% if user.is_authenticated %}
+    <div class="user-profile" title="{{ user.get_full_name|default:user.username }}">
+
+      <div class="user-avatar">
+        {% if user.userprofile.avatar %}
+        <img src="{{ user.userprofile.avatar.url }}" alt="{{ user.get_full_name }}" />
+        {% else %}
+        <i class="fas fa-user-circle" aria-hidden="true"></i>
+        {% endif %}
+      </div>
+
+      <div class="user-info-header">
+        <span class="user-name">{{ user.get_full_name|default:user.username }}</span>
+        <span class="user-role">{{ user.userprofile.role|default:"User" }}</span>
+      </div>
+
+    </div>
+    {% endif %}
+
+    <div class="sidebar-copyright">
+      <p>&copy; <span id="copyrightYear"></span> Equiper National Hospital</p>
+    </div>
+
+  </div>
+
+</aside>
+
+<script>
+  document.getElementById('copyrightYear').textContent = new Date().getFullYear();
+</script>

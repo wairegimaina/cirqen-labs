@@ -1,0 +1,40 @@
+{% if selected_workshop %}
+    {% if selected_workshop.category == 'calibration_center' %}
+        <a href="{% url 'calibration:cal-dashboard' %}" class="back-btn">
+            <i class='fas fa-arrow-left'></i>
+            Back to Dashboard
+        </a>
+    {% elif selected_workshop.category == 'maintenance' %}
+        <a href="{% url 'dashboard:dashboard-main' %}" class="back-btn">
+            <i class='fas fa-arrow-left'></i>
+            Back to Dashboard
+        </a>
+    {% else %}
+        <a href="{% url 'dashboard:dashboard-main' %}" class="back-btn">
+            <i class='fas fa-arrow-left'></i>
+            Back to Dashboard
+        </a>
+    {% endif %}
+{% elif user.userprofile.workshop %}
+    {% if user.userprofile.workshop.category == 'calibration_center' %}
+        <a href="{% url 'calibration:cal-dashboard' %}" class="back-btn">
+            <i class='fas fa-arrow-left'></i>
+            Back to Dashboard
+        </a>
+    {% elif user.userprofile.workshop.category == 'maintenance' %}
+        <a href="{% url 'dashboard:dashboard-main' %}" class="back-btn">
+            <i class='fas fa-arrow-left'></i>
+            Back to Dashboard
+        </a>
+    {% else %}
+        <a href="{% url 'dashboard:dashboard-main' %}" class="back-btn">
+            <i class='fas fa-arrow-left'></i>
+            Back to Dashboard
+        </a>
+    {% endif %}
+{% else %}
+    <a href="{% url 'dashboard:dashboard-main' %}" class="back-btn">
+        <i class='fas fa-arrow-left'></i>
+        Back to Dashboard
+    </a>
+{% endif %}

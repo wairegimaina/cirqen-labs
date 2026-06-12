@@ -1,0 +1,85 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}CMMS Dashboard — Btwelve National Hospital{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'dashboards/dashbord.css' %}" />
+{% endblock %}
+
+{% block page_title %}
+  Workshop: {{ request.user.userprofile.workshop.name }}
+{% endblock %}
+
+{% block content %}
+
+  <div id="greeting">
+    <h2>{{ greeting }}</h2>
+  </div>
+
+
+  <div class="sections-container">
+
+    <section id="ppm">
+      <h2><i class="fas fa-calendar-check"></i> Preventive Maintenance Schedules</h2>
+      <p>Schedule and track maintenance to ensure equipment reliability.</p>
+      <a href="{% url 'ppm_dashboard' %}" class="btn btn-primary">
+        <i class="fas fa-arrow-right"></i> Get Started
+      </a>
+    </section>
+
+    <section id="reports">
+      <h2><i class="fas fa-chart-bar"></i> Report Hub</h2>
+      <p>Generate and view detailed reports on equipment performance.</p>
+      <a href="{% url 'report_hub:report_hub' %}" class="btn btn-primary">
+        <i class="fas fa-arrow-right"></i> Get Started
+      </a>
+    </section>
+
+    <section id="job-cards">
+      <h2><i class="fas fa-clipboard-list"></i> Job Cards</h2>
+      <p>Create and track maintenance tasks with job cards.</p>
+      <a href="{% url 'jobcard:create_job_card' %}" class="btn btn-primary">
+        <i class="fas fa-arrow-right"></i> Get Started
+      </a>
+    </section>
+
+    <section id="machine-reports">
+      <h2><i class="fas fa-cogs"></i> Machine Reports</h2>
+      <p>Analyze machine-specific performance and issues.</p>
+      <a href="{% url 'equipment_dashboard' %}" class="btn btn-primary">
+        <i class="fas fa-arrow-right"></i> Get Started
+      </a>
+    </section>
+
+    <section id="inventory">
+      <h2><i class="fas fa-warehouse"></i> Inventory</h2>
+      <p>Track equipment and spare parts inventory.</p>
+      <a href="{% url 'inventory' %}" class="btn btn-primary">
+        <i class="fas fa-arrow-right"></i> Get Started
+      </a>
+    </section>
+
+    <section id="calibration-reports">
+      <h2><i class="fas fa-balance-scale"></i> Calibration Reports</h2>
+      <p>Review calibration history and compliance reports.</p>
+      <a href="{% url 'calibration:certificate_list' %}" class="btn btn-primary">
+        <i class="fas fa-arrow-right"></i> Get Started
+      </a>
+    </section>
+
+    <section id="parts-tools">
+      <h2><i class="fas fa-tools"></i> Parts &amp; Tools</h2>
+      <p>Manage spare parts and tools for maintenance.</p>
+      <a href="{% url 'partstools:accessories_dashboard' %}" class="btn btn-primary">
+        <i class="fas fa-arrow-right"></i> Get Started
+      </a>
+    </section>
+
+  </div>
+
+{% endblock %}
+
+{% block extra_js %}
+  <script src="{% static 'dashboards/dashboard.js' %}"></script>
+{% endblock %}

@@ -1,0 +1,146 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Department Maintenance - Equiper{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'ppm/ppm.css' %}" />
+{% endblock %}
+
+{% block content %}
+<div class="main-container">
+
+    <header class="mb-4 pb-3 border-bottom" style="border-color: var(--ppm-border) !important;">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+            <div>
+                <h1 class="h3 fw-bold mb-0" style="color: var(--ppm-text-main);">
+                    <i class="fas fa-notes-medical me-2 text-primary"></i>Department Maintenance
+                </h1>
+                <p class="text-muted small mb-0">
+                    Schedule view for <span class="fw-bold text-primary">{{ access_context.department_name }}</span>
+                </p>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-primary px-3 py-2 rounded-pill">NIC Access</span>
+                <div class="theme-card mb-0 px-3 py-1 shadow-sm d-flex align-items-center">
+                     <i class="far fa-calendar-alt me-2 text-muted"></i>
+                     <span class="fw-bold small">{{ current_month_name }} {{ current_year }}</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-8">
+            <div class="theme-card h-100 p-3 mb-0 d-flex align-items-center">
+                <div class="input-group">
+                    <span class="input-group-text bg-transparent border-end-0 ps-3">
+                        <i class="fas fa-search text-muted"></i>
+                    </span>
+                    <input type="text" id="searchInput" class="form-control border-start-0"
+                           placeholder="Search equipment, serial number, or status...">
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-2">
+            <div class="theme-card h-100 p-3 mb-0 text-center">
+                <div class="small text-muted fw-bold text-uppercase">Pending</div>
+                <div class="h4 fw-bold text-warning mb-0">{{ pending_count|default:"0" }}</div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="theme-card h-100 p-3 mb-0 text-center">
+                <div class="small text-muted fw-bold text-uppercase">Completed</div>
+                <div class="h4 fw-bold text-success mb-0">{{ completed_count|default:"0" }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="theme-card">
+        <div class="theme-card-header">
+            <h5 class="mb-0 fw-bold">
+                Scheduled Equipment
+                <span class="badge bg-secondary bg-opacity-10 text-secondary ms-2 rounded-pill">{{ schedules|length }}</span>
+            </h5>
+        </div>
+        <div class="table-responsive border-0">
+            <table class="table theme-table table-hover mb-0" id="nurseTable">
+                <thead>
+                    <tr>
+                        <th style="width: 40%;">Equipment Details</th>
+                        <th style="width: 25%;">Serial Number</th>
+                        <th style="width: 20%;">Scheduled For</th>
+                        <th style="width: 15%;">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for schedule in schedules %}
+                    <tr class="equipment-row" data-search="{{ schedule.equipment.description.name }} {{ schedule.equipment.serial_number }} {{ schedule.status }}">
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <div class="icon-box bg-light text-secondary rounded p-2 me-3 d-none d-md-block">
+                                    <i class="fas fa-microscope"></i>
+                                </div>
+                                <div>
+                                    <div class="fw-bold text-primary">{{ schedule.equipment.description.name }}</div>
+                                    <div class="small text-muted">{{ schedule.equipment.model|default:"No Model" }}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="align-middle">
+                            <span class="font-monospace bg-light px-2 py-1 rounded border small">
+                                {{ schedule.equipment.serial_number }}
+                            </span>
+                        </td>
+                        <td class="align-middle">
+                            <i class="far fa-calendar me-1 text-muted"></i>
+                            {{ schedule.scheduled_month|date:"F Y" }}
+                        </td>
+                        <td class="align-middle">
+                            {% if schedule.status == 'completed' %}
+                                <span class="status-badge badge-completed"><i class="fas fa-check-circle"></i> Done</span>
+                            {% elif schedule.status == 'pushed' %}
+                                <span class="status-badge badge-pushed"><i class="fas fa-history"></i> Pushed</span>
+                            {% else %}
+                                <span class="status-badge badge-pending"><i class="fas fa-clock"></i> Pending</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center py-5">
+                            <div class="opacity-50 mb-3">
+                                <i class="fas fa-clipboard-check fa-3x text-muted"></i>
+                            </div>
+                            <h6 class="text-muted">No scheduled maintenance found</h6>
+                            <p class="small text-muted">Your department is all caught up or nothing is scheduled.</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% if unscheduled_equipment %}
+    <div class="theme-card border-warning mt-4 bg-warning bg-opacity-10">
+        <div class="theme-card-body d-flex align-items-center gap-3">
+            <div class="fs-1 text-warning"><i class="fas fa-exclamation-triangle"></i></div>
+            <div>
+                <h6 class="text-warning fw-bold mb-1">Unscheduled Equipment Detected</h6>
+                <p class="mb-0 text-dark small" style="opacity: 0.8;">
+                    There are <strong>{{ unscheduled_equipment|length }}</strong> items in your department that are not currently on the maintenance schedule.
+                    Please contact the Biomedical Engineering department to initialize them.
+                </p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'ppm/ppm.js' %}"></script>
+{% endblock %}

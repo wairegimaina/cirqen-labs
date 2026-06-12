@@ -1,0 +1,168 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ report_type|title }} Report - Equiper Hospital{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'reporthub/report.css' %}" />
+<link rel="stylesheet" href="{% static 'reporthub/report-common.css' %}" />
+{% endblock %}
+
+{% block page_title %}{{ report_type|title }} Job Card Report{% endblock %}
+
+{% block content %}
+<div class="report-wrapper">
+
+    <div class="mb-4">
+        {% include 'Reporthub/partials/report_filters.html' %}
+    </div>
+
+    <div class="hod-header">
+        <h2>
+            {{ report_type|title }} Report
+            <span class="text-muted fs-6 fw-normal ms-2">
+                | {{ workshop.name|default:"All Workshops" }}
+            </span>
+        </h2>
+
+        <div class="header-actions">
+            <a id="download-pdf"
+               href="{% url 'report_hub:download_pdf_report' %}"
+               class="btn btn-danger btn-sm">
+               <i class="fas fa-file-pdf me-1"></i> PDF
+            </a>
+            <a id="export-csv"
+               href="{% url 'report_hub:export_report' %}"
+               class="btn btn-success btn-sm">
+               <i class="fas fa-file-csv me-1"></i> CSV
+            </a>
+        </div>
+    </div>
+
+    {% if report_type == 'annual' and annual_data %}
+
+        <div class="annual-summary-grid mb-4">
+            <div class="kpi-card kpi-primary">
+                <div class="kpi-value">{{ annual_data.total_approved|add:annual_data.total_waiting|floatformat:0 }}</div>
+                <div class="kpi-label">Total Jobs</div>
+            </div>
+
+            <div class="kpi-card kpi-success">
+                <div class="kpi-value">{{ annual_data.total_approved|floatformat:0 }}</div>
+                <div class="kpi-label">Completed</div>
+            </div>
+
+            <div class="kpi-card kpi-info">
+                <div class="kpi-value">{% widthratio annual_data.total_approved annual_data.total_approved|add:annual_data.total_waiting 100 %}%</div>
+                <div class="kpi-label">Efficiency</div>
+            </div>
+
+            <div class="kpi-card kpi-warning">
+                <div class="kpi-value">{{ annual_data.active_technicians|floatformat:0 }}</div>
+                <div class="kpi-label">Technicians</div>
+            </div>
+        </div>
+
+        {% if annual_data.peak_month %}
+        <div class="alert alert-info d-flex align-items-center mb-4" role="alert">
+            <i class="fas fa-trophy text-warning me-2"></i>
+            <div>
+                <strong>Peak Performance Month:</strong> {{ annual_data.peak_month }}
+            </div>
+        </div>
+        {% endif %}
+
+        {% if annual_data.insights or annual_data.recommendations %}
+        <div class="insights-strip mb-4">
+            <h5><i class="fas fa-lightbulb text-warning"></i> Key Insights</h5>
+            <div class="insights-content">
+                {% if annual_data.insights %}
+                    <p class="mb-2"><strong>Analysis:</strong> {{ annual_data.insights }}</p>
+                {% endif %}
+                {% if annual_data.recommendations %}
+                    <p class="mb-0"><strong>Recommendation:</strong> {{ annual_data.recommendations }}</p>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% if annual_data.monthly_breakdown %}
+        <div class="chart-card mb-4">
+            <div class="chart-header">
+                <h4>Monthly Performance Trends</h4>
+                <i class="fas fa-chart-area text-muted"></i>
+            </div>
+            <div class="chart-container" style="position: relative; height: 350px;">
+                <canvas id="annualTrendChart"></canvas>
+            </div>
+        </div>
+        {% endif %}
+    {% endif %}
+
+    <div id="chart-container" class="mb-4">
+        {% include 'Reporthub/partials/report_charts.html' %}
+    </div>
+
+    <div id="table-container" class="report-table-container mb-4">
+        {% include 'Reporthub/partials/report_table.html' %}
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header bg-transparent border-0 pt-3 pb-0">
+            <h5 class="card-title mb-0"><i class="fas fa-comment-alt me-2 text-primary"></i>Remarks</h5>
+        </div>
+        <div class="card-body">
+            <form method="POST" action="{% url 'report_hub:report_hub' %}">
+                {% csrf_token %}
+                <input type="hidden" name="report_type" value="{{ report_type }}">
+                {% if form.week.value %}<input type="hidden" name="week" value="{{ form.week.value }}">{% endif %}
+                {% if form.workshop.value %}<input type="hidden" name="workshop" value="{{ form.workshop.value }}">{% endif %}
+                {% if form.month.value %}<input type="hidden" name="month" value="{{ form.month.value }}">{% endif %}
+                {% if form.year.value %}<input type="hidden" name="year" value="{{ form.year.value }}">{% endif %}
+                {% if form.quarter.value %}<input type="hidden" name="quarter" value="{{ form.quarter.value }}">{% endif %}
+
+                <div class="remarks-area mb-3">
+                    <textarea name="remarks" id="remarks" class="form-control" rows="4" placeholder="Enter executive remarks here..."
+                              {% if report.submitted_at %}disabled readonly{% endif %}>{{ remarks|default:"" }}</textarea>
+                </div>
+
+                <div class="d-flex justify-content-end align-items-center">
+                    {% if report.submitted_at %}
+                        <div class="text-success fw-bold">
+                            <i class="fas fa-check-circle me-1"></i> Submitted on {{ report.submitted_at|date:"F d, Y H:i" }} EAT
+                        </div>
+                    {% else %}
+                        {% if not is_engineer_incharge %}
+                            <span class="text-muted small me-3">Only Engineer In-Charge can submit remarks.</span>
+                        {% endif %}
+                        <button type="submit" class="btn btn-primary" {% if not is_engineer_incharge %}disabled{% endif %}>
+                            <i class="fas fa-paper-plane me-2"></i> Submit Remarks
+                        </button>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    window.reportConfig = {
+        reportType: "{{ report_type }}",
+        totalWaitingApproval: {{ total_waiting_approval|default:0 }},
+        totalApproved: {{ total_approved|default:0 }},
+        {% if report_type == 'annual' and annual_data.monthly_breakdown %}
+        annualData: {{ annual_data.monthly_breakdown|safe }},
+        {% else %}
+        annualData: null,
+        {% endif %}
+        year: {{ form.year.value|default:"new Date().getFullYear()" }}
+    };
+</script>
+
+<script src="{% static 'js/bootstrap.bundle.min.js' %}"></script>
+<script src="{% static 'reporthub/Report.js' %}"></script>
+{% endblock %}
+
+{% block extra_js %}
+{% endblock %}

@@ -1,0 +1,110 @@
+/* ============================================================
+   SHARED DASHBOARD COMMON — reusable across ALL dashboards
+   ============================================================ */
+
+/* Alerts in list/dashboard context — same palette used everywhere */
+.soft-alert {
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: .85rem;
+  padding: .55rem .85rem;
+}
+.soft-alert.is-warn {
+  border-left: 4px solid var(--warning-color);
+  background: color-mix(in srgb, var(--warning-color) 8%, var(--bg-card));
+}
+.soft-alert.is-ok {
+  border-left: 4px solid var(--success-color);
+  background: color-mix(in srgb, var(--success-color) 8%, var(--bg-card));
+}
+.soft-alert.is-danger {
+  border-left: 4px solid var(--danger-color);
+  background: color-mix(in srgb, var(--danger-color) 8%, var(--bg-card));
+}
+
+/* Hollow pill links inside actions bars */
+[data-theme="light"] .pill-link,
+.pill-link {
+  color: var(--primary-color);
+  background: color-mix(in srgb, var(--primary-color) 6%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--primary-color) 25%, var(--border-color));
+  border-radius: 999px;
+  padding: .28rem .9rem;
+  font-weight: 600;
+  font-size: .8rem;
+}
+.pill-link:hover {
+  background: var(--primary-gradient);
+  color: #fff;
+  border-color: transparent;
+}
+
+/* Stat strip inside cards */
+.stat-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: .9rem;
+  margin-bottom: 1rem;
+}
+.stat-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: .9rem 1rem;
+  box-shadow: var(--shadow-sm);
+}
+.stat-box .value {
+  font-weight: 800;
+  font-size: 1.8rem;
+  line-height: 1;
+  color: var(--text-primary);
+}
+.stat-box .label {
+  color: var(--text-muted);
+  font-size: .72rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  margin-top: .25rem;
+}
+.stat-box.accent {
+  background: var(--primary-gradient);
+  color: #fff;
+  border-color: transparent;
+}
+.stat-box.accent .label {
+  color: rgba(255,255,255,.75);
+}
+
+/* Deploy / progress track shared */
+.track {
+  height: 14px;
+  background: var(--border-light);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.track .bar {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--primary-gradient);
+  transition: width .6s cubic-bezier(.4,0,.2,1);
+}
+
+/* Empty state */
+.s-empty {
+  color: var(--text-muted);
+  padding: 4rem 2rem;
+  text-align: center;
+}
+.s-empty .s-empty-icon {
+  font-size: 2.6rem;
+  display: block;
+  margin-bottom: .9rem;
+}
+
+/* Status text utilities mirroring dashboard chips */
+.is-live     { color: var(--success-color); }
+.is-stale    { color: var(--warning-color); }
+.is-offline  { color: var(--text-muted); }
+.is-error    { color: var(--danger-color); }

@@ -1,0 +1,914 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{% if is_hod %}HOD — {% endif %}Accessories &amp; Tools Management{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'parts_tools/accessories.css' %}" />
+{% endblock %}
+
+{% block page_title %}{% if is_hod %}HOD — {% endif %}Accessories &amp; Tools Management{% endblock %}
+
+{% block content %}
+
+<script>
+  document.body.dataset.isHod  = '{{ is_hod|yesno:"true,false" }}';
+  document.body.dataset.isTech = '{{ user.userprofile.role|lower|default:"" }}';
+
+  // Strip the trailing path segment to get just the app prefix.
+  // e.g. '/partstools/api/accessories' → '/partstools'
+  window.API_BASE = '{% url "partstools:api_accessories" %}'.replace(/\/api\/accessories$/, '');
+</script>
+
+<div class="main-container">
+
+
+  {% if is_hod %}
+  <div class="hod-section mb-3">
+    <h4><i class="fas fa-crown"></i> HOD Dashboard</h4>
+    <p class="mb-2">Full access: manage tools, accessories and requests across all workshops.</p>
+    {% if pending_requests.count > 0 %}
+    <div class="alert alert-warning mb-0">
+      <strong>{{ pending_requests.count }} pending request(s)</strong>
+      <button class="btn btn-sm btn-light ms-2"
+              data-action="show-tab" data-tab="requests">
+        Review Requests
+      </button>
+    </div>
+    {% endif %}
+  </div>
+
+
+  <div class="row mb-4">
+    <div class="col-md-5">
+      <label class="form-label fw-semibold" for="workshopFilter">Filter by Workshop</label>
+      <select class="form-select" id="workshopFilter">
+        <option value="">All Workshops</option>
+        {% for ws in workshops %}
+        <option value="{{ ws.id }}"
+          {% if ws.id|stringformat:"s" == selected_workshop_id %}selected{% endif %}>
+          {{ ws.name }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+  {% endif %}
+
+
+  <ul class="nav nav-tabs mb-0" id="mainTabs" role="tablist">
+
+    <button class="nav-item active" id="accessories-tab"
+            data-bs-toggle="tab" data-bs-target="#accessories-content"
+            type="button" role="tab" aria-selected="true">
+      <i class="fas fa-wrench"></i> Accessories
+    </button>
+
+    <button class="nav-item" id="tools-tab"
+            data-bs-toggle="tab" data-bs-target="#tools-content"
+            type="button" role="tab" aria-selected="false">
+      <i class="fas fa-cog"></i> Tools
+    </button>
+
+    {% if is_hod %}
+    <button class="nav-item" id="requests-tab"
+            data-bs-toggle="tab" data-bs-target="#requests-content"
+            type="button" role="tab" aria-selected="false">
+      <i class="fas fa-bell"></i> Requests
+      {% if pending_requests.count > 0 %}
+      <span class="badge bg-danger ms-1">{{ pending_requests.count }}</span>
+      {% endif %}
+    </button>
+
+    {% else %}
+    <button class="nav-item" id="my-requests-tab"
+            data-bs-toggle="tab" data-bs-target="#my-requests-content"
+            type="button" role="tab" aria-selected="false">
+      <i class="fas fa-user-check"></i> My Requests
+    </button>
+
+    {% if approved_requests %}
+    <button class="nav-item" id="approved-requests-tab"
+            data-bs-toggle="tab" data-bs-target="#approved-requests-content"
+            type="button" role="tab" aria-selected="false">
+      <i class="fas fa-clipboard-check"></i> Accept Items
+      {% if approved_requests.count > 0 %}
+      <span class="badge bg-success ms-1">{{ approved_requests.count }}</span>
+      {% endif %}
+    </button>
+    {% endif %}
+    {% endif %}
+
+  </ul>{# /nav-tabs #}
+
+  <div class="tab-content" id="mainTabContent">
+
+
+    <div class="tab-pane fade show active" id="accessories-content" role="tabpanel">
+
+      <div class="section-header d-flex justify-content-between align-items-center py-3">
+        <h2 class="mb-0"><i class="fas fa-wrench"></i> Accessories</h2>
+        <div class="section-actions d-flex gap-2">
+          {% if not is_hod %}
+          <button class="btn btn-primary btn-sm"
+                  data-action="open-modal" data-modal="request-accessory-modal">
+            <i class="fas fa-comment-medical"></i> Request Accessory
+          </button>
+          {% endif %}
+          <a href="{% url 'partstools:export_excel_accessories' %}"
+             class="btn btn-outline-success btn-sm">
+            <i class="fas fa-file-excel"></i> Excel
+          </a>
+          <a href="{% url 'partstools:export_pdf_accessories' %}"
+             class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-file-pdf"></i> PDF
+          </a>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-striped table-hover" id="accessories-table">
+          <thead class="table-dark">
+            <tr>
+              <th>#</th>
+              <th>Name</th>
+              <th>Equipment</th>
+              <th>Manufacturer</th>
+              <th>Stock</th>
+              <th>Unit Cost</th>
+              <th>Note</th>
+              {% if is_hod %}<th>Workshop</th><th>Actions</th>{% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for accessory in accessories %}
+            <tr>
+              <td>{{ forloop.counter }}</td>
+              <td><strong>{{ accessory.name.name|default:"-" }}</strong></td>
+              <td>{{ accessory.equipment_description.name|default:"-" }}</td>
+              <td>{{ accessory.manufacturer.name|default:"-" }}</td>
+              <td>
+                <span class="badge
+                  {% if accessory.stock_count < 5 %}bg-danger
+                  {% elif accessory.stock_count < 10 %}bg-warning text-dark
+                  {% else %}bg-success{% endif %}">
+                  {{ accessory.stock_count }}
+                </span>
+              </td>
+              <td>{{ accessory.unit_cost }} KSh</td>
+              <td>{{ accessory.note|default:"-" }}</td>
+              {% if is_hod %}
+              <td>{{ accessory.workshop.name|default:"Global" }}</td>
+              <td>
+                <button class="btn btn-outline-primary btn-sm"
+                        data-action="edit-accessory"
+                        data-id="{{ accessory.pk }}" title="Edit">
+                  <i class="fas fa-edit"></i>
+                </button>
+                <button class="btn btn-outline-danger btn-sm"
+                        data-action="confirm-delete"
+                        data-type="accessory"
+                        data-id="{{ accessory.pk }}"
+                        data-name="{{ accessory.name.name|default:'this accessory' }}"
+                        title="Delete">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </td>
+              {% endif %}
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="{% if is_hod %}9{% else %}7{% endif %}"
+                  class="text-center text-muted py-4">
+                No accessories found.
+                {% if not is_hod %}Submit a request to add accessories.{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>{# /accessories-content #}
+
+    <div class="tab-pane fade" id="tools-content" role="tabpanel">
+
+      <div class="section-header d-flex justify-content-between align-items-center py-3">
+        <h2 class="mb-0"><i class="fas fa-cog"></i> Tools</h2>
+        <div class="section-actions d-flex gap-2">
+          {% if user.userprofile.role == 'Tech' %}
+          <button class="btn btn-primary btn-sm"
+                  data-action="open-modal" data-modal="add-tool-modal">
+            <i class="fas fa-plus"></i> Add Tool
+          </button>
+          {% endif %}
+          <a href="{% url 'partstools:export_excel_tools' %}"
+             class="btn btn-outline-success btn-sm">
+            <i class="fas fa-file-excel"></i> Excel
+          </a>
+          <a href="{% url 'partstools:export_pdf_tools' %}"
+             class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-file-pdf"></i> PDF
+          </a>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-striped table-hover" id="tools-table">
+          <thead class="table-dark">
+            <tr>
+              <th>#</th>
+              <th>Name</th>
+              <th>Manufacturer</th>
+              <th>Model</th>
+              <th>Serial Number</th>
+              {% if is_hod %}<th>Workshop</th>{% endif %}
+              {% if user.userprofile.role == 'Tech' %}<th>Actions</th>{% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for tool in tools %}
+            <tr>
+              <td>{{ forloop.counter }}</td>
+              <td><strong>{{ tool.name.name|default:"-" }}</strong></td>
+              <td>{{ tool.manufacturer.name|default:"-" }}</td>
+              <td>{{ tool.model|default:"-" }}</td>
+              <td>{{ tool.serial_number|default:"-" }}</td>
+              {% if is_hod %}
+              <td>{{ tool.workshop.name|default:"Global" }}</td>
+              {% endif %}
+              {% if user.userprofile.role == 'Tech' %}
+              <td>
+                <button class="btn btn-outline-primary btn-sm"
+                        data-action="edit-tool"
+                        data-id="{{ tool.pk }}" title="Edit">
+                  <i class="fas fa-edit"></i>
+                </button>
+                <button class="btn btn-outline-danger btn-sm"
+                        data-action="confirm-delete"
+                        data-type="tool"
+                        data-id="{{ tool.pk }}"
+                        data-name="{{ tool.name.name|default:'this tool' }}"
+                        title="Delete">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </td>
+              {% endif %}
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="{% if is_hod %}7{% elif user.userprofile.role == 'Tech' %}6{% else %}5{% endif %}"
+                  class="text-center text-muted py-4">
+                No tools found.
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>{# /tools-content #}
+
+
+    {% if is_hod %}
+    <div class="tab-pane fade" id="requests-content" role="tabpanel">
+
+      <div class="section-header d-flex justify-content-between align-items-center py-3">
+        <h2 class="mb-0"><i class="fas fa-bell"></i> Accessory Requests</h2>
+        <select class="form-select form-select-sm" style="width:auto;" id="requestStatusFilter">
+          <option value="all">All</option>
+          <option value="Pending" selected>Pending</option>
+          <option value="Approved">Approved</option>
+          <option value="Declined">Declined</option>
+          <option value="Accepted">Accepted</option>
+        </select>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-striped table-hover">
+          <thead class="table-dark">
+            <tr>
+              <th>#</th>
+              <th>Requested By</th>
+              <th>Workshop</th>
+              <th>Accessory</th>
+              <th>Equipment</th>
+              <th>Qty</th>
+              <th>Note</th>
+              <th>Date</th>
+              <th>Status</th>
+              <th>Accepted By</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="requests-table-body">
+            {% for req in all_requests %}
+            <tr data-status="{{ req.status }}">
+              <td>{{ forloop.counter }}</td>
+              <td>{{ req.requested_by.user.get_full_name|default:req.requested_by.user.username }}</td>
+              <td>{{ req.workshop.name }}</td>
+              <td>
+                <strong>
+                  {% if req.request_type == 'new' %}{{ req.accessory_name }}
+                  {% else %}{{ req.existing_accessory.name.name|default:"Unknown" }}{% endif %}
+                </strong>
+                {% if req.request_type == 'restock' %}
+                <span class="badge bg-info text-dark ms-1">Restock</span>
+                {% endif %}
+              </td>
+              <td>{{ req.equipment_description.name|default:"-" }}</td>
+              <td>{{ req.requested_quantity }}</td>
+              <td>{{ req.note|default:"-" }}</td>
+              <td>{{ req.requested_at|date:"M d, Y" }}</td>
+              <td>
+                <span class="badge
+                  {% if req.status == 'Pending' %}bg-warning text-dark
+                  {% elif req.status == 'Approved' %}bg-success
+                  {% elif req.status == 'Declined' %}bg-danger
+                  {% elif req.status == 'Accepted' %}bg-primary
+                  {% endif %}">
+                  {{ req.get_status_display }}
+                </span>
+              </td>
+              <td>
+                {% if req.accepted_by %}
+                  {{ req.accepted_by.user.get_full_name|default:req.accepted_by.user.username }}
+                  <br><small class="text-muted">{{ req.accepted_at|date:"M d, Y H:i" }}</small>
+                {% else %}-{% endif %}
+              </td>
+              <td>
+                {% if req.status == 'Pending' %}
+                <button class="btn btn-outline-success btn-sm"
+                        data-action="open-response-modal"
+                        data-request-id="{{ req.pk }}"
+                        data-status="approve">
+                  <i class="fas fa-check"></i> Approve
+                </button>
+                <button class="btn btn-outline-danger btn-sm"
+                        data-action="open-response-modal"
+                        data-request-id="{{ req.pk }}"
+                        data-status="decline">
+                  <i class="fas fa-times"></i> Decline
+                </button>
+                {% else %}-{% endif %}
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="11" class="text-center text-muted py-4">No requests found.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>{# /requests-content #}
+    {% endif %}
+
+    {% if not is_hod %}
+    <div class="tab-pane fade" id="my-requests-content" role="tabpanel">
+
+      <div class="section-header py-3">
+        <h2 class="mb-0"><i class="fas fa-user-check"></i> My Requests</h2>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-striped table-hover">
+          <thead class="table-dark">
+            <tr>
+              <th>#</th>
+              <th>Accessory</th>
+              <th>Qty</th>
+              <th>Note</th>
+              <th>Date</th>
+              <th>Status</th>
+              <th>HOD Response</th>
+              <th>Accepted By</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for req in user_requests %}
+            <tr>
+              <td>{{ forloop.counter }}</td>
+              <td>
+                <strong>
+                  {% if req.request_type == 'new' %}{{ req.accessory_name }}
+                  {% else %}{{ req.existing_accessory.name.name|default:"Unknown" }}{% endif %}
+                </strong>
+                {% if req.request_type == 'restock' %}
+                <span class="badge bg-info text-dark ms-1">Restock</span>
+                {% endif %}
+              </td>
+              <td>{{ req.requested_quantity }}</td>
+              <td>{{ req.note|default:"-" }}</td>
+              <td>{{ req.requested_at|date:"M d, Y" }}</td>
+              <td>
+                <span class="badge
+                  {% if req.status == 'Pending' %}bg-warning text-dark
+                  {% elif req.status == 'Approved' %}bg-success
+                  {% elif req.status == 'Declined' %}bg-danger
+                  {% elif req.status == 'Accepted' %}bg-primary
+                  {% endif %}">
+                  {{ req.get_status_display }}
+                </span>
+              </td>
+              <td>{{ req.approval_reason|default:"-" }}</td>
+              <td>
+                {% if req.accepted_by %}
+                  {{ req.accepted_by.user.get_full_name|default:req.accepted_by.user.username }}
+                  <br><small class="text-muted">{{ req.accepted_at|date:"M d, Y H:i" }}</small>
+                {% else %}-{% endif %}
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="8" class="text-center text-muted py-4">No requests yet.</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>{# /my-requests-content #}
+    {% endif %}
+
+
+    {% if not is_hod and approved_requests %}
+    <div class="tab-pane fade" id="approved-requests-content" role="tabpanel">
+
+      <div class="section-header py-3">
+        <h2 class="mb-0"><i class="fas fa-clipboard-check"></i> Accept Approved Items</h2>
+        <p class="text-muted mb-0">Mark items as received once collected.</p>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-striped table-hover">
+          <thead class="table-dark">
+            <tr>
+              <th>#</th>
+              <th>Accessory</th>
+              <th>Qty Approved</th>
+              <th>Unit Cost</th>
+              <th>Approved On</th>
+              <th>HOD Response</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for req in approved_requests %}
+            <tr>
+              <td>{{ forloop.counter }}</td>
+              <td>
+                <strong>
+                  {% if req.request_type == 'new' %}{{ req.accessory_name }}
+                  {% else %}{{ req.existing_accessory.name.name|default:"Unknown" }}{% endif %}
+                </strong>
+                {% if req.request_type == 'restock' %}
+                <span class="badge bg-info text-dark ms-1">Restock</span>
+                {% endif %}
+              </td>
+              <td>{{ req.requested_quantity }}</td>
+              <td>{{ req.unit_cost }} KSh</td>
+              <td>{{ req.approved_at|date:"M d, Y" }}</td>
+              <td>{{ req.approval_reason|default:"-" }}</td>
+              <td>
+                <form method="POST"
+                      action="{% url 'partstools:accept_accessory_request' req.pk %}"
+                      class="d-inline">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-success btn-sm">
+                    <i class="fas fa-check-circle"></i> Accept
+                  </button>
+                </form>
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="7" class="text-center text-muted py-4">
+                No approved items awaiting collection.
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>{# /approved-requests-content #}
+    {% endif %}
+
+  </div>{# /tab-content #}
+</div>{# /main-container #}
+
+
+
+{% if user.userprofile.role == 'Tech' %}
+<div class="modal" id="add-tool-modal">
+  <div class="modal-overlay"></div>
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>Add Tool</h3>
+      <button class="close-btn" data-action="close-modal">&times;</button>
+    </div>
+    <form method="POST" action="{% url 'partstools:add_tool' %}">
+      {% csrf_token %}
+      <div class="modal-body">
+
+        <div class="mb-3">
+          <label for="tool-name" class="form-label">
+            Tool Name <span class="text-danger">*</span>
+          </label>
+          <div class="d-flex gap-2">
+            <select class="form-select" id="tool-name" name="name">
+              <option value="">Select Tool Name</option>
+              {% for tn in tool_names %}
+              <option value="{{ tn.id }}">{{ tn.name }}</option>
+              {% endfor %}
+            </select>
+            <button type="button" class="btn btn-outline-primary"
+                    onclick="toggleNewItemInput('new-tool-name-group','tool-name','new-tool-name-btn','new-tool-name')"
+                    id="new-tool-name-btn" title="Add new name">
+              <i class="fas fa-plus"></i>
+            </button>
+          </div>
+          <div id="new-tool-name-group" class="mt-2" style="display:none;">
+            <input type="text" class="form-control" id="new-tool-name" name="new_name"
+                   placeholder="Enter new tool name">
+            <small class="form-text text-muted">Will be created and saved.</small>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label for="tool-manufacturer" class="form-label">Manufacturer</label>
+          <div class="d-flex gap-2">
+            <select class="form-select" id="tool-manufacturer" name="manufacturer">
+              <option value="">Select Manufacturer</option>
+              {% for m in tools_manufacturers %}
+              <option value="{{ m.id }}">{{ m.name }}</option>
+              {% endfor %}
+            </select>
+            <button type="button" class="btn btn-outline-primary"
+                    onclick="toggleNewItemInput('new-tool-manufacturer-group','tool-manufacturer','new-tool-manufacturer-btn','new-tool-manufacturer')"
+                    id="new-tool-manufacturer-btn" title="Add new manufacturer">
+              <i class="fas fa-plus"></i>
+            </button>
+          </div>
+          <div id="new-tool-manufacturer-group" class="mt-2" style="display:none;">
+            <input type="text" class="form-control" id="new-tool-manufacturer"
+                   name="new_manufacturer" placeholder="Enter new manufacturer">
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label for="tool-model" class="form-label">Model</label>
+          <input type="text" class="form-control" id="tool-model" name="model">
+        </div>
+        <div class="mb-3">
+          <label for="tool-serial" class="form-label">Serial Number</label>
+          <input type="text" class="form-control" id="tool-serial" name="serial_number">
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-action="close-modal">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Tool</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
+<div class="modal" id="edit-tool-modal">
+  <div class="modal-overlay"></div>
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>Edit Tool</h3>
+      <button class="close-btn" data-action="close-modal">&times;</button>
+    </div>
+    <form method="POST" id="edit-tool-form">
+      {% csrf_token %}
+      <div class="modal-body">
+
+        <div class="mb-3">
+          <label for="edit-tool-name" class="form-label">
+            Tool Name <span class="text-danger">*</span>
+          </label>
+          <div class="d-flex gap-2">
+            <select class="form-select" id="edit-tool-name" name="name" required>
+              <option value="">Select Tool Name</option>
+              {% for tn in tool_names %}
+              <option value="{{ tn.id }}">{{ tn.name }}</option>
+              {% endfor %}
+            </select>
+            <button type="button" class="btn btn-outline-primary"
+                    onclick="toggleNewItemInput('edit-new-tool-name-group','edit-tool-name','edit-new-tool-name-btn','edit-new-tool-name')"
+                    id="edit-new-tool-name-btn" title="Add new name">
+              <i class="fas fa-plus"></i>
+            </button>
+          </div>
+          <div id="edit-new-tool-name-group" class="mt-2" style="display:none;">
+            <input type="text" class="form-control" id="edit-new-tool-name" name="new_name"
+                   placeholder="Enter new tool name">
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label for="edit-tool-manufacturer" class="form-label">Manufacturer</label>
+          <div class="d-flex gap-2">
+            <select class="form-select" id="edit-tool-manufacturer" name="manufacturer">
+              <option value="">Select Manufacturer</option>
+              {% for m in tools_manufacturers %}
+              <option value="{{ m.id }}">{{ m.name }}</option>
+              {% endfor %}
+            </select>
+            <button type="button" class="btn btn-outline-primary"
+                    onclick="toggleNewItemInput('edit-new-tool-manufacturer-group','edit-tool-manufacturer','edit-new-tool-manufacturer-btn','edit-new-tool-manufacturer')"
+                    id="edit-new-tool-manufacturer-btn" title="Add new manufacturer">
+              <i class="fas fa-plus"></i>
+            </button>
+          </div>
+          <div id="edit-new-tool-manufacturer-group" class="mt-2" style="display:none;">
+            <input type="text" class="form-control" id="edit-new-tool-manufacturer"
+                   name="new_manufacturer" placeholder="Enter new manufacturer">
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label for="edit-tool-model" class="form-label">Model</label>
+          <input type="text" class="form-control" id="edit-tool-model" name="model">
+        </div>
+        <div class="mb-3">
+          <label for="edit-tool-serial" class="form-label">Serial Number</label>
+          <input type="text" class="form-control" id="edit-tool-serial" name="serial_number">
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-action="close-modal">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}{# /Tech modals #}
+
+
+
+{% if is_hod %}
+<div class="modal" id="edit-accessory-modal">
+  <div class="modal-overlay"></div>
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>Edit Accessory</h3>
+      <button class="close-btn" data-action="close-modal">&times;</button>
+    </div>
+    <form method="POST" id="edit-accessory-form">
+      {% csrf_token %}
+      <div class="modal-body">
+
+        <div class="mb-3">
+          <label for="edit-accessory-name" class="form-label">Name</label>
+          <select class="form-select" id="edit-accessory-name" name="name">
+            <option value="">Select Name</option>
+            {% for an in accessory_names %}
+            <option value="{{ an.id }}">{{ an.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="mb-3">
+          <label for="edit-accessory-manufacturer" class="form-label">Manufacturer</label>
+          <select class="form-select" id="edit-accessory-manufacturer" name="manufacturer">
+            <option value="">Select Manufacturer</option>
+            {% for m in accessories_manufacturers %}
+            <option value="{{ m.id }}">{{ m.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="mb-3">
+          <label for="edit-accessory-equipment" class="form-label">Equipment Description</label>
+          <select class="form-select" id="edit-accessory-equipment" name="equipment_description">
+            <option value="">Select Equipment</option>
+            {% for eq in equipment_descriptions %}
+            <option value="{{ eq.id }}">{{ eq.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="mb-3">
+          <label for="edit-accessory-stock" class="form-label">
+            Stock Count <span class="text-danger">*</span>
+          </label>
+          <input type="number" class="form-control" id="edit-accessory-stock"
+                 name="stock_count" required min="0">
+        </div>
+        <div class="mb-3">
+          <label for="edit-accessory-cost" class="form-label">
+            Unit Cost (KSh) <span class="text-danger">*</span>
+          </label>
+          <input type="number" class="form-control" id="edit-accessory-cost"
+                 name="unit_cost" required min="0" step="0.01">
+        </div>
+        <div class="mb-3">
+          <label for="edit-accessory-note" class="form-label">Note</label>
+          <textarea class="form-control" id="edit-accessory-note" name="note" rows="3"></textarea>
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-action="close-modal">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
+<div class="modal" id="response-modal">
+  <div class="modal-overlay"></div>
+  <div class="modal-content" style="max-width:600px;">
+    <div class="modal-header">
+      <h3 id="response-modal-title">Respond to Request</h3>
+      <button class="close-btn" data-action="close-modal">&times;</button>
+    </div>
+    <form method="POST" id="response-form">
+      {% csrf_token %}
+      <input type="hidden" id="response-action" name="action">
+      <div class="modal-body">
+
+        {# Approval-only fields — hidden when declining #}
+        <div id="approval-fields">
+          <div class="mb-3">
+            <label for="approved-quantity" class="form-label">
+              Approved Quantity <span class="text-danger">*</span>
+            </label>
+            <input type="number" class="form-control" id="approved-quantity"
+                   name="approved_quantity" min="1" placeholder="Enter approved quantity">
+          </div>
+          <div class="mb-3">
+            <label for="approved-unit-cost" class="form-label">
+              Approved Unit Cost (KSh) <span class="text-danger">*</span>
+            </label>
+            <input type="number" class="form-control" id="approved-unit-cost"
+                   name="approved_unit_cost" min="0" step="0.01" placeholder="Enter unit cost">
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label for="hod-response" class="form-label">Response Message</label>
+          <textarea class="form-control" id="hod-response" name="approval_reason" rows="3"></textarea>
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-action="close-modal">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="response-submit-btn">Submit</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+
+
+{% if not is_hod %}
+<div class="modal" id="request-accessory-modal">
+  <div class="modal-overlay"></div>
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>Request Accessory</h3>
+      <button class="close-btn" data-action="close-modal">&times;</button>
+    </div>
+    <form method="POST" action="{% url 'partstools:request_accessory' %}"
+          id="request-accessory-form">
+      {% csrf_token %}
+      <input type="hidden" name="request_type" value="new">
+      <div class="modal-body">
+
+        <div class="mb-3">
+          <label class="form-label">
+            Accessory Name <span class="text-danger">*</span>
+          </label>
+          <div class="input-group">
+            <select class="form-select" id="request-accessory-name-select"
+                    name="accessory_name_select">
+              <option value="">Select or type new below</option>
+              {% for an in accessory_names %}
+              <option value="{{ an.name }}">{{ an.name }}</option>
+              {% endfor %}
+            </select>
+            <button type="button" class="btn btn-outline-secondary"
+                    onclick="toggleNewRequestAccessoryNameInput()">
+              <i class="fas fa-plus"></i> New
+            </button>
+          </div>
+          <div id="new-request-accessory-name-group" class="mt-2" style="display:none;">
+            <div class="d-flex gap-2">
+              <input type="text" class="form-control" id="new-request-accessory-name"
+                     placeholder="New accessory name">
+              <button type="button" class="btn btn-primary"
+                      onclick="submitNewRequestAccessoryName()">
+                <i class="fas fa-check"></i> Add
+              </button>
+            </div>
+          </div>
+          <input type="hidden" id="request-accessory-name" name="accessory_name">
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Manufacturer (optional)</label>
+          <div class="input-group">
+            <select class="form-select" id="request-manufacturer-name-select"
+                    name="manufacturer_name_select">
+              <option value="">Select or type new below</option>
+              {% for m in accessories_manufacturers %}
+              <option value="{{ m.name }}">{{ m.name }}</option>
+              {% endfor %}
+            </select>
+            <button type="button" class="btn btn-outline-secondary"
+                    onclick="toggleNewRequestManufacturerInput()">
+              <i class="fas fa-plus"></i> New
+            </button>
+          </div>
+          <div id="new-request-manufacturer-name-group" class="mt-2" style="display:none;">
+            <div class="d-flex gap-2">
+              <input type="text" class="form-control" id="new-request-manufacturer-name"
+                     placeholder="New manufacturer name">
+              <button type="button" class="btn btn-primary"
+                      onclick="submitNewRequestManufacturer()">
+                <i class="fas fa-check"></i> Add
+              </button>
+            </div>
+          </div>
+          <input type="hidden" id="request-manufacturer-name" name="manufacturer_name">
+        </div>
+
+        <div class="mb-3">
+          <label for="request-equipment-description" class="form-label">
+            Equipment Description <span class="text-danger">*</span>
+          </label>
+          <select class="form-select" id="request-equipment-description"
+                  name="equipment_description" required>
+            <option value="">Select Equipment</option>
+            {% for eq in equipment_descriptions %}
+            <option value="{{ eq.id }}">{{ eq.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="mb-3">
+          <label for="request-quantity" class="form-label">
+            Quantity <span class="text-danger">*</span>
+          </label>
+          <input type="number" class="form-control" id="request-quantity"
+                 name="requested_quantity" required min="1" value="1">
+        </div>
+
+        <div class="mb-3">
+          <label for="request-description" class="form-label">Note</label>
+          <textarea class="form-control" id="request-description" name="note" rows="3"></textarea>
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-action="close-modal">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="request-submit-btn">
+          Submit Request
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+
+
+<div class="modal" id="confirm-modal">
+  <div class="modal-overlay"></div>
+  <div class="modal-content" style="max-width:440px;">
+    <div class="modal-header">
+      <h3 id="confirm-modal-title">Confirm Delete</h3>
+      <button class="close-btn" data-action="close-modal">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p id="confirm-modal-message" class="mb-0"></p>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-secondary" data-action="close-modal">Cancel</button>
+      <button type="button" class="btn btn-danger" id="confirm-modal-action">Delete</button>
+    </div>
+  </div>
+</div>
+
+
+
+<div id="loading-overlay"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.45);
+            z-index:9999; justify-content:center; align-items:center;">
+  <div style="background:var(--bg-card); padding:1.5rem 2rem; border-radius:.5rem; text-align:center;">
+    <div class="spinner-border text-primary" role="status"></div>
+    <p class="mt-2 mb-0">Loading…</p>
+  </div>
+</div>
+
+{% csrf_token %}
+
+{% endblock %}
+
+
+{% block extra_js %}
+<script src="{% static 'js/bootstrap.bundle.min.js' %}"></script>
+<script src="{% static 'parts_tools/accessories.js' %}"></script>
+{% endblock %}

@@ -1,0 +1,652 @@
+/* ===== RESET AND BASE STYLES ===== */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    /* Color Palette */
+    --primary: #3b82f6;
+    --primary-dark: #1d4ed8;
+    --primary-light: #dbeafe;
+    --secondary: #64748b;
+    --secondary-dark: #334155;
+    --accent: #8b5cf6;
+    --success: #10b981;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --info: #06b6d4;
+
+    /* Background colors */
+    --bg-light: #f8f9fa;
+    --bg-white: #ffffff;
+    --bg-gradient-blue: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+    --bg-gradient-dark: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+    --bg-gradient-success: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    --bg-gradient-info: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+    --bg-overlay: rgba(0, 0, 0, 0.4);
+
+    /* Neutrals */
+    --white: #ffffff;
+    --gray-50: #f8fafc;
+    --gray-100: #f1f5f9;
+    --gray-200: #e2e8f0;
+    --gray-300: #cbd5e1;
+    --gray-400: #94a3b8;
+    --gray-500: #64748b;
+    --gray-600: #475569;
+    --gray-700: #334155;
+    --gray-800: #1e293b;
+    --gray-900: #0f172a;
+
+    /* Spacing */
+    --space-xs: 0.25rem;
+    --space-sm: 0.5rem;
+    --space-md: 1rem;
+    --space-lg: 1.5rem;
+    --space-xl: 2rem;
+    --space-2xl: 3rem;
+
+    /* Border Radius */
+    --radius-sm: 0.25rem;
+    --radius-md: 0.5rem;
+    --radius-lg: 0.75rem;
+    --radius-xl: 1rem;
+    --radius-2xl: 1.5rem;
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+    --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+
+    /* Transitions */
+    --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-fast: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+body {
+    font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    line-height: 1.6;
+    color: var(--gray-800);
+    min-height: 100vh;
+    position: relative;
+    overflow-x: hidden;
+}
+
+/* ===== BACKGROUND IMAGE ===== */
+.image {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100vh;
+    z-index: -2;
+}
+
+.image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+}
+
+.image::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--bg-overlay);
+    backdrop-filter: blur(2px);
+    z-index: 1;
+}
+
+/* ===== HOSPITAL HEADER ===== */
+.hosp {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    padding: var(--space-xl) var(--space-lg);
+    text-align: center;
+}
+
+.hosp h1 {
+    color: var(--white);
+    font-size: 2.5rem;
+    font-weight: 700;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
+    margin: 0;
+    letter-spacing: 0.5px;
+    background: linear-gradient(135deg, #ffffff 0%, #e3f2fd 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+/* ===== MAIN WRAPPER ===== */
+.wrapper {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-2xl) var(--space-lg);
+    position: relative;
+    z-index: 5;
+}
+
+/* ===== LOGIN CONTAINER ===== */
+.login-container {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: var(--radius-2xl);
+    box-shadow: var(--shadow-2xl);
+    padding: var(--space-2xl);
+    width: 100%;
+    max-width: 420px;
+    position: relative;
+    overflow: hidden;
+}
+
+.login-container::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: var(--bg-gradient-blue);
+    border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+}
+
+/* ===== LOGIN HEADER ===== */
+.login-header {
+    text-align: center;
+    margin-bottom: var(--space-2xl);
+    padding-bottom: var(--space-lg);
+    border-bottom: 1px solid var(--gray-200);
+}
+
+.login-header i {
+    font-size: 4rem;
+    color: var(--primary);
+    margin-bottom: var(--space-md);
+    display: block;
+    background: var(--bg-gradient-blue);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.login-header h2 {
+    color: var(--gray-900);
+    font-weight: 700;
+    font-size: 1.875rem;
+    margin-bottom: var(--space-sm);
+    letter-spacing: -0.025em;
+}
+
+.login-header p {
+    color: var(--gray-600);
+    font-size: 1rem;
+    margin: 0;
+    font-weight: 400;
+}
+
+/* ===== FORM STYLES ===== */
+.login-form {
+    margin-bottom: var(--space-lg);
+}
+
+.input-group {
+    margin-bottom: var(--space-lg);
+    position: relative;
+}
+
+.input-group > div {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.input-group i {
+    position: absolute;
+    left: var(--space-md);
+    color: var(--gray-500);
+    font-size: 1.25rem;
+    z-index: 2;
+    transition: var(--transition);
+}
+
+.input-group input {
+    width: 100%;
+    padding: 1rem var(--space-md) 1rem 3rem;
+    border: 2px solid var(--gray-300);
+    border-radius: var(--radius-lg);
+    font-size: 1rem;
+    background: var(--white);
+    transition: var(--transition);
+    font-weight: 400;
+}
+
+/* Password input with eye icon needs extra right padding */
+.input-group.password-field input {
+    padding-right: 3rem;
+}
+
+.input-group input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.input-group input:focus + i,
+.input-group:focus-within i {
+    color: var(--primary);
+    transform: scale(1.1);
+}
+
+.input-group input::placeholder {
+    color: var(--gray-400);
+    font-weight: 400;
+}
+
+/* Style the Django form inputs */
+.input-group input[type="text"],
+.input-group input[type="password"] {
+    font-family: inherit;
+}
+
+/* ===== PASSWORD TOGGLE STYLES ===== */
+.password-toggle {
+    position: absolute;
+    right: var(--space-md);
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: var(--gray-500);
+    font-size: 1.25rem;
+    cursor: pointer;
+    padding: var(--space-xs);
+    border-radius: var(--radius-sm);
+    transition: var(--transition);
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+}
+
+.password-toggle:hover {
+    background: var(--gray-100);
+    color: var(--primary);
+    transform: translateY(-50%) scale(1.1);
+}
+
+.password-toggle:focus {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+    background: var(--gray-100);
+    color: var(--primary);
+}
+
+.password-toggle:active {
+    transform: translateY(-50%) scale(0.95);
+}
+
+/* Animation for eye icon change */
+.password-toggle i {
+    transition: var(--transition);
+}
+
+.password-toggle.active i {
+    color: var(--primary);
+}
+
+/* Tooltip for password toggle */
+.password-toggle::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    right: 0;
+    background: var(--gray-900);
+    color: var(--white);
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    white-space: nowrap;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-5px);
+    transition: var(--transition);
+    z-index: 10;
+    pointer-events: none;
+}
+
+.password-toggle::before {
+    content: '';
+    position: absolute;
+    bottom: 100%;
+    right: 8px;
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 4px solid var(--gray-900);
+    opacity: 0;
+    visibility: hidden;
+    transition: var(--transition);
+    z-index: 10;
+}
+
+.password-toggle:hover::after,
+.password-toggle:hover::before {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(-8px);
+}
+
+/* ===== ERROR STYLES ===== */
+.field-error {
+    margin-top: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+    border: 1px solid var(--danger);
+    border-radius: var(--radius-md);
+    color: var(--danger);
+    font-size: 0.875rem;
+    display: flex;
+    align-items: center;
+    animation: slideDown 0.3s ease;
+}
+
+.field-error i {
+    margin-right: var(--space-sm);
+    font-size: 1rem;
+    color: var(--danger);
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ===== LOGIN BUTTON ===== */
+.login-btn {
+    width: 100%;
+    padding: 1rem var(--space-xl);
+    background: var(--bg-gradient-blue);
+    border: none;
+    border-radius: var(--radius-lg);
+    color: var(--white);
+    font-size: 1.1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    position: relative;
+    overflow: hidden;
+    box-shadow: var(--shadow-lg);
+}
+
+.login-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.5s;
+}
+
+.login-btn:hover::before {
+    left: 100%;
+}
+
+.login-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-xl);
+}
+
+.login-btn:active {
+    transform: translateY(0);
+}
+
+.login-btn i {
+    font-size: 1.25rem;
+    transition: var(--transition);
+}
+
+.login-btn:hover i {
+    transform: translateX(4px);
+}
+
+/* ===== FORGOT PASSWORD LINK ===== */
+.forgot-password-link {
+    color: var(--primary);
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 0.9rem;
+    transition: var(--transition);
+    display: inline-flex;
+    align-items: center;
+    padding: var(--space-sm) 0;
+}
+
+.forgot-password-link:hover {
+    color: var(--primary-dark);
+    text-decoration: underline;
+    transform: translateY(-1px);
+}
+
+.forgot-password-link i {
+    margin-right: var(--space-xs);
+    font-size: 0.9rem;
+}
+
+/* ===== RESPONSIVE DESIGN ===== */
+@media (max-width: 768px) {
+    .hosp h1 {
+        font-size: 2rem;
+    }
+    
+    .wrapper {
+        padding: var(--space-xl) var(--space-md);
+    }
+    
+    .login-container {
+        padding: var(--space-xl);
+        margin-top: 80px;
+    }
+    
+    .login-header h2 {
+        font-size: 1.5rem;
+    }
+    
+    .login-header i {
+        font-size: 3rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .hosp {
+        padding: var(--space-lg) var(--space-md);
+    }
+    
+    .hosp h1 {
+        font-size: 1.75rem;
+    }
+    
+    .wrapper {
+        padding: var(--space-lg) var(--space-sm);
+    }
+    
+    .login-container {
+        padding: var(--space-lg);
+        margin-top: 60px;
+    }
+    
+    .login-header {
+        margin-bottom: var(--space-xl);
+    }
+    
+    .login-header h2 {
+        font-size: 1.375rem;
+    }
+    
+    .login-header i {
+        font-size: 2.5rem;
+    }
+    
+    .input-group input {
+        padding: 0.875rem var(--space-sm) 0.875rem 2.75rem;
+        font-size: 0.9rem;
+    }
+    
+    .login-btn {
+        padding: 0.875rem var(--space-lg);
+        font-size: 1rem;
+    }
+}
+
+/* ===== ACCESSIBILITY IMPROVEMENTS ===== */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* Focus styles for keyboard navigation */
+.login-btn:focus,
+.forgot-password-link:focus,
+.input-group input:focus {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    .login-container {
+        background: var(--white);
+        border: 2px solid var(--gray-900);
+    }
+    
+    .login-btn {
+        background: var(--gray-900);
+        border: 2px solid var(--white);
+    }
+    
+    .input-group input {
+        border-width: 3px;
+    }
+}
+
+/* ===== LOADING STATES ===== */
+.login-btn:disabled {
+    background: var(--gray-400);
+    cursor: not-allowed;
+    transform: none;
+}
+
+.login-btn.loading {
+    pointer-events: none;
+}
+
+.login-btn.loading span {
+    opacity: 0;
+}
+
+.login-btn.loading::after {
+    content: '';
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    border: 2px solid transparent;
+    border-top: 2px solid var(--white);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* ===== ENHANCED VISUAL EFFECTS ===== */
+.login-container {
+    animation: fadeInUp 0.6s ease-out;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Subtle floating animation for the hospital header */
+@media (prefers-reduced-motion: no-preference) {
+    .hosp h1 {
+        animation: float 6s ease-in-out infinite;
+    }
+}
+
+@keyframes float {
+    0%, 100% {
+        transform: translateY(0px);
+    }
+    50% {
+        transform: translateY(-5px);
+    }
+}
+
+/* ===== PRINT STYLES ===== */
+@media print {
+    body {
+        background: white;
+    }
+    
+    .image {
+        display: none;
+    }
+    
+    .login-container {
+        background: white;
+        box-shadow: none;
+        border: 1px solid #000;
+    }
+    
+    .login-btn {
+        background: #000;
+        color: white;
+    }
+}
+

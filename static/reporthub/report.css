@@ -1,0 +1,308 @@
+/* hod-report.css
+   Refactored for Theme Integration, Reduced Nesting & High Performance
+   Dependencies: theme.css (for variables)
+*/
+
+/* =========================================
+   0. LOCAL OVERRIDES / THEME EXTENSIONS
+   ========================================= */
+
+:root {
+  --table-header-bg: #e8f5ee; /* Mint white — light mode table/filter headers */
+}
+
+/* =========================================
+   1. LAYOUT & ANIMATION
+   ========================================= */
+
+.report-wrapper {
+  width: 100%;
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* =========================================
+   2. HEADER SECTION
+   ========================================= */
+
+.hod-header {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 0.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Decorative accent line */
+.hod-header::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  background: var(--primary-gradient);
+}
+
+.hod-header h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.hod-header p {
+  color: var(--text-secondary);
+  margin: 0.5rem 0 0 0;
+  font-size: 0.95rem;
+
+}
+
+.header-actions {
+  display: flex;
+  gap: 0.75rem;
+  z-index: 2; /* Ensure buttons are clickable above decorative elements */
+}
+
+/* =========================================
+   3. FILTER CARD & DROPDOWNS (Crucial)
+   ========================================= */
+
+.filter-card {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 0.5rem;
+  margin-bottom: 2rem;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s ease;
+}
+
+.filter-card:focus-within {
+  border-color: var(--primary-color);
+  box-shadow: var(--shadow-md);
+}
+
+.filter-card h5 {
+  color: var(--text-primary);
+  font-weight: 600;
+  margin-bottom: 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* The Grid Layout for Inputs */
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.25rem;
+  align-items: end;
+}
+
+/* Explicit styling for Inputs & Dropdowns to match Theme */
+.filter-card .form-control,
+.filter-card .form-select {
+  background-color: var(--input-bg);
+  border: 1px solid var(--input-border);
+  color: var(--text-primary);
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+}
+
+.filter-card .form-control:focus,
+.filter-card .form-select:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb, 0, 0, 0), 0.1);
+  outline: none;
+}
+
+.filter-card label {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.5rem;
+  display: block;
+}
+
+/* =========================================
+   4. LOGIC UTILITIES (Restored)
+   ========================================= */
+/* These are required for JS to hide/show Weekly vs Monthly fields */
+
+.weekly-fields,
+.monthly-fields,
+.quarterly-fields,
+.date-range-fields {
+  transition: opacity 0.3s ease, height 0.3s ease;
+  width: 100%;
+}
+
+/* Helper to ensure elements hidden by JS stay hidden */
+.d-none {
+  display: none !important;
+}
+
+/* =========================================
+   5. DATA TABLES
+   ========================================= */
+
+.report-table-container {
+  background: var(--bg-card);
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  margin-bottom: 2rem;
+}
+
+.table.hod-table {
+  margin-bottom: 0;
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.hod-table thead th {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  letter-spacing: 0.05em;
+  padding: 1rem;
+  border-bottom: 2px solid var(--border-color);
+  white-space: nowrap;
+}
+
+/* Light mode: mint-white header */
+:root:not([data-theme="dark"]) .hod-table thead th,
+[data-theme="light"] .hod-table thead th {
+  background: var(--table-header-bg);
+  color: var(--text-primary);
+}
+
+.hod-table tbody td {
+  padding: 1rem;
+  vertical-align: middle;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.hod-table tbody tr:hover {
+  background-color: var(--bg-hover);
+}
+
+/* Status Badges */
+.status-badge {
+  padding: 0.35em 0.8em;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.status-badge.approved { background: color-mix(in srgb, var(--success-color) 10%, var(--bg-card)); color: var(--success-color); border: 1px solid var(--success-color); }
+.status-badge.pending { background: color-mix(in srgb, var(--warning-color) 10%, var(--bg-card)); color: var(--warning-color); border: 1px solid var(--warning-color); }
+.status-badge.rejected { background: color-mix(in srgb, var(--danger-color) 10%, var(--bg-card)); color: var(--danger-color); border: 1px solid var(--danger-color); }
+
+/* =========================================
+   6. RESPONSIVE MOBILE VIEW
+   ========================================= */
+
+@media (max-width: 768px) {
+  .hod-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .header-actions {
+    width: 100%;
+    margin-top: 1rem;
+  }
+
+  .header-actions .btn {
+    flex: 1;
+    justify-content: center;
+  }
+
+  /* Card View for Tables */
+  .hod-table thead { display: none; }
+  .hod-table tbody, .hod-table tr, .hod-table td { display: block; }
+
+  .hod-table tbody tr {
+    margin-bottom: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    background: var(--bg-card);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .hod-table tbody td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    text-align: right;
+    padding: 4px 8px 0.5rem;
+    font-size: 0.9rem;
+    border-bottom: 1px solid var(--border-light);
+  }
+
+  .hod-table tbody td::before {
+    content: attr(data-label);
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-right: 1rem;
+  }
+
+  .hod-table tbody td:last-child {
+    border-bottom: none;
+    background: var(--bg-tertiary); /* Highlight action row */
+    justify-content: flex-end;
+  }
+}
+
+/* =========================================
+   7. PRINT OPTIMIZATION
+   ========================================= */
+
+@media print {
+  body { background: white; -webkit-print-color-adjust: exact; }
+  .report-wrapper { padding: 0; margin: 0; }
+  .hod-header, .filter-card, .header-actions, .no-print { display: none !important; }
+
+  .report-table-container {
+    box-shadow: none;
+    border: none;
+  }
+
+  .hod-table {
+    border: 1px solid #000;
+    width: 100%;
+  }
+
+  .hod-table th, .hod-table td {
+    border: 1px solid #000;
+    color: #000;
+    padding: 8px;
+  }
+}

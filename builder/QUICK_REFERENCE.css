@@ -1,0 +1,296 @@
+/* ================================================
+   QUICK REFERENCE - CSS CLASSES AND VARIABLES
+   ================================================ */
+
+/* ================================================
+   ROOT VARIABLES
+   ================================================ */
+
+:root {
+  /* Layout Dimensions */
+  --header-height: 70px;
+  --footer-height: 60px;
+  --sidebar-width: 260px;
+  
+  /* Animation Settings */
+  --transition-speed: 0.3s;
+  --transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ================================================
+   KEY CSS CLASSES
+   ================================================ */
+
+/* -------------------- SIDEBAR -------------------- */
+
+/* Main sidebar container */
+.app-sidebar {
+  /* Slides in from left, fixed position */
+}
+
+.app-sidebar.hidden {
+  /* Slides out to the left (desktop) */
+  /* transform: translateX(-100%); */
+}
+
+.app-sidebar.mobile-open {
+  /* Slides in on mobile (overlay mode) */
+  /* transform: translateX(0); */
+}
+
+/* -------------------- MAIN WRAPPER -------------------- */
+
+.main-wrapper {
+  /* Main content container */
+}
+
+.main-wrapper.with-sidebar {
+  /* Has left margin for sidebar (desktop) */
+  /* margin-left: var(--sidebar-width); */
+}
+
+.main-wrapper.with-sidebar.sidebar-hidden {
+  /* No margin when sidebar is hidden */
+  /* margin-left: 0; */
+}
+
+/* -------------------- HAMBURGER MENU -------------------- */
+
+.hamburger-menu {
+  /* Button to toggle sidebar */
+  /* 44x44px with 3 lines */
+}
+
+.hamburger-menu.active {
+  /* Animates to X when sidebar is hidden/active */
+}
+
+.hamburger-line {
+  /* Individual hamburger line */
+  /* Transforms into X shape when active */
+}
+
+/* -------------------- HEADER ELEMENTS -------------------- */
+
+.app-header {
+  /* Main application header */
+  /* height: var(--header-height); */
+}
+
+.header-left {
+  /* Contains hamburger and page title */
+}
+
+.header-right {
+  /* Contains theme toggle, user info, logout */
+}
+
+/* -------------------- THEME TOGGLE -------------------- */
+
+#themeToggle {
+  /* Theme switcher button */
+  /* Enhanced with radial gradient hover effect */
+}
+
+.light-icon {
+  /* Sun icon - visible in light mode */
+  /* color: #f39c12; */
+}
+
+.dark-icon {
+  /* Moon icon - visible in dark mode */
+  /* color: #5dade2; */
+}
+
+/* -------------------- NAVIGATION -------------------- */
+
+.nav-link {
+  /* Sidebar navigation link */
+}
+
+.nav-link.active {
+  /* Currently active page */
+  /* Highlighted with left border */
+}
+
+.nav-link:hover {
+  /* Hover state with background color */
+}
+
+.submenu {
+  /* Collapsible submenu */
+  /* max-height animates */
+}
+
+.nav-item.submenu-open .submenu {
+  /* Expanded submenu state */
+}
+
+/* -------------------- OVERLAY -------------------- */
+
+.sidebar-overlay {
+  /* Backdrop for mobile sidebar */
+  /* backdrop-filter: blur(2px); */
+}
+
+.sidebar-overlay.active {
+  /* Visible when mobile sidebar is open */
+  /* opacity: 1; */
+}
+
+/* ================================================
+   STATE MANAGEMENT
+   ================================================ */
+
+/* Desktop Sidebar States:
+   - Default: Visible, content adjusted (margin-left)
+   - Hidden: Slides out left, content expands (no margin)
+   
+   Mobile Sidebar States:
+   - Default: Hidden (off-screen left)
+   - Open: Slides in over content with overlay
+*/
+
+/* ================================================
+   RESPONSIVE BREAKPOINTS
+   ================================================ */
+
+/* Tablet and below */
+@media (max-width: 768px) {
+  /* Sidebar slides over content */
+  /* No margin adjustment */
+}
+
+/* Small mobile */
+@media (max-width: 480px) {
+  /* Sidebar max-width: 300px */
+  /* Width: 85% of screen */
+}
+
+/* ================================================
+   THEME COLORS (LIGHT MODE)
+   ================================================ */
+
+:root, [data-theme="light"] {
+  --primary-color: #0d6efd;
+  --bg-primary: #f8f9fa;
+  --bg-secondary: #ffffff;
+  --bg-hover: #e9ecef;
+  --text-primary: #212529;
+  --text-secondary: #6c757d;
+  --border-color: #dee2e6;
+  --sidebar-bg: #ffffff;
+  --sidebar-hover: #f8f9fa;
+  --sidebar-active: #e7f1ff;
+}
+
+/* ================================================
+   THEME COLORS (DARK MODE)
+   ================================================ */
+
+[data-theme="dark"] {
+  --primary-color: #4dabf7;
+  --bg-primary: #1a1b1e;
+  --bg-secondary: #25262b;
+  --bg-hover: #373a40;
+  --text-primary: #e9ecef;
+  --text-secondary: #adb5bd;
+  --border-color: #373a40;
+  --sidebar-bg: #25262b;
+  --sidebar-hover: #2c2d33;
+  --sidebar-active: #1c3d5a;
+}
+
+/* ================================================
+   ANIMATION TIMING REFERENCE
+   ================================================ */
+
+/* Standard Easing Functions:
+   - Linear: linear
+   - Ease: ease (default)
+   - Ease-in: ease-in
+   - Ease-out: ease-out
+   - Ease-in-out: ease-in-out
+   
+   Custom (Current):
+   - cubic-bezier(0.4, 0, 0.2, 1) - Material Design standard
+*/
+
+/* ================================================
+   COMMON PATTERNS
+   ================================================ */
+
+/* Hide Hamburger Menu (Dashboard pages) */
+/*
+  Don't include {% if show_sidebar %} block in template
+  OR set show_sidebar: False in view context
+*/
+
+/* Force Sidebar Open */
+/*
+  sidebar.classList.remove('hidden');
+  mainWrapper.classList.remove('sidebar-hidden');
+*/
+
+/* Force Sidebar Closed */
+/*
+  sidebar.classList.add('hidden');
+  mainWrapper.classList.add('sidebar-hidden');
+*/
+
+/* Check if Mobile */
+/*
+  const isMobile = window.innerWidth <= 768;
+*/
+
+/* Toggle Hamburger Animation */
+/*
+  hamburgerBtn.classList.toggle('active');
+*/
+
+/* ================================================
+   JAVASCRIPT EVENT REFERENCE
+   ================================================ */
+
+/* Initialize Sidebar Manager:
+   window.sidebarManager = new SidebarManager();
+*/
+
+/* Manual Toggle:
+   window.sidebarManager.toggle();
+*/
+
+/* Open Sidebar:
+   Desktop: window.sidebarManager.open();
+   Mobile: window.sidebarManager.openMobile();
+*/
+
+/* Close Sidebar:
+   Desktop: window.sidebarManager.close();
+   Mobile: window.sidebarManager.closeMobile();
+*/
+
+/* ================================================
+   DEBUGGING TIPS
+   ================================================ */
+
+/* Check Sidebar State:
+   console.log(sidebar.classList);
+   // Look for: 'hidden', 'mobile-open'
+*/
+
+/* Check Main Wrapper State:
+   console.log(mainWrapper.classList);
+   // Look for: 'with-sidebar', 'sidebar-hidden'
+*/
+
+/* Check Hamburger State:
+   console.log(toggleBtn.classList);
+   // Look for: 'active'
+*/
+
+/* Monitor Transitions:
+   sidebar.addEventListener('transitionend', (e) => {
+     console.log('Transition ended:', e.propertyName);
+   });
+*/

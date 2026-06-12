@@ -1,0 +1,27 @@
+# render.yaml — place this at the ROOT of your GitHub repo
+# Render auto-deploys hq_server/ whenever you push to GitHub.
+
+services:
+  - type: web
+    name: cirqen-hq-update-server
+    runtime: python
+    rootDir: hq_server
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    plan: free          # upgrade to starter ($7/mo) for always-on
+
+    envVars:
+      - key: HQ_API_KEY
+        generateValue: true     # Render auto-generates a secure random key.
+                                # After first deploy: copy this value from
+                                # Render → Environment tab → into your
+                                # Equiper/settings.py UPDATE_SYSTEM['api_key']
+
+      - key: RENDER_EXTERNAL_URL
+        fromService:
+          type: web
+          name: cirqen-hq-update-server
+          property: host
+
+      - key: APP_VERSION
+        value: "1.0.0"          # Keep in sync with hq_server/version.txt

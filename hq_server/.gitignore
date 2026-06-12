@@ -1,0 +1,5 @@
+# Render builds these at runtime — never commit them
+packages/
+__pycache__/
+*.pyc
+*.log

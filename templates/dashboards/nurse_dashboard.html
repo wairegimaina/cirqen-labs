@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Nurse Dashboard — Equiper National Hospital{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'dashboards/dashbord.css' %}" />
+{% endblock %}
+
+{% block page_title %}
+  Department: {{ request.user.userprofile.department.name }}
+{% endblock %}
+
+{% block content %}
+
+  {# ── Greeting ── #}
+  <div id="greeting">
+    <h2>{{ greeting }}</h2>
+  </div>
+
+  {# ── Module cards ── #}
+  <div class="sections-container">
+
+    <section id="ppm">
+      <h2><i class="fas fa-calendar-check"></i> Preventive Maintenance Schedules</h2>
+      <p>Schedule and track maintenance to ensure equipment reliability.</p>
+      <a href="{% url 'dashboard:nurse_ppms' %}" class="btn btn-primary">
+        <i class="fas fa-arrow-right"></i> Get Started
+      </a>
+    </section>
+
+    <section id="job-cards">
+      <h2><i class="fas fa-clipboard-list"></i> Job Cards</h2>
+      <p>Create and track maintenance tasks with job cards.</p>
+      <a href="{% url 'jobcard:waiting_jobcards' %}" class="btn btn-primary">
+        <i class="fas fa-arrow-right"></i> Get Started
+      </a>
+    </section>
+
+    <section id="inventory">
+      <h2><i class="fas fa-warehouse"></i> Inventory</h2>
+      <p>Track equipment and spare parts inventory.</p>
+      <a href="{% url 'inventory' %}" class="btn btn-primary">
+        <i class="fas fa-arrow-right"></i> Get Started
+      </a>
+    </section>
+
+    <section id="calibration-reports">
+      <h2><i class="fas fa-balance-scale"></i> Calibration Reports</h2>
+      <p>Review calibration history and compliance reports.</p>
+      <a href="{% url 'calibration:certificate_list' %}" class="btn btn-primary">
+        <i class="fas fa-arrow-right"></i> Get Started
+      </a>
+    </section>
+
+  </div>
+
+{% endblock %}

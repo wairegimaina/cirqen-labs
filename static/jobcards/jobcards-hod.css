@@ -1,0 +1,207 @@
+/* ============================================================
+   HOD JOB CARDS — STYLES
+   Fully integrated with Equiper theme.css variables.
+   All badge variants are theme-sensitive (light & dark).
+   ============================================================ */
+
+/* ============================================================
+   MAIN CONTAINER
+   ============================================================ */
+.main-container {
+    background-color: var(--bg-primary);
+    min-height: 100vh;
+    padding-bottom: 2rem;
+}
+
+/* ============================================================
+   CARDS
+   ============================================================ */
+.card {
+    background-color: var(--bg-card);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card:hover {
+    box-shadow: var(--shadow-md) !important;
+}
+
+/* ============================================================
+   TABLE
+   ============================================================ */
+.table-responsive {
+    background-color: var(--bg-card);
+    border-color: var(--border-color) !important;
+}
+
+.table {
+    margin-bottom: 0;
+    color: var(--text-primary);
+}
+
+.table thead th {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 700;
+    border-bottom: 2px solid var(--border-color);
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.table tbody td {
+    padding: 1rem 0.75rem;
+    vertical-align: middle;
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-primary);
+}
+
+.table-hover tbody tr:hover {
+    background-color: var(--bg-hover) !important;
+    cursor: pointer;
+}
+
+/* ============================================================
+   FORMS & INPUTS
+   ============================================================ */
+.form-control,
+.input-group-text {
+    background-color: var(--input-bg);
+    border-color: var(--input-border);
+    color: var(--text-primary);
+}
+
+.form-control:focus {
+    background-color: var(--input-bg);
+    border-color: var(--primary-color);
+    box-shadow: var(--input-focus-shadow);
+    color: var(--text-primary);
+}
+
+.form-control::placeholder {
+    color: var(--text-muted);
+    opacity: 0.7;
+}
+
+/* ============================================================
+   NAVIGATION TABS (status filter pills)
+   ============================================================ */
+.nav-pills .nav-link {
+    font-weight: 600;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    color: var(--text-secondary);
+}
+
+.nav-pills .nav-link.active {
+    background: var(--primary-gradient);
+    color: var(--text-white) !important;
+}
+
+/* ============================================================
+   AVATAR CIRCLE
+   ============================================================ */
+.avatar-circle {
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+/* ============================================================
+   BADGES — THEME-AWARE OVERRIDES
+   The HTML uses Bootstrap utility classes that carry hardcoded
+   light-mode assumptions. Every badge variant is re-mapped
+   here using theme tokens so they render correctly in both
+   light and dark modes.
+   ============================================================ */
+
+/* ---- Serial number badge  (was: bg-light text-secondary border) ---- */
+.badge.bg-light {
+    background-color: var(--bg-tertiary) !important;
+    color: var(--text-secondary) !important;
+    border-color: var(--border-color) !important;
+}
+
+/* ---- Priority: High  (was: bg-danger bg-opacity-10 text-danger border-danger) ---- */
+.badge.text-danger {
+    background-color: color-mix(in srgb, var(--danger-color) 15%, var(--bg-card)) !important;
+    color: var(--danger-color) !important;
+    border-color: var(--danger-color) !important;
+}
+
+/* ---- Priority: Medium  (was: bg-warning bg-opacity-10 text-warning border-warning) ---- */
+.badge.text-warning {
+    background-color: color-mix(in srgb, var(--warning-color) 15%, var(--bg-card)) !important;
+    color: var(--warning-color) !important;
+    border-color: var(--warning-color) !important;
+}
+
+/* ---- Priority: Low  (was: bg-secondary bg-opacity-10 text-secondary border-secondary) ---- */
+.badge.text-secondary {
+    background-color: color-mix(in srgb, var(--secondary-color) 15%, var(--bg-card)) !important;
+    color: var(--text-secondary) !important;
+    border-color: var(--border-color) !important;
+}
+
+/*
+ * Fallback for browsers that do not support color-mix().
+ * Uses a semi-transparent rgba approach via a safe override block
+ * that those same browsers will also skip (since they won't parse
+ * color-mix at all), so no double-apply risk.
+ */
+@supports not (background-color: color-mix(in srgb, red 10%, white)) {
+    .badge.text-danger {
+        background-color: rgba(0,0,0,.0) !important;
+    }
+
+    .badge.text-warning {
+        background-color: rgba(0,0,0,.0) !important;
+    }
+
+    .badge.text-secondary {
+        background-color: rgba(0,0,0,.0) !important;
+    }
+
+    /* Dark theme fallbacks */
+    [data-theme="dark"] .badge.text-danger {
+        background-color: rgba(0,0,0,.0) !important;
+    }
+
+    [data-theme="dark"] .badge.text-warning {
+        background-color: rgba(0,0,0,.0) !important;
+    }
+
+    [data-theme="dark"] .badge.text-secondary {
+        background-color: rgba(0,0,0,.0) !important;
+    }
+}
+
+/* ---- Dark mode: force the bg-light serial badge to use dark surfaces ---- */
+[data-theme="dark"] .badge.bg-light {
+    background-color: var(--bg-tertiary) !important;
+    color: var(--text-secondary) !important;
+    border-color: var(--border-color) !important;
+}
+
+/* ============================================================
+   SCROLLBAR — table container
+   ============================================================ */
+.table-responsive::-webkit-scrollbar {
+    height: 8px;
+    width: 8px;
+}
+
+.table-responsive::-webkit-scrollbar-track {
+    background: var(--bg-tertiary);
+}
+
+.table-responsive::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 4px;
+}
+
+.table-responsive::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+}

@@ -1,0 +1,1171 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Edit Procedure - {{ procedure.name }} - Equiper National Hospital{% endblock %}
+
+{% block extra_css %}
+<!-- Page-specific CSS -->
+{% endblock %}
+
+{% block page_title %}Edit Procedure - {{ procedure.name }}{% endblock %}
+
+{% block content %}
+<!-- Navigation Bar -->
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/calibration/calsoft_dashboard/">Calibration Procedure System</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/calibration/procedure_create/">Create Procedure</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/calibration/procedure_list/">Manage Procedures</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/calibration/procedure_list/">Edit Procedures</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/calibration/calsoft_dashboard/">Dashboard</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        <!-- Header Section -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h1 class="h3 text-gray-800 mb-0">
+                    <i class="fas fa-edit mr-2"></i> Edit Procedure: {{ procedure.name }}
+                </h1>
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb">
+                        <li class="breadcrumb-item"><a href="{% url 'calibration:procedure_list' %}">Procedures</a></li>
+                        <li class="breadcrumb-item"><a href="{% url 'calibration:procedure_detail' pk=procedure.pk %}">{{ procedure.name }}</a></li>
+                        <li class="breadcrumb-item active" aria-current="page">Edit</li>
+                    </ol>
+                </nav>
+            </div>
+            <div>
+                <a href="{% url 'calibration:procedure_detail' pk=procedure.pk %}" class="btn btn-secondary">
+                    <i class="fas fa-times mr-2"></i> Cancel
+                </a>
+            </div>
+        </div>
+
+        <!-- Error Messages -->
+        {% if form.errors or parameter_formset.errors %}
+        <div class="alert alert-danger">
+            <h5 class="alert-heading">
+                <i class="fas fa-exclamation-triangle mr-2"></i>Please correct the errors below
+            </h5>
+            <ul class="mb-0">
+                {% for field in form %}
+                    {% for error in field.errors %}
+                        <li>{{ field.label }}: {{ error }}</li>
+                    {% endfor %}
+                {% endfor %}
+                {% for form in parameter_formset %}
+                    {% for field in form %}
+                        {% for error in field.errors %}
+                            <li>Parameter {{ forloop.parentloop.counter }} - {{ field.label }}: {{ error }}</li>
+                        {% endfor %}
+                    {% endfor %}
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        <form method="post" id="procedureForm">
+            {% csrf_token %}
+
+            <!-- Main Procedure Form -->
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-info-circle mr-2"></i>Basic Information</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="{{ form.name.id_for_label }}" class="form-label">Procedure Name*</label>
+                                {{ form.name }}
+                                <div class="form-text">Unique name for this calibration procedure</div>
+                            </div>
+                            <div class="mb-3">
+                                <label for="{{ form.description.id_for_label }}" class="form-label">Description</label>
+                                {{ form.description }}
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="{{ form.temperature.id_for_label }}" class="form-label">Temperature (°C)</label>
+                                        {{ form.temperature }}
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="{{ form.humidity.id_for_label }}" class="form-label">Humidity (%RH)</label>
+                                        {{ form.humidity }}
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="{{ form.pressure.id_for_label }}" class="form-label">Pressure (kPa)</label>
+                                        {{ form.pressure }}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mb-3 form-check">
+                                {{ form.is_active }}
+                                <label class="form-check-label" for="{{ form.is_active.id_for_label }}">Active Procedure</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Parameter Formset Management Fields -->
+            <input type="hidden" name="parameters-TOTAL_FORMS" value="{{ parameter_formset.total_form_count }}" id="id_parameters-TOTAL_FORMS">
+            <input type="hidden" name="parameters-INITIAL_FORMS" value="{{ parameter_formset.initial_form_count }}" id="id_parameters-INITIAL_FORMS">
+            <input type="hidden" name="parameters-MIN_NUM_FORMS" value="1" id="id_parameters-MIN_NUM_FORMS">
+            <input type="hidden" name="parameters-MAX_NUM_FORMS" value="1000" id="id_parameters-MAX_NUM_FORMS">
+
+            <!-- Parameters Section -->
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-sliders-h mr-2"></i>Parameters</h5>
+                    <button type="button" class="btn btn-sm btn-primary" id="addParameter">
+                        <i class="fas fa-plus mr-2"></i>Add Parameter
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div id="parameters-container">
+                        {% for param_form in parameter_formset %}
+                        <div class="parameter-form formset-container" id="parameter-{{ forloop.counter0 }}" data-formset-index="{{ forloop.counter0 }}">
+                            {{ param_form.id }}
+                            <input type="hidden" name="parameters-{{ forloop.counter0 }}-DELETE" id="id_parameters-{{ forloop.counter0 }}-DELETE">
+
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h6 class="mb-0">
+                                    {% if param_form.instance.pk %}
+                                        Parameter: {{ param_form.instance.name }}
+                                    {% else %}
+                                        New Parameter
+                                    {% endif %}
+                                </h6>
+                                <div>
+                                    <button type="button" class="btn btn-sm btn-danger delete-parameter" data-index="{{ forloop.counter0 }}">
+                                        <i class="fas fa-trash"></i> Remove
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-3">
+                                    <div class="mb-3">
+                                        <label for="id_parameters-{{ forloop.counter0 }}-name" class="form-label">Parameter Name*</label>
+                                        <select name="parameters-{{ forloop.counter0 }}-name" id="id_parameters-{{ forloop.counter0 }}-name" class="form-control parameter-name-select" required>
+                                            <option value="">Select a parameter...</option>
+                                            {% if param_form.instance.pk %}
+                                                <option value="{{ param_form.instance.name }}" selected>{{ param_form.instance.name }}</option>
+                                            {% endif %}
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-2">
+                                    <div class="mb-3">
+                                        <label for="id_parameters-{{ forloop.counter0 }}-unit" class="form-label">Unit</label>
+                                        <input type="text" name="parameters-{{ forloop.counter0 }}-unit" id="id_parameters-{{ forloop.counter0 }}-unit" class="form-control" value="{% if param_form.instance.pk %}{{ param_form.instance.unit }}{% endif %}" readonly>
+                                    </div>
+                                </div>
+                                <div class="col-md-2">
+                                    <div class="mb-3">
+                                        <label for="{{ param_form.num_readings.id_for_label }}" class="form-label">Readings*</label>
+                                        {{ param_form.num_readings }}
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="mb-3">
+                                        <label for="id_parameters-{{ forloop.counter0 }}-standard_reference" class="form-label">Standard Reference</label>
+                                        <select name="parameters-{{ forloop.counter0 }}-standard_reference" id="id_parameters-{{ forloop.counter0 }}-standard_reference" class="form-control standard-select">
+                                            <option value="">Select a standard...</option>
+                                            {% if param_form.instance.standard_reference %}
+                                                <option value="{{ param_form.instance.standard_reference.id }}" selected>{{ param_form.instance.standard_reference.serial_number }} - {{ param_form.instance.standard_reference.name }}</option>
+                                            {% endif %}
+                                        </select>
+                                        <div class="standard-info" id="standard-info-{{ forloop.counter0 }}"></div>
+                                    </div>
+                                </div>
+                                <div class="col-md-2">
+                                    <div class="mb-3">
+                                        <label for="{{ param_form.order.id_for_label }}" class="form-label">Order</label>
+                                        {{ param_form.order }}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-3">
+                                    <div class="mb-3">
+                                        <label for="{{ param_form.reference_uncertainty.id_for_label }}" class="form-label">Reference Uncertainty (k=2)</label>
+                                        {{ param_form.reference_uncertainty }}
+                                    </div>
+                                </div>
+                                <div class="col-md-2">
+                                    <div class="mb-3">
+                                        <label for="{{ param_form.coverage_factor.id_for_label }}" class="form-label">Coverage Factor</label>
+                                        {{ param_form.coverage_factor }}
+                                    </div>
+                                </div>
+                                <div class="col-md-2">
+                                    <div class="mb-3">
+                                        <label for="{{ param_form.tolerance.id_for_label }}" class="form-label">Tolerance (±)</label>
+                                        {{ param_form.tolerance }}
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="mb-3 form-check">
+                                        <input type="checkbox" class="form-check-input has-sub-parameters"
+                                               id="has-sub-parameters-{{ forloop.counter0 }}"
+                                               name="parameters-{{ forloop.counter0 }}-has_sub_parameters"
+                                               {% if param_form.instance.pk and param_form.instance.sub_parameters.exists %}checked{% endif %}>
+                                        <label class="form-check-label" for="has-sub-parameters-{{ forloop.counter0 }}">
+                                            This parameter has sub-parameters
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Sub Parameters Section -->
+                            <div class="sub-formset-container {% if not param_form.instance.pk or not param_form.instance.sub_parameters.exists %}hidden{% endif %}"
+                                 id="sub-parameter-container-{{ forloop.counter0 }}">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h6 class="mb-0">Sub Parameters</h6>
+                                    <button type="button" class="btn btn-sm btn-primary add-sub-parameter"
+                                            data-parent-index="{{ forloop.counter0 }}">
+                                        <i class="fas fa-plus mr-2"></i>Add Sub Parameter
+                                    </button>
+                                </div>
+
+                                <input type="hidden" name="parameters-{{ forloop.counter0 }}-sub_parameters-TOTAL_FORMS" value="{% if param_form.instance.pk %}{{ param_form.instance.sub_parameters.count }}{% else %}0{% endif %}" id="id_parameters-{{ forloop.counter0 }}-sub_parameters-TOTAL_FORMS">
+                                <input type="hidden" name="parameters-{{ forloop.counter0 }}-sub_parameters-INITIAL_FORMS" value="{% if param_form.instance.pk %}{{ param_form.instance.sub_parameters.count }}{% else %}0{% endif %}">
+                                <input type="hidden" name="parameters-{{ forloop.counter0 }}-sub_parameters-MIN_NUM_FORMS" value="0">
+                                <input type="hidden" name="parameters-{{ forloop.counter0 }}-sub_parameters-MAX_NUM_FORMS" value="1000">
+
+                                <div id="sub-parameter-forms-{{ forloop.counter0 }}">
+                                    {% if param_form.instance.pk %}
+                                        {% for sub_param in param_form.instance.sub_parameters.all %}
+                                        <div class="sub-parameter-form formset-container mb-3" data-sub-param-index="{{ forloop.counter0 }}">
+                                            <input type="hidden" name="parameters-{{ forloop.parentloop.counter0 }}-sub_parameters-{{ forloop.counter0 }}-id" value="{{ sub_param.id }}">
+                                            <input type="hidden" name="parameters-{{ forloop.parentloop.counter0 }}-sub_parameters-{{ forloop.counter0 }}-DELETE" id="id_parameters-{{ forloop.parentloop.counter0 }}-sub_parameters-{{ forloop.counter0 }}-DELETE">
+
+                                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                                <h6 class="mb-0">{{ sub_param.name }}</h6>
+                                                <button type="button" class="btn btn-sm btn-danger delete-sub-parameter">
+                                                    <i class="fas fa-trash"></i> Remove
+                                                </button>
+                                            </div>
+
+                                            <div class="row">
+                                                <div class="col-md-4">
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Name*</label>
+                                                        <input type="text" class="form-control sub-parameter-name-input"
+                                                               name="parameters-{{ forloop.parentloop.counter0 }}-sub_parameters-{{ forloop.counter0 }}-name"
+                                                               value="{{ sub_param.name }}" required>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Tolerance (±)</label>
+                                                        <input type="number" step="0.0001" class="form-control"
+                                                               name="parameters-{{ forloop.parentloop.counter0 }}-sub_parameters-{{ forloop.counter0 }}-tolerance"
+                                                               value="{{ sub_param.tolerance }}">
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Order</label>
+                                                        <input type="number" class="form-control"
+                                                               name="parameters-{{ forloop.parentloop.counter0 }}-sub_parameters-{{ forloop.counter0 }}-order"
+                                                               value="{{ sub_param.order }}">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {% endfor %}
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <!-- Set Values for Main Parameter -->
+                            <div class="set-value-formset sub-formset-container {% if param_form.instance.pk and param_form.instance.sub_parameters.exists %}hidden{% endif %}"
+                                 id="set-value-forms-{{ forloop.counter0 }}">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h6 class="mb-0">Set Values</h6>
+                                    <button type="button" class="btn btn-sm btn-primary add-set-value"
+                                            data-parent-index="{{ forloop.counter0 }}">
+                                        <i class="fas fa-plus mr-2"></i>Add Set Value
+                                    </button>
+                                </div>
+
+                                <input type="hidden" name="parameters-{{ forloop.counter0 }}-set_values-TOTAL_FORMS" value="{% if param_form.instance.pk %}{{ param_form.instance.set_values.count }}{% else %}1{% endif %}" id="id_parameters-{{ forloop.counter0 }}-set_values-TOTAL_FORMS">
+                                <input type="hidden" name="parameters-{{ forloop.counter0 }}-set_values-INITIAL_FORMS" value="{% if param_form.instance.pk %}{{ param_form.instance.set_values.count }}{% else %}0{% endif %}">
+                                <input type="hidden" name="parameters-{{ forloop.counter0 }}-set_values-MIN_NUM_FORMS" value="1">
+                                <input type="hidden" name="parameters-{{ forloop.counter0 }}-set_values-MAX_NUM_FORMS" value="1000">
+
+                                <div class="set-value-forms">
+                                    {% if param_form.instance.pk %}
+                                        {% for sv in param_form.instance.set_values.all %}
+                                            {% if not sv.sub_parameter %}
+                                            <div class="set-value-form formset-container mb-3" data-set-value-index="{{ forloop.counter0 }}">
+                                                <input type="hidden" name="parameters-{{ forloop.parentloop.counter0 }}-set_values-{{ forloop.counter0 }}-id" value="{{ sv.id }}">
+                                                <input type="hidden" name="parameters-{{ forloop.parentloop.counter0 }}-set_values-{{ forloop.counter0 }}-DELETE" id="id_parameters-{{ forloop.parentloop.counter0 }}-set_values-{{ forloop.counter0 }}-DELETE">
+
+                                                <div class="row">
+                                                    <div class="col-md-6">
+                                                        <div class="input-group">
+                                                            <input type="number" step="0.0001" class="form-control"
+                                                                   name="parameters-{{ forloop.parentloop.counter0 }}-set_values-{{ forloop.counter0 }}-value"
+                                                                   value="{{ sv.value }}" required>
+                                                            <span class="input-group-text">{{ param_form.instance.unit }}</span>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <input type="number" class="form-control"
+                                                               name="parameters-{{ forloop.parentloop.counter0 }}-set_values-{{ forloop.counter0 }}-order"
+                                                               value="{{ sv.order }}">
+                                                    </div>
+                                                    <div class="col-md-2">
+                                                        <button type="button" class="btn btn-sm btn-danger delete-set-value">
+                                                            <i class="fas fa-trash"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            {% endif %}
+                                        {% endfor %}
+                                    {% else %}
+                                        <!-- Default set value for new parameters -->
+                                        <div class="set-value-form formset-container mb-3" data-set-value-index="0">
+                                            <input type="hidden" name="parameters-{{ forloop.counter0 }}-set_values-0-id" value="">
+                                            <input type="hidden" name="parameters-{{ forloop.counter0 }}-set_values-0-DELETE" id="id_parameters-{{ forloop.counter0 }}-set_values-0-DELETE">
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <div class="input-group">
+                                                        <input type="number" step="0.0001" class="form-control"
+                                                               name="parameters-{{ forloop.counter0 }}-set_values-0-value" required>
+                                                        <span class="input-group-text">unit</span>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <input type="number" class="form-control"
+                                                           name="parameters-{{ forloop.counter0 }}-set_values-0-order" value="0">
+                                                </div>
+                                                <div class="col-md-2">
+                                                    <button type="button" class="btn btn-sm btn-danger delete-set-value">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="fas fa-save mr-2"></i> Save Changes
+                        </button>
+                        <div>
+                            <button type="button" class="btn btn-secondary btn-lg me-2" id="clearForm">
+                                <i class="fas fa-undo mr-2"></i> Reset Form
+                            </button>
+                            <a href="{% url 'calibration:procedure_detail' pk=procedure.pk %}" class="btn btn-outline-secondary btn-lg">
+                                <i class="fas fa-times mr-2"></i> Cancel
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Bootstrap Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+    <script>
+        // Enhanced JavaScript for Edit Procedure
+        document.addEventListener("DOMContentLoaded", function () {
+            // Global variables
+            let parameterCount = {{ parameter_formset.total_form_count }};
+            let parametersCache = [];
+            let standardsCache = {};
+
+            // Initialize the form
+            function initializeForm() {
+                loadParameters();
+                attachEventListeners();
+                initializeExistingData();
+            }
+
+            // Initialize existing parameter data
+            function initializeExistingData() {
+                document.querySelectorAll('.parameter-form').forEach((form) => {
+                    const parameterIndex = form.dataset.formsetIndex;
+                    const parameterSelect = form.querySelector('.parameter-name-select');
+                    const standardSelect = form.querySelector('.standard-select');
+
+                    if (parameterSelect && parameterSelect.value) {
+                        // Load standards for existing parameter
+                        loadStandards(parameterSelect.value, standardSelect);
+
+                        // Get standard details if standard is selected
+                        if (standardSelect && standardSelect.value) {
+                            setTimeout(() => {
+                                getStandardDetails(standardSelect.value, parameterSelect.value, parameterIndex);
+                            }, 500);
+                        }
+                    }
+                });
+            }
+
+            // Load parameters from API
+            async function loadParameters() {
+                try {
+                    const response = await fetch("/calibration/api/parameters/");
+                    if (!response.ok) throw new Error("Failed to fetch parameters");
+                    const data = await response.json();
+                    parametersCache = data.parameters;
+                    populateAllParameterDropdowns();
+                } catch (error) {
+                    console.error("Error loading parameters:", error);
+                    alert("Failed to load parameters. Please try again.");
+                }
+            }
+
+            // Populate all parameter dropdowns
+            function populateAllParameterDropdowns() {
+                document.querySelectorAll(".parameter-name-select").forEach((select) => {
+                    const currentValue = select.value;
+                    populateParameterOptions(select);
+                    if (currentValue) {
+                        select.value = currentValue;
+                    }
+                });
+            }
+
+            // Populate a single parameter dropdown
+            function populateParameterOptions(selectElement) {
+                const currentValue = selectElement.value;
+                selectElement.innerHTML = '<option value="">Select a parameter...</option>';
+                parametersCache.forEach((param) => {
+                    const option = document.createElement("option");
+                    option.value = param.name;
+                    option.textContent = `${param.name} (${param.unit})`;
+                    if (param.name === currentValue) {
+                        option.selected = true;
+                    }
+                    selectElement.appendChild(option);
+                });
+            }
+
+            // Load standards for a parameter
+            async function loadStandards(parameterName, selectElement) {
+                if (!parameterName) return;
+
+                const currentValue = selectElement.value;
+
+                if (standardsCache[parameterName]) {
+                    populateStandardOptions(selectElement, standardsCache[parameterName], currentValue);
+                    return;
+                }
+
+                try {
+                    const response = await fetch(
+                        `/calibration/api/standards/?parameter_name=${encodeURIComponent(parameterName)}`
+                    );
+                    if (!response.ok) throw new Error("Failed to fetch standards");
+                    const data = await response.json();
+                    standardsCache[parameterName] = data.standards;
+                    populateStandardOptions(selectElement, data.standards, currentValue);
+                } catch (error) {
+                    console.error("Error loading standards:", error);
+                    selectElement.innerHTML = '<option value="">Error loading standards</option>';
+                }
+            }
+
+            // Populate standard dropdown
+            function populateStandardOptions(selectElement, standards, selectedValue = null) {
+                selectElement.innerHTML = '<option value="">Select a standard...</option>';
+                standards.forEach((standard) => {
+                    const option = document.createElement("option");
+                    option.value = standard.id;
+                    option.textContent = `${standard.serial_number} - ${standard.name}`;
+                    if (selectedValue && standard.id.toString() === selectedValue.toString()) {
+                        option.selected = true;
+                    }
+                    selectElement.appendChild(option);
+                });
+            }
+
+            // Get standard details including uncertainty
+            async function getStandardDetails(standardId, parameterName, parameterIndex) {
+                try {
+                    const response = await fetch(
+                        `/calibration/api/standards/?standard_id=${standardId}&parameter_name=${encodeURIComponent(parameterName)}`
+                    );
+                    if (!response.ok) throw new Error("Failed to fetch standard details");
+                    const data = await response.json();
+
+                    if (data.standards && data.standards.length > 0) {
+                        const standard = data.standards[0];
+                        let uncertainty = "0.001"; // Default value
+
+                        // Try to get parameter-specific uncertainty
+                        try {
+                            const paramResponse = await fetch(
+                                `/calibration/api/standard-parameters/?standard_id=${standardId}&parameter_name=${encodeURIComponent(parameterName)}`
+                            );
+                            if (paramResponse.ok) {
+                                const paramData = await paramResponse.json();
+                                if (paramData.uncertainty) {
+                                    uncertainty = paramData.uncertainty;
+                                }
+                            }
+                        } catch (error) {
+                            console.error("Error fetching standard parameter details:", error);
+                        }
+
+                        // Update UI
+                        const referenceUncertaintyInput = document.querySelector(
+                            `input[name="parameters-${parameterIndex}-reference_uncertainty"]`
+                        );
+                        if (referenceUncertaintyInput) {
+                            referenceUncertaintyInput.value = uncertainty;
+                            referenceUncertaintyInput.classList.add("auto-filled");
+                        }
+
+                        const standardInfoDiv = document.getElementById(`standard-info-${parameterIndex}`);
+                        if (standardInfoDiv) {
+                            standardInfoDiv.innerHTML = `
+                                <small class="text-muted">
+                                    Model: ${standard.model_number || "N/A"} |
+                                    Manufacturer: ${standard.manufacturer || "N/A"} |
+                                    Cal Due: ${standard.calibration_due_date || "N/A"} |
+                                    Uncertainty: ${uncertainty}
+                                </small>
+                            `;
+                        }
+                    }
+                } catch (error) {
+                    console.error("Error getting standard details:", error);
+                    resetStandardDetails(parameterIndex);
+                }
+            }
+
+            // Reset standard details
+            function resetStandardDetails(parameterIndex) {
+                const referenceUncertaintyInput = document.querySelector(
+                    `input[name="parameters-${parameterIndex}-reference_uncertainty"]`
+                );
+                if (referenceUncertaintyInput) {
+                    referenceUncertaintyInput.value = "0.001";
+                    referenceUncertaintyInput.classList.remove("auto-filled");
+                }
+                const standardInfoDiv = document.getElementById(`standard-info-${parameterIndex}`);
+                if (standardInfoDiv) standardInfoDiv.innerHTML = "";
+            }
+
+            // Update formset indices
+            function updateFormsetIndices() {
+                updateParameterIndices();
+                document.querySelectorAll(".parameter-form").forEach((form, index) => {
+                    const parameterIndex = index;
+                    updateSubParameterIndices(parameterIndex);
+                    updateSetValueIndices(parameterIndex);
+                });
+            }
+
+            // Update parameter indices
+            function updateParameterIndices() {
+                const parameterForms = document.querySelectorAll(".parameter-form:not(.hidden)");
+                parameterForms.forEach((form, index) => {
+                    const oldIndex = form.dataset.formsetIndex;
+                    form.dataset.formsetIndex = index;
+                    form.id = `parameter-${index}`;
+
+                    // Update input names and IDs
+                    form.querySelectorAll("input, select, textarea").forEach((input) => {
+                        if (input.name && input.name.startsWith("parameters-")) {
+                            const newName = input.name.replace(`parameters-${oldIndex}`, `parameters-${index}`);
+                            input.name = newName;
+                            if (input.id) {
+                                input.id = input.id.replace(`parameters-${oldIndex}`, `parameters-${index}`);
+                            }
+                        }
+                    });
+
+                    // Update labels
+                    form.querySelectorAll("label[for]").forEach((label) => {
+                        const forAttr = label.getAttribute("for");
+                        if (forAttr && forAttr.includes(`parameters-${oldIndex}`)) {
+                            label.setAttribute("for", forAttr.replace(`parameters-${oldIndex}`, `parameters-${index}`));
+                        }
+                    });
+
+                    // Update button data attributes
+                    form.querySelectorAll("[data-parent-index]").forEach((btn) => {
+                        btn.dataset.parentIndex = index;
+                    });
+
+                    form.querySelectorAll("[data-index]").forEach((btn) => {
+                        btn.dataset.index = index;
+                    });
+
+                    // Update container IDs
+                    const containers = form.querySelectorAll(`[id*="parameter-${oldIndex}"], [id*="${oldIndex}"]`);
+                    containers.forEach((container) => {
+                        if (container.id) {
+                            container.id = container.id.replace(oldIndex.toString(), index.toString());
+                        }
+                    });
+                });
+
+                // Update total forms count
+                const totalFormsInput = document.getElementById("id_parameters-TOTAL_FORMS");
+                if (totalFormsInput) {
+                    totalFormsInput.value = parameterForms.length;
+                }
+                parameterCount = parameterForms.length;
+            }
+
+            // Update sub-parameter indices
+            function updateSubParameterIndices(parameterIndex) {
+                const subParamForms = document.querySelectorAll(
+                    `#sub-parameter-forms-${parameterIndex} .sub-parameter-form:not(.hidden)`
+                );
+                subParamForms.forEach((form, index) => {
+                    const oldIndex = form.dataset.subParamIndex;
+                    form.dataset.subParamIndex = index;
+
+                    form.querySelectorAll("input, select").forEach((input) => {
+                        if (input.name && input.name.includes("sub_parameters")) {
+                            const newName = input.name.replace(`sub_parameters-${oldIndex}`, `sub_parameters-${index}`);
+                            input.name = newName;
+                            if (input.id) {
+                                input.id = input.id.replace(`sub_parameters-${oldIndex}`, `sub_parameters-${index}`);
+                            }
+                        }
+                    });
+                });
+
+                const totalFormsInput = document.getElementById(`id_parameters-${parameterIndex}-sub_parameters-TOTAL_FORMS`);
+                if (totalFormsInput) {
+                    totalFormsInput.value = subParamForms.length;
+                }
+            }
+
+            // Update set value indices
+            function updateSetValueIndices(parameterIndex) {
+                const setValueForms = document.querySelectorAll(
+                    `#set-value-forms-${parameterIndex} .set-value-form:not(.hidden)`
+                );
+                setValueForms.forEach((form, index) => {
+                    const oldIndex = form.dataset.setValueIndex;
+                    form.dataset.setValueIndex = index;
+
+                    form.querySelectorAll("input, select").forEach((input) => {
+                        if (input.name && input.name.includes("set_values")) {
+                            const newName = input.name.replace(`set_values-${oldIndex}`, `set_values-${index}`);
+                            input.name = newName;
+                            if (input.id) {
+                                input.id = input.id.replace(`set_values-${oldIndex}`, `set_values-${index}`);
+                            }
+                        }
+                    });
+                });
+
+                const totalFormsInput = document.getElementById(`id_parameters-${parameterIndex}-set_values-TOTAL_FORMS`);
+                if (totalFormsInput) {
+                    totalFormsInput.value = setValueForms.length;
+                }
+            }
+
+            // Add new parameter form
+            function addParameter() {
+                const parameterContainer = document.getElementById("parameters-container");
+                const newIndex = parameterCount;
+
+                const newForm = document.createElement("div");
+                newForm.className = "parameter-form formset-container";
+                newForm.id = `parameter-${newIndex}`;
+                newForm.dataset.formsetIndex = newIndex;
+
+                newForm.innerHTML = `
+                    <input type="hidden" name="parameters-${newIndex}-id" value="">
+                    <input type="hidden" name="parameters-${newIndex}-DELETE" id="id_parameters-${newIndex}-DELETE">
+
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="mb-0">New Parameter</h6>
+                        <div>
+                            <button type="button" class="btn btn-sm btn-danger delete-parameter" data-index="${newIndex}">
+                                <i class="fas fa-trash"></i> Remove
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="mb-3">
+                                <label for="id_parameters-${newIndex}-name" class="form-label">Parameter Name*</label>
+                                <select name="parameters-${newIndex}-name" id="id_parameters-${newIndex}-name" class="form-control parameter-name-select" required>
+                                    <option value="">Select a parameter...</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="mb-3">
+                                <label for="id_parameters-${newIndex}-unit" class="form-label">Unit</label>
+                                <input type="text" name="parameters-${newIndex}-unit" id="id_parameters-${newIndex}-unit" class="form-control" readonly>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="mb-3">
+                                <label for="id_parameters-${newIndex}-num_readings" class="form-label">Readings*</label>
+                                <input type="number" name="parameters-${newIndex}-num_readings" id="id_parameters-${newIndex}-num_readings" class="form-control" min="3" max="20" value="5" required>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="mb-3">
+                                <label for="id_parameters-${newIndex}-standard_reference" class="form-label">Standard Reference</label>
+                                <select name="parameters-${newIndex}-standard_reference" id="id_parameters-${newIndex}-standard_reference" class="form-control standard-select">
+                                    <option value="">Select a standard...</option>
+                                </select>
+                                <div class="standard-info" id="standard-info-${newIndex}"></div>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="mb-3">
+                                <label for="id_parameters-${newIndex}-order" class="form-label">Order</label>
+                                <input type="number" name="parameters-${newIndex}-order" id="id_parameters-${newIndex}-order" class="form-control" min="0" value="${newIndex}">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="mb-3">
+                                <label for="id_parameters-${newIndex}-reference_uncertainty" class="form-label">Reference Uncertainty (k=2)</label>
+                                <input type="number" name="parameters-${newIndex}-reference_uncertainty" id="id_parameters-${newIndex}-reference_uncertainty" class="form-control" step="0.000001" value="0.001" required readonly>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="mb-3">
+                                <label for="id_parameters-${newIndex}-coverage_factor" class="form-label">Coverage Factor</label>
+                                <input type="number" name="parameters-${newIndex}-coverage_factor" id="id_parameters-${newIndex}-coverage_factor" class="form-control" step="0.1" value="2.0" min="1" required>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="mb-3">
+                                <label for="id_parameters-${newIndex}-tolerance" class="form-label">Tolerance (±)</label>
+                                <input type="number" name="parameters-${newIndex}-tolerance" id="id_parameters-${newIndex}-tolerance" class="form-control" step="0.0001" value="1.0" min="0">
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="mb-3 form-check">
+                                <input type="checkbox" class="form-check-input has-sub-parameters"
+                                       id="has-sub-parameters-${newIndex}"
+                                       name="parameters-${newIndex}-has_sub_parameters">
+                                <label class="form-check-label" for="has-sub-parameters-${newIndex}">
+                                    This parameter has sub-parameters
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sub Parameters Section -->
+                    <div class="sub-formset-container hidden" id="sub-parameter-container-${newIndex}">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6 class="mb-0">Sub Parameters</h6>
+                            <button type="button" class="btn btn-sm btn-primary add-sub-parameter"
+                                    data-parent-index="${newIndex}">
+                                <i class="fas fa-plus mr-2"></i>Add Sub Parameter
+                            </button>
+                        </div>
+
+                        <input type="hidden" name="parameters-${newIndex}-sub_parameters-TOTAL_FORMS" value="0" id="id_parameters-${newIndex}-sub_parameters-TOTAL_FORMS">
+                        <input type="hidden" name="parameters-${newIndex}-sub_parameters-INITIAL_FORMS" value="0">
+                        <input type="hidden" name="parameters-${newIndex}-sub_parameters-MIN_NUM_FORMS" value="0">
+                        <input type="hidden" name="parameters-${newIndex}-sub_parameters-MAX_NUM_FORMS" value="1000">
+
+                        <div id="sub-parameter-forms-${newIndex}"></div>
+                    </div>
+
+                    <!-- Set Values Section -->
+                    <div class="set-value-formset sub-formset-container" id="set-value-forms-${newIndex}">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6 class="mb-0">Set Values</h6>
+                            <button type="button" class="btn btn-sm btn-primary add-set-value"
+                                    data-parent-index="${newIndex}">
+                                <i class="fas fa-plus mr-2"></i>Add Set Value
+                            </button>
+                        </div>
+
+                        <input type="hidden" name="parameters-${newIndex}-set_values-TOTAL_FORMS" value="1" id="id_parameters-${newIndex}-set_values-TOTAL_FORMS">
+                        <input type="hidden" name="parameters-${newIndex}-set_values-INITIAL_FORMS" value="0">
+                        <input type="hidden" name="parameters-${newIndex}-set_values-MIN_NUM_FORMS" value="1">
+                        <input type="hidden" name="parameters-${newIndex}-set_values-MAX_NUM_FORMS" value="1000">
+
+                        <div class="set-value-forms">
+                            <div class="set-value-form formset-container mb-3" data-set-value-index="0">
+                                <input type="hidden" name="parameters-${newIndex}-set_values-0-id" value="">
+                                <input type="hidden" name="parameters-${newIndex}-set_values-0-DELETE" id="id_parameters-${newIndex}-set_values-0-DELETE">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="input-group">
+                                            <input type="number" step="0.0001" class="form-control"
+                                                   name="parameters-${newIndex}-set_values-0-value" required>
+                                            <span class="input-group-text">unit</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <input type="number" class="form-control"
+                                               name="parameters-${newIndex}-set_values-0-order" value="0">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <button type="button" class="btn btn-sm btn-danger delete-set-value">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                parameterContainer.appendChild(newForm);
+
+                // Populate parameter options for the new form
+                const newSelect = newForm.querySelector(".parameter-name-select");
+                populateParameterOptions(newSelect);
+
+                parameterCount++;
+                updateFormsetIndices();
+            }
+
+            // Add sub-parameter
+            function addSubParameter(button) {
+                const parameterIndex = button.dataset.parentIndex;
+                const subParamContainer = document.getElementById(`sub-parameter-forms-${parameterIndex}`);
+                const subParamCount = subParamContainer.children.length;
+
+                const newSubParam = document.createElement("div");
+                newSubParam.className = "sub-parameter-form formset-container mb-3";
+                newSubParam.dataset.subParamIndex = subParamCount;
+
+                newSubParam.innerHTML = `
+                    <input type="hidden" name="parameters-${parameterIndex}-sub_parameters-${subParamCount}-id" value="">
+                    <input type="hidden" name="parameters-${parameterIndex}-sub_parameters-${subParamCount}-DELETE" id="id_parameters-${parameterIndex}-sub_parameters-${subParamCount}-DELETE">
+
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="mb-0">New Sub Parameter</h6>
+                        <button type="button" class="btn btn-sm btn-danger delete-sub-parameter">
+                            <i class="fas fa-trash"></i> Remove
+                        </button>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">Name*</label>
+                                <input type="text" class="form-control sub-parameter-name-input"
+                                       name="parameters-${parameterIndex}-sub_parameters-${subParamCount}-name" required>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="mb-3">
+                                <label class="form-label">Tolerance (±)</label>
+                                <input type="number" step="0.0001" class="form-control"
+                                       name="parameters-${parameterIndex}-sub_parameters-${subParamCount}-tolerance">
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="mb-3">
+                                <label class="form-label">Order</label>
+                                <input type="number" class="form-control"
+                                       name="parameters-${parameterIndex}-sub_parameters-${subParamCount}-order" value="${subParamCount}">
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                subParamContainer.appendChild(newSubParam);
+                updateSubParameterIndices(parameterIndex);
+            }
+
+            // Add set value
+            function addSetValue(button) {
+                const parameterIndex = button.dataset.parentIndex;
+                const setValueContainer = document.querySelector(`#set-value-forms-${parameterIndex} .set-value-forms`);
+                const setValueCount = setValueContainer.children.length;
+
+                const newSetValue = document.createElement("div");
+                newSetValue.className = "set-value-form formset-container mb-3";
+                newSetValue.dataset.setValueIndex = setValueCount;
+
+                // Get the unit from the parameter
+                const unitInput = document.querySelector(`input[name="parameters-${parameterIndex}-unit"]`);
+                const unit = unitInput ? unitInput.value || 'unit' : 'unit';
+
+                newSetValue.innerHTML = `
+                    <input type="hidden" name="parameters-${parameterIndex}-set_values-${setValueCount}-id" value="">
+                    <input type="hidden" name="parameters-${parameterIndex}-set_values-${setValueCount}-DELETE" id="id_parameters-${parameterIndex}-set_values-${setValueCount}-DELETE">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="input-group">
+                                <input type="number" step="0.0001" class="form-control"
+                                       name="parameters-${parameterIndex}-set_values-${setValueCount}-value" required>
+                                <span class="input-group-text">${unit}</span>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <input type="number" class="form-control"
+                                   name="parameters-${parameterIndex}-set_values-${setValueCount}-order" value="${setValueCount}">
+                        </div>
+                        <div class="col-md-2">
+                            <button type="button" class="btn btn-sm btn-danger delete-set-value">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+
+                setValueContainer.appendChild(newSetValue);
+                updateSetValueIndices(parameterIndex);
+            }
+
+            // Handle parameter name change
+            function handleParameterChange(select) {
+                const parameterForm = select.closest(".parameter-form");
+                if (!parameterForm) return;
+
+                const parameterIndex = parameterForm.dataset.formsetIndex;
+                const parameterName = select.value;
+                const unitInput = document.querySelector(`input[name="parameters-${parameterIndex}-unit"]`);
+                const standardSelect = document.querySelector(`select[name="parameters-${parameterIndex}-standard_reference"]`);
+
+                // Find selected parameter
+                const parameter = parametersCache.find(param => param.name === parameterName);
+
+                // Update unit and reset other fields
+                if (parameter && unitInput) {
+                    unitInput.value = parameter.unit;
+                    unitInput.classList.add("auto-filled");
+
+                    // Update unit display in set value forms
+                    const unitSpans = parameterForm.querySelectorAll('.input-group-text');
+                    unitSpans.forEach(span => {
+                        span.textContent = parameter.unit;
+                    });
+
+                    if (standardSelect) {
+                        loadStandards(parameterName, standardSelect);
+                    }
+                } else {
+                    if (unitInput) {
+                        unitInput.value = "";
+                        unitInput.classList.remove("auto-filled");
+                    }
+                    if (standardSelect) {
+                        standardSelect.innerHTML = '<option value="">Select a standard...</option>';
+                    }
+                }
+
+                resetStandardDetails(parameterIndex);
+            }
+
+            // Handle standard change
+            function handleStandardChange(select) {
+                const parameterForm = select.closest(".parameter-form");
+                if (!parameterForm) return;
+
+                const parameterIndex = parameterForm.dataset.formsetIndex;
+                const parameterNameSelect = document.querySelector(`select[name="parameters-${parameterIndex}-name"]`);
+                const parameterName = parameterNameSelect ? parameterNameSelect.value : "";
+
+                if (select.value && parameterName) {
+                    getStandardDetails(select.value, parameterName, parameterIndex);
+                } else {
+                    resetStandardDetails(parameterIndex);
+                }
+            }
+
+            // Toggle sub-parameters
+            function toggleSubParameters(checkbox) {
+                const parameterForm = checkbox.closest('.parameter-form');
+                if (!parameterForm) return;
+
+                const parameterIndex = parameterForm.dataset.formsetIndex;
+                const container = document.getElementById(`sub-parameter-container-${parameterIndex}`);
+                const setValuesContainer = document.getElementById(`set-value-forms-${parameterIndex}`);
+
+                if (checkbox.checked) {
+                    container.classList.remove('hidden');
+                    setValuesContainer.classList.add('hidden');
+                } else {
+                    container.classList.add('hidden');
+                    setValuesContainer.classList.remove('hidden');
+                }
+            }
+
+            // Delete functions
+            function deleteParameter(button) {
+                const parameterForm = button.closest('.parameter-form');
+                const visibleForms = document.querySelectorAll('.parameter-form:not(.hidden)');
+
+                if (visibleForms.length > 1) {
+                    const deleteInput = parameterForm.querySelector('input[name$="-DELETE"]');
+                    if (deleteInput) {
+                        deleteInput.value = 'on';
+                    }
+                    parameterForm.classList.add('hidden');
+                    updateFormsetIndices();
+                } else {
+                    alert('At least one parameter is required.');
+                }
+            }
+
+            function deleteSubParameter(button) {
+                const subParamForm = button.closest('.sub-parameter-form');
+                const parameterIndex = subParamForm.closest('.parameter-form').dataset.formsetIndex;
+                const deleteInput = subParamForm.querySelector('input[name$="-DELETE"]');
+
+                if (deleteInput) {
+                    deleteInput.value = 'on';
+                }
+                subParamForm.classList.add('hidden');
+                updateSubParameterIndices(parameterIndex);
+            }
+
+            function deleteSetValue(button) {
+                const setValueForm = button.closest('.set-value-form');
+                const parameterIndex = setValueForm.closest('.parameter-form').dataset.formsetIndex;
+                const visibleSetValues = document.querySelectorAll(`#set-value-forms-${parameterIndex} .set-value-form:not(.hidden)`);
+
+                if (visibleSetValues.length > 1) {
+                    const deleteInput = setValueForm.querySelector('input[name$="-DELETE"]');
+                    if (deleteInput) {
+                        deleteInput.value = 'on';
+                    }
+                    setValueForm.classList.add('hidden');
+                    updateSetValueIndices(parameterIndex);
+                } else {
+                    alert('At least one set value is required.');
+                }
+            }
+
+            // Clear form function
+            function clearForm() {
+                if (!confirm('Are you sure you want to reset the form? This will restore the original values.')) {
+                    return;
+                }
+                location.reload();
+            }
+
+            // Event listeners
+            function attachEventListeners() {
+                // Parameter name changes
+                document.addEventListener('change', function(e) {
+                    if (e.target.classList.contains('parameter-name-select')) {
+                        handleParameterChange(e.target);
+                    } else if (e.target.classList.contains('standard-select')) {
+                        handleStandardChange(e.target);
+                    } else if (e.target.classList.contains('has-sub-parameters')) {
+                        toggleSubParameters(e.target);
+                    }
+                });
+
+                // Button clicks
+                document.addEventListener('click', function(e) {
+                    if (e.target.closest('#addParameter')) {
+                        e.preventDefault();
+                        addParameter();
+                    } else if (e.target.closest('.add-sub-parameter')) {
+                        e.preventDefault();
+                        addSubParameter(e.target.closest('.add-sub-parameter'));
+                    } else if (e.target.closest('.add-set-value')) {
+                        e.preventDefault();
+                        addSetValue(e.target.closest('.add-set-value'));
+                    } else if (e.target.closest('.delete-parameter')) {
+                        e.preventDefault();
+                        deleteParameter(e.target.closest('.delete-parameter'));
+                    } else if (e.target.closest('.delete-sub-parameter')) {
+                        e.preventDefault();
+                        deleteSubParameter(e.target.closest('.delete-sub-parameter'));
+                    } else if (e.target.closest('.delete-set-value')) {
+                        e.preventDefault();
+                        deleteSetValue(e.target.closest('.delete-set-value'));
+                    } else if (e.target.id === 'clearForm') {
+                        e.preventDefault();
+                        clearForm();
+                    }
+                });
+
+                // Form submission validation
+                const procedureForm = document.getElementById('procedureForm');
+                if (procedureForm) {
+                    procedureForm.addEventListener('submit', function(e) {
+                        const visibleParameterForms = document.querySelectorAll('.parameter-form:not(.hidden)');
+                        if (visibleParameterForms.length === 0) {
+                            e.preventDefault();
+                            alert('At least one parameter is required.');
+                            return false;
+                        }
+
+                        // Validate that each parameter has at least one set value
+                        let hasInvalidParameter = false;
+                        visibleParameterForms.forEach(form => {
+                            const parameterIndex = form.dataset.formsetIndex;
+                            const setValueForms = document.querySelectorAll(`#set-value-forms-${parameterIndex} .set-value-form:not(.hidden)`);
+                            if (setValueForms.length === 0) {
+                                hasInvalidParameter = true;
+                            }
+                        });
+
+                        if (hasInvalidParameter) {
+                            e.preventDefault();
+                            alert('Each parameter must have at least one set value.');
+                            return false;
+                        }
+                    });
+                }
+            }
+
+            // Initialize everything
+            initializeForm();
+        });
+    </script>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Page-specific JavaScript -->
+{% endblock %}

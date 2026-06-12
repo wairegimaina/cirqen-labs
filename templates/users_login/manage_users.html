@@ -1,0 +1,429 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}User Management System - Equiper National Hospital{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'users_login/manage_users.css' %}" />
+{% endblock %}
+
+{% block page_title %}User Management System{% endblock %}
+
+{% block content %}
+<div id="overlay" class="overlay hidden">
+      <div class="overlay-content">
+        <i class="fas fa-spinner fa-spin fa-3x"></i>
+        <p>Creating user, please wait...</p>
+      </div>
+    </div>
+
+    <div class="main-container">
+      
+
+      <!-- Navigation Tabs -->
+      <div class="nav-tabs-container">
+        <ul class="nav nav-tabs nav-tabs-custom" id="mainTabs" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button
+              class="nav-link active"
+              id="manage-tab"
+              data-bs-toggle="tab"
+              data-bs-target="#manage-pane"
+              type="button"
+              role="tab"
+            >
+              <i class="fas fa-users-cog"></i> Manage Users
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button
+              class="nav-link"
+              id="create-tab"
+              data-bs-toggle="tab"
+              data-bs-target="#create-pane"
+              type="button"
+              role="tab"
+            >
+              <i class="fas fa-user-plus"></i> Create User
+            </button>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Tab Content -->
+      <div class="tab-content" id="mainTabContent">
+        <!-- Manage Users Tab -->
+        <div class="tab-pane fade show active" id="manage-pane" role="tabpanel">
+          <div class="controls">
+            <div class="search-box">
+              <label for="searchInput" class="filter-label">
+                <i class="bx bx-search"></i> Search
+              </label>
+              <input type="text" id="searchInput" placeholder="Search users..." />
+            </div>
+
+            <div class="filter-box">
+              <label for="roleFilter" class="filter-label">
+                <i class="bx bx-filter"></i> Filter by Role
+              </label>
+              <select id="roleFilter" onchange="applyFilters()">
+                <option value="">All Roles</option>
+                <option value="HOD">Head of Department</option>
+                <option value="NIC">In-Charge</option>
+                <option value="Tech">Technologist</option>
+              </select>
+            </div>
+          </div>
+          <div id="alertContainer"></div>
+          <div class="users-grid" id="usersGrid">
+            <div class="loading">
+              <i class="fas fa-spinner"></i>
+              <h3>Loading users...</h3>
+              <p>Please wait while we fetch the user data</p>
+            </div>
+          </div>
+          <div id="paginationControls" class="pagination"></div>
+        </div>
+
+        <!-- Create User Tab -->
+        <div class="tab-pane fade" id="create-pane" role="tabpanel">
+          <div class="container">
+            <div class="form-card">
+              <div class="form-header">
+                <h2><i class="fas fa-user-plus"></i> Create New User</h2>
+                <p class="mb-0">
+                  Add a new user to the system with appropriate role and permissions
+                </p>
+              </div>
+
+              <div class="form-body">
+                <div id="createUserAlerts"></div>
+
+                <form id="userCreationForm">
+                  {% csrf_token %}
+
+                  <!-- Basic Information -->
+                  <div class="mb-4">
+                    <h5 class="text-primary mb-3">
+                      <i class="fas fa-info-circle"></i> Basic Information
+                    </h5>
+
+                    <div class="form-row">
+                      <div class="form-group">
+                        <label class="form-label">
+                          <i class="fas fa-user"></i>
+                          First Name <span class="required">*</span>
+                        </label>
+                        <input type="text" id="createFirstName" class="form-control" required />
+                      </div>
+
+                      <div class="form-group">
+                        <label class="form-label">
+                          <i class="fas fa-user"></i>
+                          Last Name <span class="required">*</span>
+                        </label>
+                        <input type="text" id="createLastName" class="form-control" required />
+                      </div>
+                    </div>
+
+                    <div class="form-group">
+                      <label class="form-label">
+                        <i class="fas fa-envelope"></i>
+                        Email Address <span class="required">*</span>
+                      </label>
+                      <input type="email" id="createEmail" class="form-control" required />
+                    </div>
+                  </div>
+
+                  <!-- Role Selection -->
+                  <div class="mb-4">
+                    <h5 class="text-primary mb-3">
+                      <i class="fas fa-user-tag"></i> Role & Permissions
+                    </h5>
+
+                    <div class="form-group">
+                      <label class="form-label">
+                        <i class="fas fa-shield-alt"></i>
+                        Role <span class="required">*</span>
+                      </label>
+                      <select id="createRole" class="form-control" required>
+                        <option value="">Select Role</option>
+                        {% for role_value, role_display in role_choices %}
+                        <option value="{{ role_value }}">{{ role_display }}</option>
+                        {% endfor %}
+                      </select>
+                      <div class="help-text">Select the user's role in the organization</div>
+                    </div>
+                  </div>
+
+                  <!-- Role-Dependent Fields -->
+                  <div class="mb-4">
+                    <h5 class="text-primary mb-3">
+                      <i class="fas fa-cog"></i> Role-Specific Assignments
+                    </h5>
+
+                    <!-- Department Field (for NIC) -->
+                    <div class="form-group role-dependent-field hidden" id="createDepartmentField">
+                      <label class="form-label">
+                        <i class="fas fa-building"></i>
+                        Department <span class="required">*</span>
+                        <span class="role-info-badge role-nic">Required for In-charge</span>
+                      </label>
+                      <select id="createDepartment" class="form-control">
+                        <option value="">Select Department</option>
+                        {% for department in departments %}
+                        <option value="{{ department.id }}">{{ department.name }}</option>
+                        {% endfor %}
+                      </select>
+                      <div class="help-text">
+                        Select the department this user will be in charge of
+                      </div>
+                    </div>
+
+                    <!-- Workshop Field (for Tech) -->
+                    <div class="form-group role-dependent-field hidden" id="createWorkshopField">
+                      <label class="form-label">
+                        <i class="fas fa-tools"></i>
+                        Workshop <span class="required">*</span>
+                        <span class="role-info-badge role-tech">Required for Tech</span>
+                      </label>
+                      <select id="createWorkshop" class="form-control">
+                        <option value="">Select Workshop</option>
+                        {% for workshop in workshops %}
+                        <option
+                          value="{{ workshop.id }}"
+                          data-department="{{ workshop.department.id }}"
+                        >
+                          {{ workshop.name }}
+                        </option>
+                        {% endfor %}
+                      </select>
+                      <div class="help-text">Select the workshop this technician will work in</div>
+                    </div>
+
+                    <!-- Level Field (for Tech) -->
+                    <div class="form-group role-dependent-field hidden" id="createLevelField">
+                      <label class="form-label">
+                        <i class="fas fa-star"></i>
+                        Level <span class="required">*</span>
+                        <span class="role-info-badge role-tech">Required for Tech</span>
+                      </label>
+                      <select id="createLevel" class="form-control">
+                        <option value="">Select Level</option>
+                        {% for level_value, level_display in level_choices %}
+                        <option value="{{ level_value }}">{{ level_display }}</option>
+                        {% endfor %}
+                      </select>
+                      <div class="help-text">Select the technician's skill level</div>
+                    </div>
+
+                    <!-- Info message when HOD is selected -->
+                    <div class="form-group role-dependent-field hidden" id="createHodInfo">
+                      <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        <strong>HOD Role Selected:</strong> Head of Department users have full
+                        system access and do not require department, workshop, or level assignments.
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Submit Buttons -->
+                  <div class="d-flex gap-3 justify-content-end">
+                    <button type="button" class="btn btn-secondary" onclick="resetCreateForm()">
+                      <i class="fas fa-undo"></i> Reset Form
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                      <i class="fas fa-user-plus"></i> Create User
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Enhanced Edit User Modal -->
+    <div id="editModal" class="modal">
+      <div class="modal-content" style="max-width: 700px">
+        <div class="modal-header">
+          <h2><i class="fas fa-user-edit"></i> Edit User</h2>
+          <span class="close">&times;</span>
+        </div>
+        <div class="modal-body">
+          <form id="editUserForm" enctype="multipart/form-data">
+            <!-- Basic Information Section -->
+            <div class="modal-section">
+              <div class="modal-section-title"><i class="fas fa-user"></i> Basic Information</div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="editFirstName">First Name *</label>
+                  <input type="text" id="editFirstName" required />
+                </div>
+                <div class="form-group">
+                  <label for="editLastName">Last Name *</label>
+                  <input type="text" id="editLastName" required />
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="editEmail">Email Address *</label>
+                <input type="email" id="editEmail" required />
+              </div>
+              <div class="form-group">
+                <label for="editPhone">Phone Number</label>
+                <input type="tel" id="editPhone" placeholder="Optional" />
+              </div>
+            </div>
+            <!-- Role and Assignment Section -->
+            <div class="modal-section">
+              <div class="modal-section-title">
+                <i class="fas fa-user-tag"></i> Role and Assignment
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="editRole">Role *</label>
+                  <select id="editRole" required>
+                    <option value="">Select Role</option>
+                    {% for role_value, role_display in role_choices %}
+                    <option value="{{ role_value }}">{{ role_display }}</option>
+                    {% endfor %}
+                  </select>
+                  <div class="field-help-text">Select the user's primary role</div>
+                </div>
+                <div class="form-group" id="editLevelGroup">
+                  <label for="editLevel">Level</label>
+                  <select id="editLevel">
+                    <option value="">Select Level</option>
+                    {% for level_value, level_display in level_choices %}
+                    <option value="{{ level_value }}">{{ level_display }}</option>
+                    {% endfor %}
+                  </select>
+                  <div class="field-help-text">Required for Tech roles</div>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group" id="editDepartmentGroup">
+                  <label for="editDepartment">Department</label>
+                  <select id="editDepartment">
+                    <option value="">Select Department</option>
+                    {% for department in departments %}
+                    <option value="{{ department.name }}" data-id="{{ department.id }}">
+                      {{ department.name }}
+                    </option>
+                    {% endfor %}
+                  </select>
+                  <div class="field-help-text">Required for NIC roles</div>
+                </div>
+                <div class="form-group" id="editWorkshopGroup">
+                  <label for="editWorkshop">Workshop</label>
+                  <select id="editWorkshop">
+                    <option value="">Select Workshop</option>
+                    {% for workshop in workshops %}
+                    <option
+                      value="{{ workshop.name }}"
+                      data-department="{{ workshop.department.name }}"
+                      data-department-id="{{ workshop.department.id }}"
+                    >
+                      {{ workshop.name }}
+                    </option>
+                    {% endfor %}
+                  </select>
+                  <div class="field-help-text">Required for Tech roles</div>
+                </div>
+              </div>
+            </div>
+            <!-- Signature Section -->
+            <div class="modal-section">
+              <div class="modal-section-title">
+                <i class="fas fa-signature"></i> Signature Management
+              </div>
+              <div id="currentSignatureDisplay" class="current-signature">
+                <p><i class="fas fa-info-circle"></i> Loading current signature...</p>
+              </div>
+              <div class="form-group">
+                <label>Upload New Signature (Optional)</label>
+                <div class="signature-upload-area">
+                  <div class="file-upload-container">
+                    <input
+                      type="file"
+                      id="signatureUpload"
+                      class="file-upload-input"
+                      accept="image/*"
+                    />
+                    <label for="signatureUpload" class="file-upload-label">
+                      <i
+                        class="fas fa-cloud-upload-alt"
+                        style="font-size: 24px; margin-bottom: 10px; display: block"
+                      ></i>
+                      <span>Click to select signature image</span>
+                      <div style="font-size: 12px; color: var(--text-muted); margin-top: 5px">
+                        PNG, JPG, or GIF (Max 2MB)
+                      </div>
+                    </label>
+                  </div>
+                  <div id="signaturePreview" class="hidden">
+                    <img
+                      id="signaturePreviewImg"
+                      class="signature-preview"
+                      alt="Signature preview"
+                    />
+                    <div class="signature-actions">
+                      <button
+                        type="button"
+                        class="btn btn-sm btn-secondary"
+                        onclick="clearSignatureUpload()"
+                      >
+                        <i class="fas fa-times"></i> Clear
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div class="field-help-text">
+                  Upload a custom signature image or leave empty to keep current/auto-generated
+                  signature
+                </div>
+              </div>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="closeEditModal()">Cancel</button>
+          <button class="btn btn-primary" onclick="saveUser()">
+            <i class="fas fa-save"></i> Save Changes
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- View Signature Modal -->
+    <div id="signatureModal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2><i class="fas fa-signature"></i> User Signature</h2>
+          <span class="close" onclick="closeSignatureModal()">&times;</span>
+        </div>
+        <div class="modal-body">
+          <div id="signatureContent">
+            <!-- Signature content will be loaded here -->
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-info" onclick="downloadSignature()">
+            <i class="fas fa-download"></i> Download
+          </button>
+          <button class="btn btn-warning" onclick="regenerateSignature()">
+            <i class="fas fa-redo"></i> Regenerate
+          </button>
+          <button class="btn btn-secondary" onclick="closeSignatureModal()">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    <script src="{% static 'users_login/manage_users.js' %}"></script>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'users_login/manage_users.js' %}"></script>
+{% endblock %}

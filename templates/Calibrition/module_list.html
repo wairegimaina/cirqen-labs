@@ -1,0 +1,83 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Calibration Modules - Equiper National Hospital{% endblock %}
+
+{% block extra_css %}
+<!-- Page-specific CSS -->
+{% endblock %}
+
+{% block page_title %}Calibration Modules{% endblock %}
+
+{% block content %}
+<div class="container">
+        <div class="navigation">
+            <div class="nav-links">
+                <a href="{% url 'dashboard' %}" class="nav-link">← Back to Dashboard</a>
+                <span class="breadcrumb">/</span>
+                <span>Calibration Modules</span>
+            </div>
+        </div>
+
+        
+            <div>
+                <a href="{% url 'create_module' %}" class="btn btn-primary">+ Create New Module</a>
+            </div>
+        </div>
+
+        <div class="modules-grid">
+            {% for module in modules %}
+            <div class="module-card">
+                <div class="module-header">
+                    <div>
+                        <div class="module-name">{{ module.name }}</div>
+                        <div class="device-name">{{ module.device.name }}</div>
+                    </div>
+                </div>
+
+                <div class="module-details">
+                    <div class="detail-row">
+                        <span class="detail-label">Resolution:</span>
+                        <span class="detail-value">{{ module.resolution }}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Parameter Unit:</span>
+                        <span class="detail-value">{{ module.parameter_unit|default:"Not specified" }}</span>
+                    </div>
+                    {% if module.parameters %}
+                    <div class="detail-row">
+                        <span class="detail-label">Parameter Type:</span>
+                        <span class="detail-value">{{ module.parameters.name }}</span>
+                    </div>
+                    {% endif %}
+                    {% if module.reference_module %}
+                    <div class="detail-row">
+                        <span class="detail-label">Reference Module:</span>
+                        <span class="detail-value">{{ module.reference_module.module_name }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="actions">
+                    <a href="{% url 'calibrate_module' module.id %}" class="btn-small btn-calibrate">
+                        🎯 Calibrate
+                    </a>
+                    <a href="#" class="btn-small btn-edit">
+                        ✏️ Edit
+                    </a>
+                </div>
+            </div>
+            {% empty %}
+            <div class="empty-state">
+                <h3>No Modules Found</h3>
+                <p>Get started by creating your first calibration module.</p>
+                <a href="{% url 'create_module' %}" class="btn btn-primary" style="margin-top: 1rem;">Create Your First Module</a>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Page-specific JavaScript -->
+{% endblock %}

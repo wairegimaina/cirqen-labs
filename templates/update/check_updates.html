@@ -1,0 +1,937 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}App Updates — Equiper{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ═══════════════════════════════════════════════════════
+   UPDATE PAGE — Full Styles
+════════════════════════════════════════════════════════ */
+
+.upd-page { max-width: 960px; margin: 0 auto; padding: 1.5rem; }
+
+/* ── cards ──────────────────────────────────────────── */
+.upd-card {
+  background: var(--card-bg, var(--bg-card));
+  border-radius: 14px;
+  box-shadow: 0 2px 14px rgba(0,0,0,.07);
+  padding: 1.75rem;
+  margin-bottom: 1.5rem;
+  position: relative;
+}
+.upd-card-accent-green  { border-left: 4px solid var(--success-color); }
+.upd-card-accent-blue   { border-left: 4px solid var(--primary-color); }
+.upd-card-accent-orange { border-left: 4px solid var(--warning-color); }
+.upd-card-accent-red    { border-left: 4px solid var(--danger-color); }
+
+.upd-header {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+.upd-header h5 { margin: 0; font-weight: 700; font-size: 1.05rem; }
+.upd-header-icon { font-size: 1.7rem; }
+
+/* ── version badge ──────────────────────────────────── */
+.ver-badge {
+  display: inline-block;
+  background: #e8f4ff; color: #0055bb;
+  border-radius: 20px; padding: .25rem 1rem;
+  font-weight: 700; font-size: .9rem;
+}
+.ver-badge-green { background: #d4edda; color: #155724; }
+.ver-badge-orange { background: var(--bg-card)3cd; color: #6c4c00; }
+
+/* ── chips ──────────────────────────────────────────── */
+.chip {
+  display: inline-block; border-radius: 20px;
+  padding: .22rem .85rem; font-size: .78rem;
+  font-weight: 600; letter-spacing: .02em;
+}
+.chip-ok      { background: #d4edda; color: #155724; }
+.chip-warn    { background: var(--bg-card)3cd; color: #856404; }
+.chip-err     { background: #f8d7da; color: #721c24; }
+.chip-blue    { background: #cce5ff; color: #004085; }
+.chip-orange  { background: #ffe5cc; color: #7a3800; }
+.chip-grey    { background: var(--border-light); color: var(--text-secondary); }
+
+/* ── info row ───────────────────────────────────────── */
+.upd-meta {
+  display: flex; gap: 2rem; flex-wrap: wrap;
+  font-size: .85rem; color: var(--text-muted); margin-top: .75rem;
+}
+.upd-meta span i { margin-right: .3rem; }
+
+/* ── buttons ────────────────────────────────────────── */
+.btn-upd {
+  border: none; border-radius: 9px; padding: .55rem 1.3rem;
+  font-weight: 600; cursor: pointer; transition: opacity .15s, transform .1s;
+  display: inline-flex; align-items: center; gap: .45rem;
+  font-size: .92rem;
+}
+.btn-upd:hover   { opacity: .88; transform: translateY(-1px); }
+.btn-upd:active  { transform: translateY(0); }
+.btn-upd:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+
+.btn-primary  { background: var(--primary-color); color: var(--bg-card); }
+.btn-success  { background: var(--success-color); color: var(--bg-card); }
+.btn-danger   { background: var(--danger-color); color: var(--bg-card); }
+.btn-warning  { background: var(--warning-color); color: var(--bg-card); }
+.btn-secondary{ background: var(--text-muted); color: var(--bg-card); }
+.btn-sm { padding: .35rem .8rem; font-size: .82rem; border-radius: 7px; }
+
+/* ── tabs ───────────────────────────────────────────── */
+.upd-tabs {
+  display: flex; gap: 0; border-bottom: 2px solid var(--border-color);
+  margin-bottom: 1.5rem;
+}
+.upd-tab {
+  padding: .65rem 1.4rem; cursor: pointer; font-weight: 600;
+  font-size: .9rem; color: var(--text-muted); border-bottom: 2px solid transparent;
+  margin-bottom: -2px; transition: color .15s, border-color .15s;
+  background: none; border-top: none; border-left: none; border-right: none;
+  display: flex; align-items: center; gap: .45rem;
+}
+.upd-tab:hover { color: var(--primary-color); }
+.upd-tab.active { color: var(--primary-color); border-bottom-color: var(--primary-color); }
+
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* ── progress ───────────────────────────────────────── */
+.upd-log {
+  background: #0d1117; color: #c9d1d9; border-radius: 10px;
+  padding: 1rem 1.1rem; font-family: 'Courier New', monospace; font-size: .83rem;
+  max-height: 280px; overflow-y: auto; margin-top: 1rem;
+  border: 1px solid #30363d;
+}
+.upd-log-line { margin: .12rem 0; line-height: 1.5; }
+.upd-log-line.err { color: #ff7b72; }
+.upd-log-line.ok  { color: #7ee787; }
+.upd-log-line.info { color: #79c0ff; }
+
+.progress-track {
+  background: var(--border-light); border-radius: 10px; height: 14px; overflow: hidden;
+}
+.progress-fill {
+  height: 100%; border-radius: 10px; background: linear-gradient(90deg, var(--primary-color), #6610f2);
+  transition: width .35s ease;
+  background-size: 30px 30px;
+  animation: progress-stripe 1s linear infinite;
+  background-image: linear-gradient(
+    45deg, rgba(255,255,255,.15) 25%, transparent 25%,
+    transparent 50%, rgba(255,255,255,.15) 50%,
+    rgba(255,255,255,.15) 75%, transparent 75%, transparent
+  );
+}
+@keyframes progress-stripe { from { background-position: 0 0; } to { background-position: 30px 0; } }
+
+/* ── upload zone ────────────────────────────────────── */
+.upload-zone {
+  border: 2px dashed #ced4da; border-radius: 12px; padding: 2.5rem 2rem;
+  text-align: center; cursor: pointer; transition: border-color .2s, background .2s;
+  background: var(--bg-secondary);
+}
+.upload-zone:hover, .upload-zone.drag-over {
+  border-color: var(--primary-color); background: #e8f4ff;
+}
+.upload-zone .upload-icon { font-size: 2.5rem; color: var(--text-muted); margin-bottom: .75rem; }
+.upload-zone.drag-over .upload-icon { color: var(--primary-color); }
+.upload-zone input[type=file] { display: none; }
+.upload-zone p { margin: 0; color: var(--text-muted); font-size: .9rem; }
+.upload-zone strong { color: var(--text-secondary); }
+
+.upload-meta-fields {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1.25rem;
+}
+.form-group label { font-size: .85rem; font-weight: 600; color: var(--text-secondary); margin-bottom: .3rem; display: block; }
+.form-control {
+  width: 100%; padding: .5rem .8rem; border: 1px solid #ced4da; border-radius: 8px;
+  font-size: .9rem; outline: none; transition: border-color .15s;
+}
+.form-control:focus { border-color: var(--primary-color); box-shadow: 0 0 0 3px rgba(13,110,253,.15); }
+
+/* ── packages list ──────────────────────────────────── */
+.pkg-list { display: flex; flex-direction: column; gap: .75rem; }
+.pkg-item {
+  border: 1px solid var(--border-light); border-radius: 10px; padding: 1rem 1.25rem;
+  display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+  transition: box-shadow .15s;
+}
+.pkg-item:hover { box-shadow: 0 3px 12px rgba(0,0,0,.07); }
+.pkg-item-info { flex: 1; min-width: 180px; }
+.pkg-item-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+
+/* ── history table ──────────────────────────────────── */
+.upd-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+.upd-table th {
+  text-align: left; border-bottom: 2px solid var(--border-color);
+  padding: .6rem .9rem; color: var(--text-muted); font-size: .82rem;
+  text-transform: uppercase; letter-spacing: .04em;
+}
+.upd-table td { padding: .6rem .9rem; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
+.upd-table tr:hover td { background: var(--bg-secondary); }
+.upd-table tr:last-child td { border-bottom: none; }
+
+/* ── alerts ─────────────────────────────────────────── */
+.upd-alert {
+  border-radius: 10px; padding: .9rem 1.1rem; margin-bottom: 1rem;
+  display: flex; align-items: center; gap: .6rem; font-size: .9rem;
+}
+.upd-alert-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+.upd-alert-error   { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+.upd-alert-info    { background: #cce5ff; color: #004085; border: 1px solid #b8daff; }
+.upd-alert-warning { background: var(--bg-card)3cd; color: #856404; border: 1px solid #ffeeba; }
+
+/* ── selected file display ──────────────────────────── */
+.file-selected-info {
+  display: none; background: #e8f4ff; border: 1px solid #b8daff;
+  border-radius: 8px; padding: .75rem 1rem; margin-top: .75rem;
+  display: none; align-items: center; gap: .75rem;
+}
+.file-selected-info.show { display: flex; }
+
+/* ── spinner ────────────────────────────────────────── */
+.spinner { animation: spin .8s linear infinite; display: inline-block; }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+/* ── responsive ─────────────────────────────────────── */
+@media (max-width: 600px) {
+  .upload-meta-fields { grid-template-columns: 1fr; }
+  .upd-meta { gap: .75rem; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+{% csrf_token %}
+
+<div class="upd-page">
+
+  <!-- ═══════════════════════════════════════════════
+       PAGE HEADER
+  ═══════════════════════════════════════════════ -->
+  <div class="upd-card">
+    <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
+      <div style="display:flex; align-items:center; gap:.75rem; flex:1;">
+        <i class="bx bx-cloud-download upd-header-icon" style="color:var(--primary-color);"></i>
+        <div>
+          <h4 style="margin:0; font-weight:700;">Application Updates</h4>
+          <small class="text-muted">Manage and apply Equiper updates. Current version: <span class="ver-badge">v{{ current_version }}</span></small>
+        </div>
+      </div>
+      <div style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap;">
+        {% if update_settings.last_check %}
+        <span class="chip chip-grey">
+          <i class="bx bx-time-five"></i> Last checked: {{ update_settings.last_check|date:"M d, H:i" }}
+        </span>
+        {% endif %}
+        <button class="btn-upd btn-primary" id="btn-check" onclick="checkForUpdates()">
+          <i class="bx bx-refresh"></i> Check for Updates
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── result: update available ────────────────── -->
+  <div class="upd-card upd-card-accent-green" id="upd-available-card" style="display:none;">
+    <div class="upd-header">
+      <i class="bx bx-package upd-header-icon" style="color:var(--success-color);"></i>
+      <div style="flex:1;">
+        <h5 id="upd-avail-title">Update Available</h5>
+        <span id="upd-avail-critical" class="chip chip-err" style="display:none;">⚡ Critical Update</span>
+      </div>
+      <button class="btn-upd btn-success" id="btn-apply-remote" onclick="applyUpdate()">
+        <i class="bx bx-cloud-download"></i> Apply Now
+      </button>
+    </div>
+    <p id="upd-avail-changes" style="color:var(--text-secondary); margin-bottom:.5rem;"></p>
+    <div class="upd-meta">
+      <span><i class="bx bx-git-branch"></i> Version: <strong id="upd-avail-version"></strong></span>
+      <span><i class="bx bx-hdd"></i> Size: <strong id="upd-avail-size"></strong></span>
+      <span><i class="bx bx-code-block"></i> Min version: <strong id="upd-avail-min"></strong></span>
+    </div>
+  </div>
+
+  <!-- ── result: up to date ───────────────────────── -->
+  <div class="upd-card upd-card-accent-green" id="upd-current-card" style="display:none;">
+    <div class="upd-header" style="margin-bottom:0;">
+      <i class="bx bx-check-circle upd-header-icon" style="color:var(--success-color);"></i>
+      <div>
+        <h5 style="color:var(--success-color); margin-bottom:.15rem;">You're up to date!</h5>
+        <small class="text-muted">Equiper v{{ current_version }} is the latest version.</small>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── progress panel ───────────────────────────── -->
+  <div class="upd-card upd-card-accent-blue" id="upd-progress-wrap" style="display:none;">
+    <div class="upd-header">
+      <i class="bx bx-loader-alt spinner upd-header-icon" style="color:var(--primary-color);"></i>
+      <h5>Applying Update…</h5>
+    </div>
+    <div class="progress-track">
+      <div id="upd-progress-bar" class="progress-fill" style="width:0%;"></div>
+    </div>
+    <p id="upd-progress-status" style="margin:.6rem 0 0; font-size:.88rem; color:var(--text-muted);"></p>
+    <div class="upd-log" id="upd-log"></div>
+  </div>
+
+  <!-- ── complete / error banner ──────────────────── -->
+  <div id="upd-done-card" style="display:none;" class="upd-card">
+    <div class="upd-header">
+      <i id="upd-done-icon" class="bx upd-header-icon"></i>
+      <h5 id="upd-done-title"></h5>
+    </div>
+    <p id="upd-done-msg" class="mb-0"></p>
+    <div style="margin-top:1rem; display:flex; gap:.75rem; flex-wrap:wrap;">
+      <button onclick="location.reload()" class="btn-upd btn-primary" id="btn-reload" style="display:none;">
+        <i class="bx bx-refresh"></i> Reload Page
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════
+       TABS
+  ═══════════════════════════════════════════════ -->
+  <div class="upd-tabs">
+    <button class="upd-tab active" onclick="switchTab('tab-upload', this)">
+      <i class="bx bx-upload"></i> Upload Package
+    </button>
+    <button class="upd-tab" onclick="switchTab('tab-available', this)">
+      <i class="bx bx-package"></i> Available
+      {% if packages %}<span class="chip chip-blue" style="font-size:.72rem; padding:.1rem .55rem;">{{ packages|length }}</span>{% endif %}
+    </button>
+    <button class="upd-tab" onclick="switchTab('tab-history', this)">
+      <i class="bx bx-history"></i> History
+    </button>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════
+       TAB: UPLOAD PACKAGE
+  ═══════════════════════════════════════════════ -->
+  <div id="tab-upload" class="tab-content active">
+
+    <div class="upd-card">
+      <div class="upd-header">
+        <i class="bx bx-upload upd-header-icon" style="color:var(--warning-color);"></i>
+        <div>
+          <h5>Upload Update Package</h5>
+          <small class="text-muted">Upload a <code>.zip</code> package built on the dev laptop using <code>build_update.py</code></small>
+        </div>
+      </div>
+
+      <div id="upload-alert-area"></div>
+
+      <!-- Drop zone -->
+      <div class="upload-zone" id="drop-zone"
+           ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)"
+           onclick="document.getElementById('pkg-file-input').click()">
+        <div class="upload-icon"><i class="bx bx-cloud-upload"></i></div>
+        <strong>Click to browse</strong> or drag &amp; drop your <code>.zip</code> file here
+        <p class="mt-1">Accepted: <code>.zip</code> — built by <code>build_update.py</code></p>
+        <input type="file" id="pkg-file-input" accept=".zip,.xz,.gz" onchange="onFileSelected(this)">
+      </div>
+
+      <!-- Selected file preview -->
+      <div class="file-selected-info" id="file-preview">
+        <i class="bx bx-file-find" style="font-size:1.5rem; color:var(--primary-color); flex-shrink:0;"></i>
+        <div style="flex:1;">
+          <strong id="preview-filename"></strong>
+          <small class="d-block text-muted" id="preview-filesize"></small>
+        </div>
+        <button class="btn-upd btn-secondary btn-sm" onclick="clearFile()">
+          <i class="bx bx-x"></i> Clear
+        </button>
+      </div>
+
+      <!-- Metadata fields (auto-populated from manifest, editable) -->
+      <div class="upload-meta-fields" id="upload-meta-fields" style="display:none;">
+        <div class="form-group">
+          <label>Version <span style="color:var(--danger-color);">*</span></label>
+          <input type="text" class="form-control" id="upload-version" placeholder="e.g. 1.3.0" required>
+        </div>
+        <div class="form-group">
+          <label>Min Version</label>
+          <input type="text" class="form-control" id="upload-min-version" placeholder="e.g. 1.0.0" value="0.0.0">
+        </div>
+        <div class="form-group" style="grid-column: 1/-1;">
+          <label>Release Notes / Changes</label>
+          <textarea class="form-control" id="upload-changes" rows="3" placeholder="Describe what changed in this version…"></textarea>
+        </div>
+        <div class="form-group">
+          <label style="display:flex; align-items:center; gap:.5rem; cursor:pointer;">
+            <input type="checkbox" id="upload-critical" style="width:16px; height:16px;">
+            Mark as Critical Update
+          </label>
+          <small class="text-muted">Critical updates will be highlighted and may auto-apply.</small>
+        </div>
+      </div>
+
+      <!-- Submit button -->
+      <div id="upload-submit-area" style="display:none; margin-top:1.25rem;">
+        <button class="btn-upd btn-warning" id="btn-upload" onclick="submitUpload()">
+          <i class="bx bx-upload"></i> Upload Package to Server
+        </button>
+      </div>
+
+      <!-- Upload progress -->
+      <div id="upload-progress-area" style="display:none; margin-top:1.25rem;">
+        <div style="display:flex; align-items:center; gap:.75rem; margin-bottom:.5rem;">
+          <span class="spinner" style="font-size:1.2rem; color:var(--primary-color);">⟳</span>
+          <span id="upload-progress-msg" style="font-size:.9rem;">Uploading…</span>
+        </div>
+        <div class="progress-track">
+          <div id="upload-progress-bar" class="progress-fill" style="width:0%;"></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- How to build a package -->
+    <div class="upd-card">
+      <div class="upd-header" style="margin-bottom:.75rem;">
+        <i class="bx bx-info-circle upd-header-icon" style="color:var(--text-muted);"></i>
+        <h5>How to Build an Update Package (Dev Laptop)</h5>
+      </div>
+      <p style="margin-bottom:.75rem; color:var(--text-secondary); font-size:.9rem;">
+        On your development machine, run <code>build_update.py</code> from the project root after making your changes.
+        It will produce a <code>.zip</code> file ready to upload here.
+      </p>
+      <div class="upd-log" style="max-height:none; font-size:.82rem;">
+        <div class="upd-log-line info"># ── On your dev laptop ───────────────────────────────────</div>
+        <div class="upd-log-line"></div>
+        <div class="upd-log-line"># 1. Make your code changes, test them locally</div>
+        <div class="upd-log-line"></div>
+        <div class="upd-log-line"># 2. Run the build script (adjust the version)</div>
+        <div class="upd-log-line ok">python build_update.py --version 1.3.1 --changes "Fixed PPM bug, added export"</div>
+        <div class="upd-log-line"></div>
+        <div class="upd-log-line"># 3. Optional: mark as critical</div>
+        <div class="upd-log-line ok">python build_update.py --version 1.3.1 --critical --changes "Security fix"</div>
+        <div class="upd-log-line"></div>
+        <div class="upd-log-line"># 4. The script outputs:</div>
+        <div class="upd-log-line info">#    ✅ Built: equiper_update_v1.3.1.zip  (3.2 MB)</div>
+        <div class="upd-log-line info">#    SHA-256: abcdef1234567890…</div>
+        <div class="upd-log-line"></div>
+        <div class="upd-log-line"># 5. Transfer the .zip to the server via USB/SCP/SFTP</div>
+        <div class="upd-log-line"># 6. Upload it here using the form above</div>
+        <div class="upd-log-line"># 7. Click "Apply" — done!</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══════════════════════════════════════════════
+       TAB: AVAILABLE PACKAGES
+  ═══════════════════════════════════════════════ -->
+  <div id="tab-available" class="tab-content">
+    <div class="upd-card">
+      <div class="upd-header">
+        <i class="bx bx-package upd-header-icon" style="color:var(--primary-color);"></i>
+        <h5>Available Update Packages</h5>
+      </div>
+
+      {% if packages %}
+      <div class="pkg-list">
+        {% for pkg in packages %}
+        <div class="pkg-item" id="pkg-row-{{ pkg.version }}">
+          <div>
+            <span class="ver-badge {% if pkg.critical %}ver-badge-orange{% endif %}">
+              v{{ pkg.version }}
+            </span>
+          </div>
+          <div class="pkg-item-info">
+            <div style="display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; margin-bottom:.2rem;">
+              {% if pkg.critical %}<span class="chip chip-err">⚡ Critical</span>{% endif %}
+              {% if pkg.source == 'local_upload' %}
+                <span class="chip chip-orange">⬆ Uploaded</span>
+              {% else %}
+                <span class="chip chip-blue">☁ HQ Server</span>
+              {% endif %}
+              {% if pkg.size_mb > 0 %}
+                <span class="chip chip-grey">{{ pkg.size_mb }} MB</span>
+              {% endif %}
+            </div>
+            <small class="text-muted">
+              {% if pkg.changes %}{{ pkg.changes|truncatechars:100 }}{% else %}No release notes.{% endif %}
+            </small>
+          </div>
+          <div class="pkg-item-actions">
+            <button class="btn-upd btn-success btn-sm" onclick="applySpecificVersion('{{ pkg.version }}', this)">
+              <i class="bx bx-play"></i> Apply
+            </button>
+            <button class="btn-upd btn-danger btn-sm" onclick="deletePackage('{{ pkg.version }}', this)">
+              <i class="bx bx-trash"></i>
+            </button>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div style="text-align:center; padding:2rem; color:var(--text-muted);">
+        <i class="bx bx-package" style="font-size:2.5rem; display:block; margin-bottom:.75rem;"></i>
+        <p class="mb-0">No packages available. Check for updates or upload a package from the dev laptop.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════
+       TAB: HISTORY
+  ═══════════════════════════════════════════════ -->
+  <div id="tab-history" class="tab-content">
+    <div class="upd-card">
+      <div class="upd-header">
+        <i class="bx bx-history upd-header-icon" style="color:var(--text-muted);"></i>
+        <h5>Update History</h5>
+      </div>
+
+      {% if history %}
+      <div style="overflow-x:auto;">
+        <table class="upd-table">
+          <thead>
+            <tr>
+              <th>Version</th>
+              <th>Status</th>
+              <th>Date Applied</th>
+              <th>Applied By</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for h in history %}
+            <tr>
+              <td><span class="ver-badge" style="font-size:.8rem;">v{{ h.package.version }}</span></td>
+              <td>
+                {% if h.status == 'success' %}
+                  <span class="chip chip-ok">✓ Success</span>
+                {% elif h.status == 'failed' %}
+                  <span class="chip chip-err" title="{{ h.error_message }}">✗ Failed</span>
+                {% elif h.status == 'rolled_back' %}
+                  <span class="chip chip-warn">↩ Rolled Back</span>
+                {% elif h.status == 'applying' %}
+                  <span class="chip chip-blue">⚙ Applying</span>
+                {% else %}
+                  <span class="chip chip-grey">{{ h.get_status_display }}</span>
+                {% endif %}
+              </td>
+              <td style="color:var(--text-muted); font-size:.85rem;">{{ h.started_at|date:"M d, Y H:i" }}</td>
+              <td style="font-size:.85rem;">{{ h.applied_by|default:"Auto" }}</td>
+              <td>
+                {% if h.status == 'success' %}
+                <button class="btn-upd btn-danger btn-sm"
+                        onclick="rollbackVersion('{{ h.package.version }}', this)">
+                  <i class="bx bx-undo"></i> Rollback
+                </button>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div style="text-align:center; padding:2rem; color:var(--text-muted);">
+        <i class="bx bx-history" style="font-size:2.5rem; display:block; margin-bottom:.75rem;"></i>
+        <p class="mb-0">No updates applied yet.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div><!-- end .upd-page -->
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ═══════════════════════════════════════════════════════════
+//  Equiper Updates — Full JavaScript
+// ═══════════════════════════════════════════════════════════
+
+const CSRF = (function() {
+  const m = document.cookie.match(/csrftoken=([^;]+)/);
+  return m ? m[1] : (document.querySelector('[name=csrfmiddlewaretoken]')?.value || '');
+})();
+
+let _pendingRemoteVersion = null;
+let _selectedFile = null;
+
+// ── Tabs ──────────────────────────────────────────────────
+function switchTab(tabId, btn) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.upd-tab').forEach(b => b.classList.remove('active'));
+  document.getElementById(tabId).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ── Check for updates (HQ server) ────────────────────────
+async function checkForUpdates() {
+  const btn = document.getElementById('btn-check');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bx bx-loader-alt spinner"></i> Checking…';
+  hide('upd-available-card');
+  hide('upd-current-card');
+
+  try {
+    const resp = await fetch('/updates/check/', {
+      method: 'POST',
+      headers: { 'X-CSRFToken': CSRF },
+    });
+    const data = await resp.json();
+
+    if (data.error) {
+      showAlert('upd-page-alerts', 'error', `Check failed: ${data.error}`);
+      return;
+    }
+
+    if (data.update_available) {
+      _pendingRemoteVersion = data.version;
+      document.getElementById('upd-avail-title').textContent = `Update Available → v${data.version}`;
+      document.getElementById('upd-avail-version').textContent  = data.version;
+      document.getElementById('upd-avail-size').textContent =
+        data.size_bytes ? (data.size_bytes / 1048576).toFixed(1) + ' MB' : 'Unknown';
+      document.getElementById('upd-avail-min').textContent  = data.min_version || '—';
+      document.getElementById('upd-avail-changes').textContent = data.changes || '';
+      document.getElementById('upd-avail-critical').style.display = data.critical ? 'inline-block' : 'none';
+      show('upd-available-card');
+    } else {
+      show('upd-current-card');
+    }
+  } catch (e) {
+    showAlert('upload-alert-area', 'error', 'Network error: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bx bx-refresh"></i> Check for Updates';
+  }
+}
+
+// ── Apply remote update (from check result) ───────────────
+async function applyUpdate() {
+  if (!_pendingRemoteVersion) return;
+  if (!confirm(`Apply update to v${_pendingRemoteVersion}?\n\nThe app will restart automatically.`)) return;
+  startApply(_pendingRemoteVersion);
+}
+
+// ── Apply a specific package from the available list ──────
+async function applySpecificVersion(version, btn) {
+  if (!confirm(`Apply update v${version}?\n\nThe app will restart automatically.`)) return;
+  btn.disabled = true;
+  startApply(version);
+}
+
+// ── Core apply logic ──────────────────────────────────────
+async function startApply(version) {
+  hide('upd-available-card');
+  show('upd-progress-wrap');
+  document.getElementById('upd-log').innerHTML = '';
+  setProgress(0, 'Starting…');
+  hide('upd-done-card');
+
+  try {
+    const resp = await fetch(`/updates/apply/${version}/`, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': CSRF },
+    });
+    const data = await resp.json();
+
+    if (data.error) {
+      showDone(false, 'Update Failed', data.error);
+      return;
+    }
+
+    // Connect to SSE stream
+    const es = new EventSource(data.stream_url);
+    const stageBase = {
+      downloading: 5, validating: 20, backing_up: 35, applying: 55, migrating: 88, restarting: 96,
+    };
+
+    const onStage = (e, stage) => {
+      const d = JSON.parse(e.data);
+      const base = stageBase[stage] || 0;
+      const pct = d.progress != null
+        ? Math.min(base + Math.round(d.progress * .25), base + 20)
+        : base;
+      setProgress(pct, d.message);
+      log(d.message);
+    };
+
+    es.addEventListener('connected',   e => log('Connected to update stream', 'info'));
+    es.addEventListener('started',     e => { const d=JSON.parse(e.data); log(d.message,'info'); });
+    es.addEventListener('downloading', e => onStage(e, 'downloading'));
+    es.addEventListener('validating',  e => onStage(e, 'validating'));
+    es.addEventListener('backing_up',  e => onStage(e, 'backing_up'));
+    es.addEventListener('applying',    e => onStage(e, 'applying'));
+    es.addEventListener('migrating',   e => onStage(e, 'migrating'));
+    es.addEventListener('restarting',  e => onStage(e, 'restarting'));
+
+    es.addEventListener('complete', e => {
+      es.close();
+      const d = JSON.parse(e.data);
+      setProgress(100, 'Complete!');
+      log('✅ ' + d.message, 'ok');
+      showDone(true, 'Update Applied Successfully',
+        'The app will restart shortly. Please reload the page in a few seconds.');
+      document.getElementById('btn-reload').style.display = 'inline-flex';
+      setTimeout(() => location.reload(), 8000);
+    });
+
+    es.addEventListener('error', e => {
+      es.close();
+      let msg = 'Unknown error';
+      try { msg = JSON.parse(e.data).message; } catch {}
+      log('❌ ' + msg, 'err');
+      showDone(false, 'Update Failed', msg);
+    });
+
+  } catch (err) {
+    showDone(false, 'Update Failed', err.message);
+  }
+}
+
+// ── Rollback ──────────────────────────────────────────────
+async function rollbackVersion(version, btn) {
+  if (!confirm(`Roll back to before v${version} was applied?\nThis restores the previous files.`)) return;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner">⟳</span> Rolling back…';
+
+  try {
+    const resp = await fetch(`/updates/rollback/${version}/`, {
+      method: 'POST', headers: { 'X-CSRFToken': CSRF },
+    });
+    const d = await resp.json();
+    alert(d.success
+      ? `✅ Rollback successful. Please restart the application.`
+      : `❌ Rollback failed.`);
+    location.reload();
+  } catch (e) {
+    alert('Error: ' + e.message);
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bx bx-undo"></i> Rollback';
+  }
+}
+
+// ── Delete/deactivate a package ───────────────────────────
+async function deletePackage(version, btn) {
+  if (!confirm(`Remove package v${version}?\n(It won't be deleted from disk, just hidden.)`)) return;
+  btn.disabled = true;
+  try {
+    const resp = await fetch(`/updates/delete/${version}/`, {
+      method: 'POST', headers: { 'X-CSRFToken': CSRF },
+    });
+    const d = await resp.json();
+    if (d.success) {
+      const row = document.getElementById(`pkg-row-${version}`);
+      if (row) row.remove();
+    } else {
+      alert('Error: ' + (d.error || 'Unknown'));
+      btn.disabled = false;
+    }
+  } catch (e) {
+    alert('Error: ' + e.message);
+    btn.disabled = false;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  FILE UPLOAD
+// ═══════════════════════════════════════════════════════════
+
+function onDragOver(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.add('drag-over');
+}
+function onDragLeave(e) {
+  document.getElementById('drop-zone').classList.remove('drag-over');
+}
+function onDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) processFile(file);
+}
+
+function onFileSelected(input) {
+  const file = input.files[0];
+  if (file) processFile(file);
+}
+
+function processFile(file) {
+  _selectedFile = file;
+
+  // Show preview
+  document.getElementById('preview-filename').textContent = file.name;
+  document.getElementById('preview-filesize').textContent =
+    `${(file.size / 1048576).toFixed(2)} MB`;
+  document.getElementById('file-preview').classList.add('show');
+  document.getElementById('upload-meta-fields').style.display = 'grid';
+  document.getElementById('upload-submit-area').style.display = 'block';
+
+  // Try to read manifest from zip
+  if (file.name.endsWith('.zip') && window.JSZip) {
+    JSZip.loadAsync(file).then(zip => {
+      const mf = zip.file('manifest.json');
+      if (mf) {
+        mf.async('string').then(txt => {
+          try {
+            const m = JSON.parse(txt);
+            if (m.version) document.getElementById('upload-version').value = m.version;
+            if (m.min_version) document.getElementById('upload-min-version').value = m.min_version;
+            if (m.changes) document.getElementById('upload-changes').value = m.changes;
+            if (m.critical) document.getElementById('upload-critical').checked = true;
+          } catch {}
+        });
+      }
+    }).catch(() => {});
+  }
+
+  clearAlerts();
+}
+
+function clearFile() {
+  _selectedFile = null;
+  document.getElementById('pkg-file-input').value = '';
+  document.getElementById('file-preview').classList.remove('show');
+  document.getElementById('upload-meta-fields').style.display = 'none';
+  document.getElementById('upload-submit-area').style.display = 'none';
+  clearAlerts();
+}
+
+async function submitUpload() {
+  if (!_selectedFile) return;
+
+  const version = document.getElementById('upload-version').value.trim();
+  if (!version) {
+    showAlert('upload-alert-area', 'error', 'Please enter a version number.');
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('package_file', _selectedFile);
+  formData.append('version', version);
+  formData.append('min_version', document.getElementById('upload-min-version').value.trim());
+  formData.append('changes', document.getElementById('upload-changes').value.trim());
+  formData.append('critical', document.getElementById('upload-critical').checked ? 'true' : 'false');
+
+  document.getElementById('btn-upload').disabled = true;
+  document.getElementById('upload-submit-area').style.display = 'none';
+  document.getElementById('upload-progress-area').style.display = 'block';
+  clearAlerts();
+
+  // Simulate upload progress with XHR for real progress events
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', '/updates/upload/');
+  xhr.setRequestHeader('X-CSRFToken', CSRF);
+
+  xhr.upload.addEventListener('progress', e => {
+    if (e.lengthComputable) {
+      const pct = Math.round(e.loaded / e.total * 100);
+      document.getElementById('upload-progress-bar').style.width = pct + '%';
+      document.getElementById('upload-progress-msg').textContent =
+        `Uploading… ${(e.loaded / 1048576).toFixed(1)} MB / ${(e.total / 1048576).toFixed(1)} MB`;
+    }
+  });
+
+  xhr.onload = function() {
+    document.getElementById('upload-progress-area').style.display = 'none';
+    document.getElementById('btn-upload').disabled = false;
+
+    let data;
+    try { data = JSON.parse(xhr.responseText); } catch { data = {}; }
+
+    if (xhr.status === 200 && data.success) {
+      showAlert('upload-alert-area', 'success',
+        `✅ Package v${data.version} (${data.size_mb} MB) uploaded successfully! ` +
+        `Head to the <strong>Available</strong> tab to apply it.`);
+      clearFile();
+      // Optionally auto-switch to available tab after short delay
+      setTimeout(() => {
+        document.querySelectorAll('.upd-tab')[1].click();
+        location.reload();
+      }, 2500);
+    } else {
+      document.getElementById('upload-submit-area').style.display = 'block';
+      showAlert('upload-alert-area', 'error', data.error || 'Upload failed. Please try again.');
+    }
+  };
+
+  xhr.onerror = function() {
+    document.getElementById('upload-progress-area').style.display = 'none';
+    document.getElementById('upload-submit-area').style.display = 'block';
+    document.getElementById('btn-upload').disabled = false;
+    showAlert('upload-alert-area', 'error', 'Network error during upload. Please check your connection.');
+  };
+
+  xhr.send(formData);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  UI HELPERS
+// ═══════════════════════════════════════════════════════════
+
+function show(id) { const el = document.getElementById(id); if(el) el.style.display = ''; }
+function hide(id) { const el = document.getElementById(id); if(el) el.style.display = 'none'; }
+
+function setProgress(pct, msg) {
+  document.getElementById('upd-progress-bar').style.width = pct + '%';
+  document.getElementById('upd-progress-status').textContent = msg;
+}
+
+function log(msg, cls) {
+  const el = document.getElementById('upd-log');
+  const line = document.createElement('div');
+  line.className = 'upd-log-line' + (cls ? ' ' + cls : '');
+  const ts = new Date().toLocaleTimeString();
+  line.textContent = `[${ts}] ${msg}`;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+function showDone(ok, title, msg) {
+  hide('upd-progress-wrap');
+  show('upd-done-card');
+  const card = document.getElementById('upd-done-card');
+  card.className = 'upd-card ' + (ok ? 'upd-card-accent-green' : 'upd-card-accent-red');
+  const icon = document.getElementById('upd-done-icon');
+  icon.className = ok ? 'bx bx-check-circle upd-header-icon' : 'bx bx-x-circle upd-header-icon';
+  icon.style.color = ok ? 'var(--success-color)' : 'var(--danger-color)';
+  document.getElementById('upd-done-title').textContent = title;
+  document.getElementById('upd-done-msg').textContent = msg;
+}
+
+function showAlert(areaId, type, html) {
+  const area = document.getElementById(areaId) || document.querySelector('.upd-page');
+  if (!area) return;
+  const icons = { success: 'bx-check-circle', error: 'bx-x-circle', info: 'bx-info-circle', warning: 'bx-error' };
+  const classes = { success: 'upd-alert-success', error: 'upd-alert-error', info: 'upd-alert-info', warning: 'upd-alert-warning' };
+  area.insertAdjacentHTML('afterbegin',
+    `<div class="upd-alert ${classes[type] || 'upd-alert-info'}" id="flash-alert">
+      <i class="bx ${icons[type] || 'bx-info-circle'}"></i>
+      <span>${html}</span>
+      <button onclick="this.parentElement.remove()" style="margin-left:auto; background:none; border:none; cursor:pointer; font-size:1.1rem;">×</button>
+    </div>`
+  );
+  // Auto-dismiss success after 6s
+  if (type === 'success') {
+    setTimeout(() => {
+      const el = document.getElementById('flash-alert');
+      if (el) el.remove();
+    }, 6000);
+  }
+}
+
+function clearAlerts() {
+  document.querySelectorAll('#upload-alert-area .upd-alert').forEach(e => e.remove());
+}
+
+// ── Load JSZip for manifest parsing (optional, degrades gracefully) ──
+(function() {
+  const s = document.createElement('script');
+  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+  s.async = true;
+  document.head.appendChild(s);
+})();
+</script>
+{% endblock %}

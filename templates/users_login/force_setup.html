@@ -1,0 +1,217 @@
+{% extends 'users_login/base_auth.html' %}
+{% load static %}
+
+{% block title %}Account Setup — First Login{% endblock %}
+
+{% block auth_extra_js %}
+  <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.6/dist/signature_pad.umd.min.js"></script>
+  <script>
+    var NEEDS_PASSWORD  = {% if needs_password %}true{% else %}false{% endif %};
+    var NEEDS_SIGNATURE = {% if needs_signature %}true{% else %}false{% endif %};
+  </script>
+  <script src="{% static 'users_login/force_setup.js' %}"></script>
+{% endblock %}
+
+{% block auth_content %}
+<div class="wrapper">
+  <div class="setup-container">
+
+    <!-- LEFT PANEL — Hero -->
+    <div class="setup-hero">
+      <div class="hero-content">
+        <div class="hero-logo">
+          <div class="logo-container">
+            <img src="{% static 'images/white.png' %}" alt="Cirqen Logo" class="hero-logo-img">
+          </div>
+        </div>
+
+        <h2>Welcome to Your Account</h2>
+        <p>Complete your security setup to unlock full access to your dashboard. This one-time setup ensures your account remains protected.</p>
+
+        <div class="hero-features">
+          <div class="feature-item">
+            <div class="feature-icon"><i class="fas fa-shield-alt"></i></div>
+            <div class="feature-text">
+              <h4>Secure Password</h4>
+              <p>Create a strong password to protect your account</p>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon"><i class="fas fa-signature"></i></div>
+            <div class="feature-text">
+              <h4>Digital Signature</h4>
+              <p>Add your personal signature for documents</p>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon"><i class="fas fa-rocket"></i></div>
+            <div class="feature-text">
+              <h4>Quick Setup</h4>
+              <p>Complete in just a few minutes and get started</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT PANEL — Setup Content -->
+    <div class="setup-content">
+      <div class="setup-header">
+        <h1>
+          <i class="fas fa-user-cog"></i>
+          Account Setup Required
+        </h1>
+        <p>Complete your account security setup to continue</p>
+      </div>
+
+      <div class="welcome-message">
+        <h3>
+          <i class="fas fa-hand-wave" style="color:var(--auth-warning);"></i>
+          Welcome, {{ user_full_name }}!
+        </h3>
+        <p>For security reasons, please complete the following setup steps before accessing your dashboard.</p>
+      </div>
+
+      <div class="progress-bar">
+        <div class="progress-fill" style="width: {% if needs_password and needs_signature %}0%{% elif needs_password or needs_signature %}50%{% else %}100%{% endif %};"></div>
+      </div>
+
+      <form method="post" enctype="multipart/form-data" id="setupForm">
+        {% csrf_token %}
+
+        <div class="setup-steps">
+
+          <!-- Step 1: Password -->
+          <div class="setup-step {% if needs_password %}required{% else %}completed{% endif %}">
+            <div class="step-header">
+              <div class="step-number {% if needs_password %}required{% else %}completed{% endif %}">
+                {% if needs_password %}1{% else %}<i class="fas fa-check"></i>{% endif %}
+              </div>
+              <div class="step-title">
+                {% if needs_password %}Change Your Password{% else %}Password Already Set{% endif %}
+              </div>
+            </div>
+
+            {% if needs_password %}
+              <div class="form-group">
+                <label for="new_password">
+                  <i class="fas fa-lock"></i> New Password *
+                </label>
+                <div class="password-input-wrapper">
+                  <input type="password" name="new_password" id="new_password"
+                         class="form-control" required minlength="8"
+                         placeholder="Enter your new secure password">
+                  <button type="button" class="password-toggle-btn" onclick="togglePass('new_password', this)">
+                    <i class="fas fa-eye"></i>
+                  </button>
+                </div>
+
+                <label for="confirm_password" style="margin-top:1rem;">
+                  <i class="fas fa-lock"></i> Confirm Password *
+                </label>
+                <div class="password-input-wrapper">
+                  <input type="password" name="confirm_password" id="confirm_password"
+                         class="form-control" required minlength="8"
+                         placeholder="Re-enter your new password">
+                  <button type="button" class="password-toggle-btn" onclick="togglePass('confirm_password', this)">
+                    <i class="fas fa-eye"></i>
+                  </button>
+                </div>
+
+                <div class="password-requirements" style="margin-top:1rem;">
+                  <strong><i class="fas fa-info-circle"></i> Password Requirements:</strong>
+                  <ul>
+                    <li>At least 8 characters long</li>
+                    <li>Use a mix of letters, numbers, and symbols</li>
+                    <li>Avoid using personal information</li>
+                    <li>Make it unique and memorable</li>
+                  </ul>
+                </div>
+              </div>
+            {% else %}
+              <div class="form-group" style="padding:var(--space-lg);">
+                <p style="color:var(--auth-success); display:flex; align-items:center; gap:.5rem;">
+                  <i class="fas fa-check-circle"></i> Your password has already been set.
+                </p>
+              </div>
+            {% endif %}
+          </div>
+
+          <!-- Step 2: Signature -->
+          <div class="setup-step {% if needs_signature %}required{% else %}completed{% endif %}">
+            <div class="step-header">
+              <div class="step-number {% if needs_signature %}required{% else %}completed{% endif %}">
+                {% if needs_signature %}2{% else %}<i class="fas fa-check"></i>{% endif %}
+              </div>
+              <div class="step-title">
+                {% if needs_signature %}Create Your Digital Signature{% else %}Digital Signature Created{% endif %}
+              </div>
+            </div>
+
+            {% if needs_signature %}
+              <div class="signature-container">
+                <p><i class="fas fa-signature"></i> Draw your signature using your mouse or touchscreen</p>
+                <canvas id="signature-pad"></canvas>
+                <input type="hidden" name="signature_data" id="signature_data">
+                <div class="signature-controls">
+                  <button type="button" class="btn-secondary" onclick="clearSignature()">
+                    <i class="fas fa-eraser"></i> Clear
+                  </button>
+                </div>
+                <div class="alert alert-info mt-3">
+                  <i class="fas fa-info-circle"></i>
+                  <div>
+                    <strong>Note:</strong> Your signature will be used on official documents and reports.
+                    You can skip this step and use a system-generated signature for now.
+                  </div>
+                </div>
+              </div>
+            {% else %}
+              <div class="form-group" style="padding:var(--space-lg);">
+                <p style="color:var(--auth-success); display:flex; align-items:center; gap:.5rem;">
+                  <i class="fas fa-check-circle"></i> Your digital signature has already been created.
+                </p>
+              </div>
+            {% endif %}
+          </div>
+
+        </div><!-- .setup-steps -->
+
+        <div class="submit-section">
+          {% if needs_password or needs_signature %}
+            <button type="submit" class="login-btn" id="submitBtn">
+              <span>Complete Setup &amp; Continue</span>
+              <i class="fas fa-rocket"></i>
+            </button>
+            <p>By completing setup, you'll be redirected to your dashboard</p>
+          {% else %}
+            {% if profile.role == "HOD" %}
+              <a href="{% url 'dashboard:hod_dashboard' %}" class="login-btn">
+                <span>Continue to Dashboard</span><i class="fas fa-arrow-right"></i>
+              </a>
+            {% elif profile.role == "Tech" and profile.workshop.category == "maintenance" %}
+              <a href="{% url 'dashboard:dashboard-main' %}" class="login-btn">
+                <span>Continue to Dashboard</span><i class="fas fa-arrow-right"></i>
+              </a>
+            {% elif profile.role == "Tech" and profile.workshop.category == "calibration_center" %}
+              <a href="{% url 'calibration:cal-dashboard' %}" class="login-btn">
+                <span>Continue to Dashboard</span><i class="fas fa-arrow-right"></i>
+              </a>
+            {% elif profile.role == "NIC" %}
+              <a href="{% url 'dashboard:nic_dashboard' %}" class="login-btn">
+                <span>Continue to Dashboard</span><i class="fas fa-arrow-right"></i>
+              </a>
+            {% else %}
+              <a href="{% url 'home' %}" class="login-btn">
+                <span>Continue to Dashboard</span><i class="fas fa-arrow-right"></i>
+              </a>
+            {% endif %}
+          {% endif %}
+        </div>
+
+      </form>
+    </div><!-- .setup-content -->
+
+  </div>
+</div>
+{% endblock %}

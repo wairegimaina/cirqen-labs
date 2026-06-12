@@ -1,0 +1,245 @@
+{% extends 'users_login/base_auth.html' %}
+{% load static %}
+
+{% block title %}{{ title }} — Equiper National Hospital{% endblock %}
+
+{% block auth_content %}
+<div class="wrapper">
+  <div class="forgot-password-container">
+
+    <!-- LEFT PANEL — Hero -->
+    <div class="hero-section">
+      <div class="hero-content">
+        <div class="hero-logo">
+          <div class="logo-container">
+            <img src="{% static 'images/white.png' %}" alt="Cirqen Logo" class="hero-logo-img">
+          </div>
+        </div>
+
+        {% if mode == 'reset_password' %}
+          <h2>Create New Password</h2>
+          <p>Choose a strong password that you haven't used before. Make sure it meets all the security requirements.</p>
+          <div class="hero-features">
+            <div class="feature-item">
+              <div class="feature-icon"><i class="fas fa-shield-alt"></i></div>
+              <div class="feature-text">
+                <h4>Strong &amp; Secure</h4>
+                <p>Use a mix of letters, numbers, and symbols</p>
+              </div>
+            </div>
+            <div class="feature-item">
+              <div class="feature-icon"><i class="fas fa-lock"></i></div>
+              <div class="feature-text">
+                <h4>Encrypted Storage</h4>
+                <p>Your password is encrypted and stored securely</p>
+              </div>
+            </div>
+            <div class="feature-item">
+              <div class="feature-icon"><i class="fas fa-check-circle"></i></div>
+              <div class="feature-text">
+                <h4>Almost Done</h4>
+                <p>One more step to secure your account</p>
+              </div>
+            </div>
+          </div>
+        {% else %}
+          <h2>Verification Code</h2>
+          <p>We've sent a secure 6-digit code to your email. Enter it below to verify your identity.</p>
+          <div class="hero-features">
+            <div class="feature-item">
+              <div class="feature-icon"><i class="fas fa-clock"></i></div>
+              <div class="feature-text">
+                <h4>Time Limited</h4>
+                <p>Code expires in 30 minutes for security</p>
+              </div>
+            </div>
+            <div class="feature-item">
+              <div class="feature-icon"><i class="fas fa-shield-alt"></i></div>
+              <div class="feature-text">
+                <h4>One-Time Use</h4>
+                <p>Each code can only be used once</p>
+              </div>
+            </div>
+            <div class="feature-item">
+              <div class="feature-icon"><i class="fas fa-envelope"></i></div>
+              <div class="feature-text">
+                <h4>Check Your Email</h4>
+                <p>Code sent to your registered email address</p>
+              </div>
+            </div>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- RIGHT PANEL — Form -->
+    <div class="header-section">
+
+      <div class="header-icon">
+        <i class="fas fa-key"></i>
+      </div>
+
+      {% if mode == 'reset_password' %}
+        <h2>Set New Password</h2>
+        <p>Create a strong, secure password for your account</p>
+
+        <div class="user-info">
+          <i class="fas fa-user"></i>
+          <span><strong>Resetting password for:</strong> {{ user.get_full_name|default:user.username }}</span>
+        </div>
+
+      {% else %}
+        <h2>Enter Verification Code</h2>
+        <p>We've sent a 6-digit code to your email address</p>
+
+        <div class="info-box">
+          <i class="fas fa-envelope"></i>
+          <small><strong>Email:</strong> {{ email }}</small>
+        </div>
+
+        <div class="countdown-box">
+          <i class="fas fa-clock" style="color:var(--auth-warning); flex-shrink:0;"></i>
+          <small>
+            <strong style="color:var(--text-primary);">Time Remaining:</strong>
+            <span id="countdown">30:00</span>
+          </small>
+        </div>
+      {% endif %}
+
+      {% if messages %}
+        {% for message in messages %}
+          <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+            <i class="fas fa-{% if message.tags == 'success' %}check-circle{% elif message.tags == 'danger' %}exclamation-circle{% else %}info-circle{% endif %}"></i>
+            <span>{{ message }}</span>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+        {% endfor %}
+      {% endif %}
+
+      <form method="post" id="{% if mode == 'reset_password' %}resetPasswordForm{% else %}verifyForm{% endif %}">
+        {% csrf_token %}
+
+        {% if mode == 'reset_password' %}
+          <div class="mb-3">
+            <label for="{{ form.new_password1.id_for_label }}" class="form-label">
+              <i class="fas fa-lock"></i> {{ form.new_password1.label }}
+            </label>
+            <div class="password-field">
+              {{ form.new_password1 }}
+              <button type="button" class="password-toggle" onclick="togglePassword('{{ form.new_password1.id_for_label }}', this)">
+                <i class="fas fa-eye"></i>
+              </button>
+            </div>
+            <div class="password-strength">
+              <div class="strength-bar"><div class="strength-fill" id="strengthBar"></div></div>
+              <small class="strength-text" id="strengthText">Enter a password</small>
+            </div>
+            {% if form.new_password1.errors %}
+              <div class="field-error mt-1">
+                {% for error in form.new_password1.errors %}<small>{{ error }}</small>{% endfor %}
+              </div>
+            {% endif %}
+          </div>
+
+          <div class="mb-3">
+            <label for="{{ form.new_password2.id_for_label }}" class="form-label">
+              <i class="fas fa-lock"></i> {{ form.new_password2.label }}
+            </label>
+            <div class="password-field">
+              {{ form.new_password2 }}
+              <button type="button" class="password-toggle" onclick="togglePassword('{{ form.new_password2.id_for_label }}', this)">
+                <i class="fas fa-eye"></i>
+              </button>
+            </div>
+            {% if form.new_password2.errors %}
+              <div class="field-error mt-1">
+                {% for error in form.new_password2.errors %}<small>{{ error }}</small>{% endfor %}
+              </div>
+            {% endif %}
+          </div>
+
+          <div class="password-requirements">
+            <strong><i class="fas fa-info-circle"></i> Password Requirements:</strong>
+            <div class="requirement" id="req-length"><i class="fas fa-times"></i> At least 8 characters long</div>
+            <div class="requirement" id="req-letter"><i class="fas fa-times"></i> Contains letters</div>
+            <div class="requirement" id="req-number"><i class="fas fa-times"></i> Contains numbers</div>
+            <div class="requirement" id="req-match"><i class="fas fa-times"></i> Passwords match</div>
+          </div>
+
+          <button type="submit" class="login-btn mt-3" id="submitBtn">
+            <span>Update Password</span>
+            <i class="fas fa-save"></i>
+          </button>
+
+        {% else %}
+          <div class="mb-3">
+            <label for="{{ form.reset_code.id_for_label }}" class="form-label">
+              <i class="fas fa-hashtag"></i> <strong>{{ form.reset_code.label }}</strong>
+            </label>
+            <input type="text"
+                   class="form-control code-input"
+                   name="{{ form.reset_code.name }}"
+                   id="{{ form.reset_code.id_for_label }}"
+                   placeholder="######"
+                   maxlength="6"
+                   required
+                   autocomplete="off">
+            {% if form.reset_code.errors %}
+              <div class="field-error mt-2">
+                <i class="fas fa-exclamation-circle"></i>
+                {% for error in form.reset_code.errors %}<span>{{ error }}</span>{% endfor %}
+              </div>
+            {% endif %}
+          </div>
+
+          <button type="submit" class="login-btn" id="verifyBtn">
+            <span>Verify Code</span>
+            <i class="fas fa-check"></i>
+          </button>
+        {% endif %}
+      </form>
+
+      {% if mode == 'reset_password' %}
+        <div class="text-center mt-3">
+          <small style="color:var(--text-muted);">
+            <i class="fas fa-shield-alt"></i>
+            Your password will be encrypted and stored securely
+          </small>
+        </div>
+      {% else %}
+        <div class="text-center mt-4">
+          <small style="color:var(--text-muted);">Didn't receive the code?</small><br>
+          <a href="{% url 'forgot_password' %}" class="back-link mt-1">
+            <i class="fas fa-redo"></i>
+            <span>Request New Code</span>
+          </a>
+        </div>
+        <div class="text-center mt-2">
+          <small style="color:var(--text-muted); font-size:0.8rem;">
+            <i class="fas fa-shield-alt"></i>
+            Code expires in 30 minutes and can only be used once
+          </small>
+        </div>
+      {% endif %}
+
+      <div class="text-center mt-3">
+        <a href="{% url 'custom_login' %}" class="back-link">
+          <i class="fas fa-arrow-left"></i>
+          <span>Back to Login</span>
+        </a>
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block auth_extra_js %}
+  <script>
+    var PAGE_MODE    = "{{ mode }}";
+    var FIELD_PW1_ID = "{{ form.new_password1.id_for_label }}";
+    var FIELD_PW2_ID = "{{ form.new_password2.id_for_label }}";
+    var CODE_FIELD_ID = "{{ form.reset_code.id_for_label }}";
+  </script>
+  <script src="{% static 'users_login/verify_reset_code.js' %}"></script>
+{% endblock %}

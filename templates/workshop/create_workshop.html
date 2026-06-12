@@ -1,0 +1,758 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Manage Workshops - Equiper National Hospital{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'workshop/workshop.css' %}" />
+{% endblock %}
+
+{% block page_title %}Manage Workshops{% endblock %}
+
+{% block content %}
+<!-- Loading Overlay -->
+<div id="loadingOverlay" class="loading-overlay">
+    <div class="loading-content">
+        <div class="loading-spinner"></div>
+        <h4>Saving Workshop<span class="loading-dots"></span></h4>
+        <p class="text-muted">Please wait while we save your workshop</p>
+    </div>
+</div>
+
+<!-- Success Message -->
+<div id="successMessage" class="loading-overlay">
+    <div class="success-message">
+        <div class="success-icon">
+            <i class="fas fa-check-circle"></i>
+        </div>
+        <h4 class="text-success">Workshop Created Successfully!</h4>
+        <p class="mb-3">Your workshop has been saved successfully.</p>
+        <div class="mt-4">
+            <button id="createAnother" class="btn btn-primary me-2">
+                <i class="fas fa-plus me-1"></i>Create Another Workshop
+            </button>
+            <button id="viewList" class="btn btn-success">
+                <i class="fas fa-list me-1"></i>View All Workshops
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="main-container">
+
+
+      <!-- Create Workshop Section -->
+      {% if user.is_authenticated and user.userprofile.role == 'HOD' %}
+      <button class="toggle-btn" id="toggleCreateForm">
+        <i class="fas fa-plus-circle"></i>
+        <span>Add New Workshop</span>
+        <i class="fas fa-chevron-down" id="chevron"></i>
+      </button>
+
+      <div class="create-form-container" id="createFormContainer">
+        <div class="form-header">
+          <i class="fas fa-wrench"></i>
+          <h3>Create New Workshop</h3>
+        </div>
+
+        <form method="POST" action="{% url 'workshop:create_workshop' %}">
+          {% csrf_token %}
+          <div class="form-group">
+            <label for="name">
+              <i class="fas fa-pen"></i>
+              Workshop Name:
+            </label>
+            <input
+              type="text"
+              id="name"
+              name="name"
+              maxlength="100"
+              required
+              placeholder="Enter workshop name"
+            />
+          </div>
+          <div class="form-group">
+            <label for="category">
+              <i class="fas fa-layer-group"></i>
+              Category:
+            </label>
+            <select id="category" name="category" required>
+              <option value="">Select a category</option>
+              <option value="calibration_center">Calibration Center</option>
+              <option value="maintenance">Maintenance</option>
+            </select>
+          </div>
+          <button type="submit" class="create-btn">
+            <i class="fas fa-check-circle"></i>
+            Create Workshop
+          </button>
+        </form>
+      </div>
+
+      {% if messages %}
+      <div class="messages">
+        {% for message in messages %}
+        <p class="{{ message.tags }}">{{ message }}</p>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <div class="section-divider"></div>
+
+      <h2>
+        <i class="fas fa-list-ul"></i>
+        Existing Workshops
+      </h2>
+      {% if workshops %}
+      <table class="workshop-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Category</th>
+            <th>Created</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for workshop in workshops %}
+          <tr>
+            <td>{{ workshop.name }}</td>
+            <td>{{ workshop.get_category_display }}</td>
+            <td>{{ workshop.created_at|date:"F d, Y" }}</td>
+            <td class="actions-cell">
+              <button
+                type="button"
+                class="btn btn-small btn-edit edit-workshop-btn"
+                data-workshop-id="{{ workshop.id }}"
+                data-workshop-name="{{ workshop.name|escapejs }}"
+                data-workshop-category="{{ workshop.category }}"
+              >
+                <i class="fas fa-edit"></i>
+                Edit
+              </button>
+              <button
+                type="button"
+                class="btn btn-small btn-delete delete-workshop-btn"
+                data-workshop-id="{{ workshop.id }}"
+                data-workshop-name="{{ workshop.name|escapejs }}"
+                data-workshop-category="{{ workshop.get_category_display|escapejs }}"
+              >
+                <i class="fas fa-trash"></i>
+                Delete
+              </button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="info">No workshops available.</p>
+      {% endif %} {% else %}
+      <p class="error">Access Denied: Only Heads of Department can manage workshops.</p>
+      {% endif %}
+    </div>
+
+    <!-- Edit Workshop Modal -->
+    <div class="modal-overlay" id="editModalOverlay">
+      <div class="modal-container">
+        <div class="modal-header">
+          <h3>
+            <i class="fas fa-edit"></i>
+            Edit Workshop
+          </h3>
+          <button type="button" class="modal-close" onclick="closeEditModal()">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+
+        <form method="POST" id="editWorkshopForm" class="modal-form">
+          {% csrf_token %}
+          <input type="hidden" name="workshop_id" id="editWorkshopId" value="" />
+          <div class="form-group">
+            <label for="editName">
+              <i class="fas fa-pen"></i>
+              Workshop Name:
+            </label>
+            <input
+              type="text"
+              id="editName"
+              name="name"
+              maxlength="100"
+              required
+              placeholder="Enter workshop name"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="editCategory">
+              <i class="fas fa-layer-group"></i>
+              Category:
+            </label>
+            <select id="editCategory" name="category" required>
+              <option value="">Select a category</option>
+              <option value="calibration_center">Calibration Center</option>
+              <option value="maintenance">Maintenance</option>
+            </select>
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeEditModal()">
+              <i class="fas fa-times"></i>
+              Cancel
+            </button>
+            <button type="submit" class="btn btn-primary">
+              <i class="fas fa-check"></i>
+              Save Changes
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Delete Workshop Modal - Two-Step Process -->
+    <div class="delete-modal-overlay" id="deleteModalOverlay">
+      <div class="delete-modal-container">
+        <div class="delete-modal-header">
+          <i class="fas fa-exclamation-circle"></i>
+          <h3>Delete Workshop</h3>
+        </div>
+
+        <div class="delete-modal-body">
+          <div class="workshop-info-box" id="deleteWorkshopInfo">
+            <h4>Workshop to Delete:</h4>
+            <p><strong>Name:</strong> <span id="deleteWorkshopName"></span></p>
+            <p><strong>Category:</strong> <span id="deleteWorkshopCategory"></span></p>
+          </div>
+
+          <!-- Warning Box - shown when dependencies exist -->
+          <div class="warning-box" id="warningBox">
+            <i class="fas fa-exclamation-triangle"></i>
+            <div>
+              <p><strong>Action Required!</strong></p>
+              <p>This workshop has <strong id="dependencyCount">0</strong> related records.</p>
+              <p>Click "Transfer Dependencies" first, then "Confirm Delete".</p>
+            </div>
+          </div>
+
+          <!-- Success Box - shown after transfer -->
+          <div class="success-box" id="successBox" style="display: none;">
+            <i class="fas fa-check-circle"></i>
+            <p>Dependencies transferred successfully! You can now delete the workshop.</p>
+          </div>
+
+          <!-- Progress Box - shown during operations -->
+          <div class="progress-box" id="progressBox">
+            <p id="progressMessage">
+              <span class="spinner"></span>
+              <span id="progressText">Processing...</span>
+            </p>
+          </div>
+
+          <!-- Transfer Section -->
+          <div id="transferSection" style="display: none;">
+            <div class="form-group">
+              <label for="transferWorkshop">
+                <i class="fas fa-building"></i>
+                Transfer to Workshop: <span style="color: var(--danger-color);">*</span>
+              </label>
+              <select id="transferWorkshop" name="transfer_workshop_id">
+                <option value="">-- Select Workshop --</option>
+                {% for w in workshops %}
+                <option value="{{ w.id }}" data-name="{{ w.name|escapejs }}" data-category="{{ w.get_category_display|escapejs }}">
+                  {{ w.name }} ({{ w.get_category_display }})
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <!-- No Dependencies Section -->
+          <div id="noDependenciesSection" style="display: none;">
+            <div class="success-box">
+              <i class="fas fa-check-circle"></i>
+              <p>This workshop has no related records and can be safely deleted.</p>
+            </div>
+          </div>
+
+          <!-- No Workshops Warning -->
+          <div id="noWorkshopsWarning" class="no-workshops-warning" style="display: none;">
+            <i class="fas fa-exclamation-circle"></i>
+            <strong>Cannot Delete Workshop</strong>
+            <p>There are no other workshops available to transfer dependencies to. Please create another workshop first.</p>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="delete-modal-actions">
+            <button type="button" class="btn btn-cancel" onclick="closeDeleteModal()">
+              <i class="fas fa-times"></i>
+              Cancel
+            </button>
+            <button type="button" class="btn btn-transfer" id="transferBtn" onclick="handleTransfer()">
+              <i class="fas fa-exchange-alt"></i>
+              Transfer Dependencies
+            </button>
+            <button type="button" class="btn btn-delete" id="confirmDeleteBtn" onclick="showConfirmModal()">
+              <i class="fas fa-trash"></i>
+              Confirm Delete
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Custom Confirmation Modal -->
+    <div class="confirm-modal-overlay" id="confirmModalOverlay">
+      <div class="confirm-modal-container">
+        <div class="confirm-modal-header">
+          <i class="fas fa-exclamation-triangle"></i>
+          <h3>Confirm Deletion</h3>
+        </div>
+
+        <div class="confirm-modal-body">
+          <div class="confirm-message">
+            <p>Are you absolutely sure you want to delete this workshop?</p>
+            <div class="confirm-workshop-name" id="confirmWorkshopName"></div>
+            <p>This action is permanent and cannot be undone.</p>
+          </div>
+
+          <div class="confirm-warning">
+            <i class="fas fa-shield-alt"></i>
+            <p>This workshop will be permanently removed from the system.</p>
+          </div>
+
+          <div class="confirm-modal-actions">
+            <button type="button" class="btn btn-confirm-cancel" onclick="closeConfirmModal()">
+              <i class="fas fa-times"></i>
+              Cancel
+            </button>
+            <button type="button" class="btn btn-confirm-delete" onclick="proceedWithDelete()">
+              <i class="fas fa-trash-alt"></i>
+              Yes, Delete
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let currentDeleteWorkshop = null;
+      let transferCompleted = false;
+
+      document.addEventListener('DOMContentLoaded', function () {
+        const toggleBtn = document.getElementById('toggleCreateForm');
+        const formContainer = document.getElementById('createFormContainer');
+        const chevron = document.getElementById('chevron');
+        const toggleText = toggleBtn.querySelector('span');
+
+        if (toggleBtn) {
+          toggleBtn.addEventListener('click', function () {
+            const isVisible = formContainer.classList.contains('show');
+
+            if (isVisible) {
+              formContainer.classList.remove('show');
+              toggleBtn.classList.remove('active');
+              toggleText.textContent = 'Add New Workshop';
+              chevron.style.transform = 'rotate(0deg)';
+            } else {
+              formContainer.classList.add('show');
+              toggleBtn.classList.add('active');
+              toggleText.textContent = 'Hide Form';
+              chevron.style.transform = 'rotate(180deg)';
+
+              setTimeout(() => {
+                document.getElementById('name').focus();
+              }, 400);
+            }
+          });
+        }
+
+        // Event delegation for buttons
+        document.addEventListener('click', function (e) {
+          if (e.target.closest('.edit-workshop-btn')) {
+            const button = e.target.closest('.edit-workshop-btn');
+            const workshopId = button.getAttribute('data-workshop-id');
+            const workshopName = button.getAttribute('data-workshop-name');
+            const workshopCategory = button.getAttribute('data-workshop-category');
+            openEditModal(workshopId, workshopName, workshopCategory);
+          }
+
+          if (e.target.closest('.delete-workshop-btn')) {
+            const button = e.target.closest('.delete-workshop-btn');
+            const workshopId = button.getAttribute('data-workshop-id');
+            const workshopName = button.getAttribute('data-workshop-name');
+            const workshopCategory = button.getAttribute('data-workshop-category');
+            openDeleteModal(workshopId, workshopName, workshopCategory);
+          }
+        });
+      });
+
+      function openEditModal(workshopId, workshopName, workshopCategory) {
+        const modal = document.getElementById('editModalOverlay');
+        const form = document.getElementById('editWorkshopForm');
+        const nameInput = document.getElementById('editName');
+        const categorySelect = document.getElementById('editCategory');
+        const workshopIdInput = document.getElementById('editWorkshopId');
+
+        form.action = `/workshop/edit_workshop/${workshopId}/`;
+        nameInput.value = workshopName;
+        categorySelect.value = workshopCategory;
+        workshopIdInput.value = workshopId;
+
+        modal.classList.add('show');
+        document.body.style.overflow = 'hidden';
+
+        setTimeout(() => {
+          nameInput.focus();
+          nameInput.select();
+        }, 300);
+      }
+
+      function closeEditModal() {
+        const modal = document.getElementById('editModalOverlay');
+        modal.classList.remove('show');
+        document.body.style.overflow = '';
+        document.getElementById('editWorkshopForm').reset();
+      }
+
+      async function openDeleteModal(workshopId, workshopName, workshopCategory) {
+        currentDeleteWorkshop = { id: workshopId, name: workshopName, category: workshopCategory };
+        transferCompleted = false;
+
+        const modal = document.getElementById('deleteModalOverlay');
+        const transferSelect = document.getElementById('transferWorkshop');
+        const transferBtn = document.getElementById('transferBtn');
+        const deleteBtn = document.getElementById('confirmDeleteBtn');
+
+        // Update workshop info
+        document.getElementById('deleteWorkshopName').textContent = workshopName;
+        document.getElementById('deleteWorkshopCategory').textContent = workshopCategory;
+
+        // Hide progress and success boxes initially
+        document.getElementById('progressBox').classList.remove('show');
+        document.getElementById('successBox').style.display = 'none';
+
+        // Filter out current workshop from transfer options
+        const options = transferSelect.querySelectorAll('option');
+        options.forEach(option => {
+          if (option.value === workshopId) {
+            option.style.display = 'none';
+            option.disabled = true;
+          } else {
+            option.style.display = '';
+            option.disabled = false;
+          }
+        });
+
+        // Fetch dependency count
+        const dependencyCount = await fetchDependencyCount(workshopId);
+        document.getElementById('dependencyCount').textContent = dependencyCount;
+
+        // Show/hide sections based on dependencies
+        const otherWorkshopsCount = Array.from(options).filter(opt => opt.value && opt.value !== workshopId).length;
+
+        if (dependencyCount > 0) {
+          if (otherWorkshopsCount > 0) {
+            // Has dependencies and has other workshops
+            document.getElementById('transferSection').style.display = 'block';
+            document.getElementById('noDependenciesSection').style.display = 'none';
+            document.getElementById('noWorkshopsWarning').style.display = 'none';
+            document.getElementById('warningBox').style.display = 'flex';
+            transferBtn.style.display = 'inline-flex';
+            transferBtn.disabled = false;
+            deleteBtn.disabled = true; // Disabled until transfer completes
+          } else {
+            // Has dependencies but no other workshops
+            document.getElementById('transferSection').style.display = 'none';
+            document.getElementById('noDependenciesSection').style.display = 'none';
+            document.getElementById('noWorkshopsWarning').style.display = 'block';
+            document.getElementById('warningBox').style.display = 'none';
+            transferBtn.style.display = 'none';
+            deleteBtn.disabled = true;
+          }
+        } else {
+          // No dependencies
+          document.getElementById('transferSection').style.display = 'none';
+          document.getElementById('noDependenciesSection').style.display = 'block';
+          document.getElementById('noWorkshopsWarning').style.display = 'none';
+          document.getElementById('warningBox').style.display = 'none';
+          transferBtn.style.display = 'none';
+          deleteBtn.disabled = false; // Can delete immediately
+        }
+
+        modal.classList.add('show');
+        document.body.style.overflow = 'hidden';
+      }
+
+      function closeDeleteModal() {
+        const modal = document.getElementById('deleteModalOverlay');
+        modal.classList.remove('show');
+        document.body.style.overflow = '';
+        document.getElementById('transferWorkshop').value = '';
+        currentDeleteWorkshop = null;
+        transferCompleted = false;
+      }
+
+      async function fetchDependencyCount(workshopId) {
+        try {
+          const response = await fetch(`/workshop/dependency_count/${workshopId}/`);
+          const data = await response.json();
+          return data.count || 0;
+        } catch (error) {
+          console.error('Error fetching dependency count:', error);
+          return 0;
+        }
+      }
+
+      async function handleTransfer() {
+        const transferSelect = document.getElementById('transferWorkshop');
+        const transferBtn = document.getElementById('transferBtn');
+        const deleteBtn = document.getElementById('confirmDeleteBtn');
+        const progressBox = document.getElementById('progressBox');
+        const progressText = document.getElementById('progressText');
+        const warningBox = document.getElementById('warningBox');
+        const successBox = document.getElementById('successBox');
+
+        if (!transferSelect.value) {
+          alert('Please select a workshop to transfer dependencies to.');
+          transferSelect.focus();
+          return;
+        }
+
+        // Disable buttons and show progress
+        transferBtn.disabled = true;
+        deleteBtn.disabled = true;
+        progressBox.classList.add('show');
+        progressText.textContent = 'Transferring dependencies...';
+
+        try {
+          const formData = new FormData();
+          formData.append('transfer_workshop_id', transferSelect.value);
+          formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+          const response = await fetch(`/workshop/transfer_dependencies/${currentDeleteWorkshop.id}/`, {
+            method: 'POST',
+            body: formData
+          });
+
+          const result = await response.json();
+
+          if (result.success) {
+            // Transfer successful - now wait for sync
+            transferCompleted = true;
+
+            // Show waiting message
+            progressText.innerHTML = `
+              <span class="spinner"></span>
+              <span>Transfer complete! Waiting for sync to HQ (45 seconds)...</span>
+            `;
+
+            // CRITICAL: Wait 45 seconds to ensure transfers sync to HQ in a separate batch
+            // Timeline:
+            // T+0s:   Transfers saved locally
+            // T+10s:  Sync agent uploads transfers to HQ
+            // T+15s:  HQ processes transfers
+            // T+45s:  Safe to delete (ensures next sync cycle)
+            let countdown = 45;
+            const countdownInterval = setInterval(() => {
+              countdown--;
+              if (countdown > 0) {
+                progressText.innerHTML = `
+                  <span class="spinner"></span>
+                  <span>Waiting for sync... (${countdown}s remaining)</span>
+                `;
+              } else {
+                clearInterval(countdownInterval);
+
+                // Now safe to delete
+                progressBox.classList.remove('show');
+                warningBox.style.display = 'none';
+                successBox.style.display = 'flex';
+                transferBtn.style.display = 'none';
+                deleteBtn.disabled = false; // Enable delete button
+
+                console.log('Transfer sync complete - deletion now allowed');
+              }
+            }, 1000);
+
+          } else {
+            // Transfer failed
+            progressBox.classList.remove('show');
+            alert('Transfer failed: ' + (result.error || 'Unknown error'));
+            transferBtn.disabled = false;
+          }
+        } catch (error) {
+          progressBox.classList.remove('show');
+          alert('Error during transfer: ' + error.message);
+          transferBtn.disabled = false;
+          console.error('Transfer error:', error);
+        }
+      }
+
+      function showConfirmModal() {
+        // Set workshop name in confirmation modal
+        document.getElementById('confirmWorkshopName').textContent = currentDeleteWorkshop.name;
+
+        // Show confirmation modal
+        const confirmModal = document.getElementById('confirmModalOverlay');
+        confirmModal.classList.add('show');
+      }
+
+      function closeConfirmModal() {
+        const confirmModal = document.getElementById('confirmModalOverlay');
+        confirmModal.classList.remove('show');
+      }
+
+      async function proceedWithDelete() {
+        // Close confirmation modal
+        closeConfirmModal();
+
+        const deleteBtn = document.getElementById('confirmDeleteBtn');
+        const progressBox = document.getElementById('progressBox');
+        const progressText = document.getElementById('progressText');
+
+        // Disable delete button and show progress
+        deleteBtn.disabled = true;
+        progressBox.classList.add('show');
+
+        // Show countdown
+        progressText.innerHTML = `
+          <span class="spinner"></span>
+          <span>Preparing deletion (15 seconds for safety)...</span>
+        `;
+
+        // Brief 15-second safety wait before marking for deletion
+        // Since transfers already synced in previous cycle (45s ago)
+        let countdown = 15;
+        const countdownInterval = setInterval(() => {
+          countdown--;
+          if (countdown > 0) {
+            progressText.innerHTML = `
+              <span class="spinner"></span>
+              <span>Safety wait... (${countdown}s remaining)</span>
+            `;
+          } else {
+            clearInterval(countdownInterval);
+            executeDelete();
+          }
+        }, 1000);
+
+        async function executeDelete() {
+          progressText.innerHTML = `
+            <span class="spinner"></span>
+            <span>Marking workshop for deletion...</span>
+          `;
+
+          try {
+            const formData = new FormData();
+            formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+            const response = await fetch(`/workshop/delete_workshop/${currentDeleteWorkshop.id}/`, {
+              method: 'POST',
+              body: formData
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+              // Success - reload page to show updated list
+              progressText.innerHTML = '<span>✅ Workshop deleted successfully! Reloading...</span>';
+              setTimeout(() => {
+                window.location.reload();
+              }, 1000);
+            } else {
+              // Deletion failed
+              progressBox.classList.remove('show');
+              alert('Deletion failed: ' + (result.error || 'Unknown error'));
+              deleteBtn.disabled = false;
+            }
+          } catch (error) {
+            progressBox.classList.remove('show');
+            alert('Error during deletion: ' + error.message);
+            deleteBtn.disabled = false;
+            console.error('Delete error:', error);
+          }
+        }
+      }
+
+      // Close modals when clicking outside
+      document.getElementById('editModalOverlay')?.addEventListener('click', function (e) {
+        if (e.target === this) closeEditModal();
+      });
+
+      document.getElementById('deleteModalOverlay')?.addEventListener('click', function (e) {
+        if (e.target === this) closeDeleteModal();
+      });
+
+      document.getElementById('confirmModalOverlay')?.addEventListener('click', function (e) {
+        if (e.target === this) closeConfirmModal();
+      });
+
+      // Close modals with Escape key
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+          const editModal = document.getElementById('editModalOverlay');
+          const deleteModal = document.getElementById('deleteModalOverlay');
+          const confirmModal = document.getElementById('confirmModalOverlay');
+
+          if (confirmModal.classList.contains('show')) {
+            closeConfirmModal();
+          } else if (editModal.classList.contains('show')) {
+            closeEditModal();
+          } else if (deleteModal.classList.contains('show')) {
+            closeDeleteModal();
+          }
+        }
+      });
+
+      // Loading overlay and success message functionality
+      const workshopForm = document.querySelector('form[action*="create_workshop"]');
+      const loadingOverlay = document.getElementById('loadingOverlay');
+      const successMessage = document.getElementById('successMessage');
+      const createAnotherBtn = document.getElementById('createAnother');
+      const viewListBtn = document.getElementById('viewList');
+      const loadingContent = document.querySelector('.loading-content');
+      const successContent = document.querySelector('.success-message');
+
+      if (workshopForm) {
+        workshopForm.addEventListener('submit', function(e) {
+          e.preventDefault();
+
+          // Show loading overlay
+          loadingOverlay.style.display = 'flex';
+          loadingContent.style.display = 'block';
+          successContent.style.display = 'none';
+
+          // Simulate processing time
+          setTimeout(function() {
+            // Hide loading, show success
+            loadingContent.style.display = 'none';
+            successContent.style.display = 'block';
+
+            // Auto-submit after 2 seconds
+            setTimeout(function() {
+              workshopForm.submit();
+            }, 2000);
+          }, 2000);
+        });
+      }
+
+      // Create another workshop button
+      if (createAnotherBtn) {
+        createAnotherBtn.addEventListener('click', function() {
+          successMessage.style.display = 'none';
+          workshopForm.reset();
+        });
+      }
+
+      // View list button
+      if (viewListBtn) {
+        viewListBtn.addEventListener('click', function() {
+          window.location.reload();
+        });
+      }
+    </script>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Page-specific JavaScript -->
+{% endblock %}

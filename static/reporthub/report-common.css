@@ -1,0 +1,78 @@
+/* =================================================
+   REPORTHUB — Theme-aware shared styles
+   ================================================= */
+
+/* Card header overrides for report charts */
+.card-header.bg-primary { background: var(--primary-gradient) !important; color: var(--bg-card) !important; }
+.card-header.bg-info    { background: linear-gradient(135deg, var(--info-color), var(--info-color)) !important; color: var(--bg-card) !important; }
+.card-header.bg-success { background: linear-gradient(135deg, var(--success-color), var(--success-color)) !important; color: var(--bg-card) !important; }
+.card-header.bg-warning { background: linear-gradient(135deg, var(--warning-color), var(--warning-color)) !important; color: var(--bg-card) !important; }
+.card-header.bg-danger  { background: linear-gradient(135deg, var(--danger-color), var(--danger-color)) !important; color: var(--bg-card) !important; }
+
+/* Metric boxes — replace bg-success/bg-warning/bg-danger/bg-primary bg-opacity-10 */
+.metric-box {
+  border-radius: 10px;
+  transition: transform 0.2s ease;
+}
+.metric-box:hover {
+  transform: scale(1.05);
+}
+
+.metric-box.mb-success {
+  background: color-mix(in srgb, var(--success-color) 10%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--success-color) 25%, transparent);
+}
+.metric-box.mb-warning {
+  background: color-mix(in srgb, var(--warning-color) 10%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--warning-color) 25%, transparent);
+}
+.metric-box.mb-danger {
+  background: color-mix(in srgb, var(--danger-color) 10%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--danger-color) 25%, transparent);
+}
+.metric-box.mb-primary {
+  background: color-mix(in srgb, var(--primary-color) 10%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--primary-color) 25%, transparent);
+}
+
+/* Progress bar track */
+.progress {
+  border-radius: 5px;
+  background-color: var(--border-light);
+}
+
+.progress-bar {
+  transition: width 0.6s ease;
+}
+
+/* Chart card shared */
+.chart-card {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+.chart-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+.chart-card .card-header {
+  font-weight: 600;
+  font-size: 0.95rem;
+  border-bottom: 1px solid var(--border-color);
+}
+.chart-card .card-body {
+  background: var(--bg-card);
+}
+.chart-card .card-footer {
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.chart-wrapper {
+  position: relative;
+  width: 100%;
+}

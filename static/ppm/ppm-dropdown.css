@@ -1,0 +1,211 @@
+/* =================================================
+   PPM CUSTOM DEPARTMENT DROPDOWN — Theme-aware
+   ================================================= */
+
+.ppm-dept-dropdown {
+    position: relative;
+    font-family: inherit;
+}
+.ppm-dept-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 14px;
+    background: var(--bg-card);
+    border: 1.5px solid var(--border-color);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: border-color .2s, box-shadow .2s;
+    font-size: .875rem;
+    color: var(--text-primary);
+    text-align: left;
+}
+.ppm-dept-btn:hover,
+.ppm-dept-btn:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px var(--primary-ring);
+}
+.ppm-dept-dropdown.open .ppm-dept-btn {
+    border-color: var(--primary-color);
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    box-shadow: 0 0 0 3px var(--primary-ring);
+}
+.ppm-dept-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
+    background: var(--primary-gradient);
+    color: var(--bg-card);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .75rem;
+    flex-shrink: 0;
+}
+.ppm-dept-btn:hover .ppm-dept-icon {
+    filter: brightness(1.1);
+}
+.ppm-dept-label {
+    flex: 1;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.ppm-dept-chevron {
+    font-size: .7rem;
+    color: var(--text-muted);
+    transition: transform .25s;
+    flex-shrink: 0;
+}
+.ppm-dept-dropdown.open .ppm-dept-chevron {
+    transform: rotate(180deg);
+}
+.ppm-dept-panel {
+    display: none;
+    position: absolute;
+    top: calc(100% - 1px);
+    left: 0;
+    min-width: 100%;
+    width: max-content;
+    max-width: min(420px, 90vw);
+    background: var(--bg-card);
+    border: 1.5px solid var(--primary-color);
+    border-top: 1px solid var(--border-light);
+    border-radius: 0 0 12px 12px;
+    box-shadow: var(--shadow-lg);
+    z-index: 9999;
+    overflow: visible;
+}
+.ppm-dept-dropdown.open .ppm-dept-panel { display: block; }
+
+.ppm-dept-search-wrap {
+    display: flex;
+    align-items: center;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border-light);
+    gap: 8px;
+    background: var(--primary-muted);
+}
+.ppm-dept-search-icon { color: var(--text-muted); font-size: .8rem; flex-shrink: 0; }
+.ppm-dept-search {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-size: .875rem;
+    background: transparent;
+    color: var(--text-primary);
+    min-width: 0;
+}
+.ppm-dept-search::placeholder { color: var(--text-muted); }
+
+.ppm-dept-list {
+    max-height: min(420px, 55vh);
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 6px 0;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-mid) transparent;
+}
+.ppm-dept-list::-webkit-scrollbar { width: 5px; }
+.ppm-dept-list::-webkit-scrollbar-track { background: transparent; }
+.ppm-dept-list::-webkit-scrollbar-thumb {
+    background: var(--border-mid);
+    border-radius: 10px;
+}
+.ppm-dept-list::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+
+.ppm-dept-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 14px;
+    text-decoration: none;
+    color: var(--text-primary);
+    font-size: .875rem;
+    transition: background .12s, color .12s;
+    cursor: pointer;
+    white-space: nowrap;
+    border-left: 3px solid transparent;
+}
+.ppm-dept-item:hover {
+    background: var(--primary-muted);
+    color: var(--primary-color);
+    border-left-color: var(--primary-color);
+}
+.ppm-dept-item--active {
+    background: var(--primary-light);
+    color: var(--primary-color);
+    font-weight: 600;
+    border-left-color: var(--primary-color);
+}
+.ppm-dept-item-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .68rem;
+    color: var(--bg-card);
+    flex-shrink: 0;
+}
+.ppm-dept-item-text {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.ppm-dept-check { font-size: .72rem; color: var(--primary-color); flex-shrink: 0; }
+.ppm-dept-no-results {
+    text-align: center;
+    padding: 20px 16px;
+    color: var(--text-muted);
+    font-size: .85rem;
+}
+
+/* Divider after "All Departments" */
+.ppm-dept-item:first-child {
+    border-bottom: 1px solid var(--border-light);
+    margin-bottom: 4px;
+    padding-bottom: 12px;
+}
+
+/* Ensure parent containers don't clip the open panel */
+#schedulesView .theme-card:first-child {
+    overflow: visible !important;
+}
+#schedulesView .theme-card:first-child .row {
+    overflow: visible !important;
+}
+
+/* Activity Timeline */
+.activity-item {
+    display: flex;
+    gap: 14px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-light);
+    align-items: flex-start;
+}
+.activity-item:last-child { border-bottom: none; }
+.activity-dot {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .75rem;
+    flex-shrink: 0;
+    color: var(--bg-card);
+}
+.activity-dot.completed { background: var(--success-color); }
+.activity-dot.pending   { background: var(--warning-color); color: var(--text-primary); }
+.activity-dot.pushed    { background: var(--info-color); color: var(--text-primary); }
+.activity-dot.other     { background: var(--secondary-color); }
+.activity-body { flex: 1; }
+.activity-title { font-weight: 600; font-size: .875rem; margin-bottom: 2px; color: var(--text-primary); }
+.activity-meta  { font-size: .78rem; color: var(--text-muted); }
+.activity-badge { font-size: .7rem; padding: 2px 8px; border-radius: 12px; }

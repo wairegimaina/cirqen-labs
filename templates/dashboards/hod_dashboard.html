@@ -1,0 +1,221 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}HOD Dashboard — CMMS{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'dashboards/dashbord.css' %}" />
+{% endblock %}
+
+{% block page_title %}
+  <i class="fas fa-user-tie"></i> Head of Department Dashboard
+{% endblock %}
+
+{% block content %}
+
+{% if user.userprofile.role != 'HOD' %}
+  <div class="alert alert-danger">
+    <h4><i class="fas fa-ban"></i> Access Denied</h4>
+    <p>
+      This dashboard is restricted to Head of Department accounts.
+      Your current role is <strong>{{ user.userprofile.role }}</strong>.
+    </p>
+    <a href="{% url 'dashboard:dashboard-main' %}" class="btn btn-secondary mt-2">
+      <i class="fas fa-arrow-left"></i> Back to Dashboard
+    </a>
+  </div>
+{% else %}
+
+  {# ── Greeting ── #}
+  <div id="greeting">
+    <h2><i class="fas fa-hand-wave"></i> {{ greeting }}</h2>
+  </div>
+
+  {# ── System overview totals ── #}
+  <div class="totals-section">
+    <h2><i class="fas fa-chart-line"></i> System Overview — All Workshops</h2>
+    <div class="data-grid">
+
+      <div class="data-item">
+        <h5><i class="fas fa-laptop-medical"></i> Total Equipment</h5>
+        <div class="count">{{ totals.total_equipment }}</div>
+        <small>Registered Devices</small>
+      </div>
+
+      <div class="data-item">
+        <h5><i class="fas fa-sitemap"></i> Total Departments</h5>
+        <div class="count">{{ totals.total_departments }}</div>
+        <small>Active Units</small>
+      </div>
+
+      <div class="data-item">
+        <h5><i class="fas fa-clipboard-list"></i> Total Job Cards</h5>
+        <div class="count">{{ totals.total_job_cards }}</div>
+        <small>Work Orders</small>
+      </div>
+
+      <div class="data-item">
+        <h5><i class="fas fa-file-alt"></i> Total Reports</h5>
+        <div class="count">{{ totals.total_reports }}</div>
+        <small>Generated Reports</small>
+      </div>
+
+    </div>
+  </div>
+
+  {# ── Management module cards ── #}
+  <div class="sections-container mt-5">
+
+    <section id="manage-users">
+      <h2><i class="fas fa-users-cog"></i> Manage Users</h2>
+      <p>View, add, edit, and manage all user accounts across the system.</p>
+      <a href="{% url 'manage_users' %}" class="btn btn-primary">
+        <i class="fas fa-arrow-right"></i> Go to User Management
+      </a>
+    </section>
+
+    <section id="management">
+      <h2><i class="fas fa-cogs"></i> Workshop Management</h2>
+      <p>Manage workshops, departments, and user assignments.</p>
+      <a href="{% url 'workshop:create_workshop' %}" class="btn btn-primary">
+        <i class="fas fa-arrow-right"></i> Manage Workshops
+      </a>
+    </section>
+
+    <section id="accessories">
+      <h2><i class="fas fa-box-open"></i> Accessories &amp; Parts</h2>
+      <p>Manage and track available accessories and spare parts.</p>
+      <a href="{% url 'partstools:accessories_dashboard' %}" class="btn btn-primary">
+        <i class="fas fa-arrow-right"></i> View Accessories &amp; Parts
+      </a>
+    </section>
+
+  </div>
+
+  {# ── Per-workshop breakdown ── #}
+  <div class="workshops-section">
+    <h2 class="mb-4"><i class="fas fa-industry"></i> Workshop Details</h2>
+
+    {% for workshop in workshops %}
+    <div class="workshop-card">
+
+      <div class="workshop-header">
+        <div>
+          <h3>
+            <i class="fas fa-wrench"></i> {{ workshop.name }}
+            {# ── Workshop category badge ── #}
+            {% if workshop.category == 'calibration_center' %}
+              <span class="badge badge-info ms-2">
+                <i class="fas fa-drafting-compass"></i> Calibration Centre
+              </span>
+            {% elif workshop.category == 'maintenance' %}
+              <span class="badge badge-secondary ms-2">
+                <i class="fas fa-tools"></i> Maintenance
+              </span>
+            {% else %}
+              <span class="badge badge-secondary ms-2">
+                <i class="fas fa-layer-group"></i> {{ workshop.category|capfirst }}
+              </span>
+            {% endif %}
+          </h3>
+        </div>
+        <div class="status-indicators">
+          <div class="status-dot" title="Workshop Active"></div>
+          <span>Active</span>
+        </div>
+      </div>
+
+      <div class="data-grid">
+
+        <div class="data-item">
+          <h5><i class="fas fa-laptop-medical"></i> Equipment</h5>
+          <div class="count">
+            {% for ws_id, data in workshop_data.items %}
+              {% if ws_id == workshop.id %}
+                <a href="{% url 'inventory_for_hod' workshop.id %}" class="equipment-link-button">
+                  {{ data.equipment_count }}
+                </a>
+              {% endif %}
+            {% endfor %}
+          </div>
+          <small>Total Equipment</small>
+        </div>
+
+        <div class="data-item">
+          <h5><i class="fas fa-sitemap"></i> Departments</h5>
+          <div class="count">
+            {% for ws_id, data in workshop_data.items %}
+              {% if ws_id == workshop.id %}
+                <a href="{% url 'create_department_for_hod' workshop.id %}" class="equipment-link-button">
+                  {{ data.departments_count }}
+                </a>
+              {% endif %}
+            {% endfor %}
+          </div>
+          <small>Active Departments</small>
+        </div>
+
+        <div class="data-item">
+          <h5><i class="fas fa-clipboard-list"></i> Job Cards</h5>
+          <div class="count">
+            {% for ws_id, data in workshop_data.items %}
+              {% if ws_id == workshop.id %}
+                <a href="{% url 'jobcard:hod_workshop_jobcards' workshop.id %}" class="equipment-link-button">
+                  {{ data.job_cards_count }}
+                </a>
+              {% endif %}
+            {% endfor %}
+          </div>
+          <small>Work Orders</small>
+        </div>
+
+        <div class="data-item">
+          <h5><i class="fas fa-file-alt"></i> Reports</h5>
+          <div class="count">
+            {% for ws_id, data in workshop_data.items %}
+              {% if ws_id == workshop.id %}
+                <a href="{% url 'report_hub:hod_reports_view' workshop.id %}" class="equipment-link-button">
+                  {{ data.reports_count }}
+                </a>
+              {% endif %}
+            {% endfor %}
+          </div>
+          <small>Submitted Reports</small>
+        </div>
+
+        {# ── Calibration-specific link — only shown for calibration_center workshops ── #}
+        {% if workshop.category == 'calibration_center' %}
+        <div class="data-item">
+          <h5><i class="fas fa-drafting-compass"></i> Calibration</h5>
+          <div class="count">
+            {% for ws_id, data in workshop_data.items %}
+              {% if ws_id == workshop.id %}
+                <a href="{% url 'calibration:cal-dashboard' %}" class="equipment-link-button">
+                  {{ data.calibrations_count|default:"—" }}
+                </a>
+              {% endif %}
+            {% endfor %}
+          </div>
+          <small>Calibration Sessions</small>
+        </div>
+        {% endif %}
+
+      </div>
+    </div>
+    {% empty %}
+    <div class="alert alert-info">
+      <h4><i class="fas fa-info-circle"></i> No Workshops Found</h4>
+      <p>No workshops are currently configured in the system.</p>
+    </div>
+    {% endfor %}
+
+  </div>
+
+{% endif %}
+{# ── END ROLE GUARD ── #}
+
+{% endblock %}
+
+{% block extra_js %}
+  <script src="{% static 'dashboards/dashboard.js' %}"></script>
+{% endblock %}

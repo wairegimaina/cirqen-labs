@@ -1,0 +1,1133 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Calibration Schedules - Equiper National Hospital{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'calibrition/calScheduels.css' %}" />
+{% endblock %}
+
+{% block page_title %}Calibration Schedules{% endblock %}
+
+{% block content %}
+<div class="main-container">
+
+  <div class="cs-toolbar">
+    <div class="cs-toolbar-left">
+
+      <div class="cal-dept-dropdown" id="calDeptDropdown">
+        <button class="cal-dept-btn" type="button" id="calDeptDropdownBtn"
+          onclick="toggleCalDeptDropdown(event)" aria-haspopup="listbox" aria-expanded="false">
+          <span class="cal-dept-icon">
+            {% if selected_department %}<i class="fas fa-building"></i>{% else %}<i class="fas fa-layer-group"></i>{% endif %}
+          </span>
+          <span class="cal-dept-label">
+            {% if selected_department %}{{ selected_department.name|default:"Unknown" }}{% else %}All Departments{% endif %}
+          </span>
+          <i class="fas fa-chevron-down cal-dept-chevron"></i>
+        </button>
+        <div class="cal-dept-panel" id="calDeptDropdownPanel" role="listbox">
+          <div class="cal-dept-search-wrap">
+            <i class="fas fa-search cal-dept-search-icon"></i>
+            <input type="text" class="cal-dept-search" id="calDeptSearchInput"
+              placeholder="Search departments..." oninput="filterCalDepts(this.value)"
+              autocomplete="off" aria-label="Search departments">
+          </div>
+          <div class="cal-dept-list" id="calDeptList">
+            <a class="cal-dept-item {% if not selected_department_id %}cal-dept-item--active{% endif %}"
+              href="{% url 'schedule:calibration_dashboard' %}" data-name="all departments" role="option">
+              <span class="cal-dept-item-icon" style="background:linear-gradient(135deg,#0d6efd,#6ea8fe)">
+                <i class="fas fa-layer-group"></i>
+              </span>
+              <span class="cal-dept-item-text">All Departments</span>
+              {% if not selected_department_id %}<i class="fas fa-check cal-dept-check"></i>{% endif %}
+            </a>
+            {% for dept in departments %}
+            <a class="cal-dept-item {% if selected_department_id == dept.id %}cal-dept-item--active{% endif %}"
+              href="{% url 'schedule:calibration_by_department' dept.id %}"
+              data-name="{{ dept.name|lower|default:'unknown' }}" role="option">
+              <span class="cal-dept-item-icon" style="background:hsl({{ forloop.counter0|add:2 }}20deg 55% 42%)">
+                <i class="fas fa-building"></i>
+              </span>
+              <span class="cal-dept-item-text">{{ dept.name|default:"Unknown" }}</span>
+              {% if selected_department_id == dept.id %}<i class="fas fa-check cal-dept-check"></i>{% endif %}
+            </a>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <select class="cs-select" id="monthFilter" aria-label="Filter by month">
+        <option value="1"  {% if selected_month == '1'  %}selected{% endif %}>January</option>
+        <option value="2"  {% if selected_month == '2'  %}selected{% endif %}>February</option>
+        <option value="3"  {% if selected_month == '3'  %}selected{% endif %}>March</option>
+        <option value="4"  {% if selected_month == '4'  %}selected{% endif %}>April</option>
+        <option value="5"  {% if selected_month == '5'  %}selected{% endif %}>May</option>
+        <option value="6"  {% if selected_month == '6'  %}selected{% endif %}>June</option>
+        <option value="7"  {% if selected_month == '7'  %}selected{% endif %}>July</option>
+        <option value="8"  {% if selected_month == '8'  %}selected{% endif %}>August</option>
+        <option value="9"  {% if selected_month == '9'  %}selected{% endif %}>September</option>
+        <option value="10" {% if selected_month == '10' %}selected{% endif %}>October</option>
+        <option value="11" {% if selected_month == '11' %}selected{% endif %}>November</option>
+        <option value="12" {% if selected_month == '12' %}selected{% endif %}>December</option>
+      </select>
+      <select class="cs-select cs-select--year" id="yearFilter" aria-label="Filter by year"></select>
+
+      <button type="button" class="cs-btn-ghost" onclick="goToCurrentMonth()" title="Go to current month">
+        <i class="fas fa-calendar-day"></i>
+      </button>
+      <button type="button" class="cs-btn-ghost" id="showAllBtn" title="Show all (no date filter)">
+        <i class="fas fa-expand-alt"></i>
+      </button>
+    </div>
+
+    <div class="cs-toolbar-right">
+
+      <div class="cs-search-wrap">
+        <i class="fas fa-search cs-search-icon"></i>
+        <input type="text" class="cs-search" id="searchInput"
+          placeholder="Search equipment, serial, model..."
+          value="{{ search_query }}" data-server-search="{{ search_query }}"
+          aria-label="Search equipment">
+      </div>
+
+      <div id="bulkActionsBar" class="cs-bulk-bar" style="display:none;">
+        <button type="button" class="cs-btn cs-btn--warning" id="bulkPushSchedules" disabled>
+          <i class="fas fa-arrow-right me-1"></i>Push
+        </button>
+        <button type="button" class="cs-btn cs-btn--danger" id="bulkDeleteBtn" disabled>
+          <i class="fas fa-trash"></i>
+        </button>
+        <button type="button" class="cs-btn cs-btn--success" id="bulkCompleteBtn" disabled>
+          <i class="fas fa-check me-1"></i>Complete
+        </button>
+      </div>
+
+
+      <button type="button" class="cs-btn cs-btn--ghost" id="smartOrganizerMainBtn"
+        data-bs-toggle="modal" data-bs-target="#smartReorgModal" title="Smart Organizer">
+        <i class="fas fa-magic"></i>
+        {% if logic_change_warnings_count and logic_change_warnings_count > 0 %}
+        <span class="cs-btn-dot cs-btn-dot--danger"></span>
+        {% endif %}
+      </button>
+
+
+      <div class="dropdown">
+        <button class="cs-btn cs-btn--ghost" type="button" data-bs-toggle="dropdown" title="Export">
+          <i class="fas fa-download"></i>
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end">
+          <li>
+            <a class="dropdown-item export-link" href="{% url 'schedule:export_calibration_excel' %}" data-export-type="excel">
+              <i class="fas fa-file-excel me-2 text-success"></i>Excel
+            </a>
+          </li>
+          <li>
+            <a class="dropdown-item export-link" href="{% url 'schedule:export_calibration_pdf' %}" data-export-type="pdf">
+              <i class="fas fa-file-pdf me-2 text-danger"></i>PDF
+            </a>
+          </li>
+          {% if selected_department %}
+          <li><hr class="dropdown-divider"></li>
+          <li>
+            <a class="dropdown-item export-link"
+              href="{% url 'schedule:export_department_calibration_pdf' selected_department.id %}" data-export-type="dept-pdf">
+              <i class="fas fa-building me-2 text-info"></i>{{ selected_department.name }} PDF
+            </a>
+          </li>
+          {% endif %}
+        </ul>
+      </div>
+
+      <button class="cs-btn cs-btn--primary" data-bs-toggle="modal" data-bs-target="#calibrationPlanningModal">
+        <i class="fas fa-plus me-1"></i>Initialize
+      </button>
+
+      {% if selected_department %}
+      <button type="button" id="clearFilterBtn" class="cs-btn cs-btn--ghost" title="Clear department filter">
+        <i class="fas fa-times"></i>
+      </button>
+      {% endif %}
+    </div>
+  </div>
+  <div class="cs-stats-row" id="calStatsRow">
+    <div class="cs-stat">
+      <span class="cs-stat-value" id="stat-pending">{{ stats.pending|default:"—" }}</span>
+      <span class="cs-stat-label">Pending</span>
+    </div>
+    <div class="cs-stat cs-stat--danger" id="cs-stat-overdue" {% if not stats.overdue %}style="opacity:.45"{% endif %}>
+      <span class="cs-stat-value" id="stat-overdue">{{ stats.overdue|default:"0" }}</span>
+      <span class="cs-stat-label">Overdue</span>
+    </div>
+    <div class="cs-stat cs-stat--success">
+      <span class="cs-stat-value" id="stat-completed">{{ stats.completed_this_month|default:"—" }}</span>
+      <span class="cs-stat-label">Completed (30d)</span>
+    </div>
+    <div class="cs-stat">
+      <span class="cs-stat-value" id="stat-logic">
+        {% if current_planning_logic == 'date_based' or current_planning_logic == 'department' %}Dept
+        {% elif current_planning_logic == 'description_based' or current_planning_logic == 'description' %}Desc
+        {% else %}—{% endif %}
+      </span>
+      <span class="cs-stat-label">Logic</span>
+    </div>
+  </div>
+
+  {% if logic_change_warnings_count and logic_change_warnings_count > 0 %}
+  <div class="cs-alert cs-alert--warning mb-2" id="logicChangeWarningBanner">
+    <i class="fas fa-exclamation-triangle me-2"></i>
+    <strong>{{ logic_change_warnings_count }} schedule(s)</strong> need reorganisation after a planning logic change.
+    <button type="button" class="cs-alert-action" data-bs-toggle="modal" data-bs-target="#smartReorgModal">
+      Run Smart Organiser
+    </button>
+    <button type="button" class="cs-alert-close ms-2"
+      onclick="document.getElementById('logicChangeWarningBanner').style.display='none'">
+      <i class="fas fa-times"></i>
+    </button>
+  </div>
+  {% endif %}
+
+  <div id="loadingOverlay" class="loading-overlay">
+    <div class="loading-content">
+      <div class="spinner mx-auto mb-3"></div>
+      <h5>Initializing Calibration Schedule</h5>
+      <div class="progress-bar-container">
+        <div class="progress">
+          <div class="progress-bar progress-bar-striped progress-bar-animated"
+            role="progressbar" style="width:0%" id="initProgress"></div>
+        </div>
+      </div>
+      <div class="status-message" id="statusMessage">Preparing schedule initialization...</div>
+    </div>
+  </div>
+
+
+  <nav class="cs-tabs" id="schedulesSubTabs">
+    <button class="cs-tab active" data-subtab="pending" data-endpoint="ajaxSchedules">
+      <i class="fas fa-clock"></i> Pending
+      <span class="cs-tab-badge" id="badge-pending">…</span>
+    </button>
+    <button class="cs-tab" data-subtab="completed" data-endpoint="ajaxCompleted">
+      <i class="fas fa-check-circle"></i> Completed
+      <span class="cs-tab-badge cs-tab-badge--green" id="badge-completed">…</span>
+    </button>
+    <button class="cs-tab" data-subtab="unscheduled" data-endpoint="ajaxUnscheduled">
+      <i class="fas fa-calendar-plus"></i> Unscheduled
+      <span class="cs-tab-badge cs-tab-badge--amber" id="badge-unscheduled">…</span>
+    </button>
+    <button class="cs-tab" data-subtab="reports" data-view="reports">
+      <i class="fas fa-file-alt"></i> Reports
+    </button>
+  </nav>
+
+  <div class="cs-panel active" id="pendingPanel">
+    <div class="cs-panel-toolbar">
+      <div class="d-flex align-items-center gap-2">
+        <input type="checkbox" id="selectAll" class="form-check-input cs-check">
+        <label for="selectAll" class="small text-muted mb-0">Select all</label>
+        <span class="cs-sort-note text-muted small ms-2">Pending → Pushed → Overdue</span>
+      </div>
+    </div>
+
+    <form id="bulkActionForm" method="post">
+      {% csrf_token %}
+      <div class="table-responsive">
+        <table class="cs-table" id="schedulesTable">
+          <thead>
+            <tr>
+              <th width="4%"></th>
+              <th>Department</th>
+              <th>Equipment</th>
+              <th>Serial</th>
+              <th>Month</th>
+              <th>Logic</th>
+              <th>Status</th>
+              <th width="6%"></th>
+            </tr>
+          </thead>
+          <tbody id="pendingTableBody">
+            {% if schedules %}
+              {% for schedule_data in schedules %}
+              {% with schedule=schedule_data.schedule waiting=schedule_data.waiting_status %}
+              <tr class="equipment-row {% if schedule_data.is_overdue %}cs-row--danger{% endif %}">
+                <td>
+                  <input type="checkbox" name="schedule_ids" value="{{ schedule.id }}"
+                    class="form-check-input cs-check schedule-checkbox">
+                </td>
+                <td>
+                  <span class="cs-dept-pill">{{ schedule.equipment.department.name|default:"—" }}</span>
+                </td>
+                <td>
+                  <span class="cs-equip-name">{{ schedule.equipment.description.name|default:"—" }}</span>
+                  {% if schedule_data.is_overdue %}
+                  <span class="cs-badge cs-badge--danger ms-1">OVERDUE</span>
+                  {% elif schedule_data.is_warning %}
+                  <span class="cs-badge cs-badge--warning ms-1">DUE</span>
+                  {% endif %}
+                  {% if waiting.is_waiting %}
+                  <span class="cs-badge cs-badge--info ms-1"
+                    data-bs-toggle="modal" data-bs-target="#waitingModal{{ schedule.id }}" style="cursor:pointer;">
+                    WAITING {{ waiting.completed_count }}/{{ waiting.total_count }}
+                  </span>
+                  {% endif %}
+                </td>
+                <td><code class="cs-code">{{ schedule.equipment.serial_number|default:"N/A" }}</code></td>
+                <td>{{ schedule.scheduled_month|date:"M Y" }}</td>
+                <td>
+                  {% with logic=schedule.planning_logic|default:"" %}
+                  {% if logic == 'date_based' or logic == 'department' %}
+                    <span class="cs-logic-pill cs-logic-pill--dept" title="Department-Based: all equipment in same department is calibrated in the same month">
+                      <i class="fas fa-building"></i> Dept
+                    </span>
+                  {% elif logic == 'description_based' or logic == 'description' %}
+                    <span class="cs-logic-pill cs-logic-pill--desc" title="Description-Based: all equipment of the same type is calibrated in the same month">
+                      <i class="fas fa-cog"></i> Desc
+                    </span>
+                  {% else %}
+                    <span class="cs-logic-pill cs-logic-pill--none" title="No planning logic assigned">—</span>
+                  {% endif %}
+                  {% endwith %}
+                </td>
+                <td>
+                  {% if schedule.status == 'pending' %}
+                    <span class="cs-badge cs-badge--pending">Pending</span>
+                  {% elif schedule.status == 'completed' %}
+                    <span class="cs-badge cs-badge--done">Done</span>
+                  {% elif schedule.status == 'pushed' %}
+                    <span class="cs-badge cs-badge--pushed">Pushed</span>
+                  {% else %}
+                    <span class="cs-badge">{{ schedule.status|title }}</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <div class="cs-row-actions">
+                    <button type="button" class="cs-icon-btn" title="Edit"
+                      data-bs-toggle="modal" data-bs-target="#editModal{{ schedule.id }}">
+                      <i class="fas fa-pencil-alt"></i>
+                    </button>
+                    <a href="{% url 'schedule:mark_calibration_completed' schedule.id %}"
+                      class="cs-icon-btn cs-icon-btn--success" title="Mark complete">
+                      <i class="fas fa-check"></i>
+                    </a>
+                    <a href="{% url 'schedule:push_calibration_schedule' schedule.id %}"
+                      class="cs-icon-btn" title="Push schedule">
+                      <i class="fas fa-arrow-right"></i>
+                    </a>
+                    <a href="{% url 'schedule:delete_calibration_schedule' schedule.id %}"
+                      class="cs-icon-btn cs-icon-btn--danger" title="Delete"
+                      onclick="return confirm('Delete this schedule?')">
+                      <i class="fas fa-trash"></i>
+                    </a>
+                  </div>
+                </td>
+              </tr>
+              {% endwith %}
+              {% endfor %}
+            {% else %}
+              <tr>
+                <td colspan="8">
+                  <div class="cs-empty">
+                    <i class="fas fa-calendar-times cs-empty-icon"></i>
+                    <p>No schedules for this period</p>
+                    <button class="cs-btn cs-btn--primary btn-sm" data-bs-toggle="modal"
+                      data-bs-target="#calibrationPlanningModal">Initialize Schedule</button>
+                  </div>
+                </td>
+              </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </form>
+
+    {% if schedules.has_other_pages %}
+    <div class="cs-pagination">
+      <span class="cs-pagination-info text-muted small">
+        {{ schedules.start_index }}–{{ schedules.end_index }} of {{ schedules.paginator.count }}
+      </span>
+      <nav aria-label="Schedules pagination">
+        <ul class="pagination pagination-sm mb-0">
+          {% if schedules.has_previous %}
+          <li class="page-item">
+            <a class="page-link" href="?page={{ schedules.previous_page_number }}{% if selected_department_id %}&department={{ selected_department_id }}{% endif %}{% if month_filter %}&month={{ month_filter }}{% endif %}{% if year_filter %}&year={{ year_filter }}{% endif %}{% if search_query %}&search={{ search_query|urlencode }}{% endif %}">‹</a>
+          </li>
+          {% endif %}
+          {% for page_num in schedules.paginator.page_range %}
+            {% if page_num == schedules.number %}
+            <li class="page-item active"><span class="page-link">{{ page_num }}</span></li>
+            {% elif page_num > schedules.number|add:'-3' and page_num < schedules.number|add:'3' %}
+            <li class="page-item">
+              <a class="page-link" href="?page={{ page_num }}{% if selected_department_id %}&department={{ selected_department_id }}{% endif %}{% if month_filter %}&month={{ month_filter }}{% endif %}{% if year_filter %}&year={{ year_filter }}{% endif %}{% if search_query %}&search={{ search_query|urlencode }}{% endif %}">{{ page_num }}</a>
+            </li>
+            {% endif %}
+          {% endfor %}
+          {% if schedules.has_next %}
+          <li class="page-item">
+            <a class="page-link" href="?page={{ schedules.next_page_number }}{% if selected_department_id %}&department={{ selected_department_id }}{% endif %}{% if month_filter %}&month={{ month_filter }}{% endif %}{% if year_filter %}&year={{ year_filter }}{% endif %}{% if search_query %}&search={{ search_query|urlencode }}{% endif %}">›</a>
+          </li>
+          {% endif %}
+        </ul>
+      </nav>
+    </div>
+    {% endif %}
+  </div>
+  <div class="cs-panel" id="completedPanel">
+    <div class="table-responsive">
+      <table class="cs-table" id="completedTable">
+        <thead>
+          <tr>
+            <th>Equipment</th>
+            <th>Serial</th>
+            <th>Department</th>
+            <th>Completed</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="completedTableBody">
+          <tr><td colspan="5" class="text-center py-4 text-muted">Select "Completed" to load</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div id="completedPagination" class="cs-pagination"></div>
+  </div>
+
+
+  <div class="cs-panel" id="unscheduledPanel">
+    {% if unscheduled_equipment %}
+    <div class="cs-panel-toolbar">
+      <div class="d-flex align-items-center gap-2">
+        <input type="checkbox" id="selectAllUnscheduled" class="form-check-input cs-check">
+        <label for="selectAllUnscheduled" class="small text-muted mb-0">Select all</label>
+      </div>
+      <form method="post" action="{% url 'schedule:bulk_schedule_unscheduled_calibration' %}" id="unscheduledForm">
+        {% csrf_token %}
+        <button type="submit" class="cs-btn cs-btn--primary btn-sm" id="bulkScheduleBtn" disabled>
+          <i class="fas fa-calendar-plus me-1"></i>Schedule Selected
+        </button>
+      </form>
+    </div>
+    <div class="table-responsive">
+      <table class="cs-table" id="unscheduledTable">
+        <thead>
+          <tr>
+            <th width="4%"></th>
+            <th>Department</th>
+            <th>Equipment</th>
+            <th>Serial</th>
+            <th>Model</th>
+            <th width="6%"></th>
+          </tr>
+        </thead>
+        <tbody id="unscheduledTableBody">
+          {% for equipment in unscheduled_equipment %}
+          <tr class="equipment-row">
+            <td>
+              <input type="checkbox" name="equipment_ids" value="{{ equipment.id }}"
+                class="form-check-input cs-check unscheduled-checkbox" form="unscheduledForm">
+            </td>
+            <td><span class="cs-dept-pill">{{ equipment.department.name|default:"—" }}</span></td>
+            <td><span class="cs-equip-name">{{ equipment.description.name|default:"—" }}</span></td>
+            <td><code class="cs-code">{{ equipment.serial_number|default:"N/A" }}</code></td>
+            <td>{{ equipment.model|default:"N/A" }}</td>
+            <td>
+              <a href="{% url 'schedule:schedule_calibration_equipment' equipment.id %}"
+                class="cs-icon-btn cs-icon-btn--success" title="Schedule">
+                <i class="fas fa-plus"></i>
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if unscheduled_equipment.has_other_pages %}
+    <div class="cs-pagination">
+      <span class="cs-pagination-info text-muted small">
+        {{ unscheduled_equipment.start_index }}–{{ unscheduled_equipment.end_index }} of {{ unscheduled_equipment.paginator.count }}
+      </span>
+      <nav aria-label="Unscheduled pagination">
+        <ul class="pagination pagination-sm mb-0">
+          {% if unscheduled_equipment.has_previous %}
+          <li class="page-item">
+            <a class="page-link" href="?unscheduled_page={{ unscheduled_equipment.previous_page_number }}{% if selected_department_id %}&department={{ selected_department_id }}{% endif %}">‹</a>
+          </li>
+          {% endif %}
+          {% for page_num in unscheduled_equipment.paginator.page_range %}
+            {% if page_num == unscheduled_equipment.number %}
+            <li class="page-item active"><span class="page-link">{{ page_num }}</span></li>
+            {% elif page_num > unscheduled_equipment.number|add:'-3' and page_num < unscheduled_equipment.number|add:'3' %}
+            <li class="page-item">
+              <a class="page-link" href="?unscheduled_page={{ page_num }}{% if selected_department_id %}&department={{ selected_department_id }}{% endif %}">{{ page_num }}</a>
+            </li>
+            {% endif %}
+          {% endfor %}
+          {% if unscheduled_equipment.has_next %}
+          <li class="page-item">
+            <a class="page-link" href="?unscheduled_page={{ unscheduled_equipment.next_page_number }}{% if selected_department_id %}&department={{ selected_department_id }}{% endif %}">›</a>
+          </li>
+          {% endif %}
+        </ul>
+      </nav>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="cs-empty">
+      <i class="fas fa-calendar-check cs-empty-icon text-success"></i>
+      <p>All equipment is scheduled.</p>
+    </div>
+    {% endif %}
+  </div>
+
+
+  <div class="cs-panel" id="reportsPanel">
+    <div class="cs-reports-grid">
+
+      <div class="cs-report-card">
+        <div class="cs-report-icon cs-report-icon--blue">
+          <i class="fas fa-calendar-alt"></i>
+        </div>
+        <div class="cs-report-body">
+          <h6>Monthly Report</h6>
+          <p>Calibrations for
+            {% if    selected_month == '1'  %}January
+            {% elif  selected_month == '2'  %}February
+            {% elif  selected_month == '3'  %}March
+            {% elif  selected_month == '4'  %}April
+            {% elif  selected_month == '5'  %}May
+            {% elif  selected_month == '6'  %}June
+            {% elif  selected_month == '7'  %}July
+            {% elif  selected_month == '8'  %}August
+            {% elif  selected_month == '9'  %}September
+            {% elif  selected_month == '10' %}October
+            {% elif  selected_month == '11' %}November
+            {% elif  selected_month == '12' %}December
+            {% endif %}
+            {{ selected_year }}
+          </p>
+        </div>
+        <a href="{% url 'schedule:export_calibration_pdf' %}?month={{ selected_month }}&year={{ selected_year }}"
+          class="cs-btn cs-btn--primary btn-sm">
+          <i class="fas fa-download me-1"></i>PDF
+        </a>
+      </div>
+
+      <div class="cs-report-card">
+        <div class="cs-report-icon cs-report-icon--green">
+          <i class="fas fa-file-excel"></i>
+        </div>
+        <div class="cs-report-body">
+          <h6>Excel Export</h6>
+          <p>Full schedule data spreadsheet</p>
+        </div>
+        <a href="{% url 'schedule:export_calibration_excel' %}" class="cs-btn cs-btn--success btn-sm">
+          <i class="fas fa-download me-1"></i>Excel
+        </a>
+      </div>
+
+      <div class="cs-report-card">
+        <div class="cs-report-icon cs-report-icon--amber">
+          <i class="fas fa-chart-line"></i>
+        </div>
+        <div class="cs-report-body">
+          <h6>Annual Report</h6>
+          <p>Full year {{ selected_year }} summary</p>
+        </div>
+        <a href="{% url 'schedule:export_calibration_pdf' %}?year={{ selected_year }}"
+          class="cs-btn cs-btn--primary btn-sm">
+          <i class="fas fa-download me-1"></i>PDF
+        </a>
+      </div>
+
+      {% if selected_department %}
+      <div class="cs-report-card">
+        <div class="cs-report-icon cs-report-icon--teal">
+          <i class="fas fa-building"></i>
+        </div>
+        <div class="cs-report-body">
+          <h6>Department Report</h6>
+          <p>{{ selected_department.name }} only</p>
+        </div>
+        <a href="{% url 'schedule:export_department_calibration_pdf' selected_department.id %}?month={{ selected_month }}&year={{ selected_year }}"
+          class="cs-btn cs-btn--primary btn-sm">
+          <i class="fas fa-download me-1"></i>PDF
+        </a>
+      </div>
+      {% else %}
+      <div class="cs-report-card">
+        <div class="cs-report-icon cs-report-icon--teal">
+          <i class="fas fa-filter"></i>
+        </div>
+        <div class="cs-report-body">
+          <h6>Custom Report</h6>
+          <p>Filter by date range &amp; department</p>
+        </div>
+        <button class="cs-btn cs-btn--ghost btn-sm" data-bs-toggle="modal" data-bs-target="#customCalReportModal">
+          <i class="fas fa-cog me-1"></i>Configure
+        </button>
+      </div>
+      {% endif %}
+
+    </div>
+  </div>
+
+  {% for schedule_data in schedules %}
+  {% with schedule=schedule_data.schedule %}
+  <div class="modal fade" id="editModal{{ schedule.id }}" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="fas fa-edit me-2"></i>Edit Schedule</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <form method="post" action="{% url 'schedule:edit_calibration_schedule' schedule.id %}">
+          {% csrf_token %}
+          <div class="modal-body">
+            <div class="mb-3">
+              <label class="form-label">Equipment</label>
+              <input type="text" class="form-control"
+                value="{{ schedule.equipment.description.name|default:'No Description' }}" readonly>
+            </div>
+            <div class="mb-3">
+              <label for="scheduled_month{{ schedule.id }}" class="form-label">Scheduled Month</label>
+              <input type="month" class="form-control" id="scheduled_month{{ schedule.id }}"
+                name="scheduled_month" value="{{ schedule.scheduled_month|date:'Y-m' }}" required>
+            </div>
+            <div class="mb-3">
+              <label for="status{{ schedule.id }}" class="form-label">Status</label>
+              <select class="form-select" id="status{{ schedule.id }}" name="status" required>
+                <option value="pending"   {% if schedule.status == "pending"   %}selected{% endif %}>Pending</option>
+                <option value="completed" {% if schedule.status == "completed" %}selected{% endif %}>Completed</option>
+                <option value="pushed"    {% if schedule.status == "pushed"    %}selected{% endif %}>Pushed</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label for="calibration_period{{ schedule.id }}" class="form-label">Calibration Period</label>
+              <select class="form-select" id="calibration_period{{ schedule.id }}" name="calibration_period" required>
+                <option value="6"  {% if schedule.calibration_period == 6  %}selected{% endif %}>6 Months</option>
+                <option value="12" {% if schedule.calibration_period == 12 %}selected{% endif %}>12 Months</option>
+              </select>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i>Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endwith %}
+  {% endfor %}
+
+  {% for schedule_data in schedules %}
+  {% with schedule=schedule_data.schedule waiting=schedule_data.waiting_status %}
+  {% if waiting.is_waiting %}
+  <div class="modal fade" id="waitingModal{{ schedule.id }}" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header bg-info text-white">
+          <h5 class="modal-title"><i class="fas fa-users me-2"></i>Group Completion Status</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="alert alert-info">
+            <h6><i class="fas fa-info-circle me-2"></i>Waiting for Group</h6>
+            <p class="mb-0">Part of <strong>{{ waiting.group_name }}</strong>. All equipment must complete before rescheduling.</p>
+          </div>
+          <div class="progress mb-3" style="height:20px;">
+            <div class="progress-bar bg-success" role="progressbar"
+              style="width:{% widthratio waiting.completed_count waiting.total_count 100 %}%">
+              {{ waiting.completed_count }} / {{ waiting.total_count }}
+            </div>
+          </div>
+          {% if waiting.pending_equipment %}
+          <div class="table-responsive">
+            <table class="table table-sm">
+              <thead><tr><th>Equipment</th><th>Serial</th><th>Status</th></tr></thead>
+              <tbody>
+                {% for eq in waiting.pending_equipment %}
+                <tr>
+                  <td>{{ eq.description }}</td>
+                  <td><code>{{ eq.serial_number }}</code></td>
+                  <td><span class="badge bg-warning">{{ eq.status|title }}</span></td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% endif %}
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+  {% endwith %}
+  {% endfor %}
+
+
+
+  <div class="modal fade" id="calibrationPlanningModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+      <div class="modal-content">
+        <div class="modal-header bg-primary text-white">
+          <h5 class="modal-title"><i class="fas fa-calculator me-2"></i>Configure Calibration Planning</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <form method="post" action="{% url 'schedule:trigger_calibration_initialization' %}" id="calibrationInitForm">
+          {% csrf_token %}
+          <div class="modal-body">
+
+            <div id="logicChangeInlineWarning" class="alert alert-danger d-none mb-3">
+              <i class="fas fa-exclamation-triangle me-2"></i>
+              <strong>Logic change:</strong> Changing from <strong id="warnFromLogic"></strong> to <strong id="warnToLogic"></strong> will trigger a reorganization.
+            </div>
+
+            <div class="mb-4">
+              <h6 class="border-bottom pb-2 mb-3"><i class="fas fa-cog me-2"></i>Planning Logic</h6>
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <div class="card planning-card selected" data-logic="department">
+                    <div class="card-body text-center">
+                      <i class="fas fa-building display-4 text-primary"></i>
+                      <h6 class="mt-2 mb-1">Department-Based</h6>
+                      <p class="text-muted small mb-0">Same department → same month</p>
+                    </div>
+                  </div>
+                </div>
+                <div class="col-md-6">
+                  <div class="card planning-card" data-logic="description">
+                    <div class="card-body text-center">
+                      <i class="fas fa-cog display-4 text-info"></i>
+                      <h6 class="mt-2 mb-1">Description-Based</h6>
+                      <p class="text-muted small mb-0">Same description → same month</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <input type="hidden" name="planning_logic" id="planningLogic" value="department">
+            </div>
+
+            <div class="mb-4" id="specialClassSection">
+              <h6 class="border-bottom pb-2 mb-3"><i class="fas fa-star me-2 text-warning"></i>Special Class <span class="badge bg-warning text-dark">Optional</span></h6>
+              <div id="specialDepartmentSection">
+                <label class="form-label fw-bold small">Special Departments</label>
+                <div class="row g-2 mb-3">
+                  {% for dept in departments %}
+                  <div class="col-md-4 col-sm-6">
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" name="special_class_departments"
+                        value="{{ dept.id }}" id="special_dept_{{ dept.id }}">
+                      <label class="form-check-label small" for="special_dept_{{ dept.id }}">{{ dept.name }}</label>
+                    </div>
+                  </div>
+                  {% endfor %}
+                </div>
+              </div>
+              <div id="specialDescriptionSection" style="display:none;">
+                <label class="form-label fw-bold small">Special Descriptions</label>
+                <input type="text" class="form-control form-control-sm mb-2" id="descriptionSearchInput" placeholder="Search...">
+                <div class="row g-2 mb-3" id="descriptionCheckboxList" style="max-height:240px;overflow-y:auto;">
+                  {% for desc in equipment_descriptions %}
+                  <div class="col-md-4 col-sm-6 description-checkbox-item">
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" name="special_class_descriptions"
+                        value="{{ desc.id }}" id="special_desc_{{ desc.id }}">
+                      <label class="form-check-label small" for="special_desc_{{ desc.id }}">{{ desc.name }}</label>
+                    </div>
+                  </div>
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
+
+            <div class="row g-3 mb-4">
+              <div class="col-md-3">
+                <label class="form-label fw-bold small">Period</label>
+                <div class="d-flex gap-2">
+                  <button type="button" class="btn btn-outline-primary period-btn" data-period="6">6 mo</button>
+                  <button type="button" class="btn btn-primary period-btn active" data-period="12">12 mo</button>
+                </div>
+                <input type="hidden" name="calibration_period" id="calibrationPeriod" value="12">
+              </div>
+              <div class="col-md-3">
+                <label for="base_month" class="form-label fw-bold small">Start Month</label>
+                <select class="form-select" id="base_month" name="base_month" required>
+                  <option value="1"  {% if current_month == 1  %}selected{% endif %}>January</option>
+                  <option value="2"  {% if current_month == 2  %}selected{% endif %}>February</option>
+                  <option value="3"  {% if current_month == 3  %}selected{% endif %}>March</option>
+                  <option value="4"  {% if current_month == 4  %}selected{% endif %}>April</option>
+                  <option value="5"  {% if current_month == 5  %}selected{% endif %}>May</option>
+                  <option value="6"  {% if current_month == 6  %}selected{% endif %}>June</option>
+                  <option value="7"  {% if current_month == 7  %}selected{% endif %}>July</option>
+                  <option value="8"  {% if current_month == 8  %}selected{% endif %}>August</option>
+                  <option value="9"  {% if current_month == 9  %}selected{% endif %}>September</option>
+                  <option value="10" {% if current_month == 10 %}selected{% endif %}>October</option>
+                  <option value="11" {% if current_month == 11 %}selected{% endif %}>November</option>
+                  <option value="12" {% if current_month == 12 %}selected{% endif %}>December</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label for="base_year" class="form-label fw-bold small">Start Year</label>
+                <input type="number" class="form-control" id="base_year" name="base_year"
+                  value="{{ current_year }}"
+                  min="{{ current_year|add:'-2' }}"
+                  max="{{ current_year|add:'5' }}" required>
+              </div>
+              <div class="col-md-3">
+                <label for="max_departments" class="form-label fw-bold small">Max Groups/Month</label>
+                <input type="number" class="form-control" id="max_departments"
+                  name="max_departments" value="20" min="1" max="100" required>
+                <input type="hidden" name="max_descriptions" value="20">
+              </div>
+            </div>
+
+            <div class="form-check mb-3">
+              <input class="form-check-input" type="checkbox" id="preserve_existing"
+                name="preserve_existing" value="true" checked>
+              <label class="form-check-label" for="preserve_existing">
+                <strong>Preserve existing schedules</strong>
+                <small class="d-block text-muted">Only schedule equipment without existing entries</small>
+              </label>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="initializeBtn">
+              <i class="fas fa-play-circle me-1"></i>Initialize &amp; Normalize
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="smartReorgModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header bg-warning text-dark">
+          <div>
+            <h5 class="modal-title fw-bold"><i class="fas fa-magic me-2"></i>Smart Organiser</h5>
+            <small>Realign all schedules to the selected planning logic</small>
+          </div>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <form method="post" action="{% url 'schedule:trigger_smart_reorganize' %}" id="smartReorgForm">
+          {% csrf_token %}
+          <div class="modal-body">
+
+            <div id="smartReorgAutoTriggerNotice" class="alert alert-danger border-danger d-none mb-3">
+              <i class="fas fa-bolt me-2"></i>
+              <strong>Logic change detected!</strong> From <strong id="smartReorgFromLogic"></strong> →
+              <strong id="smartReorgToLogic"></strong>. Run organiser to realign schedules.
+            </div>
+
+            <div class="cs-reorg-info mb-4">
+              <div class="cs-reorg-info-header">
+                <i class="fas fa-info-circle cs-reorg-info-icon"></i>
+                <div>
+                  <strong>What the Smart Organiser does</strong>
+                  <span class="cs-reorg-info-current ms-2">
+                    Current logic:
+                    {% if current_planning_logic == 'date_based' or current_planning_logic == 'department' %}
+                      <span class="cs-logic-pill cs-logic-pill--dept"><i class="fas fa-building me-1"></i>Department-Based</span>
+                    {% elif current_planning_logic == 'description_based' or current_planning_logic == 'description' %}
+                      <span class="cs-logic-pill cs-logic-pill--desc"><i class="fas fa-cog me-1"></i>Description-Based</span>
+                    {% else %}
+                      <span class="cs-logic-pill cs-logic-pill--none">Not set</span>
+                    {% endif %}
+                  </span>
+                </div>
+              </div>
+              <p class="cs-reorg-info-body">
+                The Smart Organiser scans all <strong>pending and pushed</strong> schedules and redistributes
+                them across the calendar so equipment that belongs to the same group lands in the same month.
+                Use it after switching planning logic, or whenever the schedule has drifted out of alignment.
+              </p>
+              <div class="cs-reorg-info-steps">
+                <div class="cs-reorg-step">
+                  <span class="cs-reorg-step-num">1</span>
+                  <div>
+                    <strong>Groups are identified</strong> — either by department <em>(Dept-Based)</em>
+                    or by equipment type <em>(Desc-Based)</em>, depending on the logic you select below.
+                  </div>
+                </div>
+                <div class="cs-reorg-step">
+                  <span class="cs-reorg-step-num">2</span>
+                  <div>
+                    <strong>Months are assigned</strong> — groups are spread evenly from the start month
+                    you choose, rotating through the year so no month is overloaded.
+                  </div>
+                </div>
+                <div class="cs-reorg-step">
+                  <span class="cs-reorg-step-num">3</span>
+                  <div>
+                    <strong>Protected schedules are skipped</strong> — completed, locked, and
+                    signal-created (PPM) schedules are <em>never</em> touched, preserving
+                    calibration intervals and audit trails.
+                  </div>
+                </div>
+              </div>
+              <div class="cs-reorg-info-tip">
+                <i class="fas fa-lightbulb me-1"></i>
+                Tick <strong>Dry Run</strong> to preview which schedules would move without saving any changes.
+              </div>
+            </div>
+
+            <div class="row g-2 mb-3">
+              <div class="col-md-6">
+                <div class="form-check form-check-card border rounded p-3">
+                  <input class="form-check-input" type="radio" name="new_planning_logic" id="reorgLogicDept"
+                    value="date_based" {% if current_planning_logic == 'date_based' or current_planning_logic == 'department' %}checked{% endif %}>
+                  <label class="form-check-label w-100" for="reorgLogicDept">
+                    <i class="fas fa-building text-primary me-1"></i>
+                    <strong>Department-Based</strong>
+                    <small class="d-block text-muted">Same department → same month</small>
+                  </label>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="form-check form-check-card border rounded p-3">
+                  <input class="form-check-input" type="radio" name="new_planning_logic" id="reorgLogicDesc"
+                    value="description_based" {% if current_planning_logic == 'description_based' or current_planning_logic == 'description' %}checked{% endif %}>
+                  <label class="form-check-label w-100" for="reorgLogicDesc">
+                    <i class="fas fa-cog text-info me-1"></i>
+                    <strong>Description-Based</strong>
+                    <small class="d-block text-muted">Same description → same month</small>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div class="row g-3 mb-3">
+              <div class="col-md-4">
+                <label for="reorgBaseMonth" class="form-label small">Start Month</label>
+                <select class="form-select form-select-sm" id="reorgBaseMonth" name="base_month">
+                  <option value="1"  {% if current_month == 1  %}selected{% endif %}>January</option>
+                  <option value="2"  {% if current_month == 2  %}selected{% endif %}>February</option>
+                  <option value="3"  {% if current_month == 3  %}selected{% endif %}>March</option>
+                  <option value="4"  {% if current_month == 4  %}selected{% endif %}>April</option>
+                  <option value="5"  {% if current_month == 5  %}selected{% endif %}>May</option>
+                  <option value="6"  {% if current_month == 6  %}selected{% endif %}>June</option>
+                  <option value="7"  {% if current_month == 7  %}selected{% endif %}>July</option>
+                  <option value="8"  {% if current_month == 8  %}selected{% endif %}>August</option>
+                  <option value="9"  {% if current_month == 9  %}selected{% endif %}>September</option>
+                  <option value="10" {% if current_month == 10 %}selected{% endif %}>October</option>
+                  <option value="11" {% if current_month == 11 %}selected{% endif %}>November</option>
+                  <option value="12" {% if current_month == 12 %}selected{% endif %}>December</option>
+                </select>
+              </div>
+              <div class="col-md-4">
+                <label for="reorgMaxDepts" class="form-label small">Max Depts/Month</label>
+                <input type="number" class="form-control form-control-sm" id="reorgMaxDepts" name="max_departments" value="20" min="1" max="100">
+              </div>
+              <div class="col-md-4">
+                <label for="reorgMaxDescs" class="form-label small">Max Descs/Month</label>
+                <input type="number" class="form-control form-control-sm" id="reorgMaxDescs" name="max_descriptions" value="20" min="1" max="100">
+              </div>
+            </div>
+
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="checkbox" id="reorgDryRun" name="dry_run" value="true">
+              <label class="form-check-label" for="reorgDryRun">
+                <strong>Dry Run</strong> — preview changes only
+              </label>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-warning fw-bold" id="smartReorgBtn">
+              <i class="fas fa-magic me-1"></i>Run Smart Organiser
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+
+  <div class="modal fade" id="customCalReportModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="fas fa-filter me-2"></i>Custom Report</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <form method="get" action="{% url 'schedule:export_calibration_pdf' %}">
+          <div class="modal-body">
+            <div class="mb-3">
+              <label class="form-label fw-bold">Date Range</label>
+              <div class="row g-2">
+                <div class="col-6">
+                  <label class="form-label small text-muted">Month</label>
+                  <select class="form-select" name="month">
+                    <option value="">All Months</option>
+                    <option value="1"  {% if selected_month == '1'  %}selected{% endif %}>January</option>
+                    <option value="2"  {% if selected_month == '2'  %}selected{% endif %}>February</option>
+                    <option value="3"  {% if selected_month == '3'  %}selected{% endif %}>March</option>
+                    <option value="4"  {% if selected_month == '4'  %}selected{% endif %}>April</option>
+                    <option value="5"  {% if selected_month == '5'  %}selected{% endif %}>May</option>
+                    <option value="6"  {% if selected_month == '6'  %}selected{% endif %}>June</option>
+                    <option value="7"  {% if selected_month == '7'  %}selected{% endif %}>July</option>
+                    <option value="8"  {% if selected_month == '8'  %}selected{% endif %}>August</option>
+                    <option value="9"  {% if selected_month == '9'  %}selected{% endif %}>September</option>
+                    <option value="10" {% if selected_month == '10' %}selected{% endif %}>October</option>
+                    <option value="11" {% if selected_month == '11' %}selected{% endif %}>November</option>
+                    <option value="12" {% if selected_month == '12' %}selected{% endif %}>December</option>
+                  </select>
+                </div>
+                <div class="col-6">
+                  <label class="form-label small text-muted">Year</label>
+                  <select class="form-select" name="year" id="customReportYearSelect">
+                    {# Populated by JS using CalibrationConfig #}
+                  </select>
+                </div>
+              </div>
+            </div>
+            {% if departments %}
+            <div class="mb-3">
+              <label class="form-label fw-bold">Department</label>
+              <select class="form-select" name="department">
+                <option value="">All Departments</option>
+                {% for dept in departments %}
+                <option value="{{ dept.id }}" {% if selected_department_id == dept.id|stringformat:"s" %}selected{% endif %}>
+                  {{ dept.name }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+            {% endif %}
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-primary">
+              <i class="fas fa-download me-1"></i>Generate Report
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+
+<script src="{% static 'js/bootstrap.bundle.min.js' %}"></script>
+
+<script>
+  window.CalibrationConfig = {
+    currentMonth:  {{ current_month }},
+    currentYear:   {{ current_year }},
+    selectedMonth: '{{ selected_month }}',
+    selectedYear:  '{{ selected_year }}'
+  };
+  window.CalibrationURLs = {
+    dashboard:         "{% url 'schedule:calibration_dashboard' %}",
+    bulkDelete:        "{% url 'schedule:bulk_delete_calibration_schedules' %}",
+    bulkPush:          "{% url 'schedule:bulk_push_calibration_schedules' %}",
+    bulkComplete:      "{% url 'schedule:bulk_mark_calibration_completed' %}",
+    overdueStatus:     "{% url 'schedule:api_overdue_status' %}",
+    waitingGroups:     "{% url 'schedule:api_waiting_groups' %}",
+    ajaxSchedules:     "{% url 'schedule:ajax_schedules' %}",
+    ajaxCompleted:     "{% url 'schedule:ajax_completed_schedules' %}",
+    ajaxUnscheduled:   "{% url 'schedule:ajax_unscheduled_equipment' %}",
+    ajaxStats:         "{% url 'schedule:ajax_schedule_stats' %}"
+  };
+</script>
+
+<input type="hidden" id="currentActivePlanningLogic" value="{{ current_planning_logic|default:'' }}">
+
+{# ── SPA: tabs now drive panels directly (no separate view-sections) ── #}
+<script>
+(function () {
+  // Map subtab name → panel id (reports is a special case)
+  var PANEL_MAP = {
+    pending:     'pendingPanel',
+    completed:   'completedPanel',
+    unscheduled: 'unscheduledPanel',
+    reports:     'reportsPanel'
+  };
+
+  document.querySelectorAll('#schedulesSubTabs .cs-tab').forEach(function (tab) {
+    tab.addEventListener('click', function () {
+      // Switch active tab
+      document.querySelectorAll('#schedulesSubTabs .cs-tab').forEach(function (t) {
+        t.classList.remove('active');
+      });
+      tab.classList.add('active');
+
+      // Switch visible panel
+      var subtab = tab.dataset.subtab;
+      Object.values(PANEL_MAP).forEach(function (pid) {
+        var el = document.getElementById(pid);
+        if (el) el.classList.remove('active');
+      });
+      var target = document.getElementById(PANEL_MAP[subtab]);
+      if (target) target.classList.add('active');
+    });
+  });
+})();
+</script>
+
+{# Inline stats refresh — load badge counts from ajax_schedule_stats on page load #}
+<script>
+(function () {
+  // Populate the custom-report year <select> dynamically, same window as main year filter
+  var cfg = window.CalibrationConfig || {};
+  var currentYear  = parseInt(cfg.currentYear)  || new Date().getFullYear();
+  var selectedYear = parseInt(cfg.selectedYear) || currentYear;
+
+  var customYearSel = document.getElementById('customReportYearSelect');
+  if (customYearSel) {
+    for (var y = currentYear - 3; y <= currentYear + 5; y++) {
+      var opt = document.createElement('option');
+      opt.value = y;
+      opt.textContent = y;
+      if (y === selectedYear) opt.selected = true;
+      customYearSel.appendChild(opt);
+    }
+  }
+  // Keep base_year input min/max in sync with actual current year at runtime
+  var baseYearInput = document.getElementById('base_year');
+  if (baseYearInput) {
+    var cy = parseInt((window.CalibrationConfig || {}).currentYear) || new Date().getFullYear();
+    baseYearInput.min   = cy - 2;
+    baseYearInput.max   = cy + 5;
+    baseYearInput.value = baseYearInput.value || cy;
+  }
+
+  var urls = window.CalibrationURLs || {};
+  if (!urls.ajaxStats) return;
+  fetch(urls.ajaxStats)
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      var set = function (id, v) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = (v !== undefined && v !== null) ? v : '0';
+      };
+      set('badge-pending',    d.pending);
+      set('badge-completed',  d.completed);
+      set('badge-unscheduled', '');  // will be set by ajax tab load
+      set('stat-pending',    d.pending);
+      set('stat-overdue',    d.overdue);
+      set('stat-completed',  d.completed);
+
+      // Dim overdue stat if zero
+      var ovEl = document.getElementById('cs-stat-overdue');
+      if (ovEl) ovEl.style.opacity = d.overdue > 0 ? '1' : '0.45';
+    })
+    .catch(function () {});
+})();
+</script>
+
+<script src="{% static 'calibrition/cal.js' %}"></script>
+
+
+{% endblock %}
+
+{% block extra_js %}{% endblock %}

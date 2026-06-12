@@ -1,0 +1,36 @@
+{% for equipment in equipment_page %}
+<tr class="equipment-row">
+    <td>{{ forloop.counter0|add:equipment_page.start_index }}</td>
+    <td><small class="text-muted">{{ equipment.description.name }}</small></td>
+    <td>{{ equipment.manufacturer|default:"-" }}</td>
+    <td>{{ equipment.serial_number|default:"-" }}</td>
+    <td>{{ equipment.model|default:"-" }}</td>
+    <td><span class="badge bg-light text-dark">{{ equipment.category.name }}</span></td>
+    {% if is_hod %}
+    <td>{{ equipment.workshop.name }}</td>
+    {% endif %}
+    <td>
+        <span class="badge
+            {% if equipment.status == 'Working' %}bg-success
+            {% elif equipment.status == 'Under repair' %}bg-warning text-dark
+            {% else %}bg-danger{% endif %}">
+            {{ equipment.status }}
+        </span>
+    </td>
+    <td class="text-center">
+        <button class="btn btn-sm btn-outline-primary view-repair-btn"
+                data-equipment-id="{{ equipment.id }}"
+                type="button"
+                title="View repair history">
+            <i class="fa-solid fa-history"></i>
+        </button>
+    </td>
+</tr>
+{% empty %}
+<tr>
+    <td colspan="{% if is_hod %}9{% else %}8{% endif %}"
+        class="text-center text-muted py-5">
+        <h5>No Equipment Found</h5>
+    </td>
+</tr>
+{% endfor %}

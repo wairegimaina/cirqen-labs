@@ -1,0 +1,19 @@
+python manage.py migrate --database=hq
+python -c "
+import json
+with open('/home/maina/.cirqen/data/config.json', 'r') as f:
+    cfg = json.load(f)
+
+cfg['hq_db']['host'] = 'dpg-d7rk2sa8qa3s73diimb0-a.ohio-postgres.render.com'
+cfg['hq_db']['port'] = 5432
+cfg['hq_db']['database'] = 'cirqen_hq'
+cfg['hq_db']['user'] = 'cirqen_hq'
+cfg['hq_db']['password'] = 'RyJEzkPmYWrdC2472TzWnFUMaOIueaye'
+cfg['hq_db']['enabled'] = True
+
+with open('/home/maina/.cirqen/data/config.json', 'w') as f:
+    json.dump(cfg, f, indent=2)
+
+print('Done. HQ DB updated to Render.')
+print('Host:', cfg['hq_db']['host'])
+"

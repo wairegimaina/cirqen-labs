@@ -1,0 +1,429 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Department Inventory Management - Equiper National Hospital{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'Inventory/inventory.css' %}" />
+{% endblock %}
+
+{% block page_title %}Department Inventory Management{% endblock %}
+
+{% block content %}
+
+<!-- Django Data for JavaScript -->
+<script id="django-data" type="application/json">
+{
+  "urls": {
+    "inventory": "{% url 'inventory' %}",
+    "equipmentAnalytics": "{% url 'equipment_analytics_api' %}",
+    "inventorySummary": "{% url 'inventory_summary_api' %}",
+    "exportExcel": "{% url 'export_equipment_excel' %}",
+    "exportPdf": "{% url 'export_equipment_to_pdf' %}",
+    "createManufacturer": "{% url 'create_manufacturer' %}",
+    "createEquipmentDescription": "{% url 'create_equipment_description' %}",
+    "checkEquipmentAvailability": "{% url 'check_equipment_availability' %}",
+    "editInventory": "/Inventory/edit_inventory/"
+  },
+  "currentDepartment": {% if current_department %}"{{ current_department.id }}"{% else %}null{% endif %},
+  "selectedWorkshop": {% if selected_workshop %}"{{ selected_workshop.id }}"{% else %}null{% endif %},
+  "userRole": "{{ user_role }}"
+}
+</script>
+
+<!-- Main Content Container -->
+<div class="main-container">
+
+  <!-- Department Selection for In-Charge Users -->
+  {% if user_role == 'NIC' and user_departments.count > 1 %}
+  <div class="department-selection mb-4">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h5 class="card-title">
+          <i class="fas fa-building me-2"></i>Select Department
+        </h5>
+        <form method="GET" class="d-flex align-items-center gap-3">
+          <select name="department" class="form-select" style="width: auto;" onchange="this.form.submit()">
+            <option value="">All My Departments</option>
+            {% for dept in user_departments %}
+            <option value="{{ dept.id }}" {% if dept == selected_department %}selected{% endif %}>
+              {{ dept.name }}
+            </option>
+            {% endfor %}
+          </select>
+          <div class="text-muted">
+            <small>You manage {{ user_departments.count }} department{{ user_departments.count|pluralize }}</small>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Department Info Banner -->
+  {% if user_role == 'NIC' and selected_department %}
+  <div class="department-info-banner mb-4">
+    <div class="alert alert-info d-flex align-items-center">
+      <i class="fas fa-info-circle fa-2x me-3"></i>
+      <div>
+        <h5 class="mb-1">{{ selected_department.name }} Department</h5>
+        <p class="mb-0">Workshop: {{ selected_department.workshop.name }} | Total Equipment: {{ total_equipment }}</p>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- SPA Navigation -->
+  <div class="spa-nav-container mb-4">
+    <button class="spa-nav-item active" data-section="inventory">
+      <i class="fas fa-list-ul"></i> Inventory List
+    </button>
+    <button class="spa-nav-item" data-section="summary">
+      <i class="fas fa-chart-bar"></i> Summary View
+    </button>
+    <button class="spa-nav-item" data-section="analytics">
+      <i class="fas fa-chart-line"></i> Analytics &amp; Reports
+    </button>
+  </div>
+
+  <!-- Inventory Section -->
+  <div id="inventorySection" class="content-section active">
+
+    <!-- Filter Section -->
+    <div class="filter-section mb-4">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3><i class="fas fa-filter"></i> Filter Equipment</h3>
+      </div>
+
+      <!-- Filter Controls -->
+      <div class="filter-grid mb-3">
+        <!-- Department Filter (hidden for single-dept NIC) -->
+        {% if user_role != 'NIC' or user_departments.count > 1 %}
+        <div>
+          <label for="departmentFilter" class="form-label">Department</label>
+          <select name="department" id="departmentFilter" class="form-select">
+            {% if user_role == 'NIC' %}
+              <option value="">All My Departments</option>
+              {% for dept in user_departments %}
+                <option value="{{ dept.id }}" {% if current_department and current_department.id == dept.id %}selected{% endif %}>
+                  {{ dept.name }}
+                </option>
+              {% endfor %}
+            {% else %}
+              <option value="">Show All Departments</option>
+              {% for dept in departments %}
+                <option value="{{ dept.id }}" {% if current_department and current_department.id == dept.id %}selected{% endif %}>
+                  {{ dept.name }}
+                </option>
+              {% endfor %}
+            {% endif %}
+          </select>
+        </div>
+        {% endif %}
+
+        <!-- Status Filter -->
+        <div>
+          <label for="statusFilter" class="form-label">Status</label>
+          <select name="status" id="statusFilter" class="form-select">
+            <option value="">All Status</option>
+            {% for status in status_choices %}
+              <option value="{{ status }}" {% if status_filter == status %}selected{% endif %}>
+                {{ status }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- Search -->
+        <div class="search-item">
+          <label for="searchInput" class="form-label">Search</label>
+          <div class="input-group">
+            <span class="input-group-text"><i class="fas fa-search"></i></span>
+            <input
+              type="text"
+              name="search"
+              id="searchInput"
+              class="form-control"
+              placeholder="Search by description, manufacturer, model, or serial number..."
+              value="{{ search_query }}"
+              autocomplete="off"
+            >
+          </div>
+        </div>
+
+        <!-- Clear Button -->
+        <div class="d-flex align-items-end">
+          <button type="button" class="btn btn-outline-secondary w-100" id="clearFiltersBtn" title="Clear all filters">
+            <i class="fas fa-times me-1"></i> Clear Filters
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Equipment Table Container -->
+    <div class="table-card">
+      <!-- Loading Indicator -->
+      <div id="loadingIndicator" class="text-center py-4" style="display: none;">
+        <div class="spinner-border text-primary" role="status">
+          <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-2 text-muted">Loading equipment data...</p>
+      </div>
+
+      <!-- Equipment Table -->
+      <div class="table-responsive">
+        <table class="table table-hover">
+          <thead>
+            <tr>
+              <th scope="col">No</th>
+              <th scope="col"><i class="fas fa-box me-1"></i>Description</th>
+              <th scope="col"><i class="fas fa-building me-1"></i>Manufacturer</th>
+              <th scope="col"><i class="fas fa-tag me-1"></i>Model</th>
+              <th scope="col"><i class="fas fa-barcode me-1"></i>Serial Number</th>
+              {% if user_role != 'NIC' or user_departments.count > 1 %}
+              <th scope="col"><i class="fas fa-building me-1"></i>Department</th>
+              {% endif %}
+              <th scope="col"><i class="fas fa-check-shield me-1"></i>Status</th>
+              <th scope="col" class="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="equipmentTableBody">
+            {% for equipment in equipments %}
+            <tr class="fade-in">
+              <td>{{ forloop.counter }}</td>
+              <td class="fw-bold text-primary">{{ equipment.description.name }}</td>
+              <td>{{ equipment.manufacturer.name|default:"-" }}</td>
+              <td>{{ equipment.model|default:"-" }}</td>
+              <td class="font-monospace">{{ equipment.serial_number|default:"-" }}</td>
+              {% if user_role != 'NIC' or user_departments.count > 1 %}
+              <td>{{ equipment.department.name }}</td>
+              {% endif %}
+              <td>
+                <span class="badge {% if equipment.status == 'Working' %}bg-success{% elif equipment.status == 'Not working' %}bg-danger{% else %}bg-warning text-dark{% endif %}">
+                  {{ equipment.status }}
+                </span>
+              </td>
+              <td class="text-end">
+                <div class="btn-group btn-group-sm">
+                  <button class="btn btn-outline-primary edit-button"
+                    data-id="{{ equipment.id }}"
+                    data-description="{{ equipment.description.id }}"
+                    data-manufacturer="{{ equipment.manufacturer.id|default:'' }}"
+                    data-model="{{ equipment.model|default:'' }}"
+                    data-serial="{{ equipment.serial_number|default:'' }}"
+                    data-department="{{ equipment.department.id }}"
+                    data-status="{{ equipment.status }}"
+                    title="Edit">
+                    <i class="fas fa-pen"></i>
+                  </button>
+                  <button class="btn btn-outline-danger delete-button"
+                    data-equipment-id="{{ equipment.id }}"
+                    title="Delete">
+                    <i class="fas fa-trash"></i>
+                  </button>
+                  <button class="btn btn-outline-info transfer-button"
+                    data-id="{{ equipment.id }}"
+                    data-description="{{ equipment.description.name }}"
+                    data-serial="{{ equipment.serial_number|default:'' }}"
+                    data-department="{{ equipment.department.name }}"
+                    data-department-id="{{ equipment.department.id }}"
+                    data-workshop="{{ equipment.department.workshop.name }}"
+                    data-workshop-id="{{ equipment.department.workshop.id }}"
+                    data-status="{{ equipment.status }}"
+                    title="Transfer">
+                    <i class="fas fa-exchange-alt"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="{% if user_role != 'NIC' or user_departments.count > 1 %}8{% else %}7{% endif %}" class="text-center text-muted py-5">
+                <i class="fas fa-search fa-3x mb-3" style="opacity: 0.5;"></i>
+                <h5>No equipment found</h5>
+                <p>Try adjusting your search criteria or filters</p>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      <div id="paginationWrapper"></div>
+    </div>
+  </div>
+
+  <!-- Summary Section -->
+  <div id="summarySection" class="content-section" style="display: none;">
+    <div class="row mb-4">
+      <div class="col-12 d-flex justify-content-between align-items-center">
+        <h3>
+          <i class="fas fa-chart-bar me-2"></i>
+          {% if user_role == 'NIC' %}
+            Department Summary{% if selected_department %} - {{ selected_department.name }}{% endif %}
+          {% else %}
+            Equipment Summary
+          {% endif %}
+        </h3>
+      </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+      <div class="col-md-3">
+        <div class="card text-white bg-primary">
+          <div class="card-body text-center">
+            <h2 class="mb-0" id="totalEquipment">{{ total_equipment|default:0 }}</h2>
+            <p class="mb-0">Total Equipment</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card text-white bg-success">
+          <div class="card-body text-center">
+            <h2 class="mb-0" id="workingEquipment">{{ status_summary.Working|default:0 }}</h2>
+            <p class="mb-0">Working</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card text-white bg-danger">
+          <div class="card-body text-center">
+            <h2 class="mb-0" id="notWorkingEquipment">{{ status_summary.Not_working|default:0 }}</h2>
+            <p class="mb-0">Not Working</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="card text-dark bg-warning">
+          <div class="card-body text-center">
+            <h2 class="mb-0" id="underRepairEquipment">{{ status_summary.Under_repair|default:0 }}</h2>
+            <p class="mb-0">Under Repair</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Summary Table -->
+    <div class="table-card">
+      <div class="table-responsive">
+        <table class="table table-hover" id="summaryTable">
+          <thead>
+            <tr>
+              <th>Equipment Description</th>
+              <th>Working</th>
+              <th>Not Working</th>
+              <th>Under Repair</th>
+              <th>Total</th>
+              <th>Working %</th>
+            </tr>
+          </thead>
+          <tbody id="summaryTableBody">
+            <tr>
+              <td colspan="6" class="text-center text-muted">
+                <div class="spinner-border spinner-border-sm me-2" role="status">
+                  <span class="visually-hidden">Loading...</span>
+                </div>
+                Loading summary data...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Analytics Section -->
+  <div id="analyticsSection" class="content-section" style="display: none;">
+    <div class="row mb-4">
+      <div class="col-12">
+        <h3>
+          <i class="fas fa-chart-bar me-2"></i>
+          {% if user_role == 'NIC' %}
+            Department Analytics{% if selected_department %} - {{ selected_department.name }}{% endif %}
+          {% else %}
+            Equipment Analytics
+          {% endif %}
+        </h3>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-md-6 mb-4">
+        <div class="card h-100">
+          <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">Equipment Status Distribution</h5>
+          </div>
+          <div class="card-body" style="height: 300px;">
+            <canvas id="statusChart"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6 mb-4">
+        <div class="card h-100">
+          <div class="card-header bg-info text-white">
+            <h5 class="mb-0">
+              {% if user_role == 'NIC' and user_departments.count == 1 %}
+                Equipment by Type
+              {% else %}
+                Equipment by Department
+              {% endif %}
+            </h5>
+          </div>
+          <div class="card-body" style="height: 300px;">
+            <canvas id="departmentChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Department Insights for NIC -->
+    {% if user_role == 'NIC' and selected_department %}
+    <div class="row mt-4">
+      <div class="col-12">
+        <div class="card">
+          <div class="card-header bg-success text-white">
+            <h5 class="mb-0"><i class="fas fa-lightbulb me-2"></i>Department Insights</h5>
+          </div>
+          <div class="card-body">
+            <div class="row">
+              <div class="col-md-6">
+                <h6>Equipment Health</h6>
+                <div class="progress mb-2" style="height: 25px;">
+                  {% widthratio status_summary.Working total_equipment 100 as health_percent %}
+                  <div class="progress-bar bg-success" role="progressbar"
+                       style="width: {{ health_percent }}%"
+                       aria-valuenow="{{ health_percent }}"
+                       aria-valuemin="0" aria-valuemax="100">
+                    {{ health_percent }}%
+                  </div>
+                </div>
+                <small class="text-muted">{{ health_percent }}% of equipment is working</small>
+              </div>
+              <div class="col-md-6">
+                <h6>Maintenance Required</h6>
+                {% with not_working=status_summary.Not_working|default:0 under_repair=status_summary.Under_repair|default:0 %}
+                  {% with maintenance_needed=not_working|add:under_repair %}
+                    <h2 class="text-warning mb-2">{{ maintenance_needed }}</h2>
+                    <small class="text-muted">
+                      Equipment item{{ maintenance_needed|pluralize }} need{{ maintenance_needed|pluralize:"s," }} attention
+                    </small>
+                  {% endwith %}
+                {% endwith %}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+
+<!-- Chart.js -->
+<script src="{% static 'js/chart.min.js' %}"></script>
+<!-- NIC Inventory JavaScript -->
+<script src="{% static 'Inventory/NIC-inventory.js' %}"></script>
+{% endblock %}
