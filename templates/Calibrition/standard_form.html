@@ -153,8 +153,15 @@
                         </div>
                         <div class="card-body p-4">
                             {{ formset.management_form }}
+                            {% if formset.non_form_errors %}
+                            <ul class="errorlist">
+                                {% for error in formset.non_form_errors %}
+                                <li>{{ error }}</li>
+                                {% endfor %}
+                            </ul>
+                            {% endif %}
                             <div id="parameters-section">
-                                <!-- Initial parameter form -->
+                                <!-- Initial parameter form(s) -->
                                 {% for form in formset %}
                                 <div class="parameter-row p-3" data-parameter-index="{{ forloop.counter0 }}">
                                     <div class="row g-3 align-items-end">
@@ -190,6 +197,7 @@
                                             </button>
                                         </div>
                                     </div>
+                                    {{ form.id }}
                                     {{ form.DELETE }}
                                 </div>
                                 {% endfor %}
@@ -277,250 +285,18 @@
     <script src="{% static 'js/bootstrap.bundle.min.js' %}"></script>
     <script src="{% static 'js/jquery-3.6.0.min.js' %}"></script>
     <script>
-        let parameterIndex = {{ formset.total_form_count }};
-        let totalForms = {{ formset.total_form_count }};
-
-        // Update Django formset management fields
-        function updateManagementForm() {
-            let managementDiv = document.getElementById('management-form');
-            if (!managementDiv) {
-                managementDiv = document.createElement('div');
-                managementDiv.id = 'management-form';
-                managementDiv.style.display = 'none';
-                document.getElementById('standardForm').appendChild(managementDiv);
-            }
-
-            managementDiv.innerHTML = `
-                <input type="hidden" name="parameters-TOTAL_FORMS" value="${totalForms}">
-                <input type="hidden" name="parameters-INITIAL_FORMS" value="0">
-                <input type="hidden" name="parameters-MIN_NUM_FORMS" value="1">
-                <input type="hidden" name="parameters-MAX_NUM_FORMS" value="20">
-            `;
-        }
-
-        // Add new parameter row to standard form
-        function addParameter() {
-            const parametersSection = document.getElementById('parameters-section');
-            const newParameter = document.createElement('div');
-            newParameter.className = 'parameter-row p-3';
-            newParameter.setAttribute('data-parameter-index', parameterIndex);
-
-            newParameter.innerHTML = `
-                <div class="row g-3 align-items-end">
-                    <div class="col-md-5">
-                        <label class="form-label fw-bold">Parameter</label>
-                        <select class="form-select parameter-select" name="parameters-${parameterIndex}-parameter" required>
-                            <option value="">Select Parameter</option>
-                            {% for param in parameters %}
-                                <option value="{{ param.pk }}">{{ param.name }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label fw-bold">Uncertainty (k=2)</label>
-                        <div class="input-group">
-                            <input type="number" class="form-control" name="parameters-${parameterIndex}-uncertainty"
-                                   step="0.000001" placeholder="0.001" required>
-                            <span class="input-group-text">±</span>
-                        </div>
-                    </div>
-                    <div class="col-md-2">
-                        <button type="button" class="delete-parameter" onclick="removeParameter(this)"
-                                title="Remove Parameter">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </div>
-                </div>
-                <input type="hidden" name="parameters-${parameterIndex}-DELETE" value="">
-            `;
-
-            parametersSection.appendChild(newParameter);
-            parameterIndex++;
-            totalForms++;
-            updateManagementForm();
-
-            // Animate the new parameter
-            newParameter.style.opacity = '0';
-            newParameter.style.transform = 'translateY(20px)';
-            setTimeout(() => {
-                newParameter.style.transition = 'all 0.3s ease';
-                newParameter.style.opacity = '1';
-                newParameter.style.transform = 'translateY(0)';
-            }, 100);
-        }
-
-        // Remove parameter row
-        function removeParameter(button) {
-            const parameterRow = button.closest('.parameter-row');
-            const parametersSection = document.getElementById('parameters-section');
-
-            if (parametersSection.children.length <= 1) {
-                alert('At least one parameter is required.');
-                return;
-            }
-
-            parameterRow.style.transition = 'all 0.3s ease';
-            parameterRow.style.opacity = '0';
-            parameterRow.style.transform = 'translateY(-20px)';
-
-            setTimeout(() => {
-                const deleteField = parameterRow.querySelector('input[name$="-DELETE"]');
-                if (deleteField) {
-                    deleteField.value = 'on';
-
-                    // CRITICAL FIX: Remove 'required' attribute from all fields in hidden row
-                    const requiredFields = parameterRow.querySelectorAll('[required]');
-                    requiredFields.forEach(field => {
-                        field.removeAttribute('required');
-                        field.disabled = true; // Also disable to prevent submission
-                    });
-
-                    parameterRow.style.display = 'none';
-                } else {
-                    parametersSection.removeChild(parameterRow);
-                    totalForms--;
-                    updateManagementForm();
-                }
-            }, 300);
-        }
-
-        // Validate standard form
-        document.getElementById('standardForm').addEventListener('submit', function (e) {
-            const parameters = document.querySelectorAll('.parameter-row:not([style*="display: none"])');
-            if (parameters.length === 0) {
-                e.preventDefault();
-                alert('At least one parameter is required.');
-                return false;
-            }
-
-            const calDate = new Date(document.getElementById('id_calibration_date').value);
-            const dueDate = new Date(document.getElementById('id_calibration_due_date').value);
-
-            if (dueDate <= calDate) {
-                e.preventDefault();
-                alert('Due date must be after calibration date.');
-                return false;
-            }
-
-            return true;
-        });
-
-        // Auto-calculate due date
-        document.getElementById('id_calibration_date').addEventListener('change', function () {
-            const calDate = new Date(this.value);
-            if (calDate) {
-                const dueDate = new Date(calDate);
-                dueDate.setFullYear(dueDate.getFullYear() + 1);
-                document.getElementById('id_calibration_due_date').value = dueDate.toISOString().split('T')[0];
-            }
-        });
-
-        // Set default calibration date to today
-        document.getElementById('id_calibration_date').value = new Date().toISOString().split('T')[0];
-        document.getElementById('id_calibration_date').dispatchEvent(new Event('change'));
-
-        // Handle parameter form submission via AJAX
-        document.getElementById('parameterForm').addEventListener('submit', function (e) {
-            e.preventDefault();
-            const form = this;
-            const formData = new FormData(form);
-            const submitButton = document.getElementById('parameterSubmitBtn');
-
-            // FIXED: Check if button and icon exist before accessing
-            if (!submitButton) {
-                console.error('Submit button not found');
-                return;
-            }
-
-            const buttonIcon = submitButton.querySelector('.fa-save');
-            const buttonText = submitButton.childNodes[1]; // Text node
-
-            // Show loading state
-            submitButton.disabled = true;
-            if (buttonIcon) {
-                buttonIcon.className = 'fas fa-spinner fa-spin me-2';
-            }
-
-            // Ensure correct URL
-            const url = "{% url 'calibration:parameter_create' %}";
-
-            fetch(url, {
-                method: 'POST',
-                body: formData,
-                headers: {
-                    'X-CSRFToken': form.querySelector('[name=csrfmiddlewaretoken]').value,
-                    'X-Requested-With': 'XMLHttpRequest'
-                }
-            })
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! Status: ${response.status}`);
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    if (data.success) {
-                        // Update all parameter dropdowns
-                        const selects = document.querySelectorAll('.parameter-select');
-                        selects.forEach(select => {
-                            const option = document.createElement('option');
-                            option.value = data.parameter.id;
-                            option.text = data.parameter.name;
-                            select.appendChild(option);
-                        });
-
-                        // Show success message
-                        const alert = document.createElement('div');
-                        alert.className = 'alert alert-success alert-dismissible fade show';
-                        alert.innerHTML = `
-                            <i class="fas fa-check-circle me-2"></i>
-                            Parameter "${data.parameter.name}" created successfully!
-                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                        `;
-                        form.parentElement.insertBefore(alert, form);
-
-                        // Auto-dismiss after 3 seconds
-                        setTimeout(() => {
-                            alert.remove();
-                        }, 3000);
-
-                        // Reset form
-                        form.reset();
-                    } else {
-                        // Show error message
-                        const alert = document.createElement('div');
-                        alert.className = 'alert alert-danger alert-dismissible fade show';
-                        alert.innerHTML = `
-                            <i class="fas fa-exclamation-circle me-2"></i>
-                            Error: ${data.errors || 'Failed to create parameter.'}
-                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                        `;
-                        form.parentElement.insertBefore(alert, form);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    const alert = document.createElement('div');
-                    alert.className = 'alert alert-danger alert-dismissible fade show';
-                    alert.innerHTML = `
-                        <i class="fas fa-exclamation-triangle me-2"></i>
-                        Error: Failed to create parameter. ${error.message}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                    `;
-                    form.parentElement.insertBefore(alert, form);
-                })
-                .finally(() => {
-                    // Restore button state
-                    submitButton.disabled = false;
-                    if (buttonIcon) {
-                        buttonIcon.className = 'fas fa-save me-2';
-                    }
-                });
-        });
-
-        // Initialize management form
-        updateManagementForm();
+        // Config consumed by standard_form.js — keep this block to the
+        // minimum data that genuinely needs server-side templating.
+        window.STANDARD_FORM_CONFIG = {
+            parameterCreateUrl: "{% url 'calibration:parameter_create' %}",
+            parameterOptions: [
+                {% for param in parameters %}
+                { id: "{{ param.pk }}", name: "{{ param.name|escapejs }}" }{% if not forloop.last %},{% endif %}
+                {% endfor %}
+            ]
+        };
     </script>
+    <script src="{% static 'calibrition/standard_form.js' %}"></script>
 {% endblock %}
 
 {% block extra_js %}

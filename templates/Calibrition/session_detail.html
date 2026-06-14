@@ -255,8 +255,8 @@
           <div class="card analysis-card">
             <h2>Linearity Analysis</h2>
             <div class="linearity-data">
-              {% for parameter_key, analysis in linearity_analysis.items %} {% if not analysis.error
-              %}
+              {% for parameter_key, analysis in linearity_analysis.items %}
+              {% if not analysis.error %}
               <div class="linearity-item">
                 <h4>{{ parameter_key }} - Slope</h4>
                 <div class="value">{{ analysis.slope|floatformat:6 }}</div>

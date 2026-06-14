@@ -55,14 +55,6 @@ class CalibrationProcedure(models.Model):
         self.needs_sync = True  # mark for sync
         super().save(*args, **kwargs)
 
-    def save(self, *args, **kwargs):
-        self.needs_sync = True  # mark for sync
-        super().save(*args, **kwargs)
-
-    def save(self, *args, **kwargs):
-        self.needs_sync = True  # mark for sync
-        super().save(*args, **kwargs)
-
     def __str__(self):
         return self.name
 
@@ -1006,7 +998,7 @@ class CalibrationAuditLog(models.Model):
     action = models.CharField(max_length=50)
     description = models.TextField()
     timestamp = models.DateTimeField(auto_now_add=True)
-    schedule = models.ForeignKey(CalibrationSchedule, on_delete=models.SET_NULL, null=True, blank=True, related_name='audit_logs')
+    schedule = models.ForeignKey('calSchedules.CalibrationSchedule', on_delete=models.SET_NULL, null=True, blank=True, related_name='calsoft_audit_logs')
     equipment = models.ForeignKey(Equipment, on_delete=models.SET_NULL, null=True, blank=True, related_name='audit_logs')
     session = models.ForeignKey('CalibrationSession', on_delete=models.SET_NULL, null=True, blank=True, related_name='audit_logs')
     active_status = models.BooleanField(default=True)

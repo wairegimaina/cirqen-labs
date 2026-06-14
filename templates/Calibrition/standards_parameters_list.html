@@ -1,0 +1,266 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Calibration Standards and Parameters{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'calibrition/stand-parameter.css' %}" />
+{% endblock %}
+
+{% block page_title %}Calibration Standards and Parameters{% endblock %}
+
+{% block content %}
+<div class="main-container">
+
+    <!-- Standards Table -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card section-card">
+                <div class="section-header p-3 d-flex justify-content-between align-items-center">
+                    <h3 class="mb-0"><i class="fas fa-tools me-2"></i>Standards</h3>
+                </div>
+                <div class="card-body p-4">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Model Number</th>
+                                <th>Serial Number</th>
+                                <th>Manufacturer</th>
+                                <th>Calibration Date</th>
+                                <th>Due Date</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="standards-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Parameters Table -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card section-card">
+                <div class="section-header p-3 d-flex justify-content-between align-items-center">
+                    <h3 class="mb-0"><i class="fas fa-cog me-2"></i>Parameters</h3>
+                </div>
+                <div class="card-body p-4">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Symbol</th>
+                                <th>Unit</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="parameters-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Standard Edit Modal -->
+    <div class="modal fade" id="standardEditModal" tabindex="-1" aria-labelledby="standardEditModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="standardEditModalLabel">
+                        <i class="fas fa-edit me-2"></i>Edit Standard
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="modal-loading" style="display:none;"></div>
+                    <div id="modal-alerts"></div>
+
+                    <form id="standardEditForm" method="post">
+                        {% csrf_token %}
+                        <input type="hidden" id="standard_id" name="standard_id" value="">
+
+                        <!-- Standard fields -->
+                        <div class="card mb-4">
+                            <div class="card-header bg-primary text-white">
+                                <h6 class="mb-0"><i class="fas fa-info-circle me-2"></i>Standard Information</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label for="modal_name" class="form-label fw-bold">Standard Name <span class="text-danger">*</span></label>
+                                        <input type="text" class="form-control" id="modal_name" name="name" required>
+                                        <div class="invalid-feedback"></div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="modal_model_number" class="form-label fw-bold">Model Number <span class="text-danger">*</span></label>
+                                        <input type="text" class="form-control" id="modal_model_number" name="model_number" required>
+                                        <div class="invalid-feedback"></div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="modal_serial_number" class="form-label fw-bold">Serial Number <span class="text-danger">*</span></label>
+                                        <input type="text" class="form-control" id="modal_serial_number" name="serial_number" required>
+                                        <div class="invalid-feedback"></div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="modal_manufacturer" class="form-label fw-bold">Manufacturer <span class="text-danger">*</span></label>
+                                        <input type="text" class="form-control" id="modal_manufacturer" name="manufacturer" required>
+                                        <div class="invalid-feedback"></div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="modal_certificate_number" class="form-label fw-bold">Certificate Number</label>
+                                        <input type="text" class="form-control" id="modal_certificate_number" name="certificate_number">
+                                        <div class="invalid-feedback"></div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="modal_calibration_date" class="form-label fw-bold">Calibration Date <span class="text-danger">*</span></label>
+                                        <input type="date" class="form-control" id="modal_calibration_date" name="calibration_date" required>
+                                        <div class="invalid-feedback"></div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="modal_calibration_due_date" class="form-label fw-bold">Due Date <span class="text-danger">*</span></label>
+                                        <input type="date" class="form-control" id="modal_calibration_due_date" name="calibration_due_date" required>
+                                        <div class="invalid-feedback"></div>
+                                    </div>
+                                    <div class="col-12">
+                                        <label for="modal_calibration_agency" class="form-label fw-bold">Calibration Agency</label>
+                                        <input type="text" class="form-control" id="modal_calibration_agency" name="calibration_agency">
+                                        <div class="invalid-feedback"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Parameters formset -->
+                        <div class="card mb-4">
+                            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                                <h6 class="mb-0"><i class="fas fa-cog me-2"></i>Parameters & Uncertainties</h6>
+                                <button type="button" class="btn btn-sm btn-light" id="modal-add-parameter">
+                                    <i class="fas fa-plus me-1"></i>Add Parameter
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                <input type="hidden" name="parameters-TOTAL_FORMS"   id="modal-TOTAL_FORMS"   value="0">
+                                <input type="hidden" name="parameters-INITIAL_FORMS" id="modal-INITIAL_FORMS" value="0">
+                                <input type="hidden" name="parameters-MIN_NUM_FORMS" value="0">
+                                <input type="hidden" name="parameters-MAX_NUM_FORMS" value="1000">
+                                <div id="modal-parameters-container"></div>
+                                <div class="alert alert-info mt-3">
+                                    <i class="fas fa-info-circle me-2"></i>
+                                    <strong>Note:</strong> Uncertainty values should be specified with coverage factor k=2 (95% confidence level).
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-2"></i>Cancel
+                    </button>
+                    <button type="button" class="btn btn-primary" id="modal-save-btn">
+                        <i class="fas fa-save me-2"></i>
+                        <span class="btn-text">Save Changes</span>
+                        <span class="spinner-border spinner-border-sm ms-2 d-none" role="status"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Parameter Edit Modal -->
+    <div class="modal fade" id="parameterEditModal" tabindex="-1" aria-labelledby="parameterEditModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="parameterEditModalLabel">Update Parameter</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="parameterEditForm" method="post">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label for="param_name" class="form-label fw-bold">Parameter Name</label>
+                            <input type="text" class="form-control" id="param_name" name="name" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="param_symbol" class="form-label fw-bold">Symbol</label>
+                            <input type="text" class="form-control" id="param_symbol" name="symbol">
+                        </div>
+                        <div class="mb-3">
+                            <label for="param_unit" class="form-label fw-bold">Unit</label>
+                            <input type="text" class="form-control" id="param_unit" name="unit" required>
+                        </div>
+                        <div class="d-flex gap-3 justify-content-end">
+                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-primary" id="paramEditSubmitBtn">
+                                <i class="fas fa-save me-2"></i>Save
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div class="modal fade" id="deleteConfirmModal" tabindex="-1" aria-labelledby="deleteConfirmModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="deleteConfirmModalLabel">Confirm Deletion</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    Are you sure you want to delete this <span id="delete-item-type"></span>?
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="confirmDeleteBtn">
+                        <i class="fas fa-trash me-2"></i>Delete
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Parameter row template (used by the standard edit modal) -->
+    <template id="parameter-row-template">
+        <div class="parameter-row border rounded p-3 mb-3" data-index="">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-5">
+                    <label class="form-label fw-bold">Parameter</label>
+                    <select class="form-select parameter-select" name="parameters-__INDEX__-parameter" required>
+                        <option value="">Select Parameter</option>
+                        {% for param in parameters %}
+                            <option value="{{ param.pk }}">{{ param.name }} ({{ param.unit }})</option>
+                        {% endfor %}
+                    </select>
+                    <div class="invalid-feedback"></div>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-bold">Uncertainty (k=2)</label>
+                    <div class="input-group">
+                        <input type="number" class="form-control" name="parameters-__INDEX__-uncertainty"
+                               step="0.000001" placeholder="0.001" required>
+                        <span class="input-group-text">±</span>
+                    </div>
+                    <div class="invalid-feedback"></div>
+                </div>
+                <div class="col-md-2">
+                    <button type="button" class="btn btn-danger btn-sm w-100 remove-parameter" title="Remove Parameter">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+                <input type="hidden" name="parameters-__INDEX__-id" value="">
+                <input type="hidden" name="parameters-__INDEX__-DELETE" value="">
+            </div>
+        </div>
+    </template>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'calibrition/stand-parameters-list.js' %}"></script>
+{% endblock %}

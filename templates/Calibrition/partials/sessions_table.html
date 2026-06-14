@@ -1,0 +1,134 @@
+{% if page_obj.object_list %}
+<div class="table-responsive">
+    <table class="table table-hover mb-0">
+        <thead>
+            <tr>
+                <th width="12%">Certificate</th>
+                <th width="18%">Equipment</th>
+                <th width="12%">Serial Number</th>
+                <th width="12%">Procedure</th>
+                <th width="12%">Performed By</th>
+                {% if active_tab == 'awaiting_certificate' %}
+                <th width="12%">Approved By</th>
+                {% elif active_tab == 'declined' %}
+                <th width="10%">Rejected</th>
+                <th width="10%">Rejection Reason</th>
+                {% else %}
+                <th width="10%">Date</th>
+                {% endif %}
+                <th width="8%">Result</th>
+                {% if active_tab != 'awaiting_certificate' %}
+                <th width="12%">Actions</th>
+                {% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for session in page_obj %}
+            <tr class="session-card {% if session.performed_by == user %}own-session{% endif %}">
+                <td>
+                    <div class="fw-bold">{{ session.certificate_number|default:'Pending' }}</div>
+                    
+                </td>
+                <td>
+                    <div class="fw-bold">{{ session.device_description|truncatechars:30 }}</div>
+                    <div class="session-details">{{ session.device_model }}</div>
+                </td>
+                <td><span class="badge bg-secondary">{{ session.device_serial }}</span></td>
+                <td><div class="fw-bold">{{ session.procedure.name|default:'Unknown' }}</div></td>
+                <td>
+                    <div>{% if session.performed_by.get_full_name %}{{ session.performed_by.get_full_name }}{% else %}{{ session.performed_by.username }}{% endif %}</div>
+                    <div class="session-details">{{ session.timestamp|date:'M d, Y' }} {{ session.timestamp|time:'H:i' }}</div>
+                </td>
+                {% if active_tab == 'awaiting_certificate' %}
+                <td>
+                    <div>{% if session.approved_by.get_full_name %}{{ session.approved_by.get_full_name }}{% else %}{{ session.approved_by.username }}{% endif %}</div>
+                    <div class="session-details">{{ session.approved_at|date:'M d, Y' }} {{ session.approved_at|time:'H:i' }}</div>
+                </td>
+                {% elif active_tab == 'declined' %}
+                <td>
+                    <div>{{ session.rejected_at|date:'M d, Y' }}</div>
+                    <div class="session-details">{{ session.rejected_at|time:'H:i' }}</div>
+                </td>
+                <td><span class="badge bg-danger">{{ session.get_rejection_reason_display|default:'Not specified' }}</span></td>
+                {% else %}
+                <td>
+                    <div>{{ session.timestamp|date:'M d, Y' }}</div>
+                    <div class="session-details">{{ session.timestamp|time:'H:i' }}</div>
+                </td>
+                {% endif %}
+                <td>
+                    {% if session.overall_pass %}
+                        <span class="badge bg-success">PASS</span>
+                    {% else %}
+                        <span class="badge bg-danger">FAIL</span>
+                    {% endif %}
+                </td>
+                {% if active_tab != 'awaiting_certificate' %}
+                <td class="approval-actions">
+                    {% if active_tab == 'declined' %}
+                        <button class="btn btn-outline-info btn-sm" data-action="download-declined-certificate"
+                                data-session-id="{{ session.id }}">
+                            <i class="fas fa-download"></i> PDF
+                        </button>
+                        {% if session.can_restore %}
+                            <button class="btn btn-outline-success btn-sm" data-action="restore-session"
+                                    data-session-id="{{ session.id }}">
+                                <i class="fas fa-undo"></i> Restore
+                            </button>
+                        {% else %}
+                            <button class="btn btn-outline-secondary btn-sm" disabled>
+                                <i class="fas fa-hourglass-half"></i> Wait
+                            </button>
+                        {% endif %}
+                    {% else %}
+                        {% if session.performed_by == user %}
+                            <button class="btn btn-outline-secondary btn-sm" disabled title="You cannot review your own session">
+                                <i class="fas fa-eye"></i> Review
+                            </button>
+                        {% else %}
+                            <button class="btn btn-outline-primary btn-sm" data-action="review-session"
+                                    data-session-id="{{ session.id }}">
+                                <i class="fas fa-eye"></i> Review
+                            </button>
+                        {% endif %}
+                    {% endif %}
+                </td>
+                {% endif %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% if page_obj.has_other_pages %}
+<div class="card-footer">
+    <nav>
+        <ul class="pagination pagination-sm mb-0 justify-content-center">
+            {% if page_obj.has_previous %}
+                <li class="page-item"><a class="page-link" href="?tab={{ active_tab }}&page=1">First</a></li>
+                <li class="page-item"><a class="page-link" href="?tab={{ active_tab }}&page={{ page_obj.previous_page_number }}">Previous</a></li>
+            {% endif %}
+            <li class="page-item active"><span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span></li>
+            {% if page_obj.has_next %}
+                <li class="page-item"><a class="page-link" href="?tab={{ active_tab }}&page={{ page_obj.next_page_number }}">Next</a></li>
+                <li class="page-item"><a class="page-link" href="?tab={{ active_tab }}&page={{ page_obj.paginator.num_pages }}">Last</a></li>
+            {% endif %}
+        </ul>
+    </nav>
+</div>
+{% endif %}
+{% else %}
+<div class="text-center py-5">
+    {% if active_tab == 'declined' %}
+        <i class="fas fa-check-circle text-success" style="font-size: 4rem;"></i>
+        <h4 class="mt-3">No Declined Sessions</h4>
+        <p class="text-muted">No sessions rejected in the last 30 days.</p>
+    {% else %}
+        <i class="fas fa-check-circle text-success" style="font-size: 4rem;"></i>
+        <h4 class="mt-3">No Sessions Pending Approval</h4>
+        <p class="text-muted">All calibration sessions have been reviewed.</p>
+        <a href="{% url 'calibration:certificate_list' %}" class="btn btn-primary">
+            <i class="fas fa-list"></i> View Certificates
+        </a>
+    {% endif %}
+</div>
+{% endif %}

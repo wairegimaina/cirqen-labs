@@ -171,320 +171,12 @@
                 </div>
             </div>
         </div>
-    </div>
+</div>
 
-    <!-- Bootstrap Bundle with Popper -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- jQuery -->
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+     <!-- Bootstrap Bundle with Popper -->
+     <script src="{% static 'js/bootstrap.bundle.min.js' %}"></script>
 
-    <script>
-    $(document).ready(function() {
-        // Global variables
-        let currentItemId = null;
-        let currentItemType = null;
-
-        // Load content when tabs are shown
-        $('a[data-bs-toggle="tab"]').on('shown.bs.tab', function(e) {
-            const target = $(e.target).data('bs-target');
-            loadContent(target.substring(1)); // Remove the #
-        });
-
-        // Initially load dashboard content
-        loadContent('dashboard');
-
-        // Modal handlers
-        $('#procedureModal').on('show.bs.modal', function(e) {
-            const button = $(e.relatedTarget);
-            const procedureId = button.data('id');
-            const url = procedureId ? `/calibration/procedures/${procedureId}/edit/` : '/calibration/procedures/new/';
-
-            $('#procedureModalLabel').text(procedureId ? 'Edit Procedure' : 'New Procedure');
-            $('#procedureModalBody').load(url, function() {
-                // Initialize any form elements here if needed
-            });
-
-            currentItemId = procedureId;
-            currentItemType = 'procedure';
-        });
-
-        $('#standardModal').on('show.bs.modal', function(e) {
-            const button = $(e.relatedTarget);
-            const standardId = button.data('id');
-            const url = standardId ? `/calibration/standards/${standardId}/edit/` : '/calibration/standards/new/';
-
-            $('#standardModalLabel').text(standardId ? 'Edit Standard' : 'New Standard');
-            $('#standardModalBody').load(url, function() {
-                // Initialize any form elements here if needed
-            });
-
-            currentItemId = standardId;
-            currentItemType = 'standard';
-        });
-
-        $('#equipmentModal').on('show.bs.modal', function(e) {
-            const button = $(e.relatedTarget);
-            const equipmentId = button.data('id');
-            const url = equipmentId ? `/calibration/equipments/${equipmentId}/edit/` : '/calibration/equipments/new/';
-
-            $('#equipmentModalLabel').text(equipmentId ? 'Edit Equipment' : 'New Equipment');
-            $('#equipmentModalBody').load(url, function() {
-                // Initialize any form elements here if needed
-            });
-
-            currentItemId = equipmentId;
-            currentItemType = 'equipment';
-        });
-
-        $('#deleteModal').on('show.bs.modal', function(e) {
-            const button = $(e.relatedTarget);
-            currentItemId = button.data('id');
-            currentItemType = button.data('type');
-        });
-
-        // Save handlers
-        $('#saveProcedure').click(function() {
-            saveItem('procedure');
-        });
-
-        $('#saveStandard').click(function() {
-            saveItem('standard');
-        });
-
-        $('#saveEquipment').click(function() {
-            saveItem('equipment');
-        });
-
-        // Delete handler
-        $('#confirmDelete').click(function() {
-            deleteItem();
-        });
-
-        // Function to load content
-        function loadContent(section) {
-            const urlMap = {
-                'dashboard': '/calibration/dashboard_content/',
-                'procedures': '/calibration/procedures/list/',
-                'standards': '/calibration/standards/list/',
-                'certificates': '/calibration/certificates/list/',
-                'equipments': '/calibration/equipments/list/'
-            };
-
-            if (urlMap[section]) {
-                $(`#${section}List`).load(urlMap[section]);
-            }
-        }
-
-        // Function to save items
-        function saveItem(type) {
-            const form = $(`#${type}Form`);
-            const url = currentItemId ? `/calibration/${type}s/${currentItemId}/update/` : `/calibration/${type}s/create/`;
-
-            $.ajax({
-                url: url,
-                type: 'POST',
-                data: form.serialize(),
-                success: function(response) {
-                    if (response.success) {
-                        $(`#${type}Modal`).modal('hide');
-                        loadContent(`${type}s`);
-                        showAlert('success', response.message || 'Item saved successfully');
-                    } else {
-                        showAlert('danger', response.message || 'Error saving item');
-                    }
-                },
-                error: function() {
-                    showAlert('danger', 'Error saving item');
-                }
-            });
-        }
-
-        // Function to delete items
-        function deleteItem() {
-            if (!currentItemId || !currentItemType) return;
-
-            $.ajax({
-                url: `/calibration/${currentItemType}s/${currentItemId}/delete/`,
-                type: 'POST',
-                data: {
-                    'csrfmiddlewaretoken': $('input[name="csrfmiddlewaretoken"]').val()
-                },
-                success: function(response) {
-                    if (response.success) {
-                        $('#deleteModal').modal('hide');
-                        loadContent(`${currentItemType}s`);
-                        showAlert('success', response.message || 'Item deleted successfully');
-                    } else {
-                        showAlert('danger', response.message || 'Error deleting item');
-                    }
-                },
-                error: function() {
-                    showAlert('danger', 'Error deleting item');
-                }
-            });
-        }
-
-        // Function to show alerts
-        function showAlert(type, message) {
-            const alert = $(`<div class="alert alert-${type} alert-dismissible fade show" role="alert">
-                ${message}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>`);
-
-            $('.main-content').prepend(alert);
-
-            setTimeout(function() {
-                alert.alert('close');
-            }, 5000);
-        }
-    });
-    </script>
-</body>
-
-
-
-
-<!-- page for procedures-->
-
-
-
-<body>
-    <h1>Calibration Procedure System</h1>
-    <p>Create and manage calibration procedures with multiple parameters and standards</p>
-
-    <div>
-        <button class="tab-button active" onclick="openTab('create')">Create Procedure</button>
-        <button class="tab-button" onclick="openTab('perform')">Perform Calibration</button>
-        <button class="tab-button" onclick="openTab('manage')">Manage Procedures</button>
-    </div>
-
-    <div id="create" class="tab active">
-        <h2>Create New Calibration Procedure</h2>
-        <form method="post" id="procedureForm">
-            {% csrf_token %}
-            <div class="form-group">
-                <label for="{{ procedure_form.name.id_for_label }}">Procedure Name</label>
-                {{ procedure_form.name }}
-                {{ procedure_form.name.errors }}
-            </div>
-            <div class="form-group">
-                <label for="{{ procedure_form.description.id_for_label }}">Description</label>
-                {{ procedure_form.description }}
-                {{ procedure_form.description.errors }}
-            </div>
-            <div class="form-group">
-                <label for="{{ procedure_form.temperature.id_for_label }}">Temperature (°C)</label>
-                {{ procedure_form.temperature }}
-                {{ procedure_form.temperature.errors }}
-            </div>
-            <div class="form-group">
-                <label for="{{ procedure_form.humidity.id_for_label }}">Humidity (%RH)</label>
-                {{ procedure_form.humidity }}
-                {{ procedure_form.humidity.errors }}
-            </div>
-            <div class="form-group">
-                <label for="{{ procedure_form.pressure.id_for_label }}">Pressure (kPa)</label>
-                {{ procedure_form.pressure }}
-                {{ procedure_form.pressure.errors }}
-            </div>
-
-            <h3>Parameters</h3>
-            {{ parameter_formset.management_form }}
-            {% for form in parameter_formset %}
-                <div class="parameter-section" data-parameter-index="{{ forloop.counter0 }}">
-                    {{ form.as_p }}
-                    <div class="sub-parameter-toggle">
-                        <input type="checkbox" onchange="toggleSubParameters(this, {{ forloop.counter0 }})"> Add Sub-Parameters
-                    </div>
-                    {% if form.sub_parameters %}
-                        <h4>Sub-Parameters</h4>
-                        {{ form.sub_parameters.management_form }}
-                        {% for sub_form in form.sub_parameters %}
-                            <div class="sub-parameter-section">
-                                {{ sub_form.as_p }}
-                            </div>
-                        {% endfor %}
-                    {% endif %}
-                </div>
-            {% endfor %}
-            <button type="button" onclick="addParameter()">Add Parameter</button>
-
-            <div>
-                <button type="submit">Save Procedure</button>
-                <button type="button" onclick="document.getElementById('procedureForm').reset()">Clear Form</button>
-            </div>
-        </form>
-    </div>
-
-    <div id="perform" class="tab">
-        <h2>Perform Calibration</h2>
-        <form method="post" id="calibrationForm">
-            {% csrf_token %}
-            <div class="form-group">
-                <label for="{{ session_form.device_model.id_for_label }}">Device Model</label>
-                {{ session_form.device_model }}
-                {{ session_form.device_model.errors }}
-            </div>
-            <div class="form-group">
-                <label for="{{ session_form.device_serial.id_for_label }}">Device Serial</label>
-                {{ session_form.device_serial }}
-                {{ session_form.device_serial.errors }}
-            </div>
-            <div class="form-group">
-                <label for="{{ session_form.device_manufacturer.id_for_label }}">Manufacturer</label>
-                {{ session_form.device_manufacturer }}
-                {{ session_form.device_manufacturer.errors }}
-            </div>
-            <div class="form-group">
-                <label for="{{ session_form.actual_temperature.id_for_label }}">Actual Temperature (°C)</label>
-                {{ session_form.actual_temperature }}
-                {{ session_form.actual_temperature.errors }}
-            </div>
-            <div class="form-group">
-                <label for="{{ session_form.actual_humidity.id_for_label }}">Actual Humidity (%RH)</label>
-                {{ session_form.actual_humidity }}
-                {{ session_form.actual_humidity.errors }}
-            </div>
-            <div class="form-group">
-                <label for="{{ session_form.actual_pressure.id_for_label }}">Actual Pressure (kPa)</label>
-                {{ session_form.actual_pressure }}
-                {{ session_form.actual_pressure.errors }}
-            </div>
-            <div class="form-group">
-                <label for="{{ session_form.notes.id_for_label }}">Notes</label>
-                {{ session_form.notes }}
-                {{ session_form.notes.errors }}
-            </div>
-
-            <div class="form-group">
-                <label for="procedureSelect">Select Procedure</label>
-                <select id="procedureSelect" name="procedure" class="form-control" onchange="loadParameters()">
-                    <option value="">Select a procedure</option>
-                    {% for procedure in procedures %}
-                        <option value="{{ procedure.id }}">{{ procedure.name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <p>Instructions: Enter the device resolution and reading values for each parameter or sub-parameter below. The system will calculate deviations and uncertainties automatically.</p>
-            <div id="readingInputs"></div>
-
-            <div>
-                <button type="button" onclick="calculateResults()">Calculate Results</button>
-                <button type="submit" name="generate_report">Generate Report</button>
-            </div>
-        </form>
-    </div>
-
-    <div id="manage" class="tab">
-        <h2>Manage Procedures</h2>
-        <form method="get" id="searchForm">
-            {{ search_form.as_p }}
-            <button type="submit">Search</button>
-        </form>
-    </div>
-
-    <script>
+     <script>
         function openTab(tabName) {
             document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
             document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
@@ -504,7 +196,6 @@
                 toleranceInput.disabled = true;
                 toleranceInput.classList.add('hidden');
                 toleranceInput.closest('.form-group').classList.add('hidden');
-                // Ensure sub-parameter formset is visible
                 if (subParameterSection) {
                     subParameterSection.classList.remove('hidden');
                 }
@@ -526,7 +217,7 @@
             }
 
             try {
-                const response = await fetch(`/api/procedure/${procedureId}/parameters/`);
+                const response = await fetch(`/calibration/api/procedure/${procedureId}/`);
                 const data = await response.json();
                 let html = '';
 
@@ -577,7 +268,7 @@
             const form = document.getElementById('calibrationForm');
             const formData = new FormData(form);
             try {
-                const response = await fetch('/api/calculate_results/', {
+                const response = await fetch('/calibration/api/calculate-results/', {
                     method: 'POST',
                     body: formData,
                     headers: { 'X-CSRFToken': formData.get('csrfmiddlewaretoken') }

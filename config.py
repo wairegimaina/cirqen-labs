@@ -28,7 +28,7 @@ class CirqenConfig:
             "enabled": True,
             "debug": True,
             "poll_interval": 1,
-            "download_interval": 5,
+            "download_interval": 1,
             "upload_batch_size": 50,
             "max_retries": 3,
             "retry_backoff": 3.0,

@@ -136,4 +136,10 @@ urlpatterns = [
     path("api/set_values/", views.api_set_values, name="api_set_values"),
     path("api/dashboard-metrics/", views.api_dashboard_metrics, name="dashboard-metrics"),
     path("certificates/bulk/", views.bulk_certificates_download, name="bulk_certificates_download"),
+    # Standards & Parameters SPA data endpoints
+    path(
+        "api/standards-parameters/",
+        views.api_standards_parameters_data,
+        name="api_standards_parameters_data",
+    ),
 ]
