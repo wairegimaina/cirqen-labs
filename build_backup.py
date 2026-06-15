@@ -1550,6 +1550,12 @@ def generate_spec():
     # 2. DJANGO APPS (complete directories with templates & static)
     # -----------------------------------------------------------------------
 
+    logger.info("\n📦 Builder tools modules:")
+    builder_tools_path = PROJECT_ROOT / "bulider_tools"
+    if builder_tools_path.exists():
+        datas_collected.append((str(builder_tools_path), "bulider_tools"))
+        logger.info(f"  ✓ bulider_tools/")
+
     logger.info("\n📦 Sync modules:")
     sync_path = PROJECT_ROOT / "sync"
     if sync_path.exists():
@@ -1864,12 +1870,22 @@ def generate_spec():
         "django.conf",
         "django.conf.urls",
         "django.conf.urls.static",
-        "psutil"
+        "psutil",
+        # ===== BUILDER TOOLS MODULE =====
+        "bulider_tools",
+        "bulider_tools.runtime",
+        "bulider_tools.app",
+        "bulider_tools.services",
+        "bulider_tools.ui",
+        "bulider_tools.setup_ui",
+        "bulider_tools.database",
         # ===== SYNC MODULE =====
         "sync",
         "sync.sync_agent",
         "sync.mirror",
         "sync.soft_delete_handler",
+        "sync.startup_warmup",
+        "sync.config",
         # ===== UPDATE SYSTEM =====
         "update_manager",  # Update manager with reconnection support
         "update_client",  # Update client for server communication

@@ -57,6 +57,9 @@ class ServiceManager(QObject):
             pg_lib    = _pg_d / 'lib',
         )
 
+        # Update manager — initialised here, started in start_services()
+        self._update_manager = None
+
         # ====================================================================
         # NEW: Log database configuration immediately
         # ====================================================================
@@ -118,7 +121,7 @@ class ServiceManager(QObject):
                 logger.debug(f"Error terminating {name}: {e}")
 
         self.processes.clear()
-        logger.info("âœ… Fast shutdown complete")
+        logger.info("✅ Fast shutdown complete")
 
     def start_services(self):
         """
@@ -132,6 +135,7 @@ class ServiceManager(QObject):
          5. Celery Worker (background tasks)
          6. Celery Beat (task scheduler)
          7. Sync Agent (bi-directional synchronization)
+         8. Update Manager (poll for app updates)
 
         Each service is verified before proceeding to the next.
         """
@@ -279,6 +283,31 @@ class ServiceManager(QObject):
 
             time.sleep(2)
 
+            # ============================================================
+            # SERVICE 8: Update Manager (OPTIONAL — non-blocking)
+            # ============================================================
+            self.progress_update.emit("Starting update manager...", 88)
+            logger.info("")
+            logger.info("📊 [8/8] Starting Update Manager...")
+
+            try:
+                from bulider_tools.runtime import UpdateManager
+                import bulider_tools.runtime as _rt
+
+                self._update_manager = UpdateManager(
+                    data_path=DATA_PATH,
+                    app_path=APPLICATION_PATH,
+                )
+                self._update_manager.start()
+                # Expose globally so the UI "Check Now" button can poke it
+                _rt.update_manager_instance = self._update_manager
+
+                logger.info("✅ Update manager started — polling https://cirqen-hq.onrender.com")
+            except Exception as _um_exc:
+                logger.warning("⚠️  Update manager failed to start: %s", _um_exc)
+                logger.warning("   App will continue without automatic update checks")
+
+            time.sleep(1)
 
             # ============================================================
             # ALL SERVICES STARTED - READY!
@@ -398,7 +427,7 @@ class ServiceManager(QObject):
 
         logger = logging.getLogger('Cirqen.SyncAgent')
 
-        logger.info("ðŸ” Sync agent health monitor started")
+        logger.info("🔍 Sync agent health monitor started")
 
         check_interval = 60  # Check every 60 seconds
         restart_attempts = 0
@@ -423,7 +452,7 @@ class ServiceManager(QObject):
                         exit_code = sync_process.poll()
 
                         logger.error("=" * 70)
-                        logger.error("âŒ SYNC AGENT PROCESS DIED!")
+                        logger.error("❌ SYNC AGENT PROCESS DIED!")
                         logger.error(f"   Exit code: {exit_code}")
                         logger.error(f"   Restart attempts: {restart_attempts}/{max_restart_attempts}")
                         logger.error("=" * 70)
@@ -432,7 +461,7 @@ class ServiceManager(QObject):
                         if restart_attempts < max_restart_attempts:
                             restart_attempts += 1
 
-                            logger.info(f"ðŸ”„ Attempting to restart sync agent (attempt {restart_attempts})...")
+                            logger.info(f"🔄 Attempting to restart sync agent (attempt {restart_attempts})...")
 
                             # Close old log file
                             if sync_log_file:
@@ -449,22 +478,22 @@ class ServiceManager(QObject):
 
                             # Restart
                             if self.start_sync_agent():
-                                logger.info("âœ… Sync agent restarted successfully")
+                                logger.info("✅ Sync agent restarted successfully")
                                 restart_attempts = 0  # Reset counter on success
                             else:
-                                logger.error("âŒ Sync agent restart failed")
+                                logger.error("❌ Sync agent restart failed")
                         else:
-                            logger.error("âŒ Max restart attempts reached")
+                            logger.error("❌ Max restart attempts reached")
                             logger.error("   Manual intervention required")
                             logger.error("   Run cleanup_cirqen.py and restart application")
                             break
                     else:
                         # Process is healthy
                         if restart_attempts > 0:
-                            logger.info("âœ… Sync agent health restored")
+                            logger.info("✅ Sync agent health restored")
                             restart_attempts = 0
 
-                        logger.debug(f"âœ“ Sync agent healthy (PID: {sync_process.pid})")
+                        logger.debug(f"✅ Sync agent healthy (PID: {sync_process.pid})")
 
             except Exception as e:
                 logger.error(f"Error in sync agent monitor: {e}")
@@ -475,7 +504,7 @@ class ServiceManager(QObject):
                     break
                 time.sleep(1)
 
-        logger.info("ðŸ” Sync agent health monitor stopped")
+        logger.info("🔍 Sync agent health monitor stopped")
 
     def start_postgresql(self):
         """
@@ -807,14 +836,14 @@ class ServiceManager(QObject):
                         connect_timeout=3
                     )
                     conn.close()
-                    logger.info("âœ… PostgreSQL HQ is ready")
+                    logger.info("✅ PostgreSQL HQ is ready")
                     postgres_hq_ready = True
                     break
                 except:
                     time.sleep(0.5)
 
             if not postgres_hq_ready:
-                logger.warning("âš ï¸  PostgreSQL HQ timeout (non-critical)")
+                logger.warning("⚠️  PostgreSQL HQ timeout (non-critical)")
                 return False
 
             # Create HQ database if needed (same logic as local)
@@ -841,20 +870,20 @@ class ServiceManager(QObject):
                 if not db_exists:
                     logger.info(f"Creating HQ database: {self.hq_db_config['database']}")
                     cursor.execute(f"CREATE DATABASE {self.hq_db_config['database']}")
-                    logger.info(f"âœ… HQ database created: {self.hq_db_config['database']}")
+                    logger.info(f"✅ HQ database created: {self.hq_db_config['database']}")
 
                 cursor.close()
                 conn.close()
 
-                logger.info(f"âœ… PostgreSQL HQ ready on port {port}")
+                logger.info(f"✅ PostgreSQL HQ ready on port {port}")
                 return True
 
             except Exception as e:
-                logger.warning(f"âš ï¸  PostgreSQL HQ database setup failed: {e}")
+                logger.warning(f"⚠️  PostgreSQL HQ database setup failed: {e}")
                 return False
 
         except Exception as e:
-            logger.warning(f"âš ï¸  PostgreSQL HQ error (non-critical): {e}")
+            logger.warning(f"⚠️  PostgreSQL HQ error (non-critical): {e}")
             return False
 
     def start_redis(self):
@@ -894,7 +923,7 @@ daemonize no
             self.processes.append(('redis', process, log_file))
 
             time.sleep(1)
-            logger.info(f"âœ… Redis started on port {port}")
+            logger.info(f"✅ Redis started on port {port}")
             return True
 
         except Exception as e:
@@ -943,8 +972,8 @@ daemonize no
 
             django_process.start()
 
-            logger.info(f"âœ… Django process started (PID: {django_process.pid})")
-            logger.info(f"â³ Waiting for Django to be ready...")
+            logger.info(f"✅ Django process started (PID: {django_process.pid})")
+            logger.info(f"⏳ Waiting for Django to be ready...")
 
             # Store process reference
             self.processes.append(('django', django_process, None))
@@ -968,12 +997,12 @@ daemonize no
             logger.info("=" * 70)
             logger.info("DJANGO HEALTH CHECK - ENHANCED")
             logger.info("=" * 70)
-            logger.info("â³ Waiting for Django server to be ready...")
+            logger.info("⏳ Waiting for Django server to be ready...")
             logger.info("   This may take 1-3 minutes on first run:")
-            logger.info("   â€¢ Matplotlib font cache (~30-45s)")
-            logger.info("   â€¢ Django app loading (~20-30s)")
-            logger.info("   â€¢ Database migrations (if pending)")
-            logger.info("   â€¢ Database connections (~10s)")
+            logger.info("   • Matplotlib font cache (~30-45s)")
+            logger.info("   • Django app loading (~20-30s)")
+            logger.info("   • Database migrations (if pending)")
+            logger.info("   • Database connections (~10s)")
             logger.info("=" * 70)
 
             start_time = time.time()
@@ -994,7 +1023,7 @@ daemonize no
                     if not django_process.is_alive():
                         exit_code = django_process.exitcode
                         logger.error("=" * 70)
-                        logger.error(f"âŒ DJANGO PROCESS DIED (EXIT CODE: {exit_code})")
+                        logger.error(f"❌ DJANGO PROCESS DIED (EXIT CODE: {exit_code})")
                         logger.error("=" * 70)
 
                         # Show log
@@ -1002,7 +1031,7 @@ daemonize no
                             with open(django_log, 'r') as f:
                                 lines = f.readlines()
                                 if lines:
-                                    logger.error("ðŸ“„ LAST 50 LINES OF DJANGO LOG:")
+                                    logger.error("📄 LAST 50 LINES OF DJANGO LOG:")
                                     logger.error("-" * 70)
                                     for line in lines[-50:]:
                                         logger.error(f"  {line.rstrip()}")
@@ -1027,13 +1056,13 @@ daemonize no
                         current_status = f"PORT_CLOSED"
 
                         if current_status != last_status:
-                            logger.info(f"   ðŸ” Status: Django starting, port not open yet...")
+                            logger.info(f"   🔍 Status: Django starting, port not open yet...")
                             last_status = current_status
 
                         if current_time - last_log_time > 10:  # Log every 10 seconds
-                            logger.info(f"   â³ Still waiting... {int(elapsed)}s elapsed")
-                            logger.info(f"      - Process alive: âœ…")
-                            logger.info(f"      - Port {port} open: âŒ (not yet)")
+                            logger.info(f"   ⏳ Still waiting... {int(elapsed)}s elapsed")
+                            logger.info(f"      - Process alive: ✅")
+                            logger.info(f"      - Port {port} open: ❌ (not yet)")
                             last_log_time = current_time
 
                         time.sleep(0.5)
@@ -1042,8 +1071,8 @@ daemonize no
                     # Port is NOW open!
                     if port_open_time is None:
                         port_open_time = current_time
-                        logger.info(f"   âœ… Port {port} is now LISTENING (after {int(elapsed)}s)")
-                        logger.info(f"   ðŸ” Attempting HTTP connection...")
+                        logger.info(f"   ✅ Port {port} is now LISTENING (after {int(elapsed)}s)")
+                        logger.info(f"   🔍 Attempting HTTP connection...")
 
                     # ============================================================
                     # CHECK 3: Can we get HTTP response? (CONFIRMS Django ready)
@@ -1057,7 +1086,7 @@ daemonize no
                         response = urllib.request.urlopen(request, timeout=3)
 
                         logger.info("=" * 70)
-                        logger.info(f"âœ… DJANGO READY ON PORT {port}")
+                        logger.info(f"✅ DJANGO READY ON PORT {port}")
                         logger.info("=" * 70)
                         logger.info(f"   Total startup time: {int(elapsed)}s")
                         logger.info(f"   HTTP response code: {response.code}")
@@ -1071,7 +1100,7 @@ daemonize no
                         # Django is responding with HTTP error - but it's READY!
                         if e.code in [200, 301, 302, 404, 500, 403]:
                             logger.info("=" * 70)
-                            logger.info(f"âœ… DJANGO READY ON PORT {port} (HTTP {e.code})")
+                            logger.info(f"✅ DJANGO READY ON PORT {port} (HTTP {e.code})")
                             logger.info("=" * 70)
                             logger.info(f"   Total startup time: {int(elapsed)}s")
                             logger.info(f"   Response code: {e.code} (Django responding)")
@@ -1084,11 +1113,11 @@ daemonize no
                             # Unexpected HTTP error - log but continue trying
                             current_status = f"HTTP_ERROR_{e.code}"
                             if current_status != last_status:
-                                logger.warning(f"   âš ï¸  HTTP {e.code} error, retrying...")
+                                logger.warning(f"   ⚠️  HTTP {e.code} error, retrying...")
                                 last_status = current_status
 
                             if current_time - last_log_time > 10:
-                                logger.info(f"   â³ HTTP errors, still trying... {int(elapsed)}s elapsed")
+                                logger.info(f"   ⏳ HTTP errors, still trying... {int(elapsed)}s elapsed")
                                 last_log_time = current_time
 
                     except (urllib.error.URLError, socket.error, ConnectionRefusedError) as e:
@@ -1096,15 +1125,15 @@ daemonize no
                         current_status = "PORT_OPEN_HTTP_NOT_READY"
 
                         if current_status != last_status:
-                            logger.info(f"   ðŸ” Port open, waiting for HTTP response...")
+                            logger.info(f"   🔍 Port open, waiting for HTTP response...")
                             last_status = current_status
 
                         if current_time - last_log_time > 10:
                             time_since_port_open = current_time - port_open_time
-                            logger.info(f"   â³ Django loading... {int(elapsed)}s total, {int(time_since_port_open)}s since port opened")
-                            logger.info(f"      - Process alive: âœ…")
-                            logger.info(f"      - Port {port} listening: âœ…")
-                            logger.info(f"      - HTTP responding: â³ (loading apps...)")
+                            logger.info(f"   ⏳ Django loading... {int(elapsed)}s total, {int(time_since_port_open)}s since port opened")
+                            logger.info(f"      - Process alive: ✅")
+                            logger.info(f"      - Port {port} listening: ✅")
+                            logger.info(f"      - HTTP responding: ⏳ (loading apps...)")
                             last_log_time = current_time
 
                 except Exception as e:
@@ -1113,11 +1142,11 @@ daemonize no
                     current_status = f"EXCEPTION_{error_type}"
 
                     if current_status != last_status:
-                        logger.warning(f"   âš ï¸  Unexpected error: {error_type}: {str(e)[:100]}")
+                        logger.warning(f"   ⚠️  Unexpected error: {error_type}: {str(e)[:100]}")
                         last_status = current_status
 
                     if current_time - last_log_time > 10:
-                        logger.debug(f"   ðŸ” Still checking... {int(elapsed)}s elapsed ({error_type})")
+                        logger.debug(f"   🔍 Still checking... {int(elapsed)}s elapsed ({error_type})")
                         last_log_time = current_time
 
                 time.sleep(0.5)
@@ -1127,19 +1156,19 @@ daemonize no
             # ============================================================
             if not django_ready:
                 logger.error("=" * 70)
-                logger.error(f"âŒ DJANGO STARTUP TIMEOUT (after {max_wait}s)")
+                logger.error(f"❌ DJANGO STARTUP TIMEOUT (after {max_wait}s)")
                 logger.error("=" * 70)
                 logger.error(f"   Total attempts: {attempts}")
-                logger.error(f"   Process alive: {'âœ… Yes' if django_process.is_alive() else 'âŒ No'}")
+                logger.error(f"   Process alive: {'✅ Yes' if django_process.is_alive() else '❌ No'}")
 
                 if port_open_time:
-                    logger.error(f"   Port opened: âœ… Yes (but HTTP never responded)")
+                    logger.error(f"   Port opened: ✅ Yes (but HTTP never responded)")
                     logger.error(f"   Time since port opened: {int(time.time() - port_open_time)}s")
                 else:
-                    logger.error(f"   Port opened: âŒ No (Django never started listening)")
+                    logger.error(f"   Port opened: ❌ No (Django never started listening)")
 
                 logger.error("")
-                logger.error("ðŸ“„ DJANGO LOG FILE:")
+                logger.error("📄 DJANGO LOG FILE:")
                 logger.error(f"   Location: {django_log}")
 
                 # Show last part of log
@@ -1159,7 +1188,7 @@ daemonize no
                     logger.error(f"   (Could not read log: {log_err})")
 
                 logger.error("")
-                logger.error("ðŸ’¡ TROUBLESHOOTING:")
+                logger.error("💡 TROUBLESHOOTING:")
                 logger.error("   1. Check if port is already in use")
                 logger.error("   2. Check Django settings for errors")
                 logger.error("   3. Try running migrations manually")
@@ -1172,7 +1201,7 @@ daemonize no
             # SUCCESS
             # ====================================================================
             logger.info("="*70)
-            logger.info("âœ… DJANGO WEB SERVER READY")
+            logger.info("✅ DJANGO WEB SERVER READY")
             logger.info("="*70)
             logger.info(f"Status:       Running")
             logger.info(f"PID:          {django_process.pid}")
@@ -1185,7 +1214,7 @@ daemonize no
             # Emit progress
 
             try:
-                self.progress_update.emit("Django ready! ðŸš€", 70)
+                self.progress_update.emit("Django ready! 🚀", 70)
             except:
                 pass
 
@@ -1193,7 +1222,7 @@ daemonize no
             # ADDITIONAL WARMUP - Wait for Django to be fully ready
             # ====================================================================
 
-            logger.info("âœ… Django HTTP responding - waiting for full warmup...")
+            logger.info("✅ Django HTTP responding - waiting for full warmup...")
             logger.info("   (This ensures first page load works correctly)")
 
             # Give Django 3-5 more seconds to fully initialize all apps
@@ -1206,15 +1235,15 @@ daemonize no
                     headers={'User-Agent': 'Cirqen-Warmup/1.0'}
                 )
                 urllib.request.urlopen(request, timeout=5)
-                logger.info("ðŸ”¥ Django fully warmed up and ready")
+                logger.info("🔥 Django fully warmed up and ready")
             except:
-                logger.warning("âš ï¸  Warmup request failed, but continuing...")
+                logger.warning("⚠️  Warmup request failed, but continuing...")
 
             return True
 
 
         except Exception as e:
-            logger.error(f"âŒ Django startup error: {e}")
+            logger.error(f"❌ Django startup error: {e}")
             import traceback
             logger.error(traceback.format_exc())
             return False
@@ -1787,6 +1816,14 @@ daemonize no
             except Exception as e:
                 logger.error(f"Error stopping {name}: {e}")
 
+        # Stop the update manager background thread
+        if self._update_manager:
+            try:
+                self._update_manager.stop()
+                logger.info("✅ Update manager stopped")
+            except Exception as _e:
+                logger.debug("Update manager stop error: %s", _e)
+            self._update_manager = None
+
         self.processes.clear()
         logger.info("All services stopped")
-

@@ -2,17 +2,19 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QRectF, Qt, QTimer, QUrl
-from PySide6.QtGui import QBrush, QColor, QFont, QIcon, QPainter, QLinearGradient, QPen, QPixmap
+from PySide6.QtGui import QBrush, QColor, QFont, QIcon, QPainter, QLinearGradient, QPen, QPixmap, QTextCursor
 from PySide6.QtWebEngineCore import QWebEngineDownloadRequest
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import (
     QApplication,
+    QComboBox,
     QDialog,
     QHBoxLayout,
     QLabel,
     QMainWindow,
     QMessageBox,
     QFileDialog,
+    QPlainTextEdit,
     QProgressBar,
     QPushButton,
     QSplashScreen,
@@ -45,6 +47,212 @@ class UpdateProgressDialog(QDialog):
         percent = int((current / total) * 100)
         self.progress.setValue(percent)
         self.status.setText(f"Downloaded {current}/{total} files")
+
+
+# ============================
+# Log Viewer
+# ============================
+class LogViewerDialog(QDialog):
+    """
+    Lightweight log viewer — tails the rotating log files written by the
+    desktop app (cirqen_app.log), the bundled Django server (django.log),
+    PostgreSQL (postgres.log), and the subprocess bootstrap
+    (cirqen_subprocess.log).
+
+    This is the main way to see what the UpdateManager (and everything
+    else) is actually doing — e.g. why an update check failed.
+    """
+
+    # How many bytes from the end of the file to read on each refresh.
+    _TAIL_BYTES = 200_000
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Application Logs")
+        self.resize(900, 600)
+        self.setStyleSheet("""
+            QDialog { background-color: #0f0f0f; }
+            QLabel { color: #cfcfcf; font-size: 11px; }
+            QComboBox {
+                background-color: #1a1a1a;
+                color: #e8e8e8;
+                border: 1px solid rgba(255,255,255,0.12);
+                border-radius: 4px;
+                padding: 4px 8px;
+                font-size: 11px;
+            }
+            QPushButton {
+                background-color: rgba(34,197,94,0.15);
+                color: #22c55e;
+                border: 1px solid rgba(34,197,94,0.30);
+                border-radius: 4px;
+                font-size: 11px;
+                font-weight: 600;
+                padding: 4px 12px;
+            }
+            QPushButton:hover { background-color: rgba(34,197,94,0.28); }
+            QPushButton:checked {
+                background-color: rgba(34,197,94,0.35);
+                border-color: #22c55e;
+            }
+        """)
+
+        self._log_dir = DATA_PATH / "logs"
+        self._log_dir.mkdir(parents=True, exist_ok=True)
+        self._current_path: Path | None = None
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
+
+        # ── Top bar: file selector + actions ──────────────────────────
+        top_bar = QHBoxLayout()
+        top_bar.setSpacing(8)
+
+        top_bar.addWidget(QLabel("Log file:"))
+
+        self.file_combo = QComboBox()
+        self.file_combo.setMinimumWidth(220)
+        self.file_combo.currentIndexChanged.connect(self._on_file_changed)
+        top_bar.addWidget(self.file_combo)
+
+        top_bar.addStretch()
+
+        self.path_label = QLabel("")
+        self.path_label.setStyleSheet("color: #707070; font-size: 10px;")
+        top_bar.addWidget(self.path_label)
+
+        top_bar.addStretch()
+
+        self.auto_refresh_btn = QPushButton("⏵ Auto-refresh")
+        self.auto_refresh_btn.setCheckable(True)
+        self.auto_refresh_btn.setChecked(True)
+        self.auto_refresh_btn.toggled.connect(self._on_auto_refresh_toggled)
+        top_bar.addWidget(self.auto_refresh_btn)
+
+        refresh_btn = QPushButton("↻ Refresh now")
+        refresh_btn.clicked.connect(self._refresh)
+        top_bar.addWidget(refresh_btn)
+
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(self.close)
+        top_bar.addWidget(close_btn)
+
+        layout.addLayout(top_bar)
+
+        # ── Log text area ───────────────────────────────────────────────
+        self.text_view = QPlainTextEdit()
+        self.text_view.setReadOnly(True)
+        self.text_view.setLineWrapMode(QPlainTextEdit.NoWrap)
+        self.text_view.setStyleSheet("""
+            QPlainTextEdit {
+                background-color: #0a0a0a;
+                color: #d4d4d4;
+                border: 1px solid rgba(255,255,255,0.08);
+                border-radius: 4px;
+                font-family: 'DejaVu Sans Mono', 'Consolas', monospace;
+                font-size: 11px;
+                padding: 6px;
+            }
+        """)
+        layout.addWidget(self.text_view)
+
+        # ── Footer ─────────────────────────────────────────────────────
+        self.status_label = QLabel("")
+        self.status_label.setStyleSheet("color: #707070; font-size: 10px;")
+        layout.addWidget(self.status_label)
+
+        # Auto-refresh timer
+        self._timer = QTimer(self)
+        self._timer.setInterval(2000)
+        self._timer.timeout.connect(self._refresh)
+
+        self._populate_file_list()
+        self._refresh()
+        self._timer.start()
+
+    # ── File list ─────────────────────────────────────────────────────────
+    def _populate_file_list(self):
+        """Find known log files, newest/most-relevant first."""
+        preferred_order = [
+            "cirqen_app.log",
+            "django.log",
+            "cirqen_subprocess.log",
+            "postgres.log",
+        ]
+        found = {p.name: p for p in self._log_dir.glob("*.log")}
+
+        self.file_combo.blockSignals(True)
+        self.file_combo.clear()
+        ordered_names = [n for n in preferred_order if n in found]
+        ordered_names += sorted(n for n in found if n not in preferred_order)
+
+        if not ordered_names:
+            self.file_combo.addItem("(no log files found)")
+            self.file_combo.setEnabled(False)
+        else:
+            for name in ordered_names:
+                self.file_combo.addItem(name, str(found[name]))
+            self.file_combo.setEnabled(True)
+        self.file_combo.blockSignals(False)
+
+        if ordered_names:
+            self._current_path = found[ordered_names[0]]
+            self.path_label.setText(str(self._current_path))
+
+    def _on_file_changed(self, index: int):
+        path_str = self.file_combo.itemData(index)
+        if path_str:
+            self._current_path = Path(path_str)
+            self.path_label.setText(path_str)
+            self.text_view.clear()
+            self._refresh()
+
+    def _on_auto_refresh_toggled(self, checked: bool):
+        if checked:
+            self.auto_refresh_btn.setText("⏵ Auto-refresh")
+            self._timer.start()
+            self._refresh()
+        else:
+            self.auto_refresh_btn.setText("⏸ Paused")
+            self._timer.stop()
+
+    # ── Refresh ───────────────────────────────────────────────────────────
+    def _refresh(self):
+        if not self._current_path or not self._current_path.exists():
+            self.status_label.setText("Log file not found yet — it is created on first write.")
+            return
+
+        try:
+            size = self._current_path.stat().st_size
+            with self._current_path.open("rb") as f:
+                if size > self._TAIL_BYTES:
+                    f.seek(size - self._TAIL_BYTES)
+                    f.readline()  # skip partial first line
+                content = f.read().decode("utf-8", errors="replace")
+        except Exception as exc:
+            self.status_label.setText(f"Could not read log file: {exc}")
+            return
+
+        # Preserve scroll position if the user has scrolled up to read
+        # something; otherwise keep following the tail.
+        sb = self.text_view.verticalScrollBar()
+        at_bottom = sb.value() >= sb.maximum() - 4
+
+        if content != self.text_view.toPlainText():
+            self.text_view.setPlainText(content)
+            if at_bottom:
+                self.text_view.moveCursor(QTextCursor.End)
+                sb.setValue(sb.maximum())
+
+        from datetime import datetime as _dt
+        size_kb = size / 1024
+        self.status_label.setText(
+            f"{self._current_path.name} — {size_kb:.1f} KB"
+            f"  •  last refreshed {_dt.now().strftime('%H:%M:%S')}"
+        )
+
+
 # ============================
 # Splash Screen
 # ============================
@@ -317,7 +525,7 @@ class MainWindow(QMainWindow):
 
         bottom_layout.addStretch()
 
-        # Update Status + Restart button (no version badge shown to users)
+        # ── Update status label ──────────────────────────────────────────
         self.update_status_label = QLabel("⚙️ Checking updates…")
         self.update_status_label.setStyleSheet("""
             QLabel {
@@ -326,10 +534,42 @@ class MainWindow(QMainWindow):
                 padding: 4px 8px;
             }
         """)
-        self.update_status_label.setToolTip("Update system status")
+        self.update_status_label.setToolTip("Update system status — click to view logs")
+        self.update_status_label.setCursor(Qt.PointingHandCursor)
+        self.update_status_label.mousePressEvent = lambda _e: self._show_log_viewer()
         bottom_layout.addWidget(self.update_status_label)
 
+        # ── "Restart & Update" button (hidden until update is ready) ─────
+        self.restart_update_btn = QPushButton("↺ Restart & Update")
+        self.restart_update_btn.setFixedHeight(24)
+        self.restart_update_btn.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(34, 197, 94, 0.18);
+                color: #22c55e;
+                border: 1px solid rgba(34, 197, 94, 0.40);
+                border-radius: 4px;
+                font-size: 10px;
+                font-weight: 600;
+                padding: 0px 10px;
+            }
+            QPushButton:hover {
+                background-color: rgba(34, 197, 94, 0.30);
+                border-color: #22c55e;
+            }
+            QPushButton:pressed { background-color: rgba(34, 197, 94, 0.45); }
+        """)
+        self.restart_update_btn.setVisible(False)
+        self.restart_update_btn.setToolTip("Restart now to apply the downloaded update")
+        self.restart_update_btn.clicked.connect(
+            lambda: self._show_restart_dialog(
+                getattr(self, "_pending_update_version", "")
+            )
+        )
+        bottom_layout.addWidget(self.restart_update_btn)
 
+        # initialise transient state
+        self._pending_update_version = ""
+        self._restart_dialog_shown_for = None
 
         # Separator
         sep1 = self._create_separator()
@@ -367,6 +607,27 @@ class MainWindow(QMainWindow):
         bottom_layout.addWidget(self.refresh_btn)
 
         # Logs Button
+        self.logs_btn = QPushButton("📄 Logs")
+        self.logs_btn.setFixedHeight(24)
+        self.logs_btn.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(96, 165, 250, 0.15);
+                color: #60a5fa;
+                border: 1px solid rgba(96, 165, 250, 0.30);
+                border-radius: 4px;
+                font-size: 10px;
+                font-weight: 600;
+                padding: 0px 10px;
+            }
+            QPushButton:hover {
+                background-color: rgba(96, 165, 250, 0.28);
+                border-color: #60a5fa;
+            }
+            QPushButton:pressed { background-color: rgba(96, 165, 250, 0.40); }
+        """)
+        self.logs_btn.setToolTip("View application logs (incl. update checks)")
+        self.logs_btn.clicked.connect(self._show_log_viewer)
+        bottom_layout.addWidget(self.logs_btn)
 
 
         main_layout.addWidget(bottom_bar)
@@ -402,6 +663,19 @@ class MainWindow(QMainWindow):
             }
         """)
         return sep
+
+    def _show_log_viewer(self):
+        """
+        Open (or raise) the LogViewerDialog. Reuses a single instance so
+        repeated clicks don't stack up multiple windows.
+        """
+        dlg = getattr(self, "_log_viewer_dialog", None)
+        if dlg is None or not dlg.isVisible():
+            dlg = LogViewerDialog(self)
+            self._log_viewer_dialog = dlg
+        dlg.show()
+        dlg.raise_()
+        dlg.activateWindow()
 
     def update_update_status(self):
         """
@@ -514,113 +788,121 @@ class MainWindow(QMainWindow):
 
     def _show_restart_dialog(self, new_version: str):
         """
-        Show a modal dialog asking the user to restart so the update takes effect.
-        'Restart Now' re-executes the current process; 'Later' dismisses the dialog.
-        The dialog is intentionally non-blocking (uses QTimer to defer so the main
-        window finishes initialising before the dialog appears).
+        Show a modal dialog asking the user to confirm the restart.
+        On confirm: kick off the Updater with the staged zip, write the
+        restart sentinel, and quit so the launcher can relaunch the app.
         """
-        def _do_show():
+        import json as _j
+        import queue as _q
+        import threading as _thr
+
+        if not new_version:
+            return
+
+        dlg = QMessageBox(self)
+        dlg.setWindowTitle("Update Ready")
+        dlg.setIcon(QMessageBox.Information)
+        dlg.setText(
+            f"<b>Cirqen v{new_version} is ready to install.</b>"
+        )
+        dlg.setInformativeText(
+            "A restart is required to apply the update.\n\n"
+            "Save any work before continuing."
+        )
+        dlg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        dlg.setDefaultButton(QMessageBox.Yes)
+        dlg.button(QMessageBox.Yes).setText("Restart Now")
+        dlg.button(QMessageBox.No).setText("Later")
+
+        if dlg.exec() != QMessageBox.Yes:
+            return
+
+        # ── Locate the staged zip ─────────────────────────────────────────
+        staged_zip = DATA_PATH / "update_staging" / f"cirqen_update_v{new_version}.zip"
+
+        # Fall back: check update_status.json for staged_path field
+        if not staged_zip.exists():
             try:
-                from PySide6.QtWidgets import QMessageBox, QPushButton
-                from PySide6.QtCore import Qt
-
-                dlg = QMessageBox(self)
-                dlg.setWindowTitle("Update Ready")
-                dlg.setIcon(QMessageBox.Icon.Information)
-                dlg.setText(
-                    f"<b>Cirqen v{new_version} has been downloaded and is ready to install.</b>"
+                sd = _j.loads(
+                    (DATA_PATH / "sync_state" / "update_status.json").read_text()
                 )
-                dlg.setInformativeText(
-                    "A restart is required to apply the update.\n\n"
-                    "Click <b>Restart Now</b> to restart immediately, or "
-                    "<b>Later</b> to continue and restart at your convenience."
-                )
-                dlg.setStandardButtons(QMessageBox.StandardButton.NoButton)
+                alt = sd.get("staged_path", "")
+                if alt and _Path(alt).exists():
+                    staged_zip = _Path(alt)
+            except Exception:
+                pass
 
-                restart_btn = dlg.addButton("Restart Now", QMessageBox.ButtonRole.AcceptRole)
-                later_btn   = dlg.addButton("Later",        QMessageBox.ButtonRole.RejectRole)
+        if not staged_zip.exists():
+            QMessageBox.warning(
+                self, "Package Missing",
+                f"The update package for v{new_version} was not found.\n"
+                "It will be re-downloaded on next check.",
+            )
+            return
 
-                restart_btn.setStyleSheet(
-                    "QPushButton { background-color: #22c55e; color: white; "
-                    "font-weight: bold; padding: 6px 18px; border-radius: 4px; }"
-                    "QPushButton:hover { background-color: #16a34a; }"
-                )
-                later_btn.setStyleSheet(
-                    "QPushButton { background-color: #374151; color: #d1d5db; "
-                    "padding: 6px 18px; border-radius: 4px; }"
-                    "QPushButton:hover { background-color: #4b5563; }"
-                )
+        # ── Apply via Updater ─────────────────────────────────────────────
+        try:
+            # Import Django's Updater (lives in updates/updater.py or
+            # hq_server/updater.py — whichever is on the path)
+            try:
+                from updates.updater import Updater
+            except ImportError:
+                from hq_server.updater import Updater   # dev layout
 
-                dlg.setDefaultButton(restart_btn)
-                dlg.exec()
+            progress_q = _q.Queue()
+            updater = Updater(
+                package_url=str(staged_zip),
+                version=new_version,
+                progress_queue=progress_q,
+                is_local_file=True,
+            )
 
-                if dlg.clickedButton() == restart_btn:
-                    logger.info(f"User requested restart to apply v{new_version}")
-                    # Stop timers immediately so no more UI updates fire
-                    try:
-                        self.sync_status_timer.stop()
-                        self.update_status_timer.stop()
-                    except Exception:
-                        pass
+            # Run in background; the sentinel triggers app restart on exit
+            _thr.Thread(
+                target=updater.run,
+                name="UpdaterApply",
+                daemon=True,
+            ).start()
 
-                    # Pre-emptively clear the update_ready flag and sentinel so
-                    # that if the new process crashes before the update thread
-                    # initialises, the banner doesn't reappear as a ghost.
-                    try:
-                        _status_file = DATA_PATH / 'sync_state' / 'update_status.json'
-                        if _status_file.exists():
-                            _sd = json.loads(_status_file.read_text())
-                            _sd['update_ready'] = False
-                            _sd['update_available'] = False
-                            _sd['downloading'] = False
-                            _status_file.write_text(json.dumps(_sd, indent=2))
-                    except Exception:
-                        pass
-                    try:
-                        if getattr(sys, 'frozen', False):
-                            _ar = Path(sys.executable).parent / "_internal"
-                        else:
-                            _ar = APPLICATION_PATH
-                        _sent = _ar / '.restart_required'
-                        if _sent.exists():
-                            _sent.unlink()
-                    except Exception:
-                        pass
+            QMessageBox.information(
+                self, "Applying Update",
+                f"Update v{new_version} is being applied.\n"
+                "The application will restart automatically when done."
+            )
 
-                    def _do_restart():
-                        # Stop services in background - use fast version to avoid blocking
-                        try:
-                            self.service_manager.stop_services_fast()
-                        except Exception:
-                            pass
-                        # Spawn the new process
-                        try:
-                            restart_cmd, use_shell, cwd, env = get_restart_command()
-                            subprocess.Popen(
-                                restart_cmd,
-                                cwd=cwd,
-                                shell=use_shell,
-                                stdout=subprocess.DEVNULL,
-                                stderr=subprocess.DEVNULL,
-                                start_new_session=True,
-                            )
-                        except Exception:
-                            os.execv(sys.executable, [sys.executable] + sys.argv)
-                        # Kill this process from background thread - bypasses Qt's exception catch
-                        import time as _restart_time
-                        _restart_time.sleep(1)
-                        os.kill(os.getpid(), signal.SIGTERM)
+        except Exception as _exc:
+            logger.error("Failed to apply update: %s", _exc)
+            # Fallback: just write the sentinel and restart — the Updater
+            # will apply files on next boot (legacy behaviour).
+            sentinel = APPLICATION_PATH / ".restart_required"
+            try:
+                sentinel.write_text(new_version)
+            except Exception:
+                sentinel = DATA_PATH / ".restart_required"
+                sentinel.write_text(new_version)
 
-                    threading.Thread(target=_do_restart, daemon=True).start()
-                else:
-                    logger.info("User chose to restart later")
+        # ── Stop timers and quit ──────────────────────────────────────────
+        try:
+            self.update_status_timer.stop()
+        except Exception:
+            pass
+        try:
+            self.sync_status_timer.stop()
+        except Exception:
+            pass
 
-            except Exception as _e:
-                logger.warning(f"Could not show restart dialog: {_e}")
+        # Pre-emptively clear update flags
+        try:
+            _sf = DATA_PATH / "sync_state" / "update_status.json"
+            _sd = _j.loads(_sf.read_text()) if _sf.exists() else {}
+            _sd["update_ready"]     = False
+            _sd["update_available"] = False
+            _sf.write_text(_j.dumps(_sd, indent=2))
+        except Exception:
+            pass
 
-        # Defer by 2 seconds so the main window is fully visible first
-        from PySide6.QtCore import QTimer
-        QTimer.singleShot(2000, _do_show)
+        from PySide6.QtWidgets import QApplication as _App
+        _App.instance().quit()
 
     def update_sync_online_indicator(self):
         """
@@ -946,5 +1228,3 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
         QApplication.quit()
-
-
