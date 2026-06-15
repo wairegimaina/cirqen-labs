@@ -121,11 +121,17 @@ def _handle_calibration_post(request):
 
     schedule_was_created = False
     if not schedule:
-        schedule = CalibrationSchedule.objects.create(
-            equipment=equipment, calibration_procedure=procedure,
-            scheduled_month=timezone.now().date(), status='pending'
+        grouped_schedule = _find_grouped_schedule_for_equipment(equipment)
+        scheduled_month = grouped_schedule.scheduled_month if grouped_schedule else timezone.now().date()
+        schedule, created = CalibrationSchedule.objects.get_or_create(
+            equipment=equipment,
+            scheduled_month=scheduled_month,
+            defaults={
+                "calibration_procedure": procedure,
+                "status": "pending",
+            },
         )
-        schedule_was_created = True
+        schedule_was_created = created or not schedule.pk
 
     session_form = CalibrationSessionForm(request.POST)
     if not session_form.is_valid():
@@ -151,6 +157,8 @@ def _handle_calibration_post(request):
                 if new_schedule:
                     schedule = new_schedule
 
+    schedule = _ensure_saved_schedule(schedule, equipment, procedure)
+
     session = CalibrationSession.objects.create(
         procedure=procedure, schedule=schedule, performed_by=request.user,
         timestamp=timezone.now(), device_model=equipment.model,
@@ -162,6 +170,47 @@ def _handle_calibration_post(request):
 
     return _process_readings(request, session, procedure, equipment, schedule,
         return_department, return_month, return_year)
+
+
+def _ensure_saved_schedule(schedule, equipment, procedure):
+    if not schedule:
+        return None
+
+    scheduled_month = getattr(schedule, "scheduled_month", None) or timezone.now().date()
+    schedule_pk = getattr(schedule, "pk", None)
+
+    if schedule_pk:
+        try:
+            return CalibrationSchedule.objects.get(pk=schedule_pk)
+        except CalibrationSchedule.DoesNotExist:
+            logger.warning(
+                f"CalibrationSchedule {schedule_pk} no longer exists; creating replacement "
+                f"for equipment {equipment.id}"
+            )
+
+    schedule, _ = CalibrationSchedule.objects.get_or_create(
+        equipment=equipment,
+        scheduled_month=scheduled_month,
+        defaults={
+            "calibration_procedure": procedure,
+            "status": "pending",
+        },
+    )
+
+    try:
+        return CalibrationSchedule.objects.get(pk=schedule.pk)
+    except CalibrationSchedule.DoesNotExist:
+        fallback_schedule = CalibrationSchedule.objects.filter(
+            equipment=equipment,
+            status__in=["pending", "pushed", "pending_approval"],
+        ).exclude(scheduled_month=scheduled_month).order_by("scheduled_month").first()
+        if fallback_schedule:
+            logger.warning(
+                f"Created CalibrationSchedule for equipment {equipment.id} was removed; "
+                f"using existing schedule {fallback_schedule.pk}"
+            )
+            return fallback_schedule
+        return schedule
 
 
 def _process_readings(request, session, procedure, equipment, schedule, return_department, return_month, return_year):
@@ -235,6 +284,7 @@ def _process_readings(request, session, procedure, equipment, schedule, return_d
         schedule.status = 'pending_approval'
         schedule.save()
 
+    schedule = _ensure_saved_schedule(schedule, equipment, procedure)
     _store_historical_data(session)
 
     CalibrationAuditLog.objects.create(

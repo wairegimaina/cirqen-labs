@@ -1,4 +1,10 @@
 from .agent_prelude import LOG
+from typing import List, Dict
+import uuid
+import psycopg2
+from psycopg2.extras import RealDictCursor
+import requests
+
 
 class SmartDeleteMixin:
 
@@ -22,22 +28,26 @@ class SmartDeleteMixin:
 
             # Check if table has status columns
             with conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT column_name
                     FROM information_schema.columns
                     WHERE table_schema = %s
                     AND table_name = %s
                     AND column_name IN ('pending_delete', 'active_status')
-                """, (schema, tbl))
+                """,
+                    (schema, tbl),
+                )
 
                 status_columns = {row[0] for row in cur.fetchall()}
 
-            if 'pending_delete' not in status_columns:
+            if "pending_delete" not in status_columns:
                 return []  # Table doesn't support soft delete
 
             # Find records marked for deletion
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute(f"""
+                cur.execute(
+                    f"""
                     SELECT
                         id,
                         to_jsonb(t.*) as row_data,
@@ -49,14 +59,16 @@ class SmartDeleteMixin:
                     AND updated_at > %s
                     ORDER BY updated_at ASC
                     LIMIT 100
-                """, (since_ts,))
+                """,
+                    (since_ts,),
+                )
 
                 deleted_records = cur.fetchall()
 
                 delete_events = []
 
                 for record in deleted_records:
-                    row_id = str(record['id'])
+                    row_id = str(record["id"])
 
                     # Check if this record has dependencies
                     has_deps = self.check_local_dependencies(conn, table, row_id)
@@ -72,13 +84,10 @@ class SmartDeleteMixin:
                             "_local_soft_delete": True,
                             # Don't include full record data for deletes
                         },
-                        "created_at": record['updated_at'].isoformat(),
+                        "created_at": record["updated_at"].isoformat(),
                         "source": "local",
                         "machine_id": self.machine_id,
-                        "metadata": {
-                            "has_dependencies": has_deps,
-                            "local_soft_delete": True
-                        }
+                        "metadata": {"has_dependencies": has_deps, "local_soft_delete": True},
                     }
 
                     delete_events.append(delete_event)
@@ -111,7 +120,8 @@ class SmartDeleteMixin:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 # Get ALL tables that have foreign keys pointing to this table
                 # Removed LIMIT to check all dependencies
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT
                         tc.table_schema AS child_schema,
                         tc.table_name AS child_table,
@@ -127,7 +137,9 @@ class SmartDeleteMixin:
                         tc.constraint_type = 'FOREIGN KEY'
                         AND ccu.table_schema = %s
                         AND ccu.table_name = %s
-                """, (schema, tbl))
+                """,
+                    (schema, tbl),
+                )
 
                 child_tables = cur.fetchall()
 
@@ -135,29 +147,36 @@ class SmartDeleteMixin:
                     LOG.debug(f"   No FK relationships found for {table}")
                     return False
 
-                LOG.debug(f"   Checking {len(child_tables)} potential child tables for dependencies...")
+                LOG.debug(
+                    f"   Checking {len(child_tables)} potential child tables for dependencies..."
+                )
 
                 # Check each child table for actual records
                 for child in child_tables:
-                    child_schema = child['child_schema']
-                    child_table = child['child_table']
-                    fk_column = child['child_fk_column']
+                    child_schema = child["child_schema"]
+                    child_table = child["child_table"]
+                    fk_column = child["child_fk_column"]
 
                     child_table_full = f"{child_schema}.{child_table}"
 
                     try:
                         # Count ANY records that reference this parent
                         # This checks ALL records, not just active ones
-                        cur.execute(f"""
+                        cur.execute(
+                            f"""
                             SELECT COUNT(*) as count
                             FROM "{child_schema}"."{child_table}"
                             WHERE "{fk_column}" = %s
-                        """, (row_id,))
+                        """,
+                            (row_id,),
+                        )
 
                         result = cur.fetchone()
 
-                        if result and result['count'] > 0:
-                            LOG.info(f"   ✓ Found {result['count']} dependencies in {child_table_full}")
+                        if result and result["count"] > 0:
+                            LOG.info(
+                                f"   ✓ Found {result['count']} dependencies in {child_table_full}"
+                            )
                             # Return immediately on first dependency found
                             return True
                         else:
@@ -168,7 +187,9 @@ class SmartDeleteMixin:
                         LOG.debug(f"   ⚠ Could not check {child_table_full}: {str(e)[:100]}")
                         continue
                     except Exception as e:
-                        LOG.debug(f"   ⚠ Unexpected error checking {child_table_full}: {str(e)[:100]}")
+                        LOG.debug(
+                            f"   ⚠ Unexpected error checking {child_table_full}: {str(e)[:100]}"
+                        )
 
                 # If we checked all tables and found no dependencies
                 LOG.debug(f"   ✓ No dependencies found for {table}[{row_id}]")
@@ -208,22 +229,28 @@ class SmartDeleteMixin:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 if operation_type == "soft_delete":
                     # Apply soft delete locally
-                    cur.execute(f"""
+                    cur.execute(
+                        f"""
                         UPDATE {full_table}
                         SET pending_delete = TRUE,
                             active_status = FALSE,
                             updated_at = NOW()
                         WHERE id = %s
-                    """, (row_id,))
+                    """,
+                        (row_id,),
+                    )
 
                     LOG.info(f"   ✓ Applied soft delete locally")
 
                 elif operation_type == "hard_delete":
                     # Apply hard delete locally
-                    cur.execute(f"""
+                    cur.execute(
+                        f"""
                         DELETE FROM {full_table}
                         WHERE id = %s
-                    """, (row_id,))
+                    """,
+                        (row_id,),
+                    )
 
                     LOG.info(f"   🗑️ Applied hard delete locally")
 
@@ -239,13 +266,16 @@ class SmartDeleteMixin:
             # Try soft delete as fallback
             try:
                 with conn.cursor() as cur:
-                    cur.execute(f"""
+                    cur.execute(
+                        f"""
                         UPDATE {full_table}
                         SET pending_delete = TRUE,
                             active_status = FALSE,
                             updated_at = NOW()
                         WHERE id = %s
-                    """, (row_id,))
+                    """,
+                        (row_id,),
+                    )
                     conn.commit()
                     LOG.info(f"   ✓ Applied as soft delete instead")
                     return True
@@ -263,8 +293,6 @@ class SmartDeleteMixin:
         finally:
             if conn:
                 self.pool.putconn(conn)
-
-
 
     def detect_local_restores(self, table: str, since_ts: str) -> List[Dict]:
         """
@@ -285,13 +313,16 @@ class SmartDeleteMixin:
 
             # Check if table has status columns
             with conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT column_name
                     FROM information_schema.columns
                     WHERE table_schema = %s
                     AND table_name = %s
                     AND column_name IN ('pending_delete', 'active_status')
-                """, (schema, tbl))
+                """,
+                    (schema, tbl),
+                )
 
                 status_columns = {row[0] for row in cur.fetchall()}
 
@@ -301,7 +332,8 @@ class SmartDeleteMixin:
 
             # Find restore operations from audit log
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT
                         event_id,
                         row_id,
@@ -313,7 +345,9 @@ class SmartDeleteMixin:
                     AND received_at > %s
                     ORDER BY received_at ASC
                     LIMIT 100
-                """, (table, since_ts))
+                """,
+                    (table, since_ts),
+                )
 
                 audit_restores = cur.fetchall()
 
@@ -326,11 +360,12 @@ class SmartDeleteMixin:
                 restored_ids = []
 
                 for audit_record in audit_restores:
-                    row_id = str(audit_record['row_id'])
-                    event_id = audit_record['event_id']
+                    row_id = str(audit_record["row_id"])
+                    event_id = audit_record["event_id"]
 
                     # Verify the record exists and is active
-                    cur.execute(f"""
+                    cur.execute(
+                        f"""
                         SELECT
                             id,
                             to_jsonb(t.*) as row_data,
@@ -339,7 +374,9 @@ class SmartDeleteMixin:
                             pending_delete
                         FROM {full_table} t
                         WHERE id = %s
-                    """, (row_id,))
+                    """,
+                        (row_id,),
+                    )
 
                     current_record = cur.fetchone()
 
@@ -349,8 +386,8 @@ class SmartDeleteMixin:
 
                     # Verify it's actually active
                     is_active = (
-                        current_record.get('active_status') == True or
-                        current_record.get('pending_delete') == False
+                        current_record.get("active_status") == True
+                        or current_record.get("pending_delete") == False
                     )
 
                     if not is_active:
@@ -364,15 +401,12 @@ class SmartDeleteMixin:
                         "row_id": row_id,
                         "operation": "activate",
                         "data": current_record["row_data"],
-                        "created_at": current_record['updated_at'].isoformat(),
+                        "created_at": current_record["updated_at"].isoformat(),
                         "source": "local",
                         "machine_id": self.machine_id,
                         "active_status": True,
                         "pending_delete": False,
-                        "metadata": {
-                            "restore_operation": True,
-                            "restored_from_audit": True
-                        }
+                        "metadata": {"restore_operation": True, "restored_from_audit": True},
                     }
 
                     restore_events.append(restore_event)
@@ -381,7 +415,9 @@ class SmartDeleteMixin:
 
                 # 🔥 CRITICAL FIX: Clear soft delete tracking for restored records
                 if restored_ids:
-                    LOG.info(f"🧹 Clearing soft delete tracking for {len(restored_ids)} restored records...")
+                    LOG.info(
+                        f"🧹 Clearing soft delete tracking for {len(restored_ids)} restored records..."
+                    )
                     self._clear_soft_delete_tracking_for_records(table, restored_ids)
 
                 if restore_events:
@@ -397,7 +433,6 @@ class SmartDeleteMixin:
             if conn:
                 self.pool.putconn(conn)
 
-
     def _clear_soft_delete_tracking_for_records(self, table: str, row_ids: List[str]):
         """
         🔥 NEW: Clear soft delete tracking for specific records.
@@ -405,7 +440,9 @@ class SmartDeleteMixin:
         """
         state_key = f"synced_soft_deletes_{table}"
         synced_soft_deletes_str = self.state.get(state_key, "")
-        synced_soft_deletes = set(synced_soft_deletes_str.split(",")) if synced_soft_deletes_str else set()
+        synced_soft_deletes = (
+            set(synced_soft_deletes_str.split(",")) if synced_soft_deletes_str else set()
+        )
 
         cleared_count = 0
         for row_id in row_ids:
@@ -421,7 +458,6 @@ class SmartDeleteMixin:
             LOG.info(f"   ✅ Cleared {cleared_count} records from soft delete tracking")
             LOG.info(f"   📝 These records can now be deleted again")
 
-
     def clear_soft_delete_tracking(self, table: str, row_id: str = None):
         """
         🔧 ENHANCED: Clear soft delete tracking for emergency cleanup.
@@ -431,7 +467,9 @@ class SmartDeleteMixin:
         if row_id:
             # Clear specific record
             synced_soft_deletes_str = self.state.get(state_key, "")
-            synced_soft_deletes = set(synced_soft_deletes_str.split(",")) if synced_soft_deletes_str else set()
+            synced_soft_deletes = (
+                set(synced_soft_deletes_str.split(",")) if synced_soft_deletes_str else set()
+            )
 
             if row_id in synced_soft_deletes:
                 synced_soft_deletes.discard(row_id)
@@ -443,7 +481,6 @@ class SmartDeleteMixin:
             # Clear entire table tracking
             self.state.set(state_key, "")
             LOG.info(f"🧹 Cleared ALL soft delete tracking for {table}")
-
 
     def mark_record_for_deletion(self, table: str, row_id: str) -> bool:
         """
@@ -467,14 +504,17 @@ class SmartDeleteMixin:
 
             with conn.cursor() as cur:
                 # Mark as pending_delete instead of actually deleting
-                if schema_info['has_pending_delete']:
-                    cur.execute(f"""
+                if schema_info["has_pending_delete"]:
+                    cur.execute(
+                        f"""
                         UPDATE {full_table}
                         SET pending_delete = TRUE,
                             active_status = FALSE,
                             updated_at = NOW()
                         WHERE id = %s
-                    """, (row_id,))
+                    """,
+                        (row_id,),
+                    )
 
                     LOG.info(f"✅ Marked {table}[{row_id}] for deletion (soft delete)")
 
@@ -515,7 +555,9 @@ class SmartDeleteMixin:
             delete_count = sum(1 for e in events if e.get("operation") == "d")
             update_count = len(events) - delete_count
 
-            LOG.info(f"Discovered {len(events)} changes: {update_count} updates, {delete_count} deletes")
+            LOG.info(
+                f"Discovered {len(events)} changes: {update_count} updates, {delete_count} deletes"
+            )
 
         return events
 
@@ -554,16 +596,13 @@ class ClientSmartDelete:
                 "table": table,
                 "row_id": row_id,
                 "client_id": self.agent.client_id,
-                "force_hard_delete": force_hard
+                "force_hard_delete": force_hard,
             }
 
             LOG.info(f"Requesting smart delete from HQ: {table}[{row_id}]")
 
             response = requests.post(
-                f"{self.api_url}/smart_delete",
-                json=payload,
-                headers=self.headers,
-                timeout=30
+                f"{self.api_url}/smart_delete", json=payload, headers=self.headers, timeout=30
             )
 
             if response.status_code == 200:
@@ -585,23 +624,19 @@ class ClientSmartDelete:
         Helps UI show warning to users.
         """
         try:
-            payload = {
-                "table": table,
-                "row_id": row_id
-            }
+            payload = {"table": table, "row_id": row_id}
 
             response = requests.post(
-                f"{self.api_url}/check_dependencies",
-                json=payload,
-                headers=self.headers,
-                timeout=10
+                f"{self.api_url}/check_dependencies", json=payload, headers=self.headers, timeout=10
             )
 
             if response.status_code == 200:
                 result = response.json()
 
                 if result.get("has_dependencies"):
-                    LOG.info(f"⚠️  {table}[{row_id}] has {result.get('total_dependencies')} dependencies")
+                    LOG.info(
+                        f"⚠️  {table}[{row_id}] has {result.get('total_dependencies')} dependencies"
+                    )
 
                     for dep in result.get("dependencies", []):
                         LOG.info(f"      ↳ {dep['child_table']}: {dep['count']} records")
@@ -613,8 +648,3 @@ class ClientSmartDelete:
         except Exception as e:
             LOG.error(f"Error checking dependencies: {e}")
             return {"has_dependencies": False, "error": str(e)}
-
-
-
-
-

@@ -2,6 +2,7 @@ from .agent_prelude import LOG, now_kenyan, now_utc, now_iso, format_kenyan_time
 from .agent_prelude import KENYAN_TZ, PerformanceMonitor, encrypt_token, setup_logging, load_agent_config
 from .agent_prelude import load_config_from_unified_manager, load_config_from_env_fallback
 from .agent_prelude import sleep_with_jitter, is_online, CERT_TABLES, DEFAULT_CONFIG
+import json
 from typing import Any, Dict, List, Optional, Tuple, Set
 from datetime import datetime, timezone, timedelta
 from pathlib import Path

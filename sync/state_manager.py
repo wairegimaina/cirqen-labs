@@ -1,4 +1,9 @@
 from .agent_prelude import LOG
+import os
+import json
+from pathlib import Path
+from typing import Dict, Any, Optional
+
 
 class StateManager:
     """
@@ -27,7 +32,7 @@ class StateManager:
     def _load_state_from_file(self) -> Dict[str, Any]:
         """Load state from file with backup fallback"""
         try:
-            with open(self.state_file, 'r') as f:
+            with open(self.state_file, "r") as f:
                 state = json.load(f)
                 LOG.debug("Loaded state from primary file")
                 return state
@@ -40,7 +45,7 @@ class StateManager:
             LOG.warning("Failed to load state file: %s, trying backup", e)
 
         try:
-            with open(self.state_file_backup, 'r') as f:
+            with open(self.state_file_backup, "r") as f:
                 state = json.load(f)
                 LOG.info("✅ Recovered state from backup file")
                 self._save_state_to_file(state)
@@ -53,8 +58,8 @@ class StateManager:
     def _save_state_to_file(self, state: Dict[str, Any]):
         """Atomically save state to file with backup"""
         try:
-            temp_file = self.state_file.with_suffix('.tmp')
-            with open(temp_file, 'w') as f:
+            temp_file = self.state_file.with_suffix(".tmp")
+            with open(temp_file, "w") as f:
                 json.dump(state, f, indent=2, default=str)
                 f.flush()
                 os.fsync(f.fileno())
@@ -116,7 +121,7 @@ class StateManager:
             return self._state_cache["client_id"]
 
         try:
-            with open(self.client_id_file, 'r') as f:
+            with open(self.client_id_file, "r") as f:
                 return f.read().strip()
         except FileNotFoundError:
             return None
@@ -134,12 +139,12 @@ class StateManager:
         self._save_state_to_file(self._state_cache)
 
         try:
-            with open(self.client_id_file, 'w') as f:
+            with open(self.client_id_file, "w") as f:
                 f.write(client_id)
                 f.flush()
                 os.fsync(f.fileno())
         except Exception as e:
             LOG.warning("Failed to write client_id file: %s", e)
 
-# ---------- Dependency Discovery & Sorting ----------
 
+# ---------- Dependency Discovery & Sorting ----------

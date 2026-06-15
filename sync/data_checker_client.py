@@ -395,13 +395,13 @@ class DataCheckerClient:
                             """,
                             vals,
                         )
+                    conn.commit()
                     ok += 1
                 except Exception as exc:
                     failed += 1
                     self.logger.debug("Upsert failed for row in %s: %s", table, exc)
                     conn.rollback()
 
-            conn.commit()
         except Exception as exc:
             conn.rollback()
             self.logger.error("Batch upsert error for %s: %s", table, exc)

@@ -11,6 +11,7 @@ from django.contrib import messages
 from django.db import transaction
 from django.http import JsonResponse, HttpResponseForbidden
 from django.core.paginator import Paginator
+from django.core.exceptions import ValidationError
 
 from CalSoft.models import (
     CalibrationSession,
@@ -25,6 +26,26 @@ def is_ajax(request):
     return request.headers.get(
         "X-Requested-With"
     ) == "XMLHttpRequest" or "application/json" in request.headers.get("Accept", "")
+
+
+def _mark_schedule_for_session_approval(schedule, status, now):
+    if not schedule or schedule.status == "completed":
+        return
+
+    try:
+        schedule.status = status
+        schedule.completed_date = now.date() if status == "completed" else None
+        if hasattr(schedule, "is_locked"):
+            schedule.is_locked = True
+        schedule.updated_at = now
+
+        update_fields = ["status", "completed_date", "updated_at"]
+        if hasattr(schedule, "is_locked"):
+            update_fields.append("is_locked")
+
+        schedule.save(update_fields=update_fields)
+    except ValidationError as e:
+        logger.warning(f"Skipping schedule status update after session approval: {e}")
 
 
 logger = logging.getLogger(__name__)
@@ -306,13 +327,7 @@ def approve_calibration_session_ajax(request, pk):
                     locked_session.updated_at = now
                     locked_session.save()
 
-                    if locked_session.schedule:
-                        locked_session.schedule.status = "completed"
-                        locked_session.schedule.completed_date = now.date()
-                        if hasattr(locked_session.schedule, "is_locked"):
-                            locked_session.schedule.is_locked = True
-                        locked_session.schedule.updated_at = now
-                        locked_session.schedule.save()
+                    _mark_schedule_for_session_approval(locked_session.schedule, "completed", now)
 
                     PendingCertificate.objects.filter(
                         session=locked_session, sync_status="pending"
@@ -358,13 +373,7 @@ def approve_calibration_session_ajax(request, pk):
                     updated_at=now,
                 )
 
-                if locked_session.schedule:
-                    locked_session.schedule.status = "pushed"
-                    locked_session.schedule.completed_date = None
-                    if hasattr(locked_session.schedule, "is_locked"):
-                        locked_session.schedule.is_locked = True
-                    locked_session.schedule.updated_at = now
-                    locked_session.schedule.save()
+                _mark_schedule_for_session_approval(locked_session.schedule, "pushed", now)
 
                 logger.info(f"Session {locked_session.id} approved offline")
 
@@ -415,10 +424,7 @@ def reject_calibration_session(request, pk):
                 ]
             )
 
-            if session.schedule:
-                session.schedule.status = "pending"
-                session.schedule.completed_date = None
-                session.schedule.save(update_fields=["status", "completed_date"])
+            _mark_schedule_for_session_approval(session.schedule, "pending", timezone.now())
 
             messages.warning(request, f"Session rejected and schedule reset to pending.")
 
@@ -490,10 +496,7 @@ def restore_rejected_session(request, pk):
         ]
     )
 
-    if session.schedule:
-        session.schedule.status = "pending"
-        session.schedule.completed_date = None
-        session.schedule.save(update_fields=["status", "completed_date"])
+    _mark_schedule_for_session_approval(session.schedule, "pending", timezone.now())
 
     logger.info(f"Session {session.id} restored from rejected to pending_review")
 

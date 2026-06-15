@@ -76,9 +76,9 @@ LOG = logging.getLogger("data_checker_client")
 # ──────────────────────────────────────────────────────────────────────────────
 
 DEFAULT_BATCH_SIZE = 500
-REQUEST_TIMEOUT = 60          # seconds per HTTP call
+REQUEST_TIMEOUT = 60  # seconds per HTTP call
 MAX_RETRIES = 3
-RETRY_DELAY = 2.0             # seconds between retries
+RETRY_DELAY = 2.0  # seconds between retries
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -99,16 +99,16 @@ RETRY_DELAY = 2.0             # seconds between retries
 # all servers are on the new version.
 #
 CLIENT_TABLE_DEPENDENCIES: Dict[str, List[str]] = {
-    "public.users_userprofile":           ["public.users_customuser"],
-    "public.users_usersignature":         ["public.users_customuser"],
-    "public.Inventory_equipment":         ["public.workshop_workshop"],
+    "public.users_userprofile": ["public.users_customuser"],
+    "public.users_usersignature": ["public.users_customuser"],
+    "public.Inventory_equipment": ["public.workshop_workshop"],
     "public.Inventory_equipmentdocument": ["public.Inventory_equipment"],
-    "public.Inventory_equipmentimage":    ["public.Inventory_equipment"],
-    "public.Inventory_maintenancelog":    [
+    "public.Inventory_equipmentimage": ["public.Inventory_equipment"],
+    "public.Inventory_maintenancelog": [
         "public.Inventory_equipment",
         "public.users_customuser",
     ],
-    "public.CalSoft_calibrationreport":   [
+    "public.CalSoft_calibrationreport": [
         "public.Inventory_equipment",
         "public.users_customuser",
     ],
@@ -116,7 +116,7 @@ CLIENT_TABLE_DEPENDENCIES: Dict[str, List[str]] = {
         "public.Inventory_equipment",
         "public.users_customuser",
     ],
-    "public.CalSoft_driftdatapoint":      ["public.CalSoft_calibrationreport"],
+    "public.CalSoft_driftdatapoint": ["public.CalSoft_calibrationreport"],
     "public.workshop_workshopassignment": [
         "public.workshop_workshop",
         "public.users_customuser",
@@ -175,6 +175,7 @@ def _sort_tables_by_dependency(
 # Helpers
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 def _split_table(table: str) -> Tuple[str, str]:
     if "." in table:
         schema, tbl = table.split(".", 1)
@@ -193,7 +194,7 @@ def _decode_value(value: Any) -> Any:
     * everything else       →  unchanged
     """
     if isinstance(value, str) and value.startswith("__b64__:"):
-        return base64.b64decode(value[len("__b64__:"):])
+        return base64.b64decode(value[len("__b64__:") :])
     return value
 
 
@@ -204,6 +205,7 @@ def _decode_row(row: Dict) -> Dict:
 # ──────────────────────────────────────────────────────────────────────────────
 # DataCheckerClient
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class DataCheckerClient:
     """
@@ -247,11 +249,13 @@ class DataCheckerClient:
         self.batch_size = batch_size
 
         self._session = requests.Session()
-        self._session.headers.update({
-            "X-API-Key": self.api_key,
-            "X-Client-ID": self.client_id,
-            "Content-Type": "application/json",
-        })
+        self._session.headers.update(
+            {
+                "X-API-Key": self.api_key,
+                "X-Client-ID": self.client_id,
+                "Content-Type": "application/json",
+            }
+        )
 
     # ─────────────────────────────────────────────────────────────────
     # Local DB helpers
@@ -305,9 +309,7 @@ class DataCheckerClient:
                             continue
 
                         if "updated_at" in cols:
-                            cur.execute(
-                                f"SELECT id, updated_at FROM {full} ORDER BY id"
-                            )
+                            cur.execute(f"SELECT id, updated_at FROM {full} ORDER BY id")
                         else:
                             cur.execute(f"SELECT id FROM {full} ORDER BY id")
 
@@ -363,8 +365,7 @@ class DataCheckerClient:
                         elif k in json_cols:
                             try:
                                 processed[k] = Json(
-                                    v if isinstance(v, (dict, list))
-                                    else json.loads(v)
+                                    v if isinstance(v, (dict, list)) else json.loads(v)
                                 )
                             except Exception:
                                 processed[k] = Json(v)
@@ -379,11 +380,7 @@ class DataCheckerClient:
 
                     col_list = ", ".join(f'"{c}"' for c in cols)
                     placeholders = ", ".join(["%s"] * len(cols))
-                    set_clause = ", ".join(
-                        f'"{c}" = EXCLUDED."{c}"'
-                        for c in cols
-                        if c != "id"
-                    )
+                    set_clause = ", ".join(f'"{c}" = EXCLUDED."{c}"' for c in cols if c != "id")
                     vals = [processed[c] for c in cols]
 
                     with conn.cursor() as cur:
@@ -395,13 +392,13 @@ class DataCheckerClient:
                             """,
                             vals,
                         )
+                    conn.commit()
                     ok += 1
                 except Exception as exc:
                     failed += 1
                     self.logger.debug("Upsert failed for row in %s: %s", table, exc)
                     conn.rollback()
 
-            conn.commit()
         except Exception as exc:
             conn.rollback()
             self.logger.error("Batch upsert error for %s: %s", table, exc)
@@ -419,19 +416,23 @@ class DataCheckerClient:
         url = f"{self.hq_url}{path}"
         for attempt in range(1, MAX_RETRIES + 1):
             try:
-                resp = self._session.post(
-                    url, json=body, timeout=REQUEST_TIMEOUT
-                )
+                resp = self._session.post(url, json=body, timeout=REQUEST_TIMEOUT)
                 if resp.status_code == 200:
                     return resp.json()
                 self.logger.warning(
                     "POST %s → %d (attempt %d/%d)",
-                    path, resp.status_code, attempt, MAX_RETRIES,
+                    path,
+                    resp.status_code,
+                    attempt,
+                    MAX_RETRIES,
                 )
             except requests.RequestException as exc:
                 self.logger.warning(
                     "POST %s error (attempt %d/%d): %s",
-                    path, attempt, MAX_RETRIES, exc,
+                    path,
+                    attempt,
+                    MAX_RETRIES,
+                    exc,
                 )
             if attempt < MAX_RETRIES:
                 time.sleep(RETRY_DELAY * attempt)
@@ -471,9 +472,7 @@ class DataCheckerClient:
                 data = resp.json()
                 dep_map = data.get("table_dependencies")
                 if isinstance(dep_map, dict) and dep_map:
-                    self.logger.debug(
-                        "Fetched server dep map: %d entries", len(dep_map)
-                    )
+                    self.logger.debug("Fetched server dep map: %d entries", len(dep_map))
                     return dep_map
         except Exception as exc:
             self.logger.warning(
@@ -630,9 +629,7 @@ class DataCheckerClient:
             # Ask the server for its live dependency map so we don't rely on the
             # static CLIENT_TABLE_DEPENDENCIES fallback.
             server_dep_map = self._fetch_server_dep_map()
-            tables_to_sync = _sort_tables_by_dependency(
-                self.allowed_tables, dep_map=server_dep_map
-            )
+            tables_to_sync = _sort_tables_by_dependency(self.allowed_tables, dep_map=server_dep_map)
             self.logger.info(
                 "   Force mode: dependency-sorted %d tables (%s dep map)",
                 len(tables_to_sync),
@@ -668,7 +665,9 @@ class DataCheckerClient:
 
             if server_sync_order:
                 tables_to_sync = server_sync_order
-                self.logger.info("   Using server-provided sync_order (%d tables)", len(tables_to_sync))
+                self.logger.info(
+                    "   Using server-provided sync_order (%d tables)", len(tables_to_sync)
+                )
             else:
                 raw_tables = [e["table"] for e in out_of_sync] + missing
                 try:
@@ -708,9 +707,7 @@ class DataCheckerClient:
         failed: List[str] = []
 
         for i, table in enumerate(tables_to_sync, start=1):
-            self.logger.info(
-                "[%d/%d] %s", i, len(tables_to_sync), table
-            )
+            self.logger.info("[%d/%d] %s", i, len(tables_to_sync), table)
             try:
                 result = self.sync_table_from_hq(table)
                 if result["success"] or result["upserted"] > 0:

@@ -1,4 +1,13 @@
 from .agent_prelude import LOG
+from .agent_prelude import NETWORKX_AVAILABLE
+from psycopg2.extras import RealDictCursor
+from collections import defaultdict
+
+try:
+    import networkx as nx
+except ImportError:
+    nx = None
+
 
 class DependencyManager:
     """Manages table dependencies for proper sync ordering"""
@@ -55,23 +64,25 @@ class DependencyManager:
         fk_details = defaultdict(list)
 
         for row in fk_rows:
-            schema = row['table_schema']
-            child = row['table_name']
-            fschema = row['foreign_table_schema']
-            parent = row['foreign_table_name']
-            child_col = row['column_name']
-            parent_col = row['foreign_column_name']
+            schema = row["table_schema"]
+            child = row["table_name"]
+            fschema = row["foreign_table_schema"]
+            parent = row["foreign_table_name"]
+            child_col = row["column_name"]
+            parent_col = row["foreign_column_name"]
 
             child_full = f"{schema}.{child}"
             parent_full = f"{fschema}.{parent}"
 
             if child_full in tables:
                 dependencies[child_full].add(parent_full)
-                fk_details[child_full].append({
-                    'parent_table': parent_full,
-                    'child_column': child_col,
-                    'parent_column': parent_col
-                })
+                fk_details[child_full].append(
+                    {
+                        "parent_table": parent_full,
+                        "child_column": child_col,
+                        "parent_column": parent_col,
+                    }
+                )
 
         self._dependencies_cache = {k: list(v) for k, v in dependencies.items()}
         return self._dependencies_cache, fk_details
@@ -124,7 +135,7 @@ class DependencyManager:
                     LOG.info("📊 Discovered %d table dependencies", len(sorted_tables))
                     self._sorted_tables_cache = sorted_tables
                     return sorted_tables
-                except nx.NetworkXError:
+                except (nx.NetworkXUnfeasible, nx.NetworkXError):
                     LOG.warning("⚠️ Cyclic dependencies detected; using node order")
                     self._sorted_tables_cache = list(G.nodes())
                     return self._sorted_tables_cache
@@ -152,5 +163,5 @@ class DependencyManager:
 
         return sorted(updates, key=sort_key)
 
-# ---------- Enhanced Sync Agent Class ----------
 
+# ---------- Enhanced Sync Agent Class ----------

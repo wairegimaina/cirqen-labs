@@ -513,6 +513,8 @@
       const result = await approveSession(currentSessionId, formData);
 
       if (result.success) {
+        await refreshSessionsTable();
+
         const approvalModalEl = document.getElementById("approvalModal");
         const successModalEl = document.getElementById("successModal");
 
@@ -594,14 +596,12 @@
           rejectionModal.hide();
         }
 
+        await refreshSessionsTable();
+
         showToast(
           "Session rejected successfully. The technician will be notified.",
           "success",
         );
-
-        setTimeout(() => {
-          location.reload();
-        }, 2000);
       } else {
         throw new Error(result.error || "Unknown error occurred");
       }
@@ -707,6 +707,40 @@
     set("summaryHighPriority", data.high_priority_count);
     set("summaryCanReview", data.can_review_count);
     set("summaryAwaitingCert", data.awaiting_cert_count);
+  }
+
+  async function refreshSessionsTable() {
+    const tableContainer = document.getElementById("sessionsTableContainer");
+    if (!tableContainer) return;
+
+    const params = new URLSearchParams(window.location.search);
+    params.delete("page");
+    const url = `${window.location.pathname}?${params.toString()}`;
+
+    tableContainer.innerHTML = `
+        <div class="text-center py-5">
+          <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+          </div>
+          <p class="text-muted mt-2">Loading sessions...</p>
+        </div>`;
+
+    try {
+      const response = await fetch(url, {
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+          Accept: "application/json",
+        },
+      });
+      if (!response.ok) throw new Error(`Server error ${response.status}`);
+      const data = await response.json();
+      tableContainer.innerHTML = data.html;
+      updateCounts(data);
+    } catch (error) {
+      console.error("Failed to refresh sessions:", error);
+      showToast("Failed to refresh sessions. Reloading page...", "error");
+      setTimeout(() => location.reload(), 1000);
+    }
   }
 
   // Event delegation for all actions

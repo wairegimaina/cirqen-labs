@@ -75,15 +75,26 @@ def _find_grouped_schedule_for_equipment(equipment):
 def _create_next_schedule(equipment, procedure):
     try:
         today = timezone.now().date()
-        if procedure.interval_months:
-            next_month = today + timedelta(days=30 * procedure.interval_months)
+        interval_months = getattr(procedure, "interval_months", None) or getattr(procedure, "calibration_period", 12) or 12
+        if interval_months:
+            next_month = today + timedelta(days=30 * interval_months)
         else:
             next_month = today + timedelta(days=365)
-        new_schedule = CalibrationSchedule.objects.create(
-            equipment=equipment, calibration_procedure=procedure,
-            scheduled_month=next_month, status='pending'
+        new_schedule, _ = CalibrationSchedule.objects.get_or_create(
+            equipment=equipment,
+            scheduled_month=next_month,
+            defaults={
+                "calibration_procedure": procedure,
+                "status": "pending",
+            },
         )
-        return new_schedule
+        try:
+            return CalibrationSchedule.objects.get(pk=new_schedule.pk)
+        except CalibrationSchedule.DoesNotExist:
+            return CalibrationSchedule.objects.filter(
+                equipment=equipment,
+                status__in=["pending", "pushed", "pending_approval"],
+            ).order_by("scheduled_month").first()
     except Exception as e:
         logger.error(f"Error creating next schedule: {str(e)}")
         return None
