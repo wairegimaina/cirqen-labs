@@ -18,13 +18,7 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 
-try:
-    from sync.update_manager import CodeUpdateManager
-    UPDATE_SYSTEM_V2_AVAILABLE = True
-except ImportError:
-    logger.warning("update_manager- update system disabled")
-    UPDATE_SYSTEM_V2_AVAILABLE = False
-import asyncio
+
 from sync.startup_warmup import StartupStateManager
 
 
@@ -192,131 +186,6 @@ def get_restart_command():
 # ============================================================================
 # ENHANCED: Dynamic Port Configuration
 # ============================
-
-
-# ============================================================================
-# CODE DIRECTORY UPDATE SYSTEM INTEGRATION
-# ============================================================================
-
-async def check_for_code_updates(data_path: Path, app_root: Path, current_version: str):
-    """
-    Check for code updates at startup (non-blocking, max 5 seconds)
-
-    This function:
-    1. Initializes the CodeUpdateManager
-    2. Checks for updates from HQ server (non-blocking)
-    3. Starts background update checking (every 60 minutes)
-    4. Sets up callbacks for update notifications
-
-    Args:
-        data_path: User data directory (for staging, backups, version tracking)
-        app_root: Application root (_internal/code directory)
-        current_version: Current application version
-    """
-    global update_manager_instance
-
-    if not UPDATE_SYSTEM_V2_AVAILABLE:
-        logger.info("⚠️  Update system v2 not available - skipping update check")
-        return
-
-    try:
-        logger.info("="*70)
-        logger.info("CHECKING FOR CODE UPDATES")
-        logger.info("="*70)
-
-        # Get update server URL from environment or use default HQ server
-        update_server_url = os.environ.get('UPDATE_SERVER_URL', 'https://cirqen-hq.onrender.com')
-        update_enabled = os.environ.get('UPDATE_CHECK_ENABLED', 'true').lower() == 'true'
-        update_interval = int(os.environ.get('UPDATE_CHECK_INTERVAL_MINUTES', '60'))
-
-        if not update_enabled:
-            logger.info("Update checking is disabled via UPDATE_CHECK_ENABLED")
-            return
-
-        logger.info(f"Server URL: {update_server_url}")
-        logger.info(f"Check Interval: {update_interval} minutes")
-        logger.info(f"Current Version: {current_version}")
-        logger.info(f"Code Directory: {app_root}")
-
-        # Initialize update manager
-        update_manager_instance = CodeUpdateManager(
-            server_url=update_server_url,
-            app_root=app_root,
-            data_dir=data_path,
-            current_version=current_version,
-            code_subdir="",  # app_root already points to code directory
-            check_interval_minutes=update_interval,
-            max_startup_wait_seconds=5,  # Won't delay startup
-            enable_background_checking=True
-        )
-
-        # Set up callbacks for update events
-        def on_update_available(update_info):
-            """Called when an update is available"""
-            logger.info("="*70)
-            logger.info("🆕 CODE UPDATE AVAILABLE!")
-            logger.info("="*70)
-            logger.info(f"   Current Version: {update_info.get('current_version', 'Unknown')}")
-            logger.info(f"   New Version: {update_info.get('new_version', 'Unknown')}")
-            logger.info(f"   Total Changes: {update_info.get('changes_count', 0)} files")
-            logger.info(f"   • New Files: {len(update_info.get('new_files', []))}")
-            logger.info(f"   • Modified Files: {len(update_info.get('modified_files', []))}")
-            logger.info(f"   • Deleted Files: {len(update_info.get('deleted_files', []))}")
-            logger.info("="*70)
-            logger.info("Update will be downloaded and applied in background")
-            logger.info("Application restart may be required after update completes")
-            logger.info("="*70)
-
-            # TODO: You can add UI notification here
-            # For example, update a status indicator or show a message box
-
-        def on_server_reconnect():
-            """Called when update server comes back online after being offline"""
-            logger.info("="*70)
-            logger.info("✅ UPDATE SERVER RECONNECTED")
-            logger.info("="*70)
-            logger.info("Will check for updates shortly...")
-
-        # Register callbacks
-        update_manager_instance.on_update_available = on_update_available
-        update_manager_instance.on_server_reconnect = on_server_reconnect
-
-        # Check at startup (non-blocking, max 5 seconds)
-        logger.info("Performing startup update check (max 5 seconds)...")
-        update_info = await update_manager_instance.check_at_startup()
-
-        if update_info:
-            logger.info("✅ Startup update check complete")
-        else:
-            logger.info("⚠️  Update server not available (will retry in background)")
-
-        # Start background checking (every 60 minutes)
-        await update_manager_instance.start_background_checking()
-
-        logger.info("✅ Update system initialized successfully")
-        logger.info("="*70)
-
-    except ImportError as e:
-        logger.warning("="*70)
-        logger.warning("⚠️  UPDATE SYSTEM NOT AVAILABLE")
-        logger.warning("="*70)
-        logger.warning(f"Error: {e}")
-        logger.warning("To enable updates:")
-        logger.warning("1. Ensure update_manager_v2.py is in project directory")
-        logger.warning("2. Ensure update_client_v2.py is in project directory")
-        logger.warning("3. Rebuild application with build_cirqen_FULL_ENHANCED.py")
-        logger.warning("="*70)
-        logger.info("Application will continue without update system")
-
-    except Exception as e:
-        logger.warning("="*70)
-        logger.warning("⚠️  COULD NOT INITIALIZE UPDATE SYSTEM")
-        logger.warning("="*70)
-        logger.warning(f"Error: {e}")
-        logger.warning("Application will continue without updates")
-        logger.warning("="*70)
-        import traceback
-        logger.debug(traceback.format_exc())
 
 
 class PortManager:

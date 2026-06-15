@@ -125,14 +125,13 @@ class ServiceManager(QObject):
         Start all services with dynamic ports
 
         Services started in order:
-        1. PostgreSQL Local (embedded database)
-        2. PostgreSQL HQ (remote database - optional)
-        3. Redis (cache server)
-        4. Django (web server)
-        5. Celery Worker (background tasks)
-        6. Celery Beat (task scheduler)
-        7. Sync Agent (bi-directional synchronization)
-        8. Update Manager (auto-update system)
+         1. PostgreSQL Local (embedded database)
+         2. PostgreSQL HQ (remote database - optional)
+         3. Redis (cache server)
+         4. Django (web server)
+         5. Celery Worker (background tasks)
+         6. Celery Beat (task scheduler)
+         7. Sync Agent (bi-directional synchronization)
 
         Each service is verified before proceeding to the next.
         """
@@ -146,7 +145,7 @@ class ServiceManager(QObject):
             # ============================================================
             self.progress_update.emit("Starting PostgreSQL Local...", 10)
             logger.info("")
-            logger.info("📊 [1/8] Starting PostgreSQL Local...")
+            logger.info("📊 [1/7] Starting PostgreSQL Local...")
 
             if not self.start_postgresql():
                 raise Exception("PostgreSQL Local startup failed")
@@ -159,7 +158,7 @@ class ServiceManager(QObject):
             # ============================================================
             self.progress_update.emit("Starting PostgreSQL HQ...", 20)
             logger.info("")
-            logger.info("📊 [2/8] Starting PostgreSQL HQ...")
+            logger.info("📊 [2/7] Starting PostgreSQL HQ...")
 
             if not self.start_postgresql_hq():
                 logger.warning("⚠️  PostgreSQL HQ startup failed")
@@ -175,7 +174,7 @@ class ServiceManager(QObject):
             # ============================================================
             self.progress_update.emit("Starting Redis...", 30)
             logger.info("")
-            logger.info("📊 [3/8] Starting Redis...")
+            logger.info("📊 [3/7] Starting Redis...")
 
             if not self.start_redis():
                 raise Exception("Redis startup failed")
@@ -203,7 +202,7 @@ class ServiceManager(QObject):
             # ============================================================
             self.progress_update.emit("Starting web server...", 45)
             logger.info("")
-            logger.info("📊 [4/8] Starting Django Web Server...")
+            logger.info("📊 [4/7] Starting Django Web Server...")
 
             if not self.start_django():
                 raise Exception("Django startup failed")
@@ -216,7 +215,7 @@ class ServiceManager(QObject):
             # ============================================================
             self.progress_update.emit("Starting task worker...", 60)
             logger.info("")
-            logger.info("📊 [5/8] Starting Celery Worker...")
+            logger.info("📊 [5/7] Starting Celery Worker...")
 
             if not self.start_celery():
                 logger.warning("⚠️  Celery startup failed")
@@ -230,9 +229,9 @@ class ServiceManager(QObject):
             # ============================================================
             # SERVICE 6: Celery Beat (OPTIONAL)
             # ============================================================
-            self.progress_update.emit("Starting task scheduler...", 70)
+            self.progress_update.emit("Starting task scheduler...", 75)
             logger.info("")
-            logger.info("📊 [6/8] Starting Celery Beat Scheduler...")
+            logger.info("📊 [6/7] Starting Celery Beat Scheduler...")
 
             if not self.start_celery_beat():
                 logger.warning("⚠️  Celery Beat startup failed")
@@ -250,62 +249,12 @@ class ServiceManager(QObject):
 
             time.sleep(2)
 
-
             # ============================================================
-            # SERVICE 7: Update Manager (OPTIONAL)
-            # ============================================================
-            try:
-                self.progress_update.emit("Starting update manager...", 90)
-                logger.info("")
-                logger.info("📊 [7/8] Starting Update Manager...")
-                logger.info("="*70)
-
-                update_started = False
-
-                # Check if update_manager module exists
-                logger.info("Checking for update_manager module...")
-
-                try:
-                    from sync.update_manager import UpdateManager
-                    logger.info("✅ UpdateManager module found")
-                    update_started = self.start_update_manager()
-                except ImportError as import_err:
-                    logger.warning(f"⚠️  UpdateManager module not found: {import_err}")
-                    logger.info("   Skipping update manager (optional service)")
-                except Exception as e:
-                    logger.error(f"❌ Error importing UpdateManager: {e}")
-                    import traceback
-                    logger.error(traceback.format_exc())
-
-                if update_started:
-                    logger.info("✅ Update manager started successfully")
-                    logger.info("")
-                    logger.info("🔄 UPDATE MANAGER ACTIVE:")
-                    logger.info("   • ⚡ Non-blocking startup checks (5s timeout)")
-                    logger.info("   • 🔄 Automatic server reconnection")
-                    logger.info("   • 📊 Background monitoring (every 60 minutes)")
-                    logger.info("   • 🔔 User notifications when updates available")
-                    logger.info("   • 🛡️ Graceful degradation if server offline")
-                else:
-                    logger.warning("⚠️  Update manager startup failed or not available")
-                    logger.warning("   Application will continue without automatic updates")
-
-            except Exception as e:
-                logger.error(f"❌ Update manager error: {e}")
-                import traceback
-                logger.error(traceback.format_exc())
-                logger.warning("   Continuing without update manager...")
-
-            logger.info("="*70)
-            time.sleep(1)
-
-
-            # ============================================================
-            # SERVICE 8: Sync Agent (OPTIONAL)
+            # SERVICE 7: Sync Agent (OPTIONAL)
             # ============================================================
             self.progress_update.emit("Starting sync agent...", 80)
             logger.info("")
-            logger.info("📊 [8/8] Starting Sync Agent...")
+            logger.info("📊 [7/7] Starting Sync Agent...")
 
             if not self.start_sync_agent():
                 logger.warning("⚠️  Sync agent startup failed")
@@ -366,11 +315,6 @@ class ServiceManager(QObject):
                 logger.info("   • Sync Agent: Active ✅")
             else:
                 logger.info("   • Sync Agent: Not Running ⚠️")
-
-            if any(name == 'update_manager' for name in active_services):
-                logger.info("   • Update Manager: Active ✅")
-            else:
-                logger.info("   • Update Manager: Not Running ⚠️")
 
             if any(name == 'celery' for name in active_services):
                 logger.info("   • Celery Worker: Active ✅")
@@ -1732,61 +1676,6 @@ daemonize no
 
         except Exception as e:
             logger.error(f"Sync agent startup error: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-            return False
-
-    def start_update_manager(self):
-        """
-        Start Update Manager as a background thread using the shared sync update client.
-        """
-        try:
-            from sync.update_client import UpdateCheckClient
-
-            update_log = DATA_PATH / 'logs' / 'update_manager.log'
-            status_file = DATA_PATH / 'sync_state' / 'update_status.json'
-            if getattr(sys, 'frozen', False):
-                app_root = Path(sys.executable).parent / "_internal"
-            else:
-                app_root = APPLICATION_PATH
-
-            update_client = UpdateCheckClient(
-                app_root=app_root,
-                data_dir=DATA_PATH,
-                status_file=status_file,
-                log_file=update_log,
-            )
-
-            def run_update_manager():
-                update_client.run_forever()
-
-            import threading
-            update_thread = threading.Thread(
-                target=run_update_manager,
-                name='UpdateManagerThread',
-                daemon=True
-            )
-            update_thread.start()
-
-            self.processes.append(('update_manager', update_thread, None))
-
-            logger.info(f"✅ Update manager thread started (ID: {update_thread.ident})")
-            logger.info(f"   📋 Logs: {update_log}")
-
-            time.sleep(2)
-            if update_thread.is_alive():
-                logger.info("✅ Update manager thread verified running")
-                return True
-            logger.error("❌ Update manager thread died immediately")
-            return False
-
-        except ImportError as e:
-            logger.warning(f"⚠️  UpdateManager module not available: {e}")
-            logger.info("   Update functionality will not be available")
-            return False
-
-        except Exception as e:
-            logger.error(f"❌ Failed to start update manager: {e}")
             import traceback
             logger.error(traceback.format_exc())
             return False

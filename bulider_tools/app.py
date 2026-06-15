@@ -224,7 +224,37 @@ def main():
 
         logger.info("STEP 5: Starting Qt event loop...")
         exit_code = app.exec()
-        logger.info("Application exiting normally")
+        logger.info(f"Application exiting (code={exit_code})")
+
+        restart_requested = False
+        try:
+            if getattr(sys, 'frozen', False):
+                restart_sentinel = Path(sys.executable).parent / '_internal' / '.restart_required'
+            else:
+                restart_sentinel = Path(__file__).resolve().parent / '.restart_required'
+            restart_requested = restart_sentinel.exists()
+            if restart_requested:
+                restart_sentinel.unlink(missing_ok=True)
+        except Exception as sentinel_error:
+            logger.warning(f"Restart sentinel check failed: {sentinel_error}")
+
+        if restart_requested:
+            logger.info("Restart requested — relaunching application")
+            try:
+                restart_cmd, use_shell, cwd, env = get_restart_command()
+                subprocess.Popen(
+                    restart_cmd,
+                    cwd=cwd,
+                    shell=use_shell,
+                    env=env,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
+            except Exception as restart_error:
+                logger.error(f"Restart failed: {restart_error}")
+            return 0
+
         service_manager.stop_services()
         service_thread.wait()
         return exit_code

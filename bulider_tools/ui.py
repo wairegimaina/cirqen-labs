@@ -299,16 +299,17 @@ class MainWindow(QMainWindow):
         bottom_layout.addWidget(self.status_label)
 
         # Sync / HQ connection indicator (reads agent_status.json)
-        self.sync_online_label = QLabel("⚫ HQ")
+        # Initialise as "checking" until the first agent_status.json read confirms state.
+        self.sync_online_label = QLabel("🔵 Checking…")
         self.sync_online_label.setStyleSheet("""
             QLabel {
-                color: #606060;
+                color: #60a5fa;
                 font-size: 10px;
                 font-weight: 500;
                 padding: 2px 8px;
-                background-color: rgba(255,255,255,0.04);
+                background-color: rgba(96,165,250,0.12);
                 border-radius: 4px;
-                border: 1px solid rgba(255,255,255,0.08);
+                border: 1px solid rgba(96,165,250,0.35);
             }
         """)
         self.sync_online_label.setToolTip("Sync agent: checking connection to HQ server…")
@@ -328,35 +329,7 @@ class MainWindow(QMainWindow):
         self.update_status_label.setToolTip("Update system status")
         bottom_layout.addWidget(self.update_status_label)
 
-        # Inline restart button — hidden until an update is ready
-        self.restart_update_btn = QPushButton("↺ Restart")
-        self.restart_update_btn.setFixedHeight(22)
-        self.restart_update_btn.setStyleSheet("""
-            QPushButton {
-                background-color: rgba(34, 197, 94, 0.20);
-                color: #22c55e;
-                border: 1px solid rgba(34, 197, 94, 0.40);
-                border-radius: 4px;
-                font-size: 10px;
-                font-weight: 600;
-                padding: 2px 10px;
-            }
-            QPushButton:hover {
-                background-color: rgba(34, 197, 94, 0.35);
-                border-color: #22c55e;
-            }
-            QPushButton:pressed {
-                background-color: rgba(34, 197, 94, 0.50);
-            }
-        """)
-        self.restart_update_btn.setToolTip("Restart now to apply the downloaded update")
-        self.restart_update_btn.setVisible(False)
-        self.restart_update_btn.clicked.connect(
-            lambda: self._show_restart_dialog(
-                getattr(self, '_pending_update_version', '?')
-            )
-        )
-        bottom_layout.addWidget(self.restart_update_btn)
+
 
         # Separator
         sep1 = self._create_separator()
@@ -464,7 +437,6 @@ class MainWindow(QMainWindow):
 
             if not status_file.exists():
                 _set("⚙️ Starting...", "#606060", "Update manager initialising…")
-                self.restart_update_btn.setVisible(False)
                 return
 
             status = _json.loads(status_file.read_text())
