@@ -25,11 +25,15 @@
 
 <script>
 window.DashboardURLs = {
+    // Core data endpoints
     dashboardData:           "{% url 'calibration:api_dashboard_data' %}",
     scheduleStats:           "{% url 'schedule:ajax_schedule_stats' %}",
+
+    // Navigation / quick actions
     sessionsPendingApproval: "{% url 'calibration:sessions_pending_approval' %}",
-    scheduleList:            "{% url 'calibration:cal-dashboard' %}",
-    
+    pendingCalibrations:     "{% url 'schedule:pending_calibrations' %}",
+    scheduleDashboard:       "{% url 'schedule:calibration_dashboard' %}",
+    scheduleList:            "{% url 'calibration:cal-dashboard' %}",          
     certificates:            "{% url 'calibration:certificate_list' %}",
 };
 </script>

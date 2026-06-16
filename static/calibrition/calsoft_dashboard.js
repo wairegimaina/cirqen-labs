@@ -59,6 +59,9 @@
     };
   }
 
+  // ============================================================
+  // HERO SECTION - Pass Rate
+  // ============================================================
   function renderHero(data) {
     const monthRate = clamp(data.month_pass_rate ?? 0, 0, 100);
     const weekRate = clamp(data.week_pass_rate ?? 0, 0, 100);
@@ -83,6 +86,9 @@
       </section>`;
   }
 
+  // ============================================================
+  // KPI CARDS - Small cards below hero
+  // ============================================================
   function renderKpiCards(data) {
     const totalSessions = data.total_sessions || 0;
     const monthTotal = data.month_total || 0;
@@ -138,6 +144,9 @@
       </section>`;
   }
 
+  // ============================================================
+  // APPROVAL BANNER
+  // ============================================================
   function renderBanner(pendingApproval, urls) {
     if (!pendingApproval) return "";
     return `
@@ -150,6 +159,9 @@
       </section>`;
   }
 
+  // ============================================================
+  // SCHEDULE PANEL - With donut showing percentage
+  // ============================================================
   function renderSchedulePanel(counts, month) {
     const donutTotal = counts.pending + counts.overdue + counts.completed || 1;
     const donePct = pct(counts.completed, donutTotal);
@@ -192,6 +204,10 @@
 
           <div class="cs-schedule-donut">
             <canvas id="scheduleDonut" width="210" height="210" role="img" aria-label="Schedule completion donut"></canvas>
+            <div class="cs-donut-center">
+              <span class="cs-donut-pct">${donePct}%</span>
+              <small>Completed</small>
+            </div>
           </div>
 
           <div class="cs-schedule-summary">
@@ -211,6 +227,9 @@
       </section>`;
   }
 
+  // ============================================================
+  // RECENT SESSIONS TABLE
+  // ============================================================
   function renderRecentSessions(sessions, urls) {
     if (!sessions.length) {
       return `
@@ -238,23 +257,18 @@
       .join("");
   }
 
-  // Quick Actions from calsoft.js - using the same structure
-  function renderQuickActions(urls, pendingApproval) {
+  // ============================================================
+  // QUICK ACTIONS - Updated URLs
+  // ============================================================
+  function renderQuickActions(urls) {
     const actions = [
       {
-        href: urls.performCalibration || "#",
+        href: urls.pendingCalibrations || "#",
         icon: "🔬",
-        label: "New Calibration",
+        label: "Perform Calibration",
       },
-      {
-        href: urls.sessionsPendingApproval || "#",
-        icon: "📝",
-        label: "Pending Approval",
-        badge: pendingApproval,
-      },
+      { href: urls.scheduleDashboard || "#", icon: "📋", label: "Schedules" },
       { href: urls.certificates || "#", icon: "🏅", label: "Certificates" },
-      { href: urls.scheduleList || "#", icon: "📚", label: "All Sessions" },
-      { href: urls.auditLog || "#", icon: "🗂️", label: "Audit Log" },
     ];
 
     return `
@@ -265,16 +279,16 @@
           <a class="cs-qa-item" href="${escapeHTML(action.href)}">
             <span class="cs-qa-code">${escapeHTML(action.icon)}</span>
             <span>${escapeHTML(action.label)}</span>
-            ${action.badge > 0 ? `<span class="cs-qa-badge">${action.badge}</span>` : ""}
           </a>`,
           )
           .join("")}
       </div>`;
   }
 
+  // ============================================================
+  // BOTTOM ROW - Sessions + Quick Actions
+  // ============================================================
   function renderBottomRow(data, urls) {
-    const pendingApproval = Number(data.pending_approval_count || 0);
-
     return `
       <section class="cs-bottom-grid">
         <article class="cs-panel">
@@ -305,11 +319,14 @@
               <h2>Actions</h2>
             </div>
           </div>
-          ${renderQuickActions(urls, pendingApproval)}
+          ${renderQuickActions(urls)}
         </article>
       </section>`;
   }
 
+  // ============================================================
+  // DONUT CHART - With percentage overlay
+  // ============================================================
   function drawScheduleDonut(counts) {
     const canvas = document.getElementById("scheduleDonut");
     if (!canvas || typeof Chart === "undefined") return;
@@ -317,6 +334,9 @@
     const existing =
       typeof Chart.getChart === "function" ? Chart.getChart(canvas) : null;
     if (existing) existing.destroy();
+
+    const total = counts.completed + counts.pending + counts.overdue || 1;
+    const completedPct = Math.round((counts.completed / total) * 100);
 
     scheduleDonut = new Chart(canvas, {
       type: "doughnut",
@@ -338,7 +358,7 @@
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        cutout: "68%",
+        cutout: "72%",
         plugins: {
           legend: { display: false },
           tooltip: {
@@ -353,14 +373,24 @@
         },
       },
     });
+
+    // Update the percentage overlay
+    const pctEl = document.querySelector(".cs-donut-pct");
+    if (pctEl) {
+      pctEl.textContent = `${completedPct}%`;
+    }
   }
 
+  // ============================================================
+  // STYLES - No gradient on left side
+  // ============================================================
   function injectStyles() {
     if (document.getElementById("calsoft-dashboard-redesign")) return;
 
     const style = document.createElement("style");
     style.id = "calsoft-dashboard-redesign";
     style.textContent = `
+      /* Hero */
       .cs-hero {
         display: grid;
         grid-template-columns: minmax(0, 1fr) 200px;
@@ -368,12 +398,10 @@
         align-items: center;
         padding: 1.35rem;
         border-radius: 24px;
-        background:
-          radial-gradient(circle at top right, rgba(99, 102, 241, 0.22), transparent 34%),
-          linear-gradient(135deg, var(--bg-card), var(--bg-tertiary));
+        background: var(--bg-card);
         border: 1px solid var(--border-color);
         box-shadow: var(--shadow-sm);
-        margin-bottom: 1rem;
+        margin-bottom: 0.75rem;
       }
 
       .cs-hero-copy { min-width: 0; }
@@ -430,8 +458,7 @@
         display: grid;
         place-items: center;
         background:
-          conic-gradient(var(--success-color) calc(var(--pass-rate) * 1%), rgba(148, 163, 184, 0.18) 0),
-          var(--bg-card);
+          conic-gradient(var(--success-color) calc(var(--pass-rate) * 1%), var(--bg-tertiary) 0);
         position: relative;
         box-shadow: inset 0 0 0 1px var(--border-color);
       }
@@ -469,17 +496,18 @@
         text-transform: uppercase;
       }
 
+      /* KPI Cards - Small */
       .cs-kpi-grid {
         display: grid;
         grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 0.85rem;
-        margin-bottom: 1rem;
+        gap: 0.75rem;
+        margin-bottom: 0.75rem;
       }
 
       .cs-kpi-card {
-        min-height: 100px;
-        padding: 0.85rem 1rem;
-        border-radius: 16px;
+        min-height: 85px;
+        padding: 0.7rem 0.85rem;
+        border-radius: 14px;
         border: 1px solid var(--border-color);
         background: var(--bg-card);
         box-shadow: var(--shadow-sm);
@@ -491,7 +519,7 @@
         content: "";
         position: absolute;
         inset: 0 auto 0 0;
-        width: 4px;
+        width: 3px;
         background: var(--kpi-accent);
       }
 
@@ -504,45 +532,46 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 1rem;
+        gap: 0.75rem;
       }
 
       .cs-kpi-top span {
-        padding: 0.2rem 0.45rem;
+        padding: 0.15rem 0.4rem;
         border-radius: 999px;
         background: color-mix(in srgb, var(--kpi-accent) 14%, var(--bg-card));
         color: var(--kpi-accent);
-        font-size: 0.85rem;
+        font-size: 0.75rem;
         font-weight: 700;
       }
 
       .cs-kpi-top strong {
-        font-size: 1.6rem;
+        font-size: 1.4rem;
         line-height: 1;
         color: var(--kpi-accent);
       }
 
       .cs-kpi-label {
-        margin-top: 0.4rem;
+        margin-top: 0.3rem;
         color: var(--text-primary);
-        font-weight: 800;
-        font-size: 0.9rem;
+        font-weight: 700;
+        font-size: 0.82rem;
       }
 
       .cs-kpi-sub {
-        margin-top: 0.15rem;
+        margin-top: 0.1rem;
         color: var(--text-secondary);
-        font-size: 0.72rem;
+        font-size: 0.68rem;
       }
 
+      /* Approval Banner */
       .cs-approval-banner {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 1rem;
-        padding: 0.9rem 1rem;
-        border-radius: 18px;
-        margin-bottom: 1rem;
+        padding: 0.75rem 1rem;
+        border-radius: 16px;
+        margin-bottom: 0.75rem;
         background: color-mix(in srgb, var(--warning-color) 12%, var(--bg-card));
         border: 1px solid color-mix(in srgb, var(--warning-color) 38%, var(--border-color));
         color: var(--text-primary);
@@ -550,22 +579,23 @@
 
       .cs-approve-btn {
         flex: 0 0 auto;
-        padding: 0.55rem 0.85rem;
+        padding: 0.45rem 0.8rem;
         border-radius: 999px;
         background: var(--warning-color);
         color: var(--text-white);
-        font-size: 0.82rem;
+        font-size: 0.78rem;
         font-weight: 800;
         text-decoration: none;
       }
 
+      /* Panels */
       .cs-panel,
       .cs-schedule-panel {
-        border-radius: 24px;
+        border-radius: 20px;
         border: 1px solid var(--border-color);
         background: var(--bg-card);
         box-shadow: var(--shadow-sm);
-        padding: 1.15rem;
+        padding: 1rem;
       }
 
       .cs-panel-heading {
@@ -573,92 +603,121 @@
         align-items: flex-start;
         justify-content: space-between;
         gap: 1rem;
-        margin-bottom: 1rem;
+        margin-bottom: 0.85rem;
       }
 
-      .cs-panel-heading.compact { margin-bottom: 0.8rem; }
+      .cs-panel-heading.compact { margin-bottom: 0.65rem; }
 
       .cs-panel-heading h2 {
-        font-size: 1.05rem;
+        font-size: 0.95rem;
       }
 
       .cs-panel-period {
-        padding: 0.35rem 0.65rem;
+        padding: 0.3rem 0.6rem;
         border-radius: 999px;
         background: var(--bg-tertiary);
         color: var(--text-secondary);
-        font-size: 0.75rem;
+        font-size: 0.7rem;
         font-weight: 700;
         white-space: nowrap;
       }
 
+      /* Schedule Layout */
       .cs-schedule-layout {
         display: grid;
-        grid-template-columns: minmax(180px, 0.85fr) 200px minmax(200px, 1fr);
-        gap: 1rem;
+        grid-template-columns: minmax(160px, 0.85fr) 200px minmax(180px, 1fr);
+        gap: 0.85rem;
         align-items: stretch;
       }
 
       .cs-schedule-kpis {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 0.65rem;
+        gap: 0.5rem;
       }
 
       .cs-schedule-kpis article {
-        padding: 0.85rem;
-        border-radius: 16px;
+        padding: 0.7rem;
+        border-radius: 14px;
         background: var(--bg-tertiary);
         border: 1px solid var(--border-color);
       }
 
       .cs-schedule-kpis strong {
         display: block;
-        font-size: 1.6rem;
+        font-size: 1.4rem;
         line-height: 1;
         color: var(--text-primary);
       }
 
       .cs-schedule-kpis span {
         display: block;
-        margin-top: 0.35rem;
+        margin-top: 0.3rem;
         color: var(--text-secondary);
-        font-weight: 800;
-        font-size: 0.72rem;
+        font-weight: 700;
+        font-size: 0.68rem;
         text-transform: uppercase;
         letter-spacing: 0.06em;
       }
 
       .cs-schedule-kpis small {
         display: block;
-        margin-top: 0.2rem;
+        margin-top: 0.15rem;
         color: var(--text-muted);
-        font-size: 0.7rem;
+        font-size: 0.65rem;
       }
 
+      /* Donut with percentage */
       .cs-schedule-donut {
-        min-height: 200px;
+        min-height: 180px;
         display: grid;
         place-items: center;
-        border-radius: 20px;
-        background:
-          radial-gradient(circle at center, var(--bg-tertiary), transparent 62%);
+        position: relative;
+        border-radius: 18px;
+        background: var(--bg-tertiary);
         border: 1px solid var(--border-color);
       }
 
       .cs-schedule-donut canvas {
-        width: 180px !important;
-        height: 180px !important;
+        width: 160px !important;
+        height: 160px !important;
       }
 
+      .cs-donut-center {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+      }
+
+      .cs-donut-pct {
+        font-size: 1.6rem;
+        font-weight: 900;
+        color: var(--text-primary);
+        line-height: 1;
+      }
+
+      .cs-donut-center small {
+        font-size: 0.6rem;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-weight: 700;
+        margin-top: 0.1rem;
+      }
+
+      /* Summary */
       .cs-schedule-summary {
         display: flex;
         flex-direction: column;
         justify-content: space-between;
-        gap: 1rem;
-        padding: 1rem;
-        border-radius: 20px;
-        background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-card));
+        gap: 0.85rem;
+        padding: 0.85rem;
+        border-radius: 18px;
+        background: var(--bg-tertiary);
         border: 1px solid var(--border-color);
       }
 
@@ -667,13 +726,13 @@
         justify-content: space-between;
         gap: 1rem;
         color: var(--text-secondary);
-        font-size: 0.82rem;
+        font-size: 0.78rem;
         font-weight: 700;
       }
 
       .cs-progress-track {
-        height: 10px;
-        margin-top: 0.55rem;
+        height: 8px;
+        margin-top: 0.4rem;
         border-radius: 999px;
         overflow: hidden;
         background: var(--bg-primary);
@@ -682,14 +741,14 @@
       .cs-progress-fill {
         height: 100%;
         border-radius: inherit;
-        background: linear-gradient(90deg, var(--success-color), #34d399);
+        background: var(--success-color);
         transition: width 0.9s cubic-bezier(0.4, 0, 0.2, 1);
       }
 
       .cs-schedule-summary p {
         margin: 0;
         color: var(--text-secondary);
-        font-size: 0.82rem;
+        font-size: 0.78rem;
         line-height: 1.5;
       }
 
@@ -697,27 +756,29 @@
         color: var(--primary-color);
         font-weight: 800;
         text-decoration: none;
+        font-size: 0.82rem;
       }
 
       .cs-link:hover { text-decoration: underline; }
 
+      /* Bottom Grid */
       .cs-bottom-grid {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) 280px;
-        gap: 1rem;
-        margin-top: 1rem;
+        grid-template-columns: minmax(0, 1fr) 240px;
+        gap: 0.85rem;
+        margin-top: 0.85rem;
       }
 
       .cs-sessions-table {
         width: 100%;
         border-collapse: collapse;
-        font-size: 0.84rem;
+        font-size: 0.8rem;
       }
 
       .cs-sessions-table th {
-        padding: 0.65rem 0.75rem;
+        padding: 0.5rem 0.65rem;
         color: var(--text-muted);
-        font-size: 0.7rem;
+        font-size: 0.65rem;
         font-weight: 900;
         letter-spacing: 0.08em;
         text-align: left;
@@ -726,7 +787,7 @@
       }
 
       .cs-sessions-table td {
-        padding: 0.7rem 0.75rem;
+        padding: 0.55rem 0.65rem;
         color: var(--text-secondary);
         border-bottom: 1px solid var(--border-color);
       }
@@ -739,10 +800,10 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        min-width: 58px;
-        padding: 0.2rem 0.55rem;
+        min-width: 50px;
+        padding: 0.15rem 0.45rem;
         border-radius: 999px;
-        font-size: 0.72rem;
+        font-size: 0.68rem;
         font-weight: 900;
       }
 
@@ -757,35 +818,35 @@
       }
 
       .cs-empty {
-        padding: 2rem 1rem;
+        padding: 1.5rem 0.5rem;
         text-align: center;
         color: var(--text-secondary);
       }
 
       .cs-empty span {
         display: block;
-        margin-bottom: 0.5rem;
+        margin-bottom: 0.4rem;
       }
 
       .cs-empty a { color: var(--primary-color); }
 
+      /* Quick Actions */
       .cs-qa-list {
         display: grid;
-        gap: 0.6rem;
+        gap: 0.5rem;
       }
 
       .cs-qa-item {
         display: flex;
         align-items: center;
-        gap: 0.75rem;
-        padding: 0.7rem 0.85rem;
-        border-radius: 16px;
+        gap: 0.65rem;
+        padding: 0.6rem 0.75rem;
+        border-radius: 14px;
         background: var(--bg-tertiary);
         border: 1px solid var(--border-color);
         color: var(--text-primary);
         text-decoration: none;
         transition: transform 0.15s ease, border-color 0.15s ease;
-        position: relative;
       }
 
       .cs-qa-item:hover {
@@ -796,34 +857,17 @@
       .cs-qa-code {
         display: inline-grid;
         place-items: center;
-        width: 40px;
-        height: 40px;
+        width: 36px;
+        height: 36px;
         flex: 0 0 auto;
-        border-radius: 12px;
+        border-radius: 10px;
         background: var(--primary-gradient);
         color: var(--bg-card);
-        font-size: 0.85rem;
+        font-size: 0.75rem;
         font-weight: 700;
       }
 
-      .cs-qa-badge {
-        position: absolute;
-        right: 0.75rem;
-        top: -0.35rem;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-width: 20px;
-        height: 20px;
-        padding: 0 0.4rem;
-        border-radius: 999px;
-        background: var(--danger-color);
-        color: white;
-        font-size: 0.65rem;
-        font-weight: 800;
-        transform: translateY(0);
-      }
-
+      /* Responsive */
       @media (max-width: 1100px) {
         .cs-hero,
         .cs-schedule-layout,
@@ -837,12 +881,12 @@
         }
 
         .cs-schedule-donut {
-          min-height: 180px;
+          min-height: 160px;
         }
 
         .cs-schedule-donut canvas {
-          width: 160px !important;
-          height: 160px !important;
+          width: 140px !important;
+          height: 140px !important;
         }
       }
 
@@ -865,6 +909,9 @@
     document.head.appendChild(style);
   }
 
+  // ============================================================
+  // LOAD DASHBOARD
+  // ============================================================
   async function loadDashboard() {
     const content = document.getElementById("dashboardContent");
     if (!content) return;
@@ -915,6 +962,9 @@
     }
   }
 
+  // ============================================================
+  // AUTO REFRESH
+  // ============================================================
   function setupAutoRefresh() {
     if (refreshTimer) {
       clearInterval(refreshTimer);
@@ -925,6 +975,9 @@
     }, CONFIG.refreshInterval);
   }
 
+  // ============================================================
+  // BOOT
+  // ============================================================
   function boot() {
     injectStyles();
     window.CalSoftDashboard = {
