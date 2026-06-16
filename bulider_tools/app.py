@@ -234,13 +234,17 @@ def main():
 
         restart_requested = False
         try:
-            if getattr(sys, "frozen", False):
-                restart_sentinel = Path(sys.executable).parent / "_internal" / ".restart_required"
-            else:
-                restart_sentinel = Path(__file__).resolve().parent / ".restart_required"
-            restart_requested = restart_sentinel.exists()
-            if restart_requested:
-                restart_sentinel.unlink(missing_ok=True)
+            sentinel_candidates = []
+            sentinel_candidates.append(DATA_PATH / ".restart_required")
+            sentinel_candidates.append(APPLICATION_PATH / ".restart_required")
+            sentinel_candidates.append(APPLICATION_PATH / "_internal" / ".restart_required")
+            sentinel_candidates.append(Path(__file__).resolve().parent / ".restart_required")
+
+            for restart_sentinel in sentinel_candidates:
+                if restart_sentinel.exists():
+                    restart_requested = True
+                    restart_sentinel.unlink(missing_ok=True)
+                    break
         except Exception as sentinel_error:
             logger.warning(f"Restart sentinel check failed: {sentinel_error}")
 

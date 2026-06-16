@@ -209,9 +209,22 @@ def _build_zip(
         "files": files,
     }
 
+    # Fix version.txt entry in manifest to reflect the correct version content
+    version_content = version + "\n"
+    version_sha256 = hashlib.sha256(version_content.encode()).hexdigest()
+    for entry in manifest["files"]:
+        if entry["path"] == "version.txt":
+            entry["sha256"] = version_sha256
+            entry["size"] = len(version_content.encode())
+            break
+
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
         zf.writestr("manifest.json", json.dumps(manifest, indent=2))
+        # Always write the correct version into the package
+        zf.writestr("files/version.txt", version_content)
         for entry in files:
+            if entry["path"] == "version.txt":
+                continue
             src = repo_root / entry["path"]
             if src.exists():
                 zf.write(src, f"files/{entry['path']}")

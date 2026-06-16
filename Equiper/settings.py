@@ -88,7 +88,7 @@ INSTALLED_APPS = [
 if DEBUG:
     INSTALLED_APPS += ['debug_toolbar']
 
-APP_VERSION = '1.3.6'
+APP_VERSION = '1.3.7'
 
 UPDATE_SYSTEM = {
     'enabled':              True,

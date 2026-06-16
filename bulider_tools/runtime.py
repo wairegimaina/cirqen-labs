@@ -413,7 +413,12 @@ class PortManager:
 # ============================
 if getattr(sys, 'frozen', False):
     BUNDLE_DIR = Path(sys.executable).parent.absolute()
-    APPLICATION_PATH = Path(sys._MEIPASS)
+    # For onefile bundles, _MEIPASS is temp; use BUNDLE_DIR as the real app location
+    # Fall back to _MEIPASS if BUNDLE_DIR doesn't have the expected structure
+    if BUNDLE_DIR.exists() and (BUNDLE_DIR / 'Equiper').exists():
+        APPLICATION_PATH = BUNDLE_DIR
+    else:
+        APPLICATION_PATH = Path(sys._MEIPASS)
     RUNTIME_DIR = BUNDLE_DIR / 'runtime'
 
     if sys.platform == 'win32':
@@ -1179,9 +1184,9 @@ def restart_and_apply_update(version: str):
     # Fallback path — write sentinel, quit Qt
     logger.warning("restart_and_apply_update: no live service instance, using sentinel fallback")
     _sentinels = [
+        DATA_PATH / ".restart_required",
         APPLICATION_PATH / ".restart_required",
         APPLICATION_PATH / "_internal" / ".restart_required",
-        DATA_PATH / ".restart_required",
     ]
     for s in _sentinels:
         try:

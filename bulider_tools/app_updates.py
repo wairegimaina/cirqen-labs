@@ -359,10 +359,11 @@ class AppUpdateService(QObject):
         from bulider_tools.runtime import get_restart_command
 
         # Write sentinel so the app.py on_ready block knows to relaunch
+        # Prefer DATA_PATH first (always writable and consistent across modes)
         for candidate in (
+            self._data_path / ".restart_required",
             self._app_path / ".restart_required",
             self._app_path / "_internal" / ".restart_required",
-            self._data_path / ".restart_required",
         ):
             try:
                 candidate.write_text(version)
