@@ -7,7 +7,7 @@ urlpatterns = [
     path('', views.Dashboard, name='dashboard-main'),
     path('nic-dashboard/', views.nic_dashboard, name='nic_dashboard'),
     path('Department_inventory/', views.nurse_inventory, name='Department_inventory'),
-    path('nurse_ppms/', views.nurse_PPMs, name='nurse_ppms'),
+    path('nurse_ppms/', views.nurse_ppms, name='nurse_ppms'),
     path('hod-dashboard/', views.hod_dashboard, name='hod_dashboard'),
     path('log-out/',views.hod_logout_view, name='hod_logout')
 

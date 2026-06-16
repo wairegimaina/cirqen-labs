@@ -4,7 +4,8 @@
 {% block title %}HOD Dashboard — CMMS{% endblock %}
 
 {% block extra_css %}
-  <link rel="stylesheet" href="{% static 'dashboards/dashbord.css' %}" />
+  <link rel="stylesheet" href="{% static 'dashboards/cmms-dashboard.css' %}" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 {% endblock %}
 
 {% block page_title %}
@@ -26,177 +27,287 @@
   </div>
 {% else %}
 
-  {# ── Greeting ── #}
-  <div id="greeting">
-    <h2><i class="fas fa-hand-wave"></i> {{ greeting }}</h2>
-  </div>
+<div class="cmms-dash" data-api-equipment="/Inventory/api/equipment-analytics/" data-api-inventory="/Inventory/api/inventory-summary/" data-api-ppm="/ppms/api/summary/">
 
-  {# ── System overview totals ── #}
-  <div class="totals-section">
-    <h2><i class="fas fa-chart-line"></i> System Overview — All Workshops</h2>
-    <div class="data-grid">
-
-      <div class="data-item">
-        <h5><i class="fas fa-laptop-medical"></i> Total Equipment</h5>
-        <div class="count">{{ totals.total_equipment }}</div>
-        <small>Registered Devices</small>
+  <!-- Header -->
+  <div class="dash-header">
+    <div class="dash-header__left">
+      <div class="dash-greeting">{{ greeting }}</div>
+      <div class="dash-sub">
+        HOD Dashboard · <span id="live-time"></span>
       </div>
-
-      <div class="data-item">
-        <h5><i class="fas fa-sitemap"></i> Total Departments</h5>
-        <div class="count">{{ totals.total_departments }}</div>
-        <small>Active Units</small>
-      </div>
-
-      <div class="data-item">
-        <h5><i class="fas fa-clipboard-list"></i> Total Job Cards</h5>
-        <div class="count">{{ totals.total_job_cards }}</div>
-        <small>Work Orders</small>
-      </div>
-
-      <div class="data-item">
-        <h5><i class="fas fa-file-alt"></i> Total Reports</h5>
-        <div class="count">{{ totals.total_reports }}</div>
-        <small>Generated Reports</small>
-      </div>
-
+    </div>
+    <div class="dash-header__right">
+      <span class="live-badge">Live</span>
     </div>
   </div>
 
-  {# ── Management module cards ── #}
-  <div class="sections-container mt-5">
+  <!-- Alert banner (hidden by default) -->
+  <div class="alert-banner" id="alert-banner" style="display:none">
+    <i class="fas fa-exclamation-triangle"></i>
+    <span id="alert-text"></span>
+  </div>
 
-    <section id="manage-users">
-      <h2><i class="fas fa-users-cog"></i> Manage Users</h2>
-      <p>View, add, edit, and manage all user accounts across the system.</p>
-      <a href="{% url 'manage_users' %}" class="btn btn-primary">
-        <i class="fas fa-arrow-right"></i> Go to User Management
-      </a>
-    </section>
+  <!-- ═══════════════════════════════════════════════
+       MODULES SECTION — AT TOP (with full-width cards)
+       ═══════════════════════════════════════════════ -->
+  <div class="modules-section-title">
+    <i class="fas fa-th-large"></i> &nbsp;All Modules
+  </div>
+  <div class="quick-links">
 
-    <section id="management">
-      <h2><i class="fas fa-cogs"></i> Workshop Management</h2>
-      <p>Manage workshops, departments, and user assignments.</p>
-      <a href="{% url 'workshop:create_workshop' %}" class="btn btn-primary">
-        <i class="fas fa-arrow-right"></i> Manage Workshops
-      </a>
-    </section>
+    <a href="{% url 'manage_users' %}" class="ql-card" style="--ql-accent: #6366f1;">
+      <div class="ql-icon" style="background:rgba(99,102,241,.12);color:#6366f1">
+        <i class="fas fa-users-cog"></i>
+      </div>
+      <div class="ql-text">
+        <strong>Manage Users</strong>
+        <span>User accounts &amp; roles</span>
+      </div>
+    </a>
 
-    <section id="accessories">
-      <h2><i class="fas fa-box-open"></i> Accessories &amp; Parts</h2>
-      <p>Manage and track available accessories and spare parts.</p>
-      <a href="{% url 'partstools:accessories_dashboard' %}" class="btn btn-primary">
-        <i class="fas fa-arrow-right"></i> View Accessories &amp; Parts
-      </a>
-    </section>
+    <a href="{% url 'workshop:create_workshop' %}" class="ql-card" style="--ql-accent: #f59e0b;">
+      <div class="ql-icon" style="background:rgba(245,158,11,.12);color:#f59e0b">
+        <i class="fas fa-cogs"></i>
+      </div>
+      <div class="ql-text">
+        <strong>Workshop Management</strong>
+        <span>Workshops &amp; departments</span>
+      </div>
+    </a>
+
+    <a href="{% url 'partstools:accessories_dashboard' %}" class="ql-card" style="--ql-accent: #14b8a6;">
+      <div class="ql-icon" style="background:rgba(20,184,166,.12);color:#14b8a6">
+        <i class="fas fa-box-open"></i>
+      </div>
+      <div class="ql-text">
+        <strong>Accessories &amp; Parts</strong>
+        <span>Spare parts tracking</span>
+      </div>
+    </a>
+
+    <a href="{% url 'ppm_dashboard' %}" class="ql-card" style="--ql-accent: #a78bfa;">
+      <div class="ql-icon" style="background:rgba(167,139,250,.12);color:#a78bfa">
+        <i class="fas fa-calendar-check"></i>
+      </div>
+      <div class="ql-text">
+        <strong>PPM Schedules</strong>
+        <span>Plan &amp; track maintenance</span>
+      </div>
+    </a>
+
+    <a href="{% url 'report_hub:report_hub' %}" class="ql-card" style="--ql-accent: #0ea5e9;">
+      <div class="ql-icon" style="background:rgba(14,165,233,.12);color:#0ea5e9">
+        <i class="fas fa-chart-bar"></i>
+      </div>
+      <div class="ql-text">
+        <strong>Report Hub</strong>
+        <span>Performance reports</span>
+      </div>
+    </a>
+
+    <a href="{% url 'jobcard:create_job_card' %}" class="ql-card" style="--ql-accent: #1db954;">
+      <div class="ql-icon" style="background:rgba(29,185,84,.12);color:#1db954">
+        <i class="fas fa-clipboard-list"></i>
+      </div>
+      <div class="ql-text">
+        <strong>Job Cards</strong>
+        <span>Create &amp; track tasks</span>
+      </div>
+    </a>
+
+    <a href="{% url 'equipment_dashboard' %}" class="ql-card" style="--ql-accent: #fb923c;">
+      <div class="ql-icon" style="background:rgba(251,146,60,.12);color:#fb923c">
+        <i class="fas fa-cogs"></i>
+      </div>
+      <div class="ql-text">
+        <strong>Machine Reports</strong>
+        <span>Equipment analytics</span>
+      </div>
+    </a>
+
+    <a href="{% url 'inventory' %}" class="ql-card" style="--ql-accent: #0ea5e9;">
+      <div class="ql-icon" style="background:rgba(14,165,233,.12);color:#0ea5e9">
+        <i class="fas fa-warehouse"></i>
+      </div>
+      <div class="ql-text">
+        <strong>Inventory</strong>
+        <span>Equipment &amp; parts</span>
+      </div>
+    </a>
+
+    <a href="{% url 'calibration:certificate_list' %}" class="ql-card" style="--ql-accent: #ef4444;">
+      <div class="ql-icon" style="background:rgba(239,68,68,.12);color:#ef4444">
+        <i class="fas fa-balance-scale"></i>
+      </div>
+      <div class="ql-text">
+        <strong>Calibration</strong>
+        <span>Certificates &amp; compliance</span>
+      </div>
+    </a>
 
   </div>
 
-  {# ── Per-workshop breakdown ── #}
+  <!-- ═══════════════════════════════════════════════
+       KPI STRIP — System-wide Analytics
+       ═══════════════════════════════════════════════ -->
+  <div class="modules-section-title" style="margin-top: 12px;">
+    <i class="fas fa-chart-pie"></i> &nbsp;System Overview — All Workshops
+  </div>
+  <div class="kpi-strip" style="margin-bottom: 32px;">
+
+    <div class="kpi-card" style="--kpi-color: #0ea5e9;">
+      <div class="kpi-label"><i class="fas fa-laptop-medical"></i> &nbsp;Total Equipment</div>
+      <div class="count" style="font-size: 2rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: var(--text-primary);">{{ totals.total_equipment }}</div>
+      <div class="kpi-meta">Registered Devices</div>
+    </div>
+
+    <div class="kpi-card" style="--kpi-color: #1db954;">
+      <div class="kpi-label"><i class="fas fa-sitemap"></i> &nbsp;Total Departments</div>
+      <div class="count" style="font-size: 2rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: var(--text-primary);">{{ totals.total_departments }}</div>
+      <div class="kpi-meta">Active Units</div>
+    </div>
+
+    <div class="kpi-card" style="--kpi-color: #a78bfa;">
+      <div class="kpi-label"><i class="fas fa-clipboard-list"></i> &nbsp;Total Job Cards</div>
+      <div class="count" style="font-size: 2rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: var(--text-primary);">{{ totals.total_job_cards }}</div>
+      <div class="kpi-meta">Work Orders</div>
+    </div>
+
+    <div class="kpi-card" style="--kpi-color: #f59e0b;">
+      <div class="kpi-label"><i class="fas fa-file-alt"></i> &nbsp;Total Reports</div>
+      <div class="count" style="font-size: 2rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: var(--text-primary);">{{ totals.total_reports }}</div>
+      <div class="kpi-meta">Generated Reports</div>
+    </div>
+
+    <div class="kpi-card" style="--kpi-color: #14b8a6;">
+      <div class="kpi-label"><i class="fas fa-calendar-alt"></i> &nbsp;Total PPMs</div>
+      <div class="count" style="font-size: 2rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: var(--text-primary);">{{ totals.total_ppms }}</div>
+      <div class="kpi-meta">Scheduled</div>
+    </div>
+
+    <div class="kpi-card" style="--kpi-color: #6366f1;">
+      <div class="kpi-label"><i class="fas fa-box-open"></i> &nbsp;Accessories</div>
+      <div class="count" style="font-size: 2rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: var(--text-primary);">{{ totals.total_accessories }}</div>
+      <div class="kpi-meta">In Stock</div>
+    </div>
+
+    <div class="kpi-card" style="--kpi-color: #fb923c;">
+      <div class="kpi-label"><i class="fas fa-wrench"></i> &nbsp;Tools</div>
+      <div class="count" style="font-size: 2rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: var(--text-primary);">{{ totals.total_tools }}</div>
+      <div class="kpi-meta">Available</div>
+    </div>
+
+  </div>
+
+  <!-- ═══════════════════════════════════════════════
+       WORKSHOP DETAILS CARDS
+       ═══════════════════════════════════════════════ -->
   <div class="workshops-section">
     <h2 class="mb-4"><i class="fas fa-industry"></i> Workshop Details</h2>
 
     {% for workshop in workshops %}
-    <div class="workshop-card">
+    <div class="panel" style="margin-bottom: 20px;">
 
-      <div class="workshop-header">
+      <div class="workshop-header" style="background: var(--bg-secondary); padding: 18px 22px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; border-bottom: 1px solid var(--border-color); border-left: 4px solid var(--primary-color); border-radius: 14px 14px 0 0;">
         <div>
-          <h3>
-            <i class="fas fa-wrench"></i> {{ workshop.name }}
-            {# ── Workshop category badge ── #}
+          <h3 style="font-size: 1.15rem; font-weight: 600; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 10px;">
+            <i class="fas fa-wrench" style="color: var(--primary-color);"></i>
+            {{ workshop.name }}
             {% if workshop.category == 'calibration_center' %}
-              <span class="badge badge-info ms-2">
+              <span class="badge badge-blue ms-2">
                 <i class="fas fa-drafting-compass"></i> Calibration Centre
               </span>
             {% elif workshop.category == 'maintenance' %}
-              <span class="badge badge-secondary ms-2">
+              <span class="badge badge-yellow ms-2">
                 <i class="fas fa-tools"></i> Maintenance
               </span>
             {% else %}
-              <span class="badge badge-secondary ms-2">
+              <span class="badge badge-green ms-2">
                 <i class="fas fa-layer-group"></i> {{ workshop.category|capfirst }}
               </span>
             {% endif %}
           </h3>
         </div>
-        <div class="status-indicators">
-          <div class="status-dot" title="Workshop Active"></div>
-          <span>Active</span>
+        <div class="status-indicators" style="display: flex; align-items: center; gap: 8px; background: var(--bg-card); padding: 4px 12px; border-radius: 20px; border: 1px solid var(--border-color);">
+          <span class="status-dot" style="width: 8px; height: 8px; background: var(--success-color); border-radius: 50%; box-shadow: 0 0 8px var(--success-color);"></span>
+          <span style="font-size: .75rem; font-weight: 600; color: var(--success-color); text-transform: uppercase; letter-spacing: .04em;">Active</span>
         </div>
       </div>
 
-      <div class="data-grid">
+      <div class="kpi-strip" style="margin: 0; border-radius: 0 0 14px 14px; overflow: hidden;">
 
-        <div class="data-item">
-          <h5><i class="fas fa-laptop-medical"></i> Equipment</h5>
-          <div class="count">
+        <div class="kpi-card" style="--kpi-color: #0ea5e9; border-radius: 0; border: none; border-right: 1px solid var(--border-color);">
+          <div class="kpi-label"><i class="fas fa-laptop-medical"></i> Equipment</div>
+          <div class="count" style="font-size: 1.6rem;">
             {% for ws_id, data in workshop_data.items %}
               {% if ws_id == workshop.id %}
-                <a href="{% url 'inventory_for_hod' workshop.id %}" class="equipment-link-button">
-                  {{ data.equipment_count }}
-                </a>
+                <a href="{% url 'inventory_for_hod' workshop.id %}" style="color: #0ea5e9; text-decoration: none;">{{ data.equipment_count }}</a>
               {% endif %}
             {% endfor %}
           </div>
-          <small>Total Equipment</small>
+          <div class="kpi-meta">Total Equipment</div>
         </div>
 
-        <div class="data-item">
-          <h5><i class="fas fa-sitemap"></i> Departments</h5>
-          <div class="count">
+        <div class="kpi-card" style="--kpi-color: #6366f1; border-radius: 0; border: none; border-right: 1px solid var(--border-color);">
+          <div class="kpi-label"><i class="fas fa-sitemap"></i> Departments</div>
+          <div class="count" style="font-size: 1.6rem;">
             {% for ws_id, data in workshop_data.items %}
               {% if ws_id == workshop.id %}
-                <a href="{% url 'create_department_for_hod' workshop.id %}" class="equipment-link-button">
-                  {{ data.departments_count }}
-                </a>
+                <a href="{% url 'create_department_for_hod' workshop.id %}" style="color: #6366f1; text-decoration: none;">{{ data.departments_count }}</a>
               {% endif %}
             {% endfor %}
           </div>
-          <small>Active Departments</small>
+          <div class="kpi-meta">Active Units</div>
         </div>
 
-        <div class="data-item">
-          <h5><i class="fas fa-clipboard-list"></i> Job Cards</h5>
-          <div class="count">
+        <div class="kpi-card" style="--kpi-color: #1db954; border-radius: 0; border: none; border-right: 1px solid var(--border-color);">
+          <div class="kpi-label"><i class="fas fa-clipboard-list"></i> Job Cards</div>
+          <div class="count" style="font-size: 1.6rem;">
             {% for ws_id, data in workshop_data.items %}
               {% if ws_id == workshop.id %}
-                <a href="{% url 'jobcard:hod_workshop_jobcards' workshop.id %}" class="equipment-link-button">
-                  {{ data.job_cards_count }}
-                </a>
+                <a href="{% url 'jobcard:hod_workshop_jobcards' workshop.id %}" style="color: #1db954; text-decoration: none;">{{ data.job_cards_count }}</a>
               {% endif %}
             {% endfor %}
           </div>
-          <small>Work Orders</small>
+          <div class="kpi-meta">Work Orders</div>
         </div>
 
-        <div class="data-item">
-          <h5><i class="fas fa-file-alt"></i> Reports</h5>
-          <div class="count">
+        <div class="kpi-card" style="--kpi-color: #f59e0b; border-radius: 0; border: none; border-right: 1px solid var(--border-color);">
+          <div class="kpi-label"><i class="fas fa-calendar-alt"></i> PPMs</div>
+          <div class="count" style="font-size: 1.6rem; color: var(--text-primary);">
             {% for ws_id, data in workshop_data.items %}
               {% if ws_id == workshop.id %}
-                <a href="{% url 'report_hub:hod_reports_view' workshop.id %}" class="equipment-link-button">
-                  {{ data.reports_count }}
-                </a>
+                <a href="{% url 'ppm_dashboard' %}" style="color: #f59e0b; text-decoration: none;">{{ data.ppms_count }}</a>
               {% endif %}
             {% endfor %}
           </div>
-          <small>Submitted Reports</small>
+          <div class="kpi-meta">Scheduled</div>
         </div>
 
-        {# ── Calibration-specific link — only shown for calibration_center workshops ── #}
+        <div class="kpi-card" style="--kpi-color: #a78bfa; border-radius: 0; border: none; border-right: 1px solid var(--border-color);">
+          <div class="kpi-label"><i class="fas fa-file-alt"></i> Reports</div>
+          <div class="count" style="font-size: 1.6rem;">
+            {% for ws_id, data in workshop_data.items %}
+              {% if ws_id == workshop.id %}
+                <a href="{% url 'report_hub:hod_reports_view' workshop.id %}" style="color: #a78bfa; text-decoration: none;">{{ data.reports_count }}</a>
+              {% endif %}
+            {% endfor %}
+          </div>
+          <div class="kpi-meta">Submitted</div>
+        </div>
+
         {% if workshop.category == 'calibration_center' %}
-        <div class="data-item">
-          <h5><i class="fas fa-drafting-compass"></i> Calibration</h5>
-          <div class="count">
+        <div class="kpi-card" style="--kpi-color: #ef4444; border-radius: 0; border: none;">
+          <div class="kpi-label"><i class="fas fa-drafting-compass"></i> Calibration</div>
+          <div class="count" style="font-size: 1.6rem;">
             {% for ws_id, data in workshop_data.items %}
               {% if ws_id == workshop.id %}
-                <a href="{% url 'calibration:cal-dashboard' %}" class="equipment-link-button">
-                  {{ data.calibrations_count|default:"—" }}
-                </a>
+                <a href="{% url 'calibration:cal-dashboard' %}" style="color: #ef4444; text-decoration: none;">{{ data.calibrations_count|default:"—" }}</a>
               {% endif %}
             {% endfor %}
           </div>
-          <small>Calibration Sessions</small>
+          <div class="kpi-meta">Sessions</div>
         </div>
         {% endif %}
 
@@ -208,14 +319,13 @@
       <p>No workshops are currently configured in the system.</p>
     </div>
     {% endfor %}
-
   </div>
 
 {% endif %}
-{# ── END ROLE GUARD ── #}
+{# ── END ROLE GUARD ─ #}
 
 {% endblock %}
 
 {% block extra_js %}
-  <script src="{% static 'dashboards/dashboard.js' %}"></script>
+  <script src="{% static 'dashboards/cmms-dashboard.js' %}"></script>
 {% endblock %}

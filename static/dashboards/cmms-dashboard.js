@@ -41,7 +41,7 @@ function updateClock() {
 setInterval(updateClock, 1000);
 updateClock();
 
-/* ── Chart instances (keep refs for destroy on refresh) ── */
+/* ── Chart instances ── */
 let chartTrend = null,
   chartCat = null,
   chartDonut = null;
@@ -55,37 +55,107 @@ function destroyCharts() {
 ═══════════════════════════════════════════ */
 async function loadAll() {
   destroyCharts();
-  await Promise.allSettled([
-    loadEquipmentAnalytics(),
-    loadPPMSummary(),
-    loadInventorySummary(),
-  ]);
+  // Use embedded data if available, otherwise fetch
+  if (window.analyticsData) {
+    loadEquipmentAnalyticsFromData(window.analyticsData);
+  } else {
+    await loadEquipmentAnalytics();
+  }
+  if (window.ppmData) {
+    loadPPMSummaryFromData(window.ppmData);
+  } else {
+    await loadPPMSummary();
+  }
+  if (window.inventoryData) {
+    loadInventorySummaryFromData(window.inventoryData);
+  } else {
+    await loadInventorySummary();
+  }
 }
 
 /* ── 1. Equipment analytics ─────────────────── */
+
+// New function using embedded data
+function loadEquipmentAnalyticsFromData(d) {
+  setKPI("kpi-equipment", d.total_equipment);
+  setKPI("kpi-active", d.active_equipment);
+  setKPI("kpi-departments", d.total_departments);
+
+  const activeRate = d.total_equipment
+    ? Math.round((d.active_equipment / d.total_equipment) * 100)
+    : 0;
+  setMeta("kpi-active-meta", `↑ ${activeRate}% active rate`, "up");
+  setMeta("kpi-departments-meta", `${d.total_departments} departments`, "");
+
+  const labels = Object.keys(d.by_category);
+  const values = Object.values(d.by_category);
+  if (labels.length) {
+    const palette = [
+      "#0ea5e9",
+      "#1db954",
+      "#f59e0b",
+      "#a78bfa",
+      "#fb923c",
+      "#ef4444",
+      "#14b8a6",
+    ];
+    chartCat = new Chart($("chart-equipment-cat"), {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [
+          {
+            label: "Equipment",
+            data: values,
+            backgroundColor: labels.map(
+              (_, i) => palette[i % palette.length] + "33",
+            ),
+            borderColor: labels.map((_, i) => palette[i % palette.length]),
+            borderWidth: 2,
+            borderRadius: 6,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { maxRotation: 30, font: { size: 10 } },
+          },
+          y: { grid: { color: "#30363d" }, ticks: { precision: 0 } },
+        },
+      },
+    });
+  } else {
+    fallbackCategoryChart();
+  }
+  renderActivityTable(d.top_equipment);
+}
+
+// Fetch fallback
 async function loadEquipmentAnalytics() {
   try {
-    const res = await fetch("/inventory/api/equipment-analytics/");
+    const dash = document.querySelector(".cmms-dash");
+    const url = dash ? dash.dataset.apiEquipment : null;
+    if (!url) throw new Error("No API URL configured");
+    const res = await fetch(url);
     if (!res.ok) throw new Error(res.status);
     const d = await res.json();
 
-    setKPI("kpi-equipment", d.total_equipment ?? d.total ?? "—");
-    setKPI("kpi-active", d.active_equipment ?? d.active ?? "—");
-    setKPI("kpi-departments", d.total_departments ?? d.departments ?? "—");
+    setKPI("kpi-equipment", d.total_equipment);
+    setKPI("kpi-active", d.active_equipment);
+    setKPI("kpi-departments", d.total_departments);
 
-    const activeRate =
-      d.active_equipment && d.total_equipment
-        ? Math.round((d.active_equipment / d.total_equipment) * 100)
-        : null;
-    if (activeRate !== null)
-      setMeta("kpi-active-meta", `↑ ${activeRate}% active rate`, "up");
-    if (d.total_departments)
-      setMeta("kpi-departments-meta", `${d.total_departments} departments`, "");
+    const activeRate = d.total_equipment
+      ? Math.round((d.active_equipment / d.total_equipment) * 100)
+      : 0;
+    setMeta("kpi-active-meta", `↑ ${activeRate}% active rate`, "up");
+    setMeta("kpi-departments-meta", `${d.total_departments} departments`, "");
 
-    const cats = d.by_category ?? d.categories ?? {};
-    const labels = Object.keys(cats);
-    const values = Object.values(cats);
-
+    const labels = Object.keys(d.by_category);
+    const values = Object.values(d.by_category);
     if (labels.length) {
       const palette = [
         "#0ea5e9",
@@ -128,9 +198,7 @@ async function loadEquipmentAnalytics() {
     } else {
       fallbackCategoryChart();
     }
-
-    const top = d.top_equipment ?? d.equipment_with_most_jobcards ?? [];
-    renderActivityTable(top);
+    renderActivityTable(d.top_equipment);
   } catch (e) {
     console.warn("Equipment analytics error", e);
     fallbackCategoryChart();
@@ -164,14 +232,14 @@ function renderActivityTable(top) {
   tbody.innerHTML = top
     .slice(0, 8)
     .map((eq) => {
-      const jc = eq.job_cards ?? eq.jobcard_count ?? eq.count ?? 0;
-      const status = eq.active_status ?? eq.active ?? true;
+      const jc = eq.job_cards || eq.jobcard_count || eq.count || 0;
+      const status = eq.active_status ?? true;
       const badge = status
         ? '<span class="badge badge-green">Active</span>'
         : '<span class="badge badge-red">Inactive</span>';
       return `<tr>
-      <td>${eq.name ?? eq.description ?? eq.equipment_name ?? "—"}</td>
-      <td style="color:var(--text-muted)">${eq.department ?? eq.department_name ?? "—"}</td>
+      <td>${eq.name || eq.description || eq.equipment_name || "—"}</td>
+      <td style="color:var(--text-muted)">${eq.department || eq.department_name || "—"}</td>
       <td style="font-family:var(--mono);font-weight:600">${jc}</td>
       <td>${badge}</td>
     </tr>`;
@@ -180,17 +248,91 @@ function renderActivityTable(top) {
 }
 
 /* ── 2. PPM summary ─────────────────────────── */
+
+// New function using embedded data
+function loadPPMSummaryFromData(d) {
+  const total = d.total || 0;
+  const completed = d.completed || 0;
+  const overdue = d.overdue || 0;
+  const pending = d.pending || 0;
+  const upcoming = d.upcoming || 0;
+
+  setKPI("kpi-ppm", total);
+  setKPI("kpi-overdue", overdue);
+  setKPI("kpi-completed", completed);
+
+  if (overdue > 0) {
+    setMeta("kpi-overdue-meta", `${overdue} need attention`, "down");
+    const banner = $("alert-banner");
+    if (banner) {
+      banner.style.display = "flex";
+      $("alert-text").textContent =
+        `${overdue} PPM schedule${overdue > 1 ? "s are" : " is"} overdue and require immediate attention.`;
+    }
+  } else {
+    setMeta("kpi-overdue-meta", "All on track", "up");
+  }
+
+  const compRate = total > 0 ? Math.round((completed / total) * 100) : 0;
+  setMeta(
+    "kpi-completed-meta",
+    `${compRate}% completion rate`,
+    compRate >= 80 ? "up" : "warn",
+  );
+  if (total > 0) setMeta("kpi-ppm-meta", `${total} total schedules`, "");
+
+  const statuses = [
+    { label: "Completed", count: completed, color: "#1db954" },
+    { label: "Pending", count: pending, color: "#f59e0b" },
+    { label: "Overdue", count: overdue, color: "#ef4444" },
+    { label: "Upcoming", count: upcoming, color: "#0ea5e9" },
+  ];
+
+  const rows = document.getElementById("ppm-status-rows");
+  if (rows) {
+    rows.innerHTML = statuses
+      .map((s) => {
+        const pct = total > 0 ? Math.round((s.count / total) * 100) : 0;
+        return `<div class="status-row">
+          <span class="status-label">
+            <span class="status-dot" style="background:${s.color}"></span>${s.label}
+          </span>
+          <div class="status-bar-wrap">
+            <div class="status-bar" style="width:${pct}%;background:${s.color}"></div>
+          </div>
+          <span class="status-count">${s.count}</span>
+        </div>`;
+      })
+      .join("");
+  }
+
+  const monthly = d.monthly_breakdown || d.monthly || d.trend || null;
+  if (monthly && typeof monthly === "object") {
+    const labels = Object.keys(monthly);
+    const vals = Object.values(monthly).map((v) =>
+      typeof v === "object" ? (v.completed ?? v.count ?? 0) : v,
+    );
+    renderTrendChart(labels, vals);
+  } else {
+    renderTrendChart(null, null);
+  }
+}
+
+// Fetch fallback for PPM (identical to original)
 async function loadPPMSummary() {
   try {
-    const res = await fetch("/ppms/api/summary/");
+    const dash = document.querySelector(".cmms-dash");
+    const url = dash ? dash.dataset.apiPpm : null;
+    if (!url) throw new Error("No PPM API URL configured");
+    const res = await fetch(url);
     if (!res.ok) throw new Error(res.status);
     const d = await res.json();
 
-    const total = d.total ?? d.total_schedules ?? 0;
-    const completed = d.completed ?? d.completed_count ?? 0;
-    const overdue = d.overdue ?? d.overdue_count ?? 0;
-    const pending = d.pending ?? d.pending_count ?? total - completed - overdue;
-    const upcoming = d.upcoming ?? d.upcoming_count ?? 0;
+    const total = d.total || 0;
+    const completed = d.completed || 0;
+    const overdue = d.overdue || 0;
+    const pending = d.pending || 0;
+    const upcoming = d.upcoming || 0;
 
     setKPI("kpi-ppm", total);
     setKPI("kpi-overdue", overdue);
@@ -229,19 +371,19 @@ async function loadPPMSummary() {
         .map((s) => {
           const pct = total > 0 ? Math.round((s.count / total) * 100) : 0;
           return `<div class="status-row">
-          <span class="status-label">
-            <span class="status-dot" style="background:${s.color}"></span>${s.label}
-          </span>
-          <div class="status-bar-wrap">
-            <div class="status-bar" style="width:${pct}%;background:${s.color}"></div>
-          </div>
-          <span class="status-count">${s.count}</span>
-        </div>`;
+            <span class="status-label">
+              <span class="status-dot" style="background:${s.color}"></span>${s.label}
+            </span>
+            <div class="status-bar-wrap">
+              <div class="status-bar" style="width:${pct}%;background:${s.color}"></div>
+            </div>
+            <span class="status-count">${s.count}</span>
+          </div>`;
         })
         .join("");
     }
 
-    const monthly = d.monthly_breakdown ?? d.monthly ?? d.trend ?? null;
+    const monthly = d.monthly_breakdown || d.monthly || d.trend || null;
     if (monthly && typeof monthly === "object") {
       const labels = Object.keys(monthly);
       const vals = Object.values(monthly).map((v) =>
@@ -319,19 +461,84 @@ function renderTrendChart(labels, vals) {
 }
 
 /* ── 3. Inventory summary ───────────────────── */
+
+function loadInventorySummaryFromData(d) {
+  const equipment = d.equipment || 0;
+  const accessories = d.accessories || 0;
+  const tools = d.tools || 0;
+  const inactive = d.inactive || 0;
+  const total = equipment + accessories + tools;
+
+  $("donut-total").textContent = total || "—";
+
+  const segments = [
+    { label: "Equipment", count: equipment, color: "#0ea5e9" },
+    { label: "Accessories", count: accessories, color: "#1db954" },
+    { label: "Tools", count: tools, color: "#f59e0b" },
+    { label: "Inactive", count: inactive, color: "#ef4444" },
+  ].filter((s) => s.count > 0);
+
+  if (!segments.length) {
+    segments.push({ label: "Equipment", count: 1, color: "#0ea5e9" });
+  }
+
+  chartDonut = new Chart($("chart-inventory-donut"), {
+    type: "doughnut",
+    data: {
+      labels: segments.map((s) => s.label),
+      datasets: [
+        {
+          data: segments.map((s) => s.count),
+          backgroundColor: segments.map((s) => s.color + "33"),
+          borderColor: segments.map((s) => s.color),
+          borderWidth: 2,
+          hoverOffset: 8,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      cutout: "72%",
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: (ctx) => ` ${ctx.label}: ${ctx.raw}` } },
+      },
+    },
+  });
+
+  const legend = $("inventory-legend");
+  if (legend) {
+    legend.innerHTML = segments
+      .map(
+        (s) => `
+        <div class="legend-item">
+          <span class="legend-dot" style="background:${s.color}"></span>
+          <span>${s.label}</span>
+          <span style="margin-left:auto;font-family:var(--mono);font-weight:600">${s.count}</span>
+        </div>
+      `,
+      )
+      .join("");
+  }
+}
+
+// Fetch fallback
 async function loadInventorySummary() {
   try {
-    const res = await fetch("/inventory/api/inventory-summary/");
+    const dash = document.querySelector(".cmms-dash");
+    const url = dash ? dash.dataset.apiInventory : null;
+    if (!url) throw new Error("No inventory API URL configured");
+    const res = await fetch(url);
     if (!res.ok) throw new Error(res.status);
     const d = await res.json();
 
-    const equipment = d.equipment ?? d.equipment_count ?? 0;
-    const accessories = d.accessories ?? d.accessories_count ?? 0;
-    const tools = d.tools ?? d.tools_count ?? 0;
-    const inactive = d.inactive ?? d.inactive_count ?? 0;
+    const equipment = d.equipment || 0;
+    const accessories = d.accessories || 0;
+    const tools = d.tools || 0;
+    const inactive = d.inactive || 0;
     const total = equipment + accessories + tools;
 
-    $("donut-total").textContent = total || equipment || "—";
+    $("donut-total").textContent = total || "—";
 
     const segments = [
       { label: "Equipment", count: equipment, color: "#0ea5e9" },
@@ -364,9 +571,7 @@ async function loadInventorySummary() {
         plugins: {
           legend: { display: false },
           tooltip: {
-            callbacks: {
-              label: (ctx) => ` ${ctx.label}: ${ctx.raw}`,
-            },
+            callbacks: { label: (ctx) => ` ${ctx.label}: ${ctx.raw}` },
           },
         },
       },
@@ -376,12 +581,13 @@ async function loadInventorySummary() {
     if (legend) {
       legend.innerHTML = segments
         .map(
-          (s) =>
-            `<div class="legend-item">
-          <span class="legend-dot" style="background:${s.color}"></span>
-          <span>${s.label}</span>
-          <span style="margin-left:auto;font-family:var(--mono);font-weight:600">${s.count}</span>
-        </div>`,
+          (s) => `
+          <div class="legend-item">
+            <span class="legend-dot" style="background:${s.color}"></span>
+            <span>${s.label}</span>
+            <span style="margin-left:auto;font-family:var(--mono);font-weight:600">${s.count}</span>
+          </div>
+        `,
         )
         .join("");
     }
@@ -413,7 +619,4 @@ async function loadInventorySummary() {
 /* ── Boot ── */
 document.addEventListener("DOMContentLoaded", () => {
   loadAll();
-  // Refresh button
-  const refreshBtn = document.getElementById("refresh-btn");
-  if (refreshBtn) refreshBtn.addEventListener("click", loadAll);
 });
