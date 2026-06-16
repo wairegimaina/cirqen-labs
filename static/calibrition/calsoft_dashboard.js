@@ -5,18 +5,21 @@
     refreshInterval: 200000,
   };
 
-
   let scheduleDonut = null;
   let refreshTimer = null;
 
   function escapeHTML(value) {
-    return String(value ?? "").replace(/[&<>"']/g, (char) => ({
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#39;",
-    }[char]));
+    return String(value ?? "").replace(
+      /[&<>"']/g,
+      (char) =>
+        ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;",
+        })[char],
+    );
   }
 
   function pct(value, total) {
@@ -71,7 +74,6 @@
           <p>${escapeHTML(monthLabel)} pass rate from ${monthTotal} approved ${pluralize(monthTotal, "session")}</p>
           <div class="cs-hero-meta">
             <span>Week: <strong>${formatPercent(weekRate)}</strong> (${weekTotal} sessions)</span>
-            <span>Schedule snapshot is powered by calSchedules</span>
           </div>
         </div>
         <div class="cs-pass-orb" style="--pass-rate: ${monthRate}">
@@ -81,42 +83,48 @@
       </section>`;
   }
 
-  function renderKpiCards(counts, month) {
-    const total = counts.pending + counts.overdue + counts.completed;
+  function renderKpiCards(data) {
+    const totalSessions = data.total_sessions || 0;
+    const monthTotal = data.month_total || 0;
+    const pendingApproval = data.pending_approval_count || 0;
+    const awaitingCerts = data.awaiting_certificates || 0;
+
     const cards = [
       {
         variant: "pending",
-        icon: "Pending",
-        value: counts.pending,
-        label: "Pending schedules",
-        sub: `${month}`,
-      },
-      {
-        variant: "pushed",
-        icon: "Pushed",
-        value: counts.pushed,
-        label: "Pushed schedules",
-        sub: "Carried forward",
-      },
-      {
-        variant: "overdue",
-        icon: "Overdue",
-        value: counts.overdue,
-        label: "Overdue schedules",
-        sub: "Action required",
+        icon: "📋",
+        value: pendingApproval,
+        label: "Pending Approval",
+        sub: "Sessions awaiting review",
       },
       {
         variant: "approved",
-        icon: "Completed",
-        value: counts.completed,
-        label: "Completed recently",
-        sub: `${pct(counts.completed, total)}% of tracked schedules`,
+        icon: "✅",
+        value: monthTotal,
+        label: "Approved This Month",
+        sub: data.current_month || "This month",
+      },
+      {
+        variant: "total",
+        icon: "📊",
+        value: totalSessions,
+        label: "Total Approved",
+        sub: "All time sessions",
+      },
+      {
+        variant: "certs",
+        icon: "🏅",
+        value: awaitingCerts,
+        label: "Awaiting Certificates",
+        sub: "Ready for certification",
       },
     ];
 
     return `
       <section class="cs-kpi-grid">
-        ${cards.map((card) => `
+        ${cards
+          .map(
+            (card) => `
           <article class="cs-kpi-card cs-kpi-${card.variant}">
             <div class="cs-kpi-top">
               <span>${escapeHTML(card.icon)}</span>
@@ -124,7 +132,9 @@
             </div>
             <div class="cs-kpi-label">${escapeHTML(card.label)}</div>
             <div class="cs-kpi-sub">${escapeHTML(card.sub)}</div>
-          </article>`).join("")}
+          </article>`,
+          )
+          .join("")}
       </section>`;
   }
 
@@ -201,17 +211,6 @@
       </section>`;
   }
 
-  function renderTicker() {
-    const items = FACTS.map((fact) => `<span>${escapeHTML(fact)}</span>`).join("");
-    return `
-      <section class="cs-facts-ticker" aria-label="Did You Know calibration facts">
-        <div class="cs-ticker-label">Did You Know</div>
-        <div class="cs-ticker-window">
-          <div class="cs-ticker-track">${items}${items}</div>
-        </div>
-      </section>`;
-  }
-
   function renderRecentSessions(sessions, urls) {
     if (!sessions.length) {
       return `
@@ -225,22 +224,56 @@
         </tr>`;
     }
 
-    return sessions.map((session) => `
+    return sessions
+      .map(
+        (session) => `
       <tr>
         <td>${escapeHTML(session.device_model || "—")}</td>
         <td><small>${escapeHTML(session.device_serial || "—")}</small></td>
         <td>${escapeHTML(session.procedure_name || "—")}</td>
         <td>${escapeHTML(shortDate(session.timestamp))}</td>
         <td><span class="cs-result ${session.overall_pass ? "pass" : "fail"}">${session.overall_pass ? "Pass" : "Fail"}</span></td>
-      </tr>`).join("");
+      </tr>`,
+      )
+      .join("");
+  }
+
+  // Quick Actions from calsoft.js - using the same structure
+  function renderQuickActions(urls, pendingApproval) {
+    const actions = [
+      {
+        href: urls.performCalibration || "#",
+        icon: "🔬",
+        label: "New Calibration",
+      },
+      {
+        href: urls.sessionsPendingApproval || "#",
+        icon: "📝",
+        label: "Pending Approval",
+        badge: pendingApproval,
+      },
+      { href: urls.certificates || "#", icon: "🏅", label: "Certificates" },
+      { href: urls.scheduleList || "#", icon: "📚", label: "All Sessions" },
+      { href: urls.auditLog || "#", icon: "🗂️", label: "Audit Log" },
+    ];
+
+    return `
+      <div class="cs-qa-list">
+        ${actions
+          .map(
+            (action) => `
+          <a class="cs-qa-item" href="${escapeHTML(action.href)}">
+            <span class="cs-qa-code">${escapeHTML(action.icon)}</span>
+            <span>${escapeHTML(action.label)}</span>
+            ${action.badge > 0 ? `<span class="cs-qa-badge">${action.badge}</span>` : ""}
+          </a>`,
+          )
+          .join("")}
+      </div>`;
   }
 
   function renderBottomRow(data, urls) {
-    const actions = [
-      
-      { href: urls.scheduleList, icon: "Sched", label: "Schedules" },
-      { href: urls.certificates, icon: "Cert", label: "Certificates" },
-    ];
+    const pendingApproval = Number(data.pending_approval_count || 0);
 
     return `
       <section class="cs-bottom-grid">
@@ -272,13 +305,7 @@
               <h2>Actions</h2>
             </div>
           </div>
-          <div class="cs-qa-list">
-            ${actions.map((action) => `
-              <a class="cs-qa-item" href="${escapeHTML(action.href)}">
-                <span class="cs-qa-code">${escapeHTML(action.icon)}</span>
-                <span>${escapeHTML(action.label)}</span>
-              </a>`).join("")}
-          </div>
+          ${renderQuickActions(urls, pendingApproval)}
         </article>
       </section>`;
   }
@@ -287,7 +314,8 @@
     const canvas = document.getElementById("scheduleDonut");
     if (!canvas || typeof Chart === "undefined") return;
 
-    const existing = typeof Chart.getChart === "function" ? Chart.getChart(canvas) : null;
+    const existing =
+      typeof Chart.getChart === "function" ? Chart.getChart(canvas) : null;
     if (existing) existing.destroy();
 
     scheduleDonut = new Chart(canvas, {
@@ -296,7 +324,11 @@
         labels: ["Completed", "Pending", "Overdue"],
         datasets: [
           {
-            data: [counts.completed || 0, counts.pending || 0, counts.overdue || 0],
+            data: [
+              counts.completed || 0,
+              counts.pending || 0,
+              counts.overdue || 0,
+            ],
             backgroundColor: ["#10b981", "#f59e0b", "#ef4444"],
             borderWidth: 0,
             hoverOffset: 4,
@@ -331,7 +363,7 @@
     style.textContent = `
       .cs-hero {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) 220px;
+        grid-template-columns: minmax(0, 1fr) 200px;
         gap: 1.25rem;
         align-items: center;
         padding: 1.35rem;
@@ -365,7 +397,7 @@
       }
 
       .cs-hero h1 {
-        font-size: clamp(3rem, 8vw, 5.75rem);
+        font-size: clamp(2.5rem, 7vw, 4.5rem);
         letter-spacing: -0.07em;
       }
 
@@ -391,8 +423,8 @@
       }
 
       .cs-pass-orb {
-        width: 190px;
-        height: 190px;
+        width: 170px;
+        height: 170px;
         margin: 0 auto;
         border-radius: 50%;
         display: grid;
@@ -407,7 +439,7 @@
       .cs-pass-orb::before {
         content: "";
         position: absolute;
-        inset: 18px;
+        inset: 16px;
         border-radius: 50%;
         background: var(--bg-card);
         box-shadow: inset 0 0 0 1px var(--border-color);
@@ -422,7 +454,7 @@
       }
 
       .cs-pass-orb span {
-        font-size: 2.35rem;
+        font-size: 2rem;
         font-weight: 900;
         color: var(--text-primary);
         letter-spacing: -0.05em;
@@ -431,7 +463,7 @@
       .cs-pass-orb small {
         margin-top: 0.25rem;
         color: var(--text-secondary);
-        font-size: 0.72rem;
+        font-size: 0.68rem;
         font-weight: 700;
         letter-spacing: 0.08em;
         text-transform: uppercase;
@@ -440,14 +472,14 @@
       .cs-kpi-grid {
         display: grid;
         grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 1rem;
+        gap: 0.85rem;
         margin-bottom: 1rem;
       }
 
       .cs-kpi-card {
-        min-height: 132px;
-        padding: 1rem;
-        border-radius: 20px;
+        min-height: 100px;
+        padding: 0.85rem 1rem;
+        border-radius: 16px;
         border: 1px solid var(--border-color);
         background: var(--bg-card);
         box-shadow: var(--shadow-sm);
@@ -459,14 +491,14 @@
         content: "";
         position: absolute;
         inset: 0 auto 0 0;
-        width: 5px;
+        width: 4px;
         background: var(--kpi-accent);
       }
 
       .cs-kpi-pending { --kpi-accent: var(--warning-color); }
-      .cs-kpi-pushed { --kpi-accent: #8b5cf6; }
-      .cs-kpi-overdue { --kpi-accent: var(--danger-color); }
       .cs-kpi-approved { --kpi-accent: var(--success-color); }
+      .cs-kpi-total { --kpi-accent: var(--primary-color); }
+      .cs-kpi-certs { --kpi-accent: #8b5cf6; }
 
       .cs-kpi-top {
         display: flex;
@@ -476,32 +508,31 @@
       }
 
       .cs-kpi-top span {
-        padding: 0.35rem 0.5rem;
+        padding: 0.2rem 0.45rem;
         border-radius: 999px;
         background: color-mix(in srgb, var(--kpi-accent) 14%, var(--bg-card));
         color: var(--kpi-accent);
-        font-size: 0.68rem;
-        font-weight: 900;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
+        font-size: 0.85rem;
+        font-weight: 700;
       }
 
       .cs-kpi-top strong {
-        font-size: 2rem;
+        font-size: 1.6rem;
         line-height: 1;
         color: var(--kpi-accent);
       }
 
       .cs-kpi-label {
-        margin-top: 0.8rem;
+        margin-top: 0.4rem;
         color: var(--text-primary);
         font-weight: 800;
+        font-size: 0.9rem;
       }
 
       .cs-kpi-sub {
-        margin-top: 0.25rem;
+        margin-top: 0.15rem;
         color: var(--text-secondary);
-        font-size: 0.78rem;
+        font-size: 0.72rem;
       }
 
       .cs-approval-banner {
@@ -563,7 +594,7 @@
 
       .cs-schedule-layout {
         display: grid;
-        grid-template-columns: minmax(190px, 0.85fr) 220px minmax(220px, 1fr);
+        grid-template-columns: minmax(180px, 0.85fr) 200px minmax(200px, 1fr);
         gap: 1rem;
         align-items: stretch;
       }
@@ -571,41 +602,42 @@
       .cs-schedule-kpis {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 0.75rem;
+        gap: 0.65rem;
       }
 
       .cs-schedule-kpis article {
-        padding: 0.95rem;
-        border-radius: 18px;
+        padding: 0.85rem;
+        border-radius: 16px;
         background: var(--bg-tertiary);
         border: 1px solid var(--border-color);
       }
 
       .cs-schedule-kpis strong {
         display: block;
-        font-size: 2rem;
+        font-size: 1.6rem;
         line-height: 1;
         color: var(--text-primary);
       }
 
       .cs-schedule-kpis span {
         display: block;
-        margin-top: 0.45rem;
+        margin-top: 0.35rem;
         color: var(--text-secondary);
         font-weight: 800;
-        font-size: 0.78rem;
+        font-size: 0.72rem;
         text-transform: uppercase;
         letter-spacing: 0.06em;
       }
 
       .cs-schedule-kpis small {
         display: block;
-        margin-top: 0.25rem;
+        margin-top: 0.2rem;
         color: var(--text-muted);
+        font-size: 0.7rem;
       }
 
       .cs-schedule-donut {
-        min-height: 220px;
+        min-height: 200px;
         display: grid;
         place-items: center;
         border-radius: 20px;
@@ -615,8 +647,8 @@
       }
 
       .cs-schedule-donut canvas {
-        width: 200px !important;
-        height: 200px !important;
+        width: 180px !important;
+        height: 180px !important;
       }
 
       .cs-schedule-summary {
@@ -657,7 +689,7 @@
       .cs-schedule-summary p {
         margin: 0;
         color: var(--text-secondary);
-        font-size: 0.85rem;
+        font-size: 0.82rem;
         line-height: 1.5;
       }
 
@@ -669,65 +701,11 @@
 
       .cs-link:hover { text-decoration: underline; }
 
-      .cs-facts-ticker {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-        margin: 1rem 0;
-        padding: 0.85rem 1rem;
-        overflow: hidden;
-        border-radius: 20px;
-        background: var(--bg-card);
-        border: 1px solid var(--border-color);
-        box-shadow: var(--shadow-sm);
-      }
-
-      .cs-ticker-label {
-        flex: 0 0 auto;
-        padding: 0.45rem 0.7rem;
-        border-radius: 999px;
-        background: var(--primary-gradient);
-        color: var(--bg-card);
-        font-size: 0.75rem;
-        font-weight: 900;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-      }
-
-      .cs-ticker-window {
-        overflow: hidden;
-        min-width: 0;
-        mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
-      }
-
-      .cs-ticker-track {
-        display: flex;
-        width: max-content;
-        gap: 2rem;
-        animation: calsoft-fact-scroll 42s linear infinite;
-      }
-
-      .cs-ticker-track span {
-        white-space: nowrap;
-        color: var(--text-secondary);
-        font-size: 0.86rem;
-      }
-
-      .cs-ticker-track span::before {
-        content: "•";
-        margin-right: 1rem;
-        color: var(--primary-color);
-      }
-
-      @keyframes calsoft-fact-scroll {
-        from { transform: translateX(0); }
-        to { transform: translateX(-50%); }
-      }
-
       .cs-bottom-grid {
         display: grid;
         grid-template-columns: minmax(0, 1fr) 280px;
         gap: 1rem;
+        margin-top: 1rem;
       }
 
       .cs-sessions-table {
@@ -793,20 +771,21 @@
 
       .cs-qa-list {
         display: grid;
-        gap: 0.65rem;
+        gap: 0.6rem;
       }
 
       .cs-qa-item {
         display: flex;
         align-items: center;
         gap: 0.75rem;
-        padding: 0.8rem;
+        padding: 0.7rem 0.85rem;
         border-radius: 16px;
         background: var(--bg-tertiary);
         border: 1px solid var(--border-color);
         color: var(--text-primary);
         text-decoration: none;
         transition: transform 0.15s ease, border-color 0.15s ease;
+        position: relative;
       }
 
       .cs-qa-item:hover {
@@ -817,15 +796,32 @@
       .cs-qa-code {
         display: inline-grid;
         place-items: center;
-        width: 46px;
-        height: 46px;
+        width: 40px;
+        height: 40px;
         flex: 0 0 auto;
-        border-radius: 14px;
+        border-radius: 12px;
         background: var(--primary-gradient);
         color: var(--bg-card);
-        font-size: 0.68rem;
-        font-weight: 900;
-        letter-spacing: 0.06em;
+        font-size: 0.85rem;
+        font-weight: 700;
+      }
+
+      .cs-qa-badge {
+        position: absolute;
+        right: 0.75rem;
+        top: -0.35rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 20px;
+        height: 20px;
+        padding: 0 0.4rem;
+        border-radius: 999px;
+        background: var(--danger-color);
+        color: white;
+        font-size: 0.65rem;
+        font-weight: 800;
+        transform: translateY(0);
       }
 
       @media (max-width: 1100px) {
@@ -836,12 +832,17 @@
         }
 
         .cs-pass-orb {
-          width: 170px;
-          height: 170px;
+          width: 150px;
+          height: 150px;
         }
 
         .cs-schedule-donut {
-          min-height: 200px;
+          min-height: 180px;
+        }
+
+        .cs-schedule-donut canvas {
+          width: 160px !important;
+          height: 160px !important;
         }
       }
 
@@ -859,15 +860,6 @@
           align-items: flex-start;
           flex-direction: column;
         }
-
-        .cs-facts-ticker {
-          align-items: flex-start;
-          flex-direction: column;
-        }
-
-        .cs-ticker-window {
-          width: 100%;
-        }
       }
     `;
     document.head.appendChild(style);
@@ -879,7 +871,8 @@
 
     const urls = window.DashboardURLs || {};
     if (!urls.dashboardData || !urls.scheduleStats) {
-      content.innerHTML = '<div class="alert alert-danger">Dashboard configuration is missing.</div>';
+      content.innerHTML =
+        '<div class="alert alert-danger">Dashboard configuration is missing.</div>';
       return;
     }
 
@@ -894,27 +887,31 @@
       ]);
 
       if (!dashResponse.ok) {
-        throw new Error(`Dashboard data request failed with status ${dashResponse.status}`);
+        throw new Error(
+          `Dashboard data request failed with status ${dashResponse.status}`,
+        );
       }
 
       const data = await dashResponse.json();
-      const scheduleData = scheduleResponse.ok ? await scheduleResponse.json() : {};
+      const scheduleData = scheduleResponse.ok
+        ? await scheduleResponse.json()
+        : {};
       const counts = mergeScheduleCounts(data, scheduleData);
       const month = data.current_month || "This month";
       const pendingApproval = Number(data.pending_approval_count || 0);
 
       content.innerHTML = `
         ${renderHero(data)}
-        ${renderKpiCards(counts, month)}
+        ${renderKpiCards(data)}
         ${renderBanner(pendingApproval, urls)}
         ${renderSchedulePanel(counts, month)}
-        ${renderTicker()}
         ${renderBottomRow(data, urls)}`;
 
       drawScheduleDonut(counts);
     } catch (error) {
       console.error("[calsoft_dashboard.js] load error:", error);
-      content.innerHTML = '<div class="alert alert-danger">Error loading dashboard. Please refresh.</div>';
+      content.innerHTML =
+        '<div class="alert alert-danger">Error loading dashboard. Please refresh.</div>';
     }
   }
 
