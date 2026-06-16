@@ -5,7 +5,6 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{% static 'calibrition/calsoft.css' %}" />
-<link rel="stylesheet" href="{% static 'calibrition/calsoft_dashboard.css' %}" />
 {% endblock %}
 
 {% block page_title %}Workshop: {{ request.user.userprofile.workshop.name }}{% endblock %}
@@ -29,11 +28,9 @@ window.DashboardURLs = {
     dashboardData:           "{% url 'calibration:api_dashboard_data' %}",
     scheduleStats:           "{% url 'schedule:ajax_schedule_stats' %}",
     sessionsPendingApproval: "{% url 'calibration:sessions_pending_approval' %}",
-    sessionList:             "{% url 'calibration:session_list' %}",
     scheduleList:            "{% url 'calibration:cal-dashboard' %}",
     performCalibration:      "{% url 'calibration:perform_calibration' %}",
     certificates:            "{% url 'calibration:certificate_list' %}",
-    auditLog:                "{% url 'calibration:audit_log' %}",
 };
 </script>
 

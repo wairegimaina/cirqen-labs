@@ -1,359 +1,928 @@
-// ============================================================
-// CALSOFT — calsoft_dashboard.js
-// Adds schedule analytics (completed / pending for the month)
-// fetched from calSchedules:ajax_schedule_stats, running in
-// parallel with the existing api_dashboard_data call.
-//
-// Depends on: Chart.js (loaded before this file), calsoft.js
-// Place in:   static/calibrition/calsoft_dashboard.js
-// ============================================================
-
 (function () {
   "use strict";
 
-  // ----------------------------------------------------------------
-  // State for the two new Chart.js instances owned by this file.
-  // ----------------------------------------------------------------
-  let _schedDonut = null;
-  let _schedTrend = null;
+  const CONFIG = {
+    refreshInterval: 200000,
+  };
 
-  // ----------------------------------------------------------------
-  // HELPERS
-  // ----------------------------------------------------------------
+  const FACTS = [
+    "ISO/IEC 17025 focuses on the competence of testing and calibration laboratories.",
+    "Calibration compares a measurement to a traceable reference standard.",
+    "Traceability links a measurement back to national or international standards.",
+    "A calibration certificate is not the same as product acceptance.",
+    "Environmental conditions can change calibration results.",
+    "Warm-up time matters for many electronic instruments.",
+    "Uncertainty is part of every valid calibration result.",
+    "Pass or fail decisions should consider measurement uncertainty.",
+    "Drift is a gradual change in instrument response over time.",
+    "As-found data shows the condition before adjustment.",
+    "As-left data shows the condition after adjustment.",
+    "Reference standards need recalibration too.",
+    "A torque wrench is often stored at its lowest setting.",
+    "Gauge blocks require cleanliness and temperature control.",
+    "Calibration intervals should reflect usage, environment, and history.",
+    "Out of tolerance means measured error exceeded acceptance limits.",
+    "Interim checks can catch problems between scheduled calibrations.",
+    "A valid certificate should identify the standard used.",
+    "Resolution is not the same as accuracy.",
+    "Repeatability measures closeness under unchanged conditions.",
+    "Reproducibility measures closeness under changed conditions.",
+    "Measurement bias is a consistent offset from the true value.",
+    "Zeroing an instrument is not always the same as calibration.",
+    "Hysteresis appears when readings differ by direction of approach.",
+    "Linearity describes response across the measurement range.",
+    "Proper handling can be as important as instrument settings.",
+    "Calibration records support audits, root-cause analysis, and customer confidence.",
+    "A failed calibration may still be usable for non-critical checks after risk review.",
+    "Measurement uncertainty should be reported with appropriate units.",
+    "Standards should be acclimated before precision measurements.",
+    "Calibration does not repair an instrument; it quantifies performance.",
+    "The best calibration interval is data-driven, not guessed.",
+    "Traceability chains must remain unbroken.",
+    "Clean fixtures reduce repeatability errors.",
+    "Recording as-found data protects product quality investigations.",
+    "Small environmental shifts can matter in high-precision work.",
+  ];
 
-  function pct(a, b) {
-    return b > 0 ? Math.round((a / b) * 100) : 0;
+  let scheduleDonut = null;
+  let refreshTimer = null;
+
+  function escapeHTML(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    }[char]));
   }
 
-  /**
-   * Build a month-calendar heatmap.
-   * Past days: painted green (done) or red (overdue), proportionally.
-   * Future days: amber (pending).
-   */
-  function buildCalGrid(completed, pending, overdue) {
-    const today = new Date();
-    const yr = today.getFullYear();
-    const mo = today.getMonth();
-    const daysInMonth = new Date(yr, mo + 1, 0).getDate();
-    const firstDow = new Date(yr, mo, 1).getDay(); // 0 = Sunday
-    const todayDay = today.getDate();
-    const total = completed + pending + overdue || 1;
+  function pct(value, total) {
+    return total > 0 ? Math.round((value / total) * 100) : 0;
+  }
 
-    let compLeft = completed,
-      overLeft = overdue,
-      pendLeft = pending;
+  function clamp(value, min, max) {
+    return Math.min(Math.max(Number(value) || 0, min), max);
+  }
 
-    const dow = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
-    const headers = dow
-      .map((d) => `<div class="sched-hdr">${d}</div>`)
-      .join("");
-    const blanks = Array(firstDow)
-      .fill('<div class="sched-day sched-empty"></div>')
-      .join("");
+  function formatPercent(value) {
+    const number = Number(value) || 0;
+    return `${Number.isInteger(number) ? number.toFixed(0) : number.toFixed(1)}%`;
+  }
 
-    const cells = [];
-    for (let d = 1; d <= daysInMonth; d++) {
-      let cls = "sched-day";
-      if (d < todayDay) {
-        const roll = Math.random();
-        if (overLeft > 0 && roll < overdue / total) {
-          cls += " sched-overdue";
-          overLeft--;
-        } else if (compLeft > 0) {
-          cls += " sched-done";
-          compLeft--;
-        } else {
-          cls += " sched-empty";
-        }
-      } else if (d === todayDay) {
-        cls += (compLeft > 0 ? " sched-done" : " sched-empty") + " sched-today";
-        if (compLeft > 0) compLeft--;
-      } else {
-        cls += pendLeft > 0 ? " sched-pending" : " sched-empty";
-        if (pendLeft > 0) pendLeft--;
-      }
-      cells.push(`<div class="${cls}" title="Day ${d}">${d}</div>`);
+  function pluralize(count, singular, plural = `${singular}s`) {
+    return count === 1 ? singular : plural;
+  }
+
+  function shortDate(isoDate) {
+    if (!isoDate) return "—";
+    return new Date(isoDate).toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+    });
+  }
+
+  function mergeScheduleCounts(data, scheduleData) {
+    const local = data.schedule_counts || {};
+    return {
+      pending: Number(scheduleData.pending ?? local.pending ?? 0),
+      pushed: Number(local.pushed ?? 0),
+      overdue: Number(scheduleData.overdue ?? local.overdue ?? 0),
+      completed: Number(scheduleData.completed ?? local.completed ?? 0),
+      total: Number(scheduleData.total ?? 0),
+      warnings: Number(scheduleData.warnings ?? 0),
+    };
+  }
+
+  function renderHero(data) {
+    const monthRate = clamp(data.month_pass_rate ?? 0, 0, 100);
+    const weekRate = clamp(data.week_pass_rate ?? 0, 0, 100);
+    const monthTotal = Number(data.month_total || 0);
+    const weekTotal = Number(data.week_total || 0);
+    const monthLabel = data.current_month || "This month";
+
+    return `
+      <section class="cs-hero">
+        <div class="cs-hero-copy">
+          <span class="cs-eyebrow">Pass Rate Hero</span>
+          <h1>${formatPercent(monthRate)}</h1>
+          <p>${escapeHTML(monthLabel)} pass rate from ${monthTotal} approved ${pluralize(monthTotal, "session")}</p>
+          <div class="cs-hero-meta">
+            <span>Week: <strong>${formatPercent(weekRate)}</strong> (${weekTotal} sessions)</span>
+            <span>Schedule snapshot is powered by calSchedules</span>
+          </div>
+        </div>
+        <div class="cs-pass-orb" style="--pass-rate: ${monthRate}">
+          <span>${formatPercent(monthRate)}</span>
+          <small>monthly pass rate</small>
+        </div>
+      </section>`;
+  }
+
+  function renderKpiCards(counts, month) {
+    const total = counts.pending + counts.overdue + counts.completed;
+    const cards = [
+      {
+        variant: "pending",
+        icon: "Pending",
+        value: counts.pending,
+        label: "Pending schedules",
+        sub: `${month}`,
+      },
+      {
+        variant: "pushed",
+        icon: "Pushed",
+        value: counts.pushed,
+        label: "Pushed schedules",
+        sub: "Carried forward",
+      },
+      {
+        variant: "overdue",
+        icon: "Overdue",
+        value: counts.overdue,
+        label: "Overdue schedules",
+        sub: "Action required",
+      },
+      {
+        variant: "approved",
+        icon: "Completed",
+        value: counts.completed,
+        label: "Completed recently",
+        sub: `${pct(counts.completed, total)}% of tracked schedules`,
+      },
+    ];
+
+    return `
+      <section class="cs-kpi-grid">
+        ${cards.map((card) => `
+          <article class="cs-kpi-card cs-kpi-${card.variant}">
+            <div class="cs-kpi-top">
+              <span>${escapeHTML(card.icon)}</span>
+              <strong>${escapeHTML(card.value)}</strong>
+            </div>
+            <div class="cs-kpi-label">${escapeHTML(card.label)}</div>
+            <div class="cs-kpi-sub">${escapeHTML(card.sub)}</div>
+          </article>`).join("")}
+      </section>`;
+  }
+
+  function renderBanner(pendingApproval, urls) {
+    if (!pendingApproval) return "";
+    return `
+      <section class="cs-approval-banner">
+        <div>
+          <strong>${pendingApproval}</strong>
+          ${pluralize(pendingApproval, "session")} pending your review
+        </div>
+        <a class="cs-approve-btn" href="${escapeHTML(urls.sessionsPendingApproval)}">Review &amp; Approve</a>
+      </section>`;
+  }
+
+  function renderSchedulePanel(counts, month) {
+    const donutTotal = counts.pending + counts.overdue + counts.completed || 1;
+    const donePct = pct(counts.completed, donutTotal);
+    const pendingPct = pct(counts.pending, donutTotal);
+    const overduePct = pct(counts.overdue, donutTotal);
+
+    return `
+      <section class="cs-panel cs-schedule-panel">
+        <div class="cs-panel-heading">
+          <div>
+            <span class="cs-eyebrow">calSchedules</span>
+            <h2>Schedule Snapshot</h2>
+          </div>
+          <span class="cs-panel-period">${escapeHTML(month)}</span>
+        </div>
+
+        <div class="cs-schedule-layout">
+          <div class="cs-schedule-kpis">
+            <article>
+              <strong>${counts.completed}</strong>
+              <span>Completed</span>
+              <small>${donePct}% of tracked total</small>
+            </article>
+            <article>
+              <strong>${counts.pending}</strong>
+              <span>Pending</span>
+              <small>${pendingPct}% of tracked total</small>
+            </article>
+            <article>
+              <strong>${counts.overdue}</strong>
+              <span>Overdue</span>
+              <small>${overduePct}% of tracked total</small>
+            </article>
+            <article>
+              <strong>${counts.warnings}</strong>
+              <span>Warnings</span>
+              <small>Logic-change flags</small>
+            </article>
+          </div>
+
+          <div class="cs-schedule-donut">
+            <canvas id="scheduleDonut" width="210" height="210" role="img" aria-label="Schedule completion donut"></canvas>
+          </div>
+
+          <div class="cs-schedule-summary">
+            <div class="cs-progress-block">
+              <div class="cs-progress-labels">
+                <span>Completion progress</span>
+                <strong>${donePct}%</strong>
+              </div>
+              <div class="cs-progress-track">
+                <div class="cs-progress-fill" style="width: ${donePct}%"></div>
+              </div>
+            </div>
+            <p>Completed, pending, and overdue counts are read from the calSchedules statistics endpoint.</p>
+            <a class="cs-link" href="${escapeHTML(window.DashboardURLs.scheduleList || "#")}">View all schedules</a>
+          </div>
+        </div>
+      </section>`;
+  }
+
+  function renderTicker() {
+    const items = FACTS.map((fact) => `<span>${escapeHTML(fact)}</span>`).join("");
+    return `
+      <section class="cs-facts-ticker" aria-label="Did You Know calibration facts">
+        <div class="cs-ticker-label">Did You Know</div>
+        <div class="cs-ticker-window">
+          <div class="cs-ticker-track">${items}${items}</div>
+        </div>
+      </section>`;
+  }
+
+  function renderRecentSessions(sessions, urls) {
+    if (!sessions.length) {
+      return `
+        <tr>
+          <td colspan="5">
+            <div class="cs-empty">
+              <span>No approved sessions yet.</span>
+              <a href="${escapeHTML(urls.performCalibration)}">Start a calibration</a>
+            </div>
+          </td>
+        </tr>`;
     }
 
-    return `<div class="sched-grid">${headers}${blanks}${cells.join("")}</div>`;
+    return sessions.map((session) => `
+      <tr>
+        <td>${escapeHTML(session.device_model || "—")}</td>
+        <td><small>${escapeHTML(session.device_serial || "—")}</small></td>
+        <td>${escapeHTML(session.procedure_name || "—")}</td>
+        <td>${escapeHTML(shortDate(session.timestamp))}</td>
+        <td><span class="cs-result ${session.overall_pass ? "pass" : "fail"}">${session.overall_pass ? "Pass" : "Fail"}</span></td>
+      </tr>`).join("");
   }
 
-  // ----------------------------------------------------------------
-  // CHART RENDERERS
-  // ----------------------------------------------------------------
+  function renderBottomRow(data, urls) {
+    const actions = [
+      { href: urls.performCalibration, icon: "New", label: "New Calibration" },
+      { href: urls.scheduleList, icon: "Sched", label: "Schedules" },
+      { href: urls.certificates, icon: "Cert", label: "Certificates" },
+    ];
 
-  function drawSchedDonut(completed, pending, overdue) {
-    const canvas = document.getElementById("schedDonut");
+    return `
+      <section class="cs-bottom-grid">
+        <article class="cs-panel">
+          <div class="cs-panel-heading compact">
+            <div>
+              <span class="cs-eyebrow">Recent</span>
+              <h2>Approved Sessions</h2>
+            </div>
+          </div>
+          <table class="cs-sessions-table">
+            <thead>
+              <tr>
+                <th>Device</th>
+                <th>Serial</th>
+                <th>Procedure</th>
+                <th>Date</th>
+                <th>Result</th>
+              </tr>
+            </thead>
+            <tbody>${renderRecentSessions(data.recent_sessions || [], urls)}</tbody>
+          </table>
+        </article>
+
+        <article class="cs-panel">
+          <div class="cs-panel-heading compact">
+            <div>
+              <span class="cs-eyebrow">Quick</span>
+              <h2>Actions</h2>
+            </div>
+          </div>
+          <div class="cs-qa-list">
+            ${actions.map((action) => `
+              <a class="cs-qa-item" href="${escapeHTML(action.href)}">
+                <span class="cs-qa-code">${escapeHTML(action.icon)}</span>
+                <span>${escapeHTML(action.label)}</span>
+              </a>`).join("")}
+          </div>
+        </article>
+      </section>`;
+  }
+
+  function drawScheduleDonut(counts) {
+    const canvas = document.getElementById("scheduleDonut");
     if (!canvas || typeof Chart === "undefined") return;
-    if (_schedDonut) {
-      _schedDonut.destroy();
-      _schedDonut = null;
-    }
-    _schedDonut = new Chart(canvas, {
+
+    const existing = typeof Chart.getChart === "function" ? Chart.getChart(canvas) : null;
+    if (existing) existing.destroy();
+
+    scheduleDonut = new Chart(canvas, {
       type: "doughnut",
       data: {
         labels: ["Completed", "Pending", "Overdue"],
         datasets: [
           {
-            data: [completed || 0, pending || 0, overdue || 0],
+            data: [counts.completed || 0, counts.pending || 0, counts.overdue || 0],
             backgroundColor: ["#10b981", "#f59e0b", "#ef4444"],
             borderWidth: 0,
-            hoverOffset: 3,
-          },
-        ],
-      },
-      options: {
-        cutout: "70%",
-        plugins: {
-          legend: { display: false },
-          tooltip: { callbacks: { label: (c) => ` ${c.label}: ${c.parsed}` } },
-        },
-        animation: { animateRotate: true, duration: 900 },
-      },
-    });
-  }
-
-  function drawSchedTrend(currentCompleted) {
-    const canvas = document.getElementById("schedTrend");
-    if (!canvas || typeof Chart === "undefined") return;
-    if (_schedTrend) {
-      _schedTrend.destroy();
-      _schedTrend = null;
-    }
-
-    const now = new Date();
-    const labels = [];
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      labels.push(d.toLocaleString("default", { month: "short" }));
-    }
-
-    // Current month = real value; prior 5 = plausible variance (visual only)
-    const base = currentCompleted || 0;
-    const trendData = labels.map((_, i) =>
-      i === 5
-        ? base
-        : Math.max(0, Math.round(base * (0.55 + Math.random() * 0.55))),
-    );
-
-    _schedTrend = new Chart(canvas, {
-      type: "line",
-      data: {
-        labels,
-        datasets: [
-          {
-            data: trendData,
-            borderColor: "#6366f1",
-            backgroundColor: "rgba(99,102,241,0.08)",
-            borderWidth: 2,
-            pointRadius: 3,
-            pointBackgroundColor: "#6366f1",
-            fill: true,
-            tension: 0.4,
+            hoverOffset: 4,
           },
         ],
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: {
-          x: {
-            grid: { display: false },
-            ticks: { font: { size: 10 }, color: "#9ca3af" },
+        cutout: "68%",
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (context) => ` ${context.label}: ${context.parsed}`,
+            },
           },
-          y: { display: false, min: 0 },
+        },
+        animation: {
+          animateRotate: true,
+          duration: 800,
         },
       },
     });
   }
 
-  // ----------------------------------------------------------------
-  // HTML BUILDER — schedule analytics panel
-  // ----------------------------------------------------------------
-
-  function buildSchedSection(counts, currentMonth, scheduleListUrl) {
-    const completed = counts.completed || 0;
-    const pending = counts.pending || 0;
-    const overdue = counts.overdue || 0;
-    const total = completed + pending + overdue;
-    const donePct = pct(completed, total);
-    const calGrid = buildCalGrid(completed, pending, overdue);
-
-    return `
-        <div class="panel sched-analytics-panel">
-            <div class="panel-title">🗓️ ${currentMonth || "This Month"} — Schedule Analytics</div>
-
-            <div class="sched-analytics-grid">
-
-                <!-- KPI mini-cards -->
-                <div class="sched-kpi-col">
-                    <div class="sched-kpi sched-kpi-done">
-                        <div class="sched-kpi-num">${completed}</div>
-                        <div class="sched-kpi-lbl">Completed</div>
-                        <div class="sched-kpi-pct">${pct(completed, total)}% of total</div>
-                    </div>
-                    <div class="sched-kpi sched-kpi-pend">
-                        <div class="sched-kpi-num">${pending}</div>
-                        <div class="sched-kpi-lbl">Pending</div>
-                        <div class="sched-kpi-pct">${pct(pending, total)}% of total</div>
-                    </div>
-                    <div class="sched-kpi sched-kpi-over">
-                        <div class="sched-kpi-num">${overdue}</div>
-                        <div class="sched-kpi-lbl">Overdue</div>
-                        <div class="sched-kpi-pct">${pct(overdue, total)}% of total</div>
-                    </div>
-                </div>
-
-                <!-- Calendar heatmap -->
-                <div class="sched-cal-col">
-                    <div class="sched-section-label">Daily calendar</div>
-                    ${calGrid}
-                    <div class="sched-legend-row">
-                        <span class="sched-legend-item"><span class="sched-dot sched-dot-done"></span>Completed</span>
-                        <span class="sched-legend-item"><span class="sched-dot sched-dot-pend"></span>Pending</span>
-                        <span class="sched-legend-item"><span class="sched-dot sched-dot-over"></span>Overdue</span>
-                    </div>
-                </div>
-
-                <!-- Donut + 6-month sparkline -->
-                <div class="sched-charts-col">
-                    <div class="sched-donut-wrap">
-                        <canvas id="schedDonut" width="130" height="130"
-                            role="img"
-                            aria-label="${completed} completed, ${pending} pending, ${overdue} overdue">
-                            ${completed} completed, ${pending} pending, ${overdue} overdue.
-                        </canvas>
-                        <div class="sched-donut-center">
-                            <span class="sched-donut-num">${donePct}%</span>
-                            <span class="sched-donut-sub">done</span>
-                        </div>
-                    </div>
-                    <div class="sched-trend-wrap">
-                        <canvas id="schedTrend"
-                            role="img" aria-label="Completion trend last 6 months">
-                            Completion trend last 6 months.
-                        </canvas>
-                    </div>
-                    <div class="sched-section-label" style="text-align:center;margin-top:.2rem;">Last 6 months</div>
-                </div>
-
-            </div>
-
-            <!-- Month progress bar -->
-            <div class="sched-progress-wrap">
-                <div class="sched-progress-labels">
-                    <span>Month completion progress</span>
-                    <span>${donePct}% · ${completed} of ${total} schedules</span>
-                </div>
-                <div class="gauge-track sched-progress-track">
-                    <div class="sched-progress-fill" style="width:${donePct}%;"></div>
-                </div>
-            </div>
-
-            <div class="sched-view-all">
-                <a href="${scheduleListUrl || "#"}">View all schedules →</a>
-            </div>
-        </div>`;
-  }
-
-  // ----------------------------------------------------------------
-  // CSS — injected once so no separate .css file is required
-  // ----------------------------------------------------------------
-
   function injectStyles() {
-    if (document.getElementById("csd-sched-styles")) return;
-    const s = document.createElement("style");
-    s.id = "csd-sched-styles";
-    s.textContent = `
-/* ── Schedule Analytics Panel ─────────────────────────────── */
-.sched-analytics-panel { margin-bottom: 1rem; }
+    if (document.getElementById("calsoft-dashboard-redesign")) return;
 
-.sched-analytics-grid {
-    display: grid;
-    grid-template-columns: auto 1fr auto;
-    gap: 1.25rem;
-    align-items: start;
-    margin-bottom: .75rem;
-}
+    const style = document.createElement("style");
+    style.id = "calsoft-dashboard-redesign";
+    style.textContent = `
+      .cs-hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 220px;
+        gap: 1.25rem;
+        align-items: center;
+        padding: 1.35rem;
+        border-radius: 24px;
+        background:
+          radial-gradient(circle at top right, rgba(99, 102, 241, 0.22), transparent 34%),
+          linear-gradient(135deg, var(--bg-card), var(--bg-tertiary));
+        border: 1px solid var(--border-color);
+        box-shadow: var(--shadow-sm);
+        margin-bottom: 1rem;
+      }
 
-/* KPI mini-cards */
-.sched-kpi-col  { display: flex; flex-direction: column; gap: .55rem; }
-.sched-kpi      { padding: .55rem .85rem; border-radius: 8px; border-left: 3px solid transparent; min-width: 108px; }
-.sched-kpi-done { background: #f0fdf4; border-color: #10b981; }
-.sched-kpi-pend { background: #fffbeb; border-color: #f59e0b; }
-.sched-kpi-over { background: #fef2f2; border-color: #ef4444; }
-.sched-kpi-num  { font-size: 1.5rem; font-weight: 700; line-height: 1; }
-.sched-kpi-done .sched-kpi-num { color: #059669; }
-.sched-kpi-pend .sched-kpi-num { color: #d97706; }
-.sched-kpi-over .sched-kpi-num { color: #dc2626; }
-.sched-kpi-lbl  { font-size: .7rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: #6b7280; margin-top: .15rem; }
-.sched-kpi-pct  { font-size: .72rem; color: #9ca3af; margin-top: .1rem; }
+      .cs-hero-copy { min-width: 0; }
 
-/* Calendar */
-.sched-section-label { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #9ca3af; margin-bottom: .45rem; }
-.sched-grid     { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
-.sched-hdr      { font-size: 9px; font-weight: 600; text-align: center; color: #9ca3af; padding: 2px 0; }
-.sched-day      { aspect-ratio: 1; border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 500; cursor: default; }
-.sched-done     { background: #d1fae5; color: #065f46; }
-.sched-pending  { background: #fef3c7; color: #92400e; }
-.sched-overdue  { background: #fee2e2; color: #991b1b; }
-.sched-empty    { background: #f9fafb; color: #d1d5db; }
-.sched-today    { outline: 2px solid #6366f1; outline-offset: -1px; }
+      .cs-eyebrow {
+        display: inline-block;
+        margin-bottom: 0.4rem;
+        color: var(--primary-color);
+        font-size: 0.72rem;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
 
-.sched-legend-row  { display: flex; gap: .6rem; margin-top: .4rem; flex-wrap: wrap; }
-.sched-legend-item { display: flex; align-items: center; gap: .3rem; font-size: .7rem; color: #6b7280; }
-.sched-dot         { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
-.sched-dot-done    { background: #10b981; }
-.sched-dot-pend    { background: #f59e0b; }
-.sched-dot-over    { background: #ef4444; }
+      .cs-hero h1,
+      .cs-schedule-panel h2,
+      .cs-bottom-grid h2 {
+        margin: 0;
+        color: var(--text-primary);
+        line-height: 1.05;
+      }
 
-/* Charts column */
-.sched-charts-col  { display: flex; flex-direction: column; align-items: center; gap: .5rem; }
-.sched-donut-wrap  { position: relative; width: 130px; height: 130px; flex-shrink: 0; }
-.sched-donut-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
-.sched-donut-num   { font-size: 1.25rem; font-weight: 700; color: #111827; }
-.sched-donut-sub   { font-size: .7rem; color: #6b7280; }
-.sched-trend-wrap  { position: relative; width: 130px; height: 72px; }
+      .cs-hero h1 {
+        font-size: clamp(3rem, 8vw, 5.75rem);
+        letter-spacing: -0.07em;
+      }
 
-/* Progress bar */
-.sched-progress-wrap   { margin-top: .75rem; }
-.sched-progress-labels { display: flex; justify-content: space-between; font-size: .75rem; color: #6b7280; margin-bottom: .3rem; }
-.sched-progress-track  { height: 10px; }
-.sched-progress-fill   { height: 100%; border-radius: 99px; background: linear-gradient(90deg, #10b981, #34d399); transition: width .9s cubic-bezier(.4,0,.2,1); }
+      .cs-hero p {
+        margin: 0.55rem 0 0;
+        color: var(--text-secondary);
+        font-size: 1rem;
+      }
 
-.sched-view-all   { margin-top: .6rem; text-align: right; }
-.sched-view-all a { font-size: .78rem; color: #6366f1; text-decoration: none; }
-.sched-view-all a:hover { text-decoration: underline; }
+      .cs-hero-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.65rem;
+        margin-top: 1rem;
+      }
 
-/* Responsive */
-@media (max-width: 900px) {
-    .sched-analytics-grid { grid-template-columns: auto 1fr; }
-    .sched-charts-col { display: none; }
-}
-@media (max-width: 600px) {
-    .sched-analytics-grid { grid-template-columns: 1fr; }
-    .sched-kpi-col { flex-direction: row; flex-wrap: wrap; }
-    .sched-kpi { flex: 1 1 80px; }
-}
-        `;
-    document.head.appendChild(s);
+      .cs-hero-meta span {
+        padding: 0.45rem 0.7rem;
+        border-radius: 999px;
+        background: var(--bg-tertiary);
+        color: var(--text-secondary);
+        font-size: 0.8rem;
+      }
+
+      .cs-pass-orb {
+        width: 190px;
+        height: 190px;
+        margin: 0 auto;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        background:
+          conic-gradient(var(--success-color) calc(var(--pass-rate) * 1%), rgba(148, 163, 184, 0.18) 0),
+          var(--bg-card);
+        position: relative;
+        box-shadow: inset 0 0 0 1px var(--border-color);
+      }
+
+      .cs-pass-orb::before {
+        content: "";
+        position: absolute;
+        inset: 18px;
+        border-radius: 50%;
+        background: var(--bg-card);
+        box-shadow: inset 0 0 0 1px var(--border-color);
+      }
+
+      .cs-pass-orb span,
+      .cs-pass-orb small {
+        position: relative;
+        z-index: 1;
+        display: block;
+        text-align: center;
+      }
+
+      .cs-pass-orb span {
+        font-size: 2.35rem;
+        font-weight: 900;
+        color: var(--text-primary);
+        letter-spacing: -0.05em;
+      }
+
+      .cs-pass-orb small {
+        margin-top: 0.25rem;
+        color: var(--text-secondary);
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .cs-kpi-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 1rem;
+        margin-bottom: 1rem;
+      }
+
+      .cs-kpi-card {
+        min-height: 132px;
+        padding: 1rem;
+        border-radius: 20px;
+        border: 1px solid var(--border-color);
+        background: var(--bg-card);
+        box-shadow: var(--shadow-sm);
+        position: relative;
+        overflow: hidden;
+      }
+
+      .cs-kpi-card::before {
+        content: "";
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 5px;
+        background: var(--kpi-accent);
+      }
+
+      .cs-kpi-pending { --kpi-accent: var(--warning-color); }
+      .cs-kpi-pushed { --kpi-accent: #8b5cf6; }
+      .cs-kpi-overdue { --kpi-accent: var(--danger-color); }
+      .cs-kpi-approved { --kpi-accent: var(--success-color); }
+
+      .cs-kpi-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+      }
+
+      .cs-kpi-top span {
+        padding: 0.35rem 0.5rem;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--kpi-accent) 14%, var(--bg-card));
+        color: var(--kpi-accent);
+        font-size: 0.68rem;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .cs-kpi-top strong {
+        font-size: 2rem;
+        line-height: 1;
+        color: var(--kpi-accent);
+      }
+
+      .cs-kpi-label {
+        margin-top: 0.8rem;
+        color: var(--text-primary);
+        font-weight: 800;
+      }
+
+      .cs-kpi-sub {
+        margin-top: 0.25rem;
+        color: var(--text-secondary);
+        font-size: 0.78rem;
+      }
+
+      .cs-approval-banner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0.9rem 1rem;
+        border-radius: 18px;
+        margin-bottom: 1rem;
+        background: color-mix(in srgb, var(--warning-color) 12%, var(--bg-card));
+        border: 1px solid color-mix(in srgb, var(--warning-color) 38%, var(--border-color));
+        color: var(--text-primary);
+      }
+
+      .cs-approve-btn {
+        flex: 0 0 auto;
+        padding: 0.55rem 0.85rem;
+        border-radius: 999px;
+        background: var(--warning-color);
+        color: var(--text-white);
+        font-size: 0.82rem;
+        font-weight: 800;
+        text-decoration: none;
+      }
+
+      .cs-panel,
+      .cs-schedule-panel {
+        border-radius: 24px;
+        border: 1px solid var(--border-color);
+        background: var(--bg-card);
+        box-shadow: var(--shadow-sm);
+        padding: 1.15rem;
+      }
+
+      .cs-panel-heading {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: 1rem;
+      }
+
+      .cs-panel-heading.compact { margin-bottom: 0.8rem; }
+
+      .cs-panel-heading h2 {
+        font-size: 1.05rem;
+      }
+
+      .cs-panel-period {
+        padding: 0.35rem 0.65rem;
+        border-radius: 999px;
+        background: var(--bg-tertiary);
+        color: var(--text-secondary);
+        font-size: 0.75rem;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .cs-schedule-layout {
+        display: grid;
+        grid-template-columns: minmax(190px, 0.85fr) 220px minmax(220px, 1fr);
+        gap: 1rem;
+        align-items: stretch;
+      }
+
+      .cs-schedule-kpis {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.75rem;
+      }
+
+      .cs-schedule-kpis article {
+        padding: 0.95rem;
+        border-radius: 18px;
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border-color);
+      }
+
+      .cs-schedule-kpis strong {
+        display: block;
+        font-size: 2rem;
+        line-height: 1;
+        color: var(--text-primary);
+      }
+
+      .cs-schedule-kpis span {
+        display: block;
+        margin-top: 0.45rem;
+        color: var(--text-secondary);
+        font-weight: 800;
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+
+      .cs-schedule-kpis small {
+        display: block;
+        margin-top: 0.25rem;
+        color: var(--text-muted);
+      }
+
+      .cs-schedule-donut {
+        min-height: 220px;
+        display: grid;
+        place-items: center;
+        border-radius: 20px;
+        background:
+          radial-gradient(circle at center, var(--bg-tertiary), transparent 62%);
+        border: 1px solid var(--border-color);
+      }
+
+      .cs-schedule-donut canvas {
+        width: 200px !important;
+        height: 200px !important;
+      }
+
+      .cs-schedule-summary {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 1rem;
+        border-radius: 20px;
+        background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-card));
+        border: 1px solid var(--border-color);
+      }
+
+      .cs-progress-labels {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        color: var(--text-secondary);
+        font-size: 0.82rem;
+        font-weight: 700;
+      }
+
+      .cs-progress-track {
+        height: 10px;
+        margin-top: 0.55rem;
+        border-radius: 999px;
+        overflow: hidden;
+        background: var(--bg-primary);
+      }
+
+      .cs-progress-fill {
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, var(--success-color), #34d399);
+        transition: width 0.9s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      .cs-schedule-summary p {
+        margin: 0;
+        color: var(--text-secondary);
+        font-size: 0.85rem;
+        line-height: 1.5;
+      }
+
+      .cs-link {
+        color: var(--primary-color);
+        font-weight: 800;
+        text-decoration: none;
+      }
+
+      .cs-link:hover { text-decoration: underline; }
+
+      .cs-facts-ticker {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin: 1rem 0;
+        padding: 0.85rem 1rem;
+        overflow: hidden;
+        border-radius: 20px;
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        box-shadow: var(--shadow-sm);
+      }
+
+      .cs-ticker-label {
+        flex: 0 0 auto;
+        padding: 0.45rem 0.7rem;
+        border-radius: 999px;
+        background: var(--primary-gradient);
+        color: var(--bg-card);
+        font-size: 0.75rem;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .cs-ticker-window {
+        overflow: hidden;
+        min-width: 0;
+        mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+      }
+
+      .cs-ticker-track {
+        display: flex;
+        width: max-content;
+        gap: 2rem;
+        animation: calsoft-fact-scroll 42s linear infinite;
+      }
+
+      .cs-ticker-track span {
+        white-space: nowrap;
+        color: var(--text-secondary);
+        font-size: 0.86rem;
+      }
+
+      .cs-ticker-track span::before {
+        content: "•";
+        margin-right: 1rem;
+        color: var(--primary-color);
+      }
+
+      @keyframes calsoft-fact-scroll {
+        from { transform: translateX(0); }
+        to { transform: translateX(-50%); }
+      }
+
+      .cs-bottom-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 280px;
+        gap: 1rem;
+      }
+
+      .cs-sessions-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.84rem;
+      }
+
+      .cs-sessions-table th {
+        padding: 0.65rem 0.75rem;
+        color: var(--text-muted);
+        font-size: 0.7rem;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        text-align: left;
+        text-transform: uppercase;
+        border-bottom: 1px solid var(--border-color);
+      }
+
+      .cs-sessions-table td {
+        padding: 0.7rem 0.75rem;
+        color: var(--text-secondary);
+        border-bottom: 1px solid var(--border-color);
+      }
+
+      .cs-sessions-table tr:last-child td { border-bottom: 0; }
+
+      .cs-sessions-table small { color: var(--text-muted); }
+
+      .cs-result {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 58px;
+        padding: 0.2rem 0.55rem;
+        border-radius: 999px;
+        font-size: 0.72rem;
+        font-weight: 900;
+      }
+
+      .cs-result.pass {
+        background: color-mix(in srgb, var(--success-color) 16%, var(--bg-card));
+        color: var(--success-color);
+      }
+
+      .cs-result.fail {
+        background: color-mix(in srgb, var(--danger-color) 16%, var(--bg-card));
+        color: var(--danger-color);
+      }
+
+      .cs-empty {
+        padding: 2rem 1rem;
+        text-align: center;
+        color: var(--text-secondary);
+      }
+
+      .cs-empty span {
+        display: block;
+        margin-bottom: 0.5rem;
+      }
+
+      .cs-empty a { color: var(--primary-color); }
+
+      .cs-qa-list {
+        display: grid;
+        gap: 0.65rem;
+      }
+
+      .cs-qa-item {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.8rem;
+        border-radius: 16px;
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border-color);
+        color: var(--text-primary);
+        text-decoration: none;
+        transition: transform 0.15s ease, border-color 0.15s ease;
+      }
+
+      .cs-qa-item:hover {
+        transform: translateY(-2px);
+        border-color: var(--primary-color);
+      }
+
+      .cs-qa-code {
+        display: inline-grid;
+        place-items: center;
+        width: 46px;
+        height: 46px;
+        flex: 0 0 auto;
+        border-radius: 14px;
+        background: var(--primary-gradient);
+        color: var(--bg-card);
+        font-size: 0.68rem;
+        font-weight: 900;
+        letter-spacing: 0.06em;
+      }
+
+      @media (max-width: 1100px) {
+        .cs-hero,
+        .cs-schedule-layout,
+        .cs-bottom-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .cs-pass-orb {
+          width: 170px;
+          height: 170px;
+        }
+
+        .cs-schedule-donut {
+          min-height: 200px;
+        }
+      }
+
+      @media (max-width: 760px) {
+        .cs-kpi-grid,
+        .cs-schedule-kpis {
+          grid-template-columns: 1fr;
+        }
+
+        .cs-hero {
+          padding: 1rem;
+        }
+
+        .cs-approval-banner {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+
+        .cs-facts-ticker {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+
+        .cs-ticker-window {
+          width: 100%;
+        }
+      }
+    `;
+    document.head.appendChild(style);
   }
-
-  // ----------------------------------------------------------------
-  // MAIN LOAD — replaces the load() registered by calsoft.js
-  // Runs in parallel: api_dashboard_data + ajax_schedule_stats
-  // ----------------------------------------------------------------
 
   async function loadDashboard() {
     const content = document.getElementById("dashboardContent");
     if (!content) return;
 
     const urls = window.DashboardURLs || {};
+    if (!urls.dashboardData || !urls.scheduleStats) {
+      content.innerHTML = '<div class="alert alert-danger">Dashboard configuration is missing.</div>';
+      return;
+    }
 
     try {
-      // Parallel fetch
-      const [dashRes, schedRes] = await Promise.all([
+      const [dashResponse, scheduleResponse] = await Promise.all([
         fetch(urls.dashboardData, {
           headers: { "X-Requested-With": "XMLHttpRequest" },
         }),
@@ -362,317 +931,62 @@
         }),
       ]);
 
-      const data = await dashRes.json();
-      const schedData = await schedRes.json();
+      if (!dashResponse.ok) {
+        throw new Error(`Dashboard data request failed with status ${dashResponse.status}`);
+      }
 
-      // Merge schedule stats — calSchedules counts are authoritative for
-      // pending / overdue / completed this month
-      const counts = data.schedule_counts || {};
-      counts.pending = schedData.pending ?? counts.pending ?? 0;
-      counts.overdue = schedData.overdue ?? counts.overdue ?? 0;
-      counts.completed = schedData.completed ?? counts.completed ?? 0;
-      data.schedule_counts = counts;
-
-      // ── Build existing sections via calsoft.js DashboardRenderer ──
-      // DashboardRenderer is inside a closed IIFE, so we replicate its
-      // output here. The markup mirrors what calsoft.js produces exactly
-      // so calsoft_dashboard.css rules continue to apply unchanged.
-
-      const pendingApproval = data.pending_approval_count || 0;
-      const totalEquip = data.total_equipment || 0;
-      const needCalib = data.equipment_needing_calibration || 0;
-      const calibOk = totalEquip - needCalib;
-      const equipPct =
-        totalEquip > 0 ? Math.round((calibOk / totalEquip) * 100) : 0;
+      const data = await dashResponse.json();
+      const scheduleData = scheduleResponse.ok ? await scheduleResponse.json() : {};
+      const counts = mergeScheduleCounts(data, scheduleData);
       const month = data.current_month || "This month";
+      const pendingApproval = Number(data.pending_approval_count || 0);
 
-      const banner =
-        pendingApproval > 0
-          ? `
-                <div class="approval-banner">
-                    <span class="ab-icon">🔔</span>
-                    <span class="ab-text">
-                        <strong>${pendingApproval}</strong>
-                        session${pendingApproval !== 1 ? "s" : ""} pending your review
-                    </span>
-                    <a href="${urls.sessionsPendingApproval}" class="btn-approve">Review &amp; Approve →</a>
-                </div>`
-          : "";
+      content.innerHTML = `
+        ${renderHero(data)}
+        ${renderKpiCards(counts, month)}
+        ${renderBanner(pendingApproval, urls)}
+        ${renderSchedulePanel(counts, month)}
+        ${renderTicker()}
+        ${renderBottomRow(data, urls)}`;
 
-      const greeting = `
-                <div class="dash-greeting">
-                    <span>📅</span>
-                    <span>${month} overview</span>
-                </div>`;
-
-      const kpiCards = [
-        {
-          cls: "kpi-pending",
-          icon: "📋",
-          val: counts.pending || 0,
-          lbl: "Pending Calibrations",
-          sub: month,
-        },
-        {
-          cls: "kpi-pushed",
-          icon: "📌",
-          val: counts.pushed || 0,
-          lbl: "Pushed Schedules",
-          sub: "Carried from prior period",
-        },
-        {
-          cls: "kpi-overdue",
-          icon: "⚠️",
-          val: counts.overdue || 0,
-          lbl: "Overdue Items",
-          sub: "Deadline passed",
-        },
-        {
-          cls: "kpi-approved",
-          icon: "✅",
-          val: counts.completed || 0,
-          lbl: "Completed This Month",
-          sub: month,
-        },
-      ]
-        .map(
-          (c) => `
-                <div class="kpi-card ${c.cls}">
-                    <div class="kpi-icon">${c.icon}</div>
-                    <div class="kpi-num">${c.val}</div>
-                    <div class="kpi-label">${c.lbl}</div>
-                    <div class="kpi-sub">${c.sub}</div>
-                </div>`,
-        )
-        .join("");
-
-      const gaugeRows = [
-        {
-          name: "This Week",
-          pct: data.week_pass_rate || 0,
-          fill: "gf-week",
-          sub: `${data.week_total || 0} approved sessions this week`,
-        },
-        {
-          name: "This Month",
-          pct: data.month_pass_rate || 0,
-          fill: "gf-month",
-          sub: `${data.month_total || 0} approved sessions this month`,
-        },
-        {
-          name: "Equipment Coverage",
-          pct: equipPct,
-          fill: "gf-equip",
-          sub: `${calibOk} of ${totalEquip} equipment up to date`,
-        },
-      ]
-        .map(
-          (r) => `
-                <div class="gauge-row">
-                    <div class="gauge-label-row">
-                        <span class="gl-name">${r.name}</span>
-                        <span class="gl-pct">${r.pct}%</span>
-                    </div>
-                    <div class="gauge-track">
-                        <div class="gauge-fill ${r.fill}" style="width:${r.pct}%"></div>
-                    </div>
-                    <div class="gauge-sub">${r.sub}</div>
-                </div>`,
-        )
-        .join("");
-
-      const midRow = `
-                <div class="mid-row">
-                    <div class="panel">
-                        <div class="panel-title">📊 Equipment Coverage</div>
-                        <div class="donut-wrap">
-                            <canvas id="equipDonut" width="200" height="200"></canvas>
-                            <div class="donut-center">
-                                <span class="dc-num">${equipPct}%</span>
-                                <span class="dc-sub">calibrated</span>
-                            </div>
-                        </div>
-                        <div class="chart-legend">
-                            <div class="legend-item"><span class="legend-dot dot-ok"></span> Up to date (${calibOk})</div>
-                            <div class="legend-item"><span class="legend-dot dot-warn"></span> Needs calibration (${needCalib})</div>
-                        </div>
-                    </div>
-                    <div class="panel">
-                        <div class="panel-title">📈 Pass Rates &amp; Coverage</div>
-                        <div class="gauge-grid">
-                            ${gaugeRows}
-                            <div class="gauge-row gauge-total-row">
-                                <div class="gauge-label-row">
-                                    <span class="gl-name">TOTAL APPROVED (ALL TIME)</span>
-                                    <span class="gl-pct">${data.total_sessions || 0}</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>`;
-
-      const recent = data.recent_sessions || [];
-      const sessionRows =
-        recent.length === 0
-          ? `<tr><td colspan="5">
-                    <div class="empty-sessions">
-                        <span>🔬</span>
-                        No approved sessions yet. <a href="${urls.performCalibration}">Start a calibration</a>
-                    </div></td></tr>`
-          : recent
-              .map((s) => {
-                const passEl = s.overall_pass
-                  ? '<span class="pass-pill pass">Pass</span>'
-                  : '<span class="pass-pill fail">Fail</span>';
-                const dt = new Date(s.timestamp).toLocaleDateString("en-GB", {
-                  day: "2-digit",
-                  month: "short",
-                });
-                return `<tr>
-                        <td>${s.device_model || "—"}</td>
-                        <td><small class="text-muted">${s.device_serial || "—"}</small></td>
-                        <td>${s.procedure_name || "—"}</td>
-                        <td>${dt}</td>
-                        <td>${passEl}</td>
-                    </tr>`;
-              })
-              .join("");
-
-      const quickActions = [
-        {
-          href: urls.performCalibration,
-          icon: "🔬",
-          lbl: "New Calibration",
-          badge: 0,
-        },
-        {
-          href: urls.sessionsPendingApproval,
-          icon: "📝",
-          lbl: "Pending Approval",
-          badge: pendingApproval,
-        },
-        { href: urls.certificates, icon: "🏅", lbl: "Certificates", badge: 0 },
-        { href: urls.sessionList, icon: "📚", lbl: "All Sessions", badge: 0 },
-        { href: urls.auditLog, icon: "🗂️", lbl: "Audit Log", badge: 0 },
-      ]
-        .map(
-          (a) => `
-                <a class="qa-item" href="${a.href}">
-                    <span class="qi-icon">${a.icon}</span>
-                    <span class="qi-label">${a.lbl}</span>
-                    ${a.badge > 0 ? `<span class="qi-badge">${a.badge}</span>` : ""}
-                </a>`,
-        )
-        .join("");
-
-      const bottomRow = `
-                <div class="bottom-row">
-                    <div class="panel">
-                        <div class="panel-title">🕐 Recent Approved Sessions</div>
-                        <table class="sessions-table">
-                            <thead><tr>
-                                <th>Device</th><th>Serial</th><th>Procedure</th><th>Date</th><th>Result</th>
-                            </tr></thead>
-                            <tbody>${sessionRows}</tbody>
-                        </table>
-                        <div class="mt-2 text-end">
-                            <a href="${urls.sessionsPendingApproval}" class="sessions-view-all">View all pending →</a>
-                        </div>
-                    </div>
-                    <div class="panel">
-                        <div class="panel-title">⚡ Quick Actions</div>
-                        <div class="qa-list">${quickActions}</div>
-                    </div>
-                </div>`;
-
-      // ── Schedule analytics section (new) ──
-      const schedSection = buildSchedSection(
-        counts,
-        data.current_month,
-        urls.scheduleList,
-      );
-
-      // ── Assemble and inject ──
-      content.innerHTML =
-        banner +
-        greeting +
-        `<div class="kpi-grid">${kpiCards}</div>` +
-        midRow +
-        schedSection +
-        bottomRow;
-
-      // ── Draw charts ──
-      // Equipment donut (existing)
-      (function drawEquipDonut() {
-        const canvas = document.getElementById("equipDonut");
-        if (!canvas || typeof Chart === "undefined") return;
-        // Destroy any instance calsoft.js may have already created
-        const existing = Chart.getChart(canvas);
-        if (existing) existing.destroy();
-        new Chart(canvas, {
-          type: "doughnut",
-          data: {
-            labels: ["Up to date", "Needs calibration"],
-            datasets: [
-              {
-                data: [calibOk || 0, needCalib || 0],
-                backgroundColor: ["#10b981", "#f59e0b"],
-                borderWidth: 0,
-                hoverOffset: 4,
-              },
-            ],
-          },
-          options: {
-            cutout: "72%",
-            plugins: {
-              legend: { display: false },
-              tooltip: {
-                callbacks: { label: (c) => ` ${c.label}: ${c.parsed}` },
-              },
-            },
-            animation: { animateRotate: true, duration: 800 },
-          },
-        });
-      })();
-
-      // Schedule donut + trend (new)
-      drawSchedDonut(counts.completed, counts.pending, counts.overdue);
-      drawSchedTrend(counts.completed);
-    } catch (err) {
-      console.error("[calsoft_dashboard.js] load error:", err);
-      content.innerHTML =
-        '<div class="alert alert-danger">Error loading dashboard. Please refresh.</div>';
+      drawScheduleDonut(counts);
+    } catch (error) {
+      console.error("[calsoft_dashboard.js] load error:", error);
+      content.innerHTML = '<div class="alert alert-danger">Error loading dashboard. Please refresh.</div>';
     }
   }
 
-  // ----------------------------------------------------------------
-  // BOOT
-  // calsoft.js registers DashboardController.init on DOMContentLoaded.
-  // We replace window.CalSoftDashboard.load *after* calsoft.js has run
-  // (scripts execute in DOM order, so this file runs second), then
-  // we also call loadDashboard() ourselves so there's no double-load.
-  // ----------------------------------------------------------------
+  function setupAutoRefresh() {
+    if (refreshTimer) {
+      clearInterval(refreshTimer);
+    }
+
+    refreshTimer = setInterval(() => {
+      loadDashboard();
+    }, CONFIG.refreshInterval);
+  }
 
   function boot() {
     injectStyles();
-
-    // Ensure scheduleStats URL exists (belt-and-braces fallback if the
-    // Django template tag was not added to calsoft_dashboard.html)
-    if (window.DashboardURLs && !window.DashboardURLs.scheduleStats) {
-      window.DashboardURLs.scheduleStats = "/calibration-schedules/ajax/stats/";
-    }
-
-    // Patch the public API so calsoft.js auto-refresh calls our version too
-    if (window.CalSoftDashboard) {
-      window.CalSoftDashboard.load = loadDashboard;
-    }
-
-    // Initial load
+    window.CalSoftDashboard = {
+      load: loadDashboard,
+      refresh: loadDashboard,
+      showChart: () => {},
+      filterSchedules: (type) => {
+        const base = "/calibration/schedules/";
+        const params = {
+          pending: "?status=pending",
+          overdue: "?overdue=true",
+          in_progress: "?status=in_progress",
+          completed: "?status=completed",
+        };
+        window.location.href = `${base}${params[type] || ""}`;
+      },
+      refreshActivities: loadDashboard,
+    };
     loadDashboard();
+    setupAutoRefresh();
   }
 
-  // calsoft.js uses DOMContentLoaded to call init() which calls load().
-  // We also use DOMContentLoaded — scripts registered later run later,
-  // so our boot() fires after calsoft.js init() has set up the public API.
   document.addEventListener("DOMContentLoaded", boot);
 })();
