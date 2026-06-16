@@ -5,44 +5,6 @@
     refreshInterval: 200000,
   };
 
-  const FACTS = [
-    "ISO/IEC 17025 focuses on the competence of testing and calibration laboratories.",
-    "Calibration compares a measurement to a traceable reference standard.",
-    "Traceability links a measurement back to national or international standards.",
-    "A calibration certificate is not the same as product acceptance.",
-    "Environmental conditions can change calibration results.",
-    "Warm-up time matters for many electronic instruments.",
-    "Uncertainty is part of every valid calibration result.",
-    "Pass or fail decisions should consider measurement uncertainty.",
-    "Drift is a gradual change in instrument response over time.",
-    "As-found data shows the condition before adjustment.",
-    "As-left data shows the condition after adjustment.",
-    "Reference standards need recalibration too.",
-    "A torque wrench is often stored at its lowest setting.",
-    "Gauge blocks require cleanliness and temperature control.",
-    "Calibration intervals should reflect usage, environment, and history.",
-    "Out of tolerance means measured error exceeded acceptance limits.",
-    "Interim checks can catch problems between scheduled calibrations.",
-    "A valid certificate should identify the standard used.",
-    "Resolution is not the same as accuracy.",
-    "Repeatability measures closeness under unchanged conditions.",
-    "Reproducibility measures closeness under changed conditions.",
-    "Measurement bias is a consistent offset from the true value.",
-    "Zeroing an instrument is not always the same as calibration.",
-    "Hysteresis appears when readings differ by direction of approach.",
-    "Linearity describes response across the measurement range.",
-    "Proper handling can be as important as instrument settings.",
-    "Calibration records support audits, root-cause analysis, and customer confidence.",
-    "A failed calibration may still be usable for non-critical checks after risk review.",
-    "Measurement uncertainty should be reported with appropriate units.",
-    "Standards should be acclimated before precision measurements.",
-    "Calibration does not repair an instrument; it quantifies performance.",
-    "The best calibration interval is data-driven, not guessed.",
-    "Traceability chains must remain unbroken.",
-    "Clean fixtures reduce repeatability errors.",
-    "Recording as-found data protects product quality investigations.",
-    "Small environmental shifts can matter in high-precision work.",
-  ];
 
   let scheduleDonut = null;
   let refreshTimer = null;
@@ -275,7 +237,7 @@
 
   function renderBottomRow(data, urls) {
     const actions = [
-      { href: urls.performCalibration, icon: "New", label: "New Calibration" },
+      
       { href: urls.scheduleList, icon: "Sched", label: "Schedules" },
       { href: urls.certificates, icon: "Cert", label: "Certificates" },
     ];
