@@ -1,978 +1,1032 @@
-// Dashboard JavaScript for CalSoft
-// Global variables
-let dashboardData = {};
-let currentChartPeriod = 'week';
+// ============================================================
+// CALSOFT — DASHBOARD (Unified)
+// Combines both dashboard implementations with DRY principles
+// ============================================================
 
-// Initialize dashboard when DOM is loaded
-document.addEventListener('DOMContentLoaded', function() {
-    initializeDashboard();
-});
+(function() {
+    'use strict';
 
-/**
- * Initialize dashboard functionality
- */
-function initializeDashboard() {
-    try {
-        initializeChart();
+    // -------- CONFIGURATION --------
+    const CONFIG = {
+        REFRESH_INTERVAL: 200000,
+        ANIMATION_DURATION: 1000,
+        ANIMATION_STEPS: 30,
+        CHART_PADDING: 60,
+        MAX_CHART_VALUE: 100,
+    };
 
-        // Get notification count from the page
-        const notificationCountElement = document.getElementById('notification-count');
-        const count = notificationCountElement ? parseInt(notificationCountElement.textContent) || 0 : 0;
-        updateNotificationBell(count);
+    // -------- STATE --------
+    let state = {
+        chartInstance: null,
+        currentPeriod: 'week',
+        dashboardData: {},
+        csrfToken: null,
+        resizeTimeout: null,
+    };
 
-        // Auto-refresh every 5 minutes (300000ms)
-        setInterval(refreshDashboard, 300000);
+    // -------- UTILITY FUNCTIONS --------
+    const Utils = {
+        /** Read CSS variable value (theme-aware) */
+        cssVar: (name, fallback) => {
+            const val = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+            return val || fallback;
+        },
 
-        // Initialize CSRF token
-        initializeCSRF();
+        /** Format number with commas */
+        formatNumber: (num) => num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','),
 
-        console.log('Dashboard initialized successfully');
-    } catch (error) {
-        console.error('Error initializing dashboard:', error);
-    }
-}
-
-/**
- * Initialize CSRF token for AJAX requests
- */
-function initializeCSRF() {
-    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]');
-    if (csrfToken) {
-        window.csrfToken = csrfToken.value;
-    }
-}
-
-/**
- * Update notification bell with count
- * @param {number} count - Number of notifications
- */
-function updateNotificationBell(count) {
-    const notificationBell = document.getElementById('notification-count');
-    if (notificationBell) {
-        notificationBell.textContent = count;
-        notificationBell.style.display = count > 0 ? 'flex' : 'none';
-
-        // Add pulse animation for new notifications
-        if (count > 0) {
-            notificationBell.style.animation = 'pulse 2s infinite';
-        } else {
-            notificationBell.style.animation = 'none';
-        }
-    }
-}
-
-/**
- * Toggle notifications panel visibility
- */
-function toggleNotifications() {
-    const panel = document.getElementById('notifications-panel');
-    if (panel) {
-        const isVisible = panel.style.display !== 'none';
-        panel.style.display = isVisible ? 'none' : 'block';
-
-        // Add fade animation
-        if (!isVisible) {
-            panel.style.opacity = '0';
-            panel.style.transform = 'translateY(-10px)';
-            setTimeout(() => {
-                panel.style.transition = 'all 0.3s ease';
-                panel.style.opacity = '1';
-                panel.style.transform = 'translateY(0)';
-            }, 10);
-        }
-    }
-}
-
-/**
- * Refresh dashboard data
- */
-function refreshDashboard() {
-    const refreshButtons = document.querySelectorAll('.refresh-button');
-
-    // Update button states
-    refreshButtons.forEach(btn => {
-        btn.classList.add('loading');
-        btn.textContent = '⏳ Refreshing...';
-        btn.disabled = true;
-    });
-
-    // Fetch updated dashboard metrics
-    fetch('/calibration/api/dashboard-metrics/')
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(data => {
-            if (data.success) {
-                updateDashboardMetrics(data.metrics);
-                showNotification('Dashboard refreshed successfully', 'success');
-            } else {
-                throw new Error(data.message || 'Failed to refresh dashboard');
-            }
-        })
-        .catch(error => {
-            console.error('Error refreshing dashboard:', error);
-            showNotification('Failed to refresh dashboard', 'error');
-        })
-        .finally(() => {
-            // Reset button states
-            refreshButtons.forEach(btn => {
-                btn.classList.remove('loading');
-                btn.textContent = '🔄 Refresh';
-                btn.disabled = false;
+        /** Format date */
+        formatDate: (date) => {
+            if (typeof date === 'string') date = new Date(date);
+            return date.toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
             });
-        });
-}
+        },
 
-/**
- * Update dashboard metrics with new data
- * @param {Object} metrics - Updated metrics data
- */
-function updateDashboardMetrics(metrics) {
-    try {
-        // Update schedule counts
-        updateScheduleCounts(metrics.schedule_counts);
-
-        // Update performance metrics
-        updatePerformanceMetrics(metrics.performance);
-
-        // Update notifications
-        if (metrics.notifications) {
-            updateNotificationBell(metrics.notifications.length);
-        }
-
-        // Update chart with new data
-        initializeChart();
-
-        console.log('Dashboard metrics updated successfully');
-    } catch (error) {
-        console.error('Error updating dashboard metrics:', error);
-    }
-}
-
-/**
- * Update schedule count cards
- * @param {Object} scheduleCounts - Schedule count data
- */
-function updateScheduleCounts(scheduleCounts) {
-    if (!scheduleCounts) return;
-
-    const scheduleCards = document.querySelectorAll('.stat-card');
-    const counts = [
-        scheduleCounts.pending || 0,
-        scheduleCounts.overdue || 0,
-        scheduleCounts.in_progress || 0,
-        scheduleCounts.completed || 0
-    ];
-
-    scheduleCards.forEach((card, index) => {
-        const numberElement = card.querySelector('.stat-number');
-        if (numberElement && counts[index] !== undefined) {
-            animateNumber(numberElement, parseInt(numberElement.textContent) || 0, counts[index]);
-        }
-    });
-}
-
-/**
- * Update performance metrics cards
- * @param {Object} performance - Performance data
- */
-function updatePerformanceMetrics(performance) {
-    if (!performance) return;
-
-    const metricCards = document.querySelectorAll('.metric-value');
-    if (metricCards.length >= 2) {
-        if (performance.week_pass_rate !== undefined) {
-            animateNumber(metricCards[0],
-                parseFloat(metricCards[0].textContent) || 0,
-                performance.week_pass_rate,
-                '%'
-            );
-        }
-        if (performance.month_pass_rate !== undefined) {
-            animateNumber(metricCards[1],
-                parseFloat(metricCards[1].textContent) || 0,
-                performance.month_pass_rate,
-                '%'
-            );
-        }
-    }
-}
-
-/**
- * Animate number changes
- * @param {HTMLElement} element - Element to animate
- * @param {number} from - Starting value
- * @param {number} to - Ending value
- * @param {string} suffix - Optional suffix (like %)
- */
-function animateNumber(element, from, to, suffix = '') {
-    const duration = 1000; // 1 second
-    const steps = 30;
-    const increment = (to - from) / steps;
-    const stepDuration = duration / steps;
-
-    let current = from;
-    let step = 0;
-
-    const timer = setInterval(() => {
-        current += increment;
-        step++;
-
-        if (step >= steps) {
-            current = to;
-            clearInterval(timer);
-        }
-
-        element.textContent = Math.round(current * 10) / 10 + suffix;
-    }, stepDuration);
-}
-
-/**
- * Refresh recent activities section
- */
-function refreshActivities() {
-    console.log('Refreshing recent activities...');
-
-    // Show loading state
-    const refreshButton = document.querySelector('#recent-sessions .refresh-button');
-    if (refreshButton) {
-        refreshButton.textContent = '⏳';
-        refreshButton.disabled = true;
-    }
-
-    fetch('/calibration/api/recent-activities/?period=week&limit=5')
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                updateRecentActivities(data.activities);
-                showNotification('Recent sessions refreshed', 'success');
-            } else {
-                throw new Error(data.message || 'Failed to refresh activities');
+        /** Calculate time ago */
+        timeAgo: (date) => {
+            if (typeof date === 'string') date = new Date(date);
+            const diff = Math.floor((Date.now() - date) / 1000);
+            const intervals = [
+                { label: 'day', seconds: 86400 },
+                { label: 'hour', seconds: 3600 },
+                { label: 'minute', seconds: 60 },
+            ];
+            for (const interval of intervals) {
+                const value = Math.floor(diff / interval.seconds);
+                if (value > 0) return `${value} ${interval.label}${value > 1 ? 's' : ''} ago`;
             }
-        })
-        .catch(error => {
-            console.error('Error refreshing activities:', error);
-            showNotification('Failed to refresh activities', 'error');
-        })
-        .finally(() => {
-            // Reset button state
-            if (refreshButton) {
-                refreshButton.textContent = '🔄';
-                refreshButton.disabled = false;
-            }
-        });
-}
+            return 'Just now';
+        },
 
-/**
- * Update recent activities section
- * @param {Array} activities - Recent activities data
- */
-function updateRecentActivities(activities) {
-    const container = document.getElementById('recent-sessions');
-    if (!container || !activities) return;
+        /** Animate number changes */
+        animateNumber: (element, from, to, suffix = '') => {
+            const duration = CONFIG.ANIMATION_DURATION;
+            const steps = CONFIG.ANIMATION_STEPS;
+            const increment = (to - from) / steps;
+            const stepDuration = duration / steps;
 
-    try {
-        // Clear current content
-        container.innerHTML = '';
+            let current = from;
+            let step = 0;
 
-        if (activities.length === 0) {
-            // Show empty state
-            container.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-icon">📋</div>
-                    <h4>No recent calibration sessions</h4>
-                    <p>No calibration sessions have been performed this week</p>
-                    <a href="/calibration/perform_calibration/" class="btn btn-primary">Start Calibration</a>
-                </div>
-            `;
-            return;
-        }
+            const timer = setInterval(() => {
+                current += increment;
+                step++;
+                if (step >= steps) {
+                    current = to;
+                    clearInterval(timer);
+                }
+                element.textContent = Math.round(current * 10) / 10 + suffix;
+            }, stepDuration);
+        },
 
-        // Create sessions HTML
-        let sessionsHTML = '';
-        activities.slice(0, 5).forEach(session => {
-            const statusClass = session.overall_pass ? 'completed' : 'failed';
-            const statusText = session.overall_pass ? 'PASSED' : 'FAILED';
-            const progressWidth = session.overall_pass ? '100' : '50';
-
-            sessionsHTML += `
-                <div class="schedule-item ${statusClass}">
-                    <div class="schedule-info">
-                        <div class="schedule-equipment">
-                            ${session.equipment ?
-                                `${session.equipment.description} - ${session.device_serial || 'N/A'}` :
-                                `${session.device_model || 'Unknown Model'} - ${session.device_serial || 'N/A'}`
-                            }
-                        </div>
-                        <div class="schedule-details">
-                            Procedure: ${session.procedure ? session.procedure.name : 'No procedure assigned'}
-                            <br>
-                            Performed by: ${session.performed_by_name || 'Unknown'}
-                            <br>
-                            Status: <strong>${statusText}</strong>
-                        </div>
-                        <div class="progress-bar">
-                            <div class="progress-fill" style="width: ${progressWidth}%;"></div>
-                        </div>
-                    </div>
-                    <div class="schedule-actions">
-                        <div class="schedule-date">
-                            ${formatDate(session.timestamp)}
-                            <div class="time-ago">${timeAgo(session.timestamp)}</div>
-                        </div>
-                        <div class="action-buttons">
-                            <a href="/calibration/session/${session.id}/" class="btn btn-sm">View Details</a>
-                            ${session.overall_pass && session.equipment ?
-                                `<form action="/calibration/complete-from-session/${session.id}/" method="post" style="display: inline;">
-                                    <input type="hidden" name="csrfmiddlewaretoken" value="${window.csrfToken}">
-                                    <button type="submit" class="btn btn-success btn-sm">Complete Schedule</button>
-                                </form>` :
-                                ''
-                            }
-                        </div>
-                    </div>
-                </div>
-            `;
-        });
-
-        // Add summary
-        const summaryHTML = `
-            <div class="sessions-summary">
-                <p class="text-muted">
-                    Showing ${Math.min(activities.length, 5)} of ${activities.length} sessions this week
-                    ${activities.length > 5 ?
-                        '<a href="/calibration/sessions/?week=current" class="btn-link">View all this week\'s sessions</a>' :
-                        ''
-                    }
-                </p>
-            </div>
-        `;
-
-        container.innerHTML = sessionsHTML + summaryHTML;
-
-    } catch (error) {
-        console.error('Error updating recent activities:', error);
-        // Fallback to page reload if update fails
-        location.reload();
-    }
-}
-
-/**
- * Filter schedules by type
- * @param {string} type - Schedule type to filter
- */
-function filterSchedules(type) {
-    let url = '/calibration/schedules/';
-
-    switch(type) {
-        case 'pending':
-            url += '?status=pending';
-            break;
-        case 'overdue':
-            url += '?overdue=true';
-            break;
-        case 'in_progress':
-            url += '?status=in_progress';
-            break;
-        case 'completed':
-            url += '?status=completed';
-            break;
-        default:
-            break;
-    }
-
-    window.location.href = url;
-}
-
-/**
- * Initialize performance chart
- */
-function initializeChart() {
-    const canvas = document.getElementById('performanceChart');
-    if (!canvas) return;
-
-    try {
-        const ctx = canvas.getContext('2d');
-        drawPerformanceChart(ctx, canvas.width, canvas.height, currentChartPeriod);
-    } catch (error) {
-        console.error('Error initializing chart:', error);
-    }
-}
-
-function getPassRateFromPage(period) {
-    try {
-        const metricCards = document.querySelectorAll('.metric-value');
-        switch(period) {
-            case 'week':
-                return metricCards[0] ? parseFloat(metricCards[0].textContent) : 0;
-            case 'month':
-                return metricCards[1] ? parseFloat(metricCards[1].textContent) : 0;
-            case 'quarter':
-                // Quarter data would need to be provided by backend
-                return 85; // Default fallback
-            default:
-                return 0;
-        }
-    } catch (error) {
-        console.error('Error getting pass rate from page:', error);
-        return 0;
-    }
-}
-/**
- * Draw performance chart with enhanced styling
- * @param {CanvasRenderingContext2D} ctx - Canvas context
- * @param {number} width - Canvas width
- * @param {number} height - Canvas height
- * @param {string} period - Time period
- */
-function drawPerformanceChart(ctx, width, height, period) {
-    try {
-        // Clear canvas with subtle background
-        ctx.clearRect(0, 0, width, height);
-
-        // Add subtle background gradient
-        const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
-        bgGradient.addColorStop(0, '#fafbfc');
-        bgGradient.addColorStop(1, '#f8f9fa');
-        ctx.fillStyle = bgGradient;
-        ctx.fillRect(0, 0, width, height);
-
-        // Get pass rate data from the page or use defaults
-        const weekPassRate = getPassRateFromPage('week') || 0;
-        const monthPassRate = getPassRateFromPage('month') || 0;
-        const quarterPassRate = getPassRateFromPage('quarter') || 0;
-
-        let data, labels;
-
-        switch(period) {
-            case 'week':
-                data = [weekPassRate];
-                labels = ['This Week'];
-                break;
-            case 'month':
-                data = [monthPassRate];
-                labels = ['This Month'];
-                break;
-            case 'quarter':
-                data = [weekPassRate, monthPassRate, quarterPassRate];
-                labels = ['Week', 'Month', 'Quarter'];
-                break;
-            default:
-                data = [weekPassRate];
-                labels = ['Week'];
-        }
-
-        drawEnhancedChart(ctx, width, height, data, labels);
-    } catch (error) {
-        console.error('Error drawing chart:', error);
-        drawErrorChart(ctx, width, height);
-    }
-}
-
-/**
- * Draw the enhanced chart with modern styling
- * @param {CanvasRenderingContext2D} ctx - Canvas context
- * @param {number} width - Canvas width
- * @param {number} height - Canvas height
- * @param {Array} data - Data points
- * @param {Array} labels - Labels for data points
- */
-function drawEnhancedChart(ctx, width, height, data, labels) {
-    const maxValue = 100;
-    const padding = 60;
-    const chartWidth = width - 2 * padding;
-    const chartHeight = height - 2 * padding;
-
-    // Enable high-quality rendering
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-
-    // Draw background grid with enhanced styling
-    drawEnhancedGrid(ctx, padding, chartWidth, chartHeight, height);
-
-    // Draw axes with enhanced styling
-    drawEnhancedAxes(ctx, padding, chartWidth, chartHeight, height);
-
-    // Draw data visualization
-    if (data.length > 0) {
-        drawEnhancedDataPoints(ctx, data, labels, padding, chartWidth, chartHeight, height, maxValue);
-    }
-
-    // Add chart title if needed
-    drawChartTitle(ctx, width, padding, labels[0] || 'Performance');
-}
-
-/**
- * Draw enhanced grid with subtle styling
- */
-function drawEnhancedGrid(ctx, padding, chartWidth, chartHeight, height) {
-    // Horizontal grid lines
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.05)';
-    ctx.lineWidth = 1;
-
-    for (let i = 0; i <= 5; i++) {
-        const y = padding + (i * chartHeight) / 5;
-
-        // Draw grid line
-        ctx.beginPath();
-        ctx.moveTo(padding, y);
-        ctx.lineTo(padding + chartWidth, y);
-        ctx.stroke();
-
-        // Y-axis labels with better typography
-        ctx.fillStyle = '#6b7280';
-        ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-        ctx.textAlign = 'right';
-        ctx.textBaseline = 'middle';
-        ctx.fillText((100 - (i * 20)) + '%', padding - 15, y);
-    }
-
-    // Vertical grid lines (subtle)
-    if (chartWidth > 200) {
-        ctx.strokeStyle = 'rgba(0, 0, 0, 0.03)';
-        const verticalLines = Math.min(5, Math.floor(chartWidth / 80));
-
-        for (let i = 1; i < verticalLines; i++) {
-            const x = padding + (i * chartWidth) / verticalLines;
+        /** Draw rounded rectangle */
+        drawRoundedRect: (ctx, x, y, width, height, radius) => {
             ctx.beginPath();
-            ctx.moveTo(x, padding);
-            ctx.lineTo(x, height - padding);
+            ctx.moveTo(x + radius, y);
+            ctx.lineTo(x + width - radius, y);
+            ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+            ctx.lineTo(x + width, y + height - radius);
+            ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+            ctx.lineTo(x + radius, y + height);
+            ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+            ctx.lineTo(x, y + radius);
+            ctx.quadraticCurveTo(x, y, x + radius, y);
+            ctx.closePath();
+        },
+    };
+
+    // -------- RENDER HELPERS (DRY) --------
+
+    /** Generic card renderer - reduces repetitive card creation */
+    const CardRenderer = {
+        /** Render KPI cards from data array */
+        kpiCards: (cards) => {
+            return cards.map(c => `
+                <div class="kpi-card ${c.variant || ''}">
+                    <div class="kpi-icon">${c.icon}</div>
+                    <div class="kpi-num">${c.value}</div>
+                    <div class="kpi-label">${c.label}</div>
+                    ${c.sub ? `<div class="kpi-sub">${c.sub}</div>` : ''}
+                </div>
+            `).join('');
+        },
+
+        /** Render gauge rows from data array */
+        gaugeRows: (rows) => {
+            return rows.map(r => `
+                <div class="gauge-row">
+                    <div class="gauge-label-row">
+                        <span class="gl-name">${r.name}</span>
+                        <span class="gl-pct">${r.pct}%</span>
+                    </div>
+                    <div class="gauge-track">
+                        <div class="gauge-fill ${r.fill || ''}" style="width:${r.pct}%"></div>
+                    </div>
+                    ${r.sub ? `<div class="gauge-sub">${r.sub}</div>` : ''}
+                </div>
+            `).join('');
+        },
+
+        /** Render quick action links from data array */
+        quickActions: (actions) => {
+            return actions.map(a => `
+                <a class="qa-item" href="${a.href}">
+                    <span class="qi-icon">${a.icon}</span>
+                    <span class="qi-label">${a.label}</span>
+                    ${a.badge > 0 ? `<span class="qi-badge">${a.badge}</span>` : ''}
+                </a>
+            `).join('');
+        },
+
+        /** Render session rows from data array */
+        sessionRows: (sessions, urls) => {
+            if (sessions.length === 0) {
+                return `
+                    <tr><td colspan="5">
+                        <div class="empty-sessions">
+                            <span>🔬</span>
+                            No approved sessions yet. <a href="${urls.performCalibration}">Start a calibration</a>
+                        </div>
+                    </td></tr>`;
+            }
+
+            return sessions.map(s => {
+                const passEl = s.overall_pass
+                    ? '<span class="pass-pill pass">Pass</span>'
+                    : '<span class="pass-pill fail">Fail</span>';
+                const date = new Date(s.timestamp).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+
+                return `
+                    <tr>
+                        <td>${s.device_model || '—'}</td>
+                        <td><small class="text-muted">${s.device_serial || '—'}</small></td>
+                        <td>${s.procedure_name || '—'}</td>
+                        <td>${date}</td>
+                        <td>${passEl}</td>
+                    </tr>
+                `;
+            }).join('');
+        },
+
+        /** Render schedule items from data array */
+        scheduleItems: (sessions) => {
+            if (!sessions || sessions.length === 0) {
+                return `
+                    <div class="empty-state">
+                        <div class="empty-icon">📋</div>
+                        <h4>No recent calibration sessions</h4>
+                        <p>No calibration sessions have been performed this week</p>
+                        <a href="/calibration/perform_calibration/" class="btn btn-primary">Start Calibration</a>
+                    </div>
+                `;
+            }
+
+            return sessions.slice(0, 5).map(session => {
+                const statusClass = session.overall_pass ? 'completed' : 'failed';
+                const statusText = session.overall_pass ? 'PASSED' : 'FAILED';
+                const progressWidth = session.overall_pass ? '100' : '50';
+
+                return `
+                    <div class="schedule-item ${statusClass}">
+                        <div class="schedule-info">
+                            <div class="schedule-equipment">
+                                ${session.equipment ?
+                                    `${session.equipment.description} - ${session.device_serial || 'N/A'}` :
+                                    `${session.device_model || 'Unknown Model'} - ${session.device_serial || 'N/A'}`
+                                }
+                            </div>
+                            <div class="schedule-details">
+                                Procedure: ${session.procedure ? session.procedure.name : 'No procedure assigned'}
+                                <br>
+                                Performed by: ${session.performed_by_name || 'Unknown'}
+                                <br>
+                                Status: <strong>${statusText}</strong>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: ${progressWidth}%;"></div>
+                            </div>
+                        </div>
+                        <div class="schedule-actions">
+                            <div class="schedule-date">
+                                ${Utils.formatDate(session.timestamp)}
+                                <div class="time-ago">${Utils.timeAgo(session.timestamp)}</div>
+                            </div>
+                            <div class="action-buttons">
+                                <a href="/calibration/session/${session.id}/" class="btn btn-sm">View Details</a>
+                                ${session.overall_pass && session.equipment ?
+                                    `<form action="/calibration/complete-from-session/${session.id}/" method="post" style="display: inline;">
+                                        <input type="hidden" name="csrfmiddlewaretoken" value="${state.csrfToken}">
+                                        <button type="submit" class="btn btn-success btn-sm">Complete Schedule</button>
+                                    </form>` :
+                                    ''
+                                }
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        },
+    };
+
+    // -------- CHART RENDERER --------
+    const ChartRenderer = {
+        /** Draw performance chart */
+        drawPerformanceChart: (canvas, period = 'week') => {
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+
+            // Get data based on period
+            const dataMap = {
+                week: { data: [state.dashboardData.week_pass_rate || 0], labels: ['This Week'] },
+                month: { data: [state.dashboardData.month_pass_rate || 0], labels: ['This Month'] },
+                quarter: {
+                    data: [
+                        state.dashboardData.week_pass_rate || 0,
+                        state.dashboardData.month_pass_rate || 0,
+                        state.dashboardData.quarter_pass_rate || 85
+                    ],
+                    labels: ['Week', 'Month', 'Quarter']
+                },
+            };
+
+            const chartData = dataMap[period] || dataMap.week;
+            ChartRenderer._drawEnhancedChart(ctx, width, height, chartData.data, chartData.labels);
+        },
+
+        /** Draw donut chart */
+        drawDonutChart: (canvasId, data) => {
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) return;
+
+            const totalEquip = data.total_equipment || 0;
+            const needCalib = data.equipment_needing_calibration || 0;
+            const calibOk = totalEquip - needCalib;
+
+            if (state.chartInstance) state.chartInstance.destroy();
+
+            state.chartInstance = new Chart(canvas, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Up to date', 'Needs calibration'],
+                    datasets: [{
+                        data: [calibOk || 0, needCalib || 0],
+                        backgroundColor: [
+                            Utils.cssVar('--success-color', '#10b981'),
+                            Utils.cssVar('--warning-color', '#f59e0b')
+                        ],
+                        borderWidth: 0,
+                        hoverOffset: 4,
+                    }],
+                },
+                options: {
+                    cutout: '72%',
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { callbacks: { label: c => ` ${c.label}: ${c.parsed}` } },
+                    },
+                    animation: { animateRotate: true, duration: 800 },
+                },
+            });
+        },
+
+        /** Internal: draw enhanced chart with modern styling */
+        _drawEnhancedChart: (ctx, width, height, data, labels) => {
+            const maxValue = CONFIG.MAX_CHART_VALUE;
+            const padding = CONFIG.CHART_PADDING;
+            const chartWidth = width - 2 * padding;
+            const chartHeight = height - 2 * padding;
+
+            // Clear and set background
+            ctx.clearRect(0, 0, width, height);
+            const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
+            bgGradient.addColorStop(0, '#fafbfc');
+            bgGradient.addColorStop(1, '#f8f9fa');
+            ctx.fillStyle = bgGradient;
+            ctx.fillRect(0, 0, width, height);
+
+            // Enable high-quality rendering
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+
+            // Draw grid
+            ChartRenderer._drawGrid(ctx, padding, chartWidth, chartHeight, height);
+
+            // Draw axes
+            ChartRenderer._drawAxes(ctx, padding, chartWidth, chartHeight, height);
+
+            // Draw data if available
+            if (data.length > 0) {
+                ChartRenderer._drawDataPoints(ctx, data, labels, padding, chartWidth, chartHeight, height, maxValue);
+            }
+
+            // Draw title
+            ChartRenderer._drawTitle(ctx, width, padding, labels[0] || 'Performance');
+        },
+
+        /** Draw grid with subtle styling */
+        _drawGrid: (ctx, padding, chartWidth, chartHeight, height) => {
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.05)';
+            ctx.lineWidth = 1;
+
+            for (let i = 0; i <= 5; i++) {
+                const y = padding + (i * chartHeight) / 5;
+                ctx.beginPath();
+                ctx.moveTo(padding, y);
+                ctx.lineTo(padding + chartWidth, y);
+                ctx.stroke();
+
+                ctx.fillStyle = '#6b7280';
+                ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+                ctx.textAlign = 'right';
+                ctx.textBaseline = 'middle';
+                ctx.fillText((100 - (i * 20)) + '%', padding - 15, y);
+            }
+        },
+
+        /** Draw axes */
+        _drawAxes: (ctx, padding, chartWidth, chartHeight, height) => {
+            ctx.strokeStyle = '#d1d5db';
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+
+            ctx.beginPath();
+            ctx.moveTo(padding, padding);
+            ctx.lineTo(padding, height - padding);
+            ctx.moveTo(padding, height - padding);
+            ctx.lineTo(padding + chartWidth, height - padding);
             ctx.stroke();
-        }
-    }
-}
-
-/**
- * Draw enhanced axes
- */
-function drawEnhancedAxes(ctx, padding, chartWidth, chartHeight, height) {
-    // Main axes with rounded caps
-    ctx.strokeStyle = '#d1d5db';
-    ctx.lineWidth = 2;
-    ctx.lineCap = 'round';
-
-    ctx.beginPath();
-    // Y-axis
-    ctx.moveTo(padding, padding);
-    ctx.lineTo(padding, height - padding);
-    // X-axis
-    ctx.moveTo(padding, height - padding);
-    ctx.lineTo(padding + chartWidth, height - padding);
-    ctx.stroke();
-
-    ctx.lineCap = 'butt'; // Reset
-}
-
-/**
- * Draw enhanced data points with modern styling
- */
-function drawEnhancedDataPoints(ctx, data, labels, padding, chartWidth, chartHeight, height, maxValue) {
-    const points = [];
-
-    // Calculate points
-    data.forEach((value, index) => {
-        const x = data.length === 1 ?
-            padding + chartWidth / 2 :
-            padding + (index * chartWidth) / (data.length - 1);
-        const y = height - padding - (value / maxValue) * chartHeight;
-
-        points.push({ x, y, value });
-    });
-
-    // Draw area fill for multiple points
-    if (data.length > 1) {
-        drawAreaFill(ctx, points, height, padding);
-        drawConnectionLine(ctx, points);
-    }
-
-    // Draw individual data points
-    points.forEach((point, index) => {
-        drawDataPoint(ctx, point, index, labels[index]);
-    });
-
-    // Add value indicators
-    drawValueIndicators(ctx, points, labels);
-}
-
-/**
- * Draw smooth area fill
- */
-function drawAreaFill(ctx, points, height, padding) {
-    if (points.length < 2) return;
-
-    // Create gradient
-    const gradient = ctx.createLinearGradient(0, points[0].y, 0, height - padding);
-    gradient.addColorStop(0, 'rgba(59, 130, 246, 0.15)');
-    gradient.addColorStop(0.5, 'rgba(59, 130, 246, 0.08)');
-    gradient.addColorStop(1, 'rgba(59, 130, 246, 0.02)');
-
-    ctx.fillStyle = gradient;
-    ctx.beginPath();
-
-    // Start from bottom left
-    ctx.moveTo(points[0].x, height - padding);
-
-    // Draw smooth curve through points
-    if (points.length === 2) {
-        ctx.lineTo(points[0].x, points[0].y);
-        ctx.lineTo(points[1].x, points[1].y);
-    } else {
-        // Use quadratic curves for smoother lines
-        ctx.lineTo(points[0].x, points[0].y);
-
-        for (let i = 1; i < points.length - 1; i++) {
-            const cpX = (points[i].x + points[i + 1].x) / 2;
-            const cpY = (points[i].y + points[i + 1].y) / 2;
-            ctx.quadraticCurveTo(points[i].x, points[i].y, cpX, cpY);
-        }
-
-        ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y);
-    }
-
-    // Close path to bottom
-    ctx.lineTo(points[points.length - 1].x, height - padding);
-    ctx.closePath();
-    ctx.fill();
-}
-
-/**
- * Draw connection line between points
- */
-function drawConnectionLine(ctx, points) {
-    if (points.length < 2) return;
-
-    // Main line
-    ctx.strokeStyle = '#3b82f6';
-    ctx.lineWidth = 3;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-
-    // Add subtle shadow
-    ctx.shadowColor = 'rgba(59, 130, 246, 0.3)';
-    ctx.shadowBlur = 4;
-    ctx.shadowOffsetY = 2;
-
-    ctx.beginPath();
-    ctx.moveTo(points[0].x, points[0].y);
-
-    if (points.length === 2) {
-        ctx.lineTo(points[1].x, points[1].y);
-    } else {
-        // Smooth curves
-        for (let i = 1; i < points.length - 1; i++) {
-            const cpX = (points[i].x + points[i + 1].x) / 2;
-            const cpY = (points[i].y + points[i + 1].y) / 2;
-            ctx.quadraticCurveTo(points[i].x, points[i].y, cpX, cpY);
-        }
-        ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y);
-    }
-
-    ctx.stroke();
-
-    // Reset shadow
-    ctx.shadowColor = 'transparent';
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetY = 0;
-}
-
-/**
- * Draw individual data points with enhanced styling
- */
-function drawDataPoint(ctx, point, index, label) {
-    // Outer ring (shadow effect)
-    ctx.fillStyle = 'rgba(59, 130, 246, 0.2)';
-    ctx.beginPath();
-    ctx.arc(point.x, point.y, 10, 0, 2 * Math.PI);
-    ctx.fill();
-
-    // Main point
-    ctx.fillStyle = '#3b82f6';
-    ctx.beginPath();
-    ctx.arc(point.x, point.y, 6, 0, 2 * Math.PI);
-    ctx.fill();
-
-    // Inner highlight
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.arc(point.x - 1, point.y - 1, 2, 0, 2 * Math.PI);
-    ctx.fill();
-
-    // Hover effect simulation for single point
-    if (index === 0 && point.value > 0) {
-        ctx.strokeStyle = '#3b82f6';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(point.x, point.y, 12, 0, 2 * Math.PI);
-        ctx.stroke();
-    }
-}
-
-/**
- * Draw value indicators with enhanced typography
- */
-function drawValueIndicators(ctx, points, labels) {
-    points.forEach((point, index) => {
-        // Value label with background
-        const valueText = point.value.toFixed(1) + '%';
-        const labelText = labels[index];
-
-        // Measure text for background
-        ctx.font = 'bold 14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-        const valueMetrics = ctx.measureText(valueText);
-        const valueWidth = valueMetrics.width;
-
-        // Draw value background
-        const bgPadding = 8;
-        const bgHeight = 24;
-        const bgY = point.y - 35;
-
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.1)';
-        ctx.shadowBlur = 8;
-        ctx.shadowOffsetY = 2;
-
-        // Rounded rectangle for value
-        drawRoundedRect(ctx, point.x - (valueWidth / 2) - bgPadding, bgY - bgHeight/2,
-                      valueWidth + (bgPadding * 2), bgHeight, 6);
-        ctx.fill();
-
-        // Reset shadow
-        ctx.shadowColor = 'transparent';
-        ctx.shadowBlur = 0;
-        ctx.shadowOffsetY = 0;
-
-        // Draw value text
-        ctx.fillStyle = '#1f2937';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(valueText, point.x, bgY);
-
-        // Draw label below
-        ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-        ctx.fillStyle = '#6b7280';
-        ctx.fillText(labelText, point.x, point.y + 35);
-    });
-}
-
-/**
- * Draw rounded rectangle
- */
-function drawRoundedRect(ctx, x, y, width, height, radius) {
-    ctx.beginPath();
-    ctx.moveTo(x + radius, y);
-    ctx.lineTo(x + width - radius, y);
-    ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-    ctx.lineTo(x + width, y + height - radius);
-    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-    ctx.lineTo(x + radius, y + height);
-    ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-    ctx.lineTo(x, y + radius);
-    ctx.quadraticCurveTo(x, y, x + radius, y);
-    ctx.closePath();
-}
-
-/**
- * Draw chart title
- */
-function drawChartTitle(ctx, width, padding, title) {
-    ctx.fillStyle = '#374151';
-    ctx.font = 'bold 16px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(`${title} Pass Rate`, width / 2, padding / 2);
-}
-
-/**
- * Draw enhanced error chart
- */
-function drawErrorChart(ctx, width, height) {
-    // Clear and add background
-    ctx.clearRect(0, 0, width, height);
-
-    const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
-    bgGradient.addColorStop(0, '#fef2f2');
-    bgGradient.addColorStop(1, '#fef7f7');
-    ctx.fillStyle = bgGradient;
-    ctx.fillRect(0, 0, width, height);
-
-    // Error icon and text
-    ctx.fillStyle = '#ef4444';
-    ctx.font = '24px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('📊', width / 2, height / 2 - 20);
-
-    ctx.fillStyle = '#7f1d1d';
-    ctx.font = '14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-    ctx.fillText('Chart data unavailable', width / 2, height / 2 + 10);
-
-    ctx.fillStyle = '#a3a3a3';
-    ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-    ctx.fillText('Please refresh the dashboard', width / 2, height / 2 + 30);
-}
-
-/**
- * Show chart for specific period
- * @param {string} period - Time period
- */
-function showChart(period) {
-    currentChartPeriod = period;
-
-    const canvas = document.getElementById('performanceChart');
-    if (!canvas) return;
-
-    const ctx = canvas.getContext('2d');
-    drawPerformanceChart(ctx, canvas.width, canvas.height, period);
-
-    // Update button states
-    const buttons = document.querySelectorAll('.card-header button');
-    buttons.forEach(btn => {
-        btn.classList.remove('btn-primary');
-        btn.classList.add('btn');
-    });
-
-    // Find and highlight the clicked button
-    const clickedButton = Array.from(buttons).find(btn =>
-        btn.textContent.toLowerCase().includes(period.toLowerCase())
-    );
-    if (clickedButton) {
-        clickedButton.classList.remove('btn');
-        clickedButton.classList.add('btn-primary');
-    }
-}
-
-
-
-/**
- * Close notification panel when clicking outside
- */
-document.addEventListener('click', function(event) {
-    const notificationsPanel = document.getElementById('notifications-panel');
-    const notificationBell = document.querySelector('.notification-bell');
-
-    if (notificationsPanel &&
-        notificationsPanel.style.display !== 'none' &&
-        !notificationsPanel.contains(event.target) &&
-        !notificationBell.contains(event.target)) {
-        notificationsPanel.style.display = 'none';
-    }
-});
-
-/**
- * Handle keyboard shortcuts
- */
-document.addEventListener('keydown', function(event) {
-    // ESC to close notifications panel
-    if (event.key === 'Escape') {
-        const notificationsPanel = document.getElementById('notifications-panel');
-        if (notificationsPanel && notificationsPanel.style.display !== 'none') {
-            notificationsPanel.style.display = 'none';
-        }
-    }
-
-    // Ctrl/Cmd + R to refresh dashboard
-    if ((event.ctrlKey || event.metaKey) && event.key === 'r' && event.shiftKey) {
-        event.preventDefault();
-        refreshDashboard();
-    }
-});
-
-/**
- * Handle responsive chart resizing
- */
-window.addEventListener('resize', function() {
-    setTimeout(initializeChart, 100);
-});
-
-/**
- * Utility function to format numbers with commas
- * @param {number} num - Number to format
- * @returns {string} Formatted number
- */
-function formatNumber(num) {
-    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-}
-
-/**
- * Utility function to format dates
- * @param {Date|string} date - Date to format
- * @returns {string} Formatted date
- */
-function formatDate(date) {
-    if (typeof date === 'string') {
-        date = new Date(date);
-    }
-    return date.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-    });
-}
-
-/**
- * Utility function to calculate time ago
- * @param {Date|string} date - Date to calculate from
- * @returns {string} Time ago string
- */
-function timeAgo(date) {
-    if (typeof date === 'string') {
-        date = new Date(date);
-    }
-
-    const now = new Date();
-    const diffInMs = now - date;
-    const diffInSec = Math.floor(diffInMs / 1000);
-    const diffInMin = Math.floor(diffInSec / 60);
-    const diffInHour = Math.floor(diffInMin / 60);
-    const diffInDay = Math.floor(diffInHour / 24);
-
-    if (diffInDay > 0) {
-        return `${diffInDay} day${diffInDay > 1 ? 's' : ''} ago`;
-    } else if (diffInHour > 0) {
-        return `${diffInHour} hour${diffInHour > 1 ? 's' : ''} ago`;
-    } else if (diffInMin > 0) {
-        return `${diffInMin} minute${diffInMin > 1 ? 's' : ''} ago`;
-    } else {
-        return 'Just now';
-    }
-}
-
-// Export functions for global access (if needed)
-window.CalSoftDashboard = {
-    refreshDashboard,
-    showChart,
-    toggleNotifications,
-
-    filterSchedules,
-    refreshActivities,
-
-};
-// Equipment selection function for dashboard
-function selectEquipment(scheduleId, equipmentId) {
-    const baseUrl = "{% url 'calibration:perform_calibration' %}";
-    const url = `${baseUrl}?schedule=${scheduleId}&equipment=${equipmentId}&quick_select=true`;
-    window.location.href = url;
-}
-
-// Add event listeners to all quick select buttons in dashboard
-document.addEventListener('DOMContentLoaded', function() {
-    // Add click event listeners to all quick select buttons
-    document.querySelectorAll('.quick-select-btn').forEach(button => {
-        button.addEventListener('click', function() {
-            const scheduleId = this.getAttribute('data-schedule-id');
-            const equipmentId = this.getAttribute('data-equipment-id');
-            selectEquipment(scheduleId, equipmentId);
-        });
-    });
-});
-    // Handle window resize
-    let resizeTimeout;
-    window.addEventListener('resize', function() {
-        clearTimeout(resizeTimeout);
-        resizeTimeout = setTimeout(function() {
-           
-        }, 250);
-    });
-
+            ctx.lineCap = 'butt';
+        },
+
+        /** Draw data points with enhanced styling */
+        _drawDataPoints: (ctx, data, labels, padding, chartWidth, chartHeight, height, maxValue) => {
+            const points = data.map((value, index) => ({
+                x: data.length === 1 ? padding + chartWidth / 2 : padding + (index * chartWidth) / (data.length - 1),
+                y: height - padding - (value / maxValue) * chartHeight,
+                value,
+            }));
+
+            // Draw area fill for multiple points
+            if (data.length > 1) {
+                ChartRenderer._drawAreaFill(ctx, points, height, padding);
+                ChartRenderer._drawConnectionLine(ctx, points);
+            }
+
+            // Draw individual points
+            points.forEach((point, index) => {
+                ChartRenderer._drawPoint(ctx, point, index, labels[index]);
+            });
+
+            // Draw value indicators
+            ChartRenderer._drawValueIndicators(ctx, points, labels);
+        },
+
+        /** Draw area fill */
+        _drawAreaFill: (ctx, points, height, padding) => {
+            if (points.length < 2) return;
+
+            const gradient = ctx.createLinearGradient(0, points[0].y, 0, height - padding);
+            gradient.addColorStop(0, 'rgba(59, 130, 246, 0.15)');
+            gradient.addColorStop(0.5, 'rgba(59, 130, 246, 0.08)');
+            gradient.addColorStop(1, 'rgba(59, 130, 246, 0.02)');
+
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, height - padding);
+            ctx.lineTo(points[0].x, points[0].y);
+
+            if (points.length === 2) {
+                ctx.lineTo(points[1].x, points[1].y);
+            } else {
+                for (let i = 1; i < points.length - 1; i++) {
+                    const cpX = (points[i].x + points[i + 1].x) / 2;
+                    const cpY = (points[i].y + points[i + 1].y) / 2;
+                    ctx.quadraticCurveTo(points[i].x, points[i].y, cpX, cpY);
+                }
+                ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+            }
+
+            ctx.lineTo(points[points.length - 1].x, height - padding);
+            ctx.closePath();
+            ctx.fill();
+        },
+
+        /** Draw connection line */
+        _drawConnectionLine: (ctx, points) => {
+            if (points.length < 2) return;
+
+            ctx.strokeStyle = '#3b82f6';
+            ctx.lineWidth = 3;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.shadowColor = 'rgba(59, 130, 246, 0.3)';
+            ctx.shadowBlur = 4;
+            ctx.shadowOffsetY = 2;
+
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, points[0].y);
+
+            if (points.length === 2) {
+                ctx.lineTo(points[1].x, points[1].y);
+            } else {
+                for (let i = 1; i < points.length - 1; i++) {
+                    const cpX = (points[i].x + points[i + 1].x) / 2;
+                    const cpY = (points[i].y + points[i + 1].y) / 2;
+                    ctx.quadraticCurveTo(points[i].x, points[i].y, cpX, cpY);
+                }
+                ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+            }
+
+            ctx.stroke();
+            ctx.shadowColor = 'transparent';
+            ctx.shadowBlur = 0;
+            ctx.shadowOffsetY = 0;
+        },
+
+        /** Draw individual data point */
+        _drawPoint: (ctx, point, index, label) => {
+            // Outer ring
+            ctx.fillStyle = 'rgba(59, 130, 246, 0.2)';
+            ctx.beginPath();
+            ctx.arc(point.x, point.y, 10, 0, 2 * Math.PI);
+            ctx.fill();
+
+            // Main point
+            ctx.fillStyle = '#3b82f6';
+            ctx.beginPath();
+            ctx.arc(point.x, point.y, 6, 0, 2 * Math.PI);
+            ctx.fill();
+
+            // Inner highlight
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(point.x - 1, point.y - 1, 2, 0, 2 * Math.PI);
+            ctx.fill();
+
+            // Hover effect for first point
+            if (index === 0 && point.value > 0) {
+                ctx.strokeStyle = '#3b82f6';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(point.x, point.y, 12, 0, 2 * Math.PI);
+                ctx.stroke();
+            }
+        },
+
+        /** Draw value indicators */
+        _drawValueIndicators: (ctx, points, labels) => {
+            points.forEach((point, index) => {
+                const valueText = point.value.toFixed(1) + '%';
+                const labelText = labels[index];
+
+                ctx.font = 'bold 14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+                const valueMetrics = ctx.measureText(valueText);
+                const valueWidth = valueMetrics.width;
+
+                const bgPadding = 8;
+                const bgHeight = 24;
+                const bgY = point.y - 35;
+
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.1)';
+                ctx.shadowBlur = 8;
+                ctx.shadowOffsetY = 2;
+
+                Utils.drawRoundedRect(ctx,
+                    point.x - (valueWidth / 2) - bgPadding,
+                    bgY - bgHeight / 2,
+                    valueWidth + (bgPadding * 2),
+                    bgHeight,
+                    6
+                );
+                ctx.fill();
+
+                ctx.shadowColor = 'transparent';
+                ctx.shadowBlur = 0;
+                ctx.shadowOffsetY = 0;
+
+                ctx.fillStyle = '#1f2937';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(valueText, point.x, bgY);
+
+                ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+                ctx.fillStyle = '#6b7280';
+                ctx.fillText(labelText, point.x, point.y + 35);
+            });
+        },
+
+        /** Draw chart title */
+        _drawTitle: (ctx, width, padding, title) => {
+            ctx.fillStyle = '#374151';
+            ctx.font = 'bold 16px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`${title} Pass Rate`, width / 2, padding / 2);
+        },
+
+        /** Draw error chart */
+        drawErrorChart: (ctx, width, height) => {
+            ctx.clearRect(0, 0, width, height);
+            const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
+            bgGradient.addColorStop(0, '#fef2f2');
+            bgGradient.addColorStop(1, '#fef7f7');
+            ctx.fillStyle = bgGradient;
+            ctx.fillRect(0, 0, width, height);
+
+            ctx.fillStyle = '#ef4444';
+            ctx.font = '24px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('📊', width / 2, height / 2 - 20);
+
+            ctx.fillStyle = '#7f1d1d';
+            ctx.font = '14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            ctx.fillText('Chart data unavailable', width / 2, height / 2 + 10);
+
+            ctx.fillStyle = '#a3a3a3';
+            ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            ctx.fillText('Please refresh the dashboard', width / 2, height / 2 + 30);
+        },
+    };
+
+    // -------- DASHBOARD RENDERER --------
+    const DashboardRenderer = {
+        /** Main render function */
+        render: (data, urls) => {
+            const counts = data.schedule_counts || {};
+            const pendingApproval = data.pending_approval_count || 0;
+            const totalEquip = data.total_equipment || 0;
+            const needCalib = data.equipment_needing_calibration || 0;
+            const calibOk = totalEquip - needCalib;
+            const equipPct = totalEquip > 0 ? Math.round(calibOk / totalEquip * 100) : 0;
+
+            return {
+                content: `
+                    ${DashboardRenderer._renderBanner(pendingApproval, urls)}
+                    ${DashboardRenderer._renderGreeting(data)}
+                    ${DashboardRenderer._renderKpiGrid(counts, data)}
+                    ${DashboardRenderer._renderMidRow(data, equipPct, calibOk, totalEquip)}
+                    ${DashboardRenderer._renderBottomRow(data, urls, pendingApproval)}
+                `,
+                equipPct,
+                calibOk,
+                needCalib,
+            };
+        },
+
+        /** Render approval banner */
+        _renderBanner: (pendingApproval, urls) => {
+            if (pendingApproval <= 0) return '';
+            return `
+                <div class="approval-banner">
+                    <span class="ab-icon">🔔</span>
+                    <span class="ab-text">
+                        <strong>${pendingApproval}</strong>
+                        session${pendingApproval !== 1 ? 's' : ''} pending your review
+                    </span>
+                    <a href="${urls.sessionsPendingApproval}" class="btn-approve">Review &amp; Approve →</a>
+                </div>
+            `;
+        },
+
+        /** Render greeting */
+        _renderGreeting: (data) => `
+            <div class="dash-greeting">
+                <span>📅</span>
+                <span>${data.current_month || ''} overview</span>
+            </div>
+        `,
+
+        /** Render KPI grid */
+        _renderKpiGrid: (counts, data) => {
+            const month = data.current_month || 'This month';
+            const cards = [
+                { variant: 'kpi-pending', icon: '📋', value: counts.pending || 0, label: 'Pending Calibrations', sub: month },
+                { variant: 'kpi-pushed', icon: '📌', value: counts.pushed || 0, label: 'Pushed Schedules', sub: 'Carried from prior period' },
+                { variant: 'kpi-overdue', icon: '⚠️', value: counts.overdue || 0, label: 'Overdue Items', sub: 'Deadline passed' },
+                { variant: 'kpi-approved', icon: '✅', value: counts.completed || 0, label: 'Approved Sessions', sub: month },
+            ];
+            return `<div class="kpi-grid">${CardRenderer.kpiCards(cards)}</div>`;
+        },
+
+        /** Render middle row with donut and gauges */
+        _renderMidRow: (data, equipPct, calibOk, totalEquip) => {
+            const needCalib = totalEquip - calibOk;
+            const gaugeRows = [
+                { name: 'This Week', pct: data.week_pass_rate || 0, fill: 'gf-week', sub: `${data.week_total || 0} approved sessions this week` },
+                { name: 'This Month', pct: data.month_pass_rate || 0, fill: 'gf-month', sub: `${data.month_total || 0} approved sessions this month` },
+                { name: 'Equipment Coverage', pct: equipPct, fill: 'gf-equip', sub: `${calibOk} of ${totalEquip} equipment up to date` },
+            ];
+
+            return `
+                <div class="mid-row">
+                    <div class="panel">
+                        <div class="panel-title">📊 Equipment Coverage</div>
+                        <div class="donut-wrap">
+                            <canvas id="equipDonut" width="200" height="200"></canvas>
+                            <div class="donut-center">
+                                <span class="dc-num">${equipPct}%</span>
+                                <span class="dc-sub">calibrated</span>
+                            </div>
+                        </div>
+                        <div class="chart-legend">
+                            <div class="legend-item"><span class="legend-dot dot-ok"></span> Up to date (${calibOk})</div>
+                            <div class="legend-item"><span class="legend-dot dot-warn"></span> Needs calibration (${needCalib})</div>
+                        </div>
+                    </div>
+                    <div class="panel">
+                        <div class="panel-title">📈 Pass Rates &amp; Coverage</div>
+                        <div class="gauge-grid">
+                            ${CardRenderer.gaugeRows(gaugeRows)}
+                            <div class="gauge-row gauge-total-row">
+                                <div class="gauge-label-row">
+                                    <span class="gl-name">TOTAL APPROVED (ALL TIME)</span>
+                                    <span class="gl-pct">${data.total_sessions || 0}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        },
+
+        /** Render bottom row with sessions and quick actions */
+        _renderBottomRow: (data, urls, pendingApproval) => {
+            const recent = data.recent_sessions || [];
+            const actions = [
+                { href: urls.performCalibration, icon: '🔬', label: 'New Calibration' },
+                { href: urls.sessionsPendingApproval, icon: '📝', label: 'Pending Approval', badge: pendingApproval },
+                { href: urls.certificates, icon: '🏅', label: 'Certificates' },
+                { href: urls.sessionList, icon: '📚', label: 'All Sessions' },
+                { href: urls.auditLog, icon: '🗂️', label: 'Audit Log' },
+            ];
+
+            return `
+                <div class="bottom-row">
+                    <div class="panel">
+                        <div class="panel-title">🕐 Recent Approved Sessions</div>
+                        <table class="sessions-table">
+                            <thead>
+                                <tr>
+                                    <th>Device</th>
+                                    <th>Serial</th>
+                                    <th>Procedure</th>
+                                    <th>Date</th>
+                                    <th>Result</th>
+                                </tr>
+                            </thead>
+                            <tbody>${CardRenderer.sessionRows(recent, urls)}</tbody>
+                        </table>
+                        <div class="mt-2 text-end">
+                            <a href="${urls.sessionsPendingApproval}" class="sessions-view-all">View all pending →</a>
+                        </div>
+                    </div>
+                    <div class="panel">
+                        <div class="panel-title">⚡ Quick Actions</div>
+                        <div class="qa-list">${CardRenderer.quickActions(actions)}</div>
+                    </div>
+                </div>
+            `;
+        },
+    };
+
+    // -------- DASHBOARD CONTROLLER --------
+    const DashboardController = {
+        /** Initialize dashboard */
+        init: () => {
+            try {
+                // Initialize CSRF
+                const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]');
+                if (csrfToken) state.csrfToken = csrfToken.value;
+
+                // Load dashboard data
+                DashboardController.load();
+
+                // Set up auto-refresh
+                setInterval(DashboardController.refresh, CONFIG.REFRESH_INTERVAL);
+
+                // Set up event listeners
+                DashboardController._setupEventListeners();
+
+                console.log('Dashboard initialized successfully');
+            } catch (error) {
+                console.error('Error initializing dashboard:', error);
+            }
+        },
+
+        /** Load dashboard data */
+        load: async () => {
+            const content = document.getElementById('dashboardContent');
+            if (!content) return;
+
+            try {
+                const response = await fetch(window.DashboardURLs.dashboardData, {
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                });
+                const data = await response.json();
+
+                state.dashboardData = data;
+                const urls = window.DashboardURLs;
+
+                // Render dashboard
+                const result = DashboardRenderer.render(data, urls);
+                content.innerHTML = result.content;
+
+                // Render charts
+                ChartRenderer.drawDonutChart('equipDonut', data);
+
+                // Render performance chart if canvas exists
+                const perfCanvas = document.getElementById('performanceChart');
+                if (perfCanvas) {
+                    ChartRenderer.drawPerformanceChart(perfCanvas, state.currentPeriod);
+                }
+
+            } catch (error) {
+                console.error('Dashboard error:', error);
+                content.innerHTML = '<div class="alert alert-danger">Error loading dashboard. Please refresh.</div>';
+            }
+        },
+
+        /** Refresh dashboard data */
+        refresh: async () => {
+            const refreshButtons = document.querySelectorAll('.refresh-button');
+
+            // Update button states
+            refreshButtons.forEach(btn => {
+                btn.classList.add('loading');
+                btn.textContent = '⏳ Refreshing...';
+                btn.disabled = true;
+            });
+
+            try {
+                const response = await fetch('/calibration/api/dashboard-metrics/');
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    state.dashboardData = data.metrics;
+                    DashboardController._updateMetrics(data.metrics);
+                    DashboardController._showNotification('Dashboard refreshed successfully', 'success');
+                } else {
+                    throw new Error(data.message || 'Failed to refresh dashboard');
+                }
+            } catch (error) {
+                console.error('Error refreshing dashboard:', error);
+                DashboardController._showNotification('Failed to refresh dashboard', 'error');
+            } finally {
+                refreshButtons.forEach(btn => {
+                    btn.classList.remove('loading');
+                    btn.textContent = '🔄 Refresh';
+                    btn.disabled = false;
+                });
+            }
+        },
+
+        /** Update dashboard metrics */
+        _updateMetrics: (metrics) => {
+            try {
+                // Update KPI counts
+                if (metrics.schedule_counts) {
+                    const cards = document.querySelectorAll('.kpi-card .kpi-num');
+                    const counts = [
+                        metrics.schedule_counts.pending || 0,
+                        metrics.schedule_counts.pushed || 0,
+                        metrics.schedule_counts.overdue || 0,
+                        metrics.schedule_counts.completed || 0
+                    ];
+                    cards.forEach((el, i) => {
+                        if (counts[i] !== undefined) {
+                            const current = parseInt(el.textContent) || 0;
+                            Utils.animateNumber(el, current, counts[i]);
+                        }
+                    });
+                }
+
+                // Update performance metrics
+                if (metrics.performance) {
+                    const metricCards = document.querySelectorAll('.metric-value');
+                    if (metricCards.length >= 2) {
+                        if (metrics.performance.week_pass_rate !== undefined) {
+                            Utils.animateNumber(metricCards[0],
+                                parseFloat(metricCards[0].textContent) || 0,
+                                metrics.performance.week_pass_rate,
+                                '%'
+                            );
+                        }
+                        if (metrics.performance.month_pass_rate !== undefined) {
+                            Utils.animateNumber(metricCards[1],
+                                parseFloat(metricCards[1].textContent) || 0,
+                                metrics.performance.month_pass_rate,
+                                '%'
+                            );
+                        }
+                    }
+                }
+
+                // Update notifications
+                if (metrics.notifications) {
+                    DashboardController._updateNotificationBell(metrics.notifications.length);
+                }
+
+                // Refresh chart
+                const perfCanvas = document.getElementById('performanceChart');
+                if (perfCanvas) {
+                    ChartRenderer.drawPerformanceChart(perfCanvas, state.currentPeriod);
+                }
+
+                console.log('Dashboard metrics updated successfully');
+            } catch (error) {
+                console.error('Error updating dashboard metrics:', error);
+            }
+        },
+
+        /** Update notification bell */
+        _updateNotificationBell: (count) => {
+            const bell = document.getElementById('notification-count');
+            if (bell) {
+                bell.textContent = count;
+                bell.style.display = count > 0 ? 'flex' : 'none';
+                bell.style.animation = count > 0 ? 'pulse 2s infinite' : 'none';
+            }
+        },
+
+        /** Show notification */
+        _showNotification: (message, type = 'info') => {
+            // Implement notification display
+            console.log(`[${type}] ${message}`);
+        },
+
+        /** Toggle notifications panel */
+        toggleNotifications: () => {
+            const panel = document.getElementById('notifications-panel');
+            if (panel) {
+                const isVisible = panel.style.display !== 'none';
+                panel.style.display = isVisible ? 'none' : 'block';
+
+                if (!isVisible) {
+                    panel.style.opacity = '0';
+                    panel.style.transform = 'translateY(-10px)';
+                    setTimeout(() => {
+                        panel.style.transition = 'all 0.3s ease';
+                        panel.style.opacity = '1';
+                        panel.style.transform = 'translateY(0)';
+                    }, 10);
+                }
+            }
+        },
+
+        /** Filter schedules by type */
+        filterSchedules: (type) => {
+            const baseUrl = '/calibration/schedules/';
+            const params = {
+                pending: '?status=pending',
+                overdue: '?overdue=true',
+                in_progress: '?status=in_progress',
+                completed: '?status=completed',
+            };
+            window.location.href = baseUrl + (params[type] || '');
+        },
+
+        /** Show chart for specific period */
+        showChart: (period) => {
+            state.currentPeriod = period;
+            const canvas = document.getElementById('performanceChart');
+            if (canvas) {
+                ChartRenderer.drawPerformanceChart(canvas, period);
+
+                // Update button states
+                const buttons = document.querySelectorAll('.card-header button');
+                buttons.forEach(btn => {
+                    btn.classList.remove('btn-primary');
+                    btn.classList.add('btn');
+                });
+
+                const clickedButton = Array.from(buttons).find(btn =>
+                    btn.textContent.toLowerCase().includes(period.toLowerCase())
+                );
+                if (clickedButton) {
+                    clickedButton.classList.remove('btn');
+                    clickedButton.classList.add('btn-primary');
+                }
+            }
+        },
+
+        /** Refresh activities */
+        refreshActivities: async () => {
+            console.log('Refreshing recent activities...');
+            const refreshButton = document.querySelector('#recent-sessions .refresh-button');
+            if (refreshButton) {
+                refreshButton.textContent = '⏳';
+                refreshButton.disabled = true;
+            }
+
+            try {
+                const response = await fetch('/calibration/api/recent-activities/?period=week&limit=5');
+                const data = await response.json();
+
+                if (data.success) {
+                    DashboardController._updateActivities(data.activities);
+                    DashboardController._showNotification('Recent sessions refreshed', 'success');
+                } else {
+                    throw new Error(data.message || 'Failed to refresh activities');
+                }
+            } catch (error) {
+                console.error('Error refreshing activities:', error);
+                DashboardController._showNotification('Failed to refresh activities', 'error');
+            } finally {
+                if (refreshButton) {
+                    refreshButton.textContent = '🔄';
+                    refreshButton.disabled = false;
+                }
+            }
+        },
+
+        /** Update activities */
+        _updateActivities: (activities) => {
+            const container = document.getElementById('recent-sessions');
+            if (!container) return;
+
+            container.innerHTML = CardRenderer.scheduleItems(activities);
+        },
+
+        /** Set up event listeners */
+        _setupEventListeners: () => {
+            // Click outside notifications panel
+            document.addEventListener('click', (event) => {
+                const panel = document.getElementById('notifications-panel');
+                const bell = document.querySelector('.notification-bell');
+                if (panel && panel.style.display !== 'none' &&
+                    !panel.contains(event.target) && !bell.contains(event.target)) {
+                    panel.style.display = 'none';
+                }
+            });
+
+            // Keyboard shortcuts
+            document.addEventListener('keydown', (event) => {
+                // ESC to close notifications
+                if (event.key === 'Escape') {
+                    const panel = document.getElementById('notifications-panel');
+                    if (panel && panel.style.display !== 'none') {
+                        panel.style.display = 'none';
+                    }
+                }
+                // Ctrl+Shift+R to refresh
+                if ((event.ctrlKey || event.metaKey) && event.key === 'r' && event.shiftKey) {
+                    event.preventDefault();
+                    DashboardController.refresh();
+                }
+            });
+
+            // Resize handler
+            window.addEventListener('resize', () => {
+                clearTimeout(state.resizeTimeout);
+                state.resizeTimeout = setTimeout(() => {
+                    const canvas = document.getElementById('performanceChart');
+                    if (canvas) {
+                        ChartRenderer.drawPerformanceChart(canvas, state.currentPeriod);
+                    }
+                }, 100);
+            });
+
+            // Theme change handler
+            document.addEventListener('themechange', () => {
+                DashboardController.load();
+            });
+
+            // Quick select buttons
+            document.querySelectorAll('.quick-select-btn').forEach(button => {
+                button.addEventListener('click', function() {
+                    const scheduleId = this.getAttribute('data-schedule-id');
+                    const equipmentId = this.getAttribute('data-equipment-id');
+                    DashboardController._selectEquipment(scheduleId, equipmentId);
+                });
+            });
+        },
+
+        /** Select equipment for calibration */
+        _selectEquipment: (scheduleId, equipmentId) => {
+            const baseUrl = "{% url 'calibration:perform_calibration' %}";
+            const url = `${baseUrl}?schedule=${scheduleId}&equipment=${equipmentId}&quick_select=true`;
+            window.location.href = url;
+        },
+    };
+
+    // -------- EXPOSE PUBLIC API --------
+    window.CalSoftDashboard = {
+        refresh: DashboardController.refresh.bind(DashboardController),
+        showChart: DashboardController.showChart.bind(DashboardController),
+        toggleNotifications: DashboardController.toggleNotifications.bind(DashboardController),
+        filterSchedules: DashboardController.filterSchedules.bind(DashboardController),
+        refreshActivities: DashboardController.refreshActivities.bind(DashboardController),
+        load: DashboardController.load.bind(DashboardController),
+    };
+
+    // -------- INITIALIZE --------
+    document.addEventListener('DOMContentLoaded', DashboardController.init);
+
+})();

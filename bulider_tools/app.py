@@ -15,6 +15,7 @@ from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QIcon
 from PySide6.QtCore import QTimer, QUrl
 
+
 def main():
     """
     ENHANCED: Main entry point with automatic cleanup, dynamic port allocation,
@@ -23,7 +24,7 @@ def main():
     import multiprocessing as _mp
 
     try:
-        _mp.set_start_method('spawn', force=True)
+        _mp.set_start_method("spawn", force=True)
         logger.info("multiprocessing start method set to 'spawn'")
     except RuntimeError:
         pass
@@ -36,14 +37,14 @@ def main():
     if icon_path.exists():
         app.setWindowIcon(QIcon(str(icon_path)))
 
-    logger.info("="*70)
+    logger.info("=" * 70)
     logger.info("🚀 CIRQEN APPLICATION - ENHANCED EDITION")
-    logger.info("="*70)
+    logger.info("=" * 70)
     logger.info(f"Platform: {sys.platform}")
     logger.info(f"Python: {sys.version.split()[0]}")
     logger.info(f"PID: {os.getpid()}")
     logger.info(f"Data Path: {DATA_PATH}")
-    logger.info("="*70)
+    logger.info("=" * 70)
 
     logger.info("STEP 1: Running startup cleanup...")
     perform_startup_cleanup()
@@ -57,7 +58,7 @@ def main():
 
     instance_lock = None
     if not should_skip_instance_lock():
-        LOCK_FILE = DATA_PATH / 'cirqen.lock'
+        LOCK_FILE = DATA_PATH / "cirqen.lock"
         instance_lock = SingleInstanceLock(LOCK_FILE, port_manager)
         lock_success, lock_message = instance_lock.acquire()
         if not lock_success:
@@ -68,9 +69,9 @@ def main():
         logger.info("⚠️  Skipping instance lock (subprocess/migration mode)")
 
     def cleanup_on_exit():
-        logger.info("="*70)
+        logger.info("=" * 70)
         logger.info("CLEANUP ON EXIT")
-        logger.info("="*70)
+        logger.info("=" * 70)
 
         if instance_lock:
             instance_lock.release()
@@ -85,7 +86,7 @@ def main():
         raise SystemExit(0)
 
     signal.signal(signal.SIGINT, signal_handler)
-    if sys.platform != 'win32':
+    if sys.platform != "win32":
         signal.signal(signal.SIGTERM, signal_handler)
 
     try:
@@ -98,8 +99,8 @@ def main():
             startup_manager = StartupStateManager(DATA_PATH, logger)
             last_startup = startup_manager.get_last_startup_info()
             if last_startup:
-                last_time = last_startup.get('last_startup', 'Unknown')
-                last_cleared = last_startup.get('cleared_items', 0)
+                last_time = last_startup.get("last_startup", "Unknown")
+                last_cleared = last_startup.get("cleared_items", 0)
                 logger.info(f"📅 Last startup: {last_time}")
                 logger.info(f"📊 Last session cleared: {last_cleared} items")
 
@@ -117,15 +118,16 @@ def main():
             splash.update_progress("Almost there…", 45)
             app.processEvents()
 
-            logger.info("="*70)
+            logger.info("=" * 70)
             logger.info(f"✅ STARTUP WARMUP COMPLETE")
             logger.info(f"   • Cleared: {cleared_count} stale items")
             logger.info(f"   • Warnings: {len(startup_manager.warnings)}")
-            logger.info("="*70)
+            logger.info("=" * 70)
         except Exception as e:
             logger.warning(f"⚠️  Startup warmup encountered an issue: {e}")
             logger.info("Continuing with normal startup...")
             import traceback
+
             logger.debug(traceback.format_exc())
 
         first_run_setup = FirstRunSetup(port_manager)
@@ -154,7 +156,7 @@ def main():
                     "error",
                     "Setup didn’t complete",
                     "Something went wrong during the initial setup.",
-                    f"Details: {setup_complete[1]}"
+                    f"Details: {setup_complete[1]}",
                 )
                 logger.error("❌ First-run setup failed")
                 cleanup_on_exit()
@@ -165,7 +167,7 @@ def main():
                 "info",
                 "You’re all set!",
                 "Cirqen is ready to use. Your workspace has been created.",
-                setup_complete[1]
+                setup_complete[1],
             )
             logger.info("✅ First-run setup completed")
 
@@ -198,8 +200,12 @@ def main():
                 main_window.web_view.setUrl(QUrl(django_url))
                 main_window.refresh_btn.setEnabled(True)
                 main_window.status_label.setText("🟢 System Online")
-                main_window.update_status_timer.start(30000)
-                QTimer.singleShot(5000, main_window.update_update_status)
+                # Wire AppUpdateService signals now that both window and
+                # service exist.  update_status_timer kept for compat but
+                # not started — signals drive updates instead.
+                if service_manager._update_manager is not None:
+                    main_window.connect_update_service(service_manager._update_manager)
+                    logger.info("✅ AppUpdateService wired to MainWindow signals")
                 main_window.sync_status_timer.start(5000)
                 QTimer.singleShot(2000, main_window.update_sync_online_indicator)
                 logger.info("✅ Application ready and displayed")
@@ -213,7 +219,7 @@ def main():
                 "error",
                 "Couldn’t start Cirqen",
                 "One of the background services failed to start.",
-                f"Details: {error}"
+                f"Details: {error}",
             )
             cleanup_on_exit()
             app.quit()
@@ -228,10 +234,10 @@ def main():
 
         restart_requested = False
         try:
-            if getattr(sys, 'frozen', False):
-                restart_sentinel = Path(sys.executable).parent / '_internal' / '.restart_required'
+            if getattr(sys, "frozen", False):
+                restart_sentinel = Path(sys.executable).parent / "_internal" / ".restart_required"
             else:
-                restart_sentinel = Path(__file__).resolve().parent / '.restart_required'
+                restart_sentinel = Path(__file__).resolve().parent / ".restart_required"
             restart_requested = restart_sentinel.exists()
             if restart_requested:
                 restart_sentinel.unlink(missing_ok=True)
@@ -262,12 +268,13 @@ def main():
     except Exception as e:
         logger.error(f"❌ Fatal error: {e}")
         import traceback
+
         logger.error(traceback.format_exc())
         _themed_dialog(
             "error",
             "Something went wrong",
             "Cirqen encountered an unexpected problem and needs to close.",
-            f"Details: {str(e)}"
+            f"Details: {str(e)}",
         )
         return 1
     finally:

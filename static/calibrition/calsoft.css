@@ -1,7 +1,16 @@
+/* ================================================================
+   CALSOFT — COMPLETE DASHBOARD STYLES (CONSOLIDATED)
+   Theme-aware: relies on CSS variables for light/dark mode support
+   Version: 2.0
+   ================================================================ */
+
+/* ================================================================
+   1. ROOT VARIABLES & RESET
+   ================================================================ */
 :root {
-  --space-xs: .25rem;
-  --space-sm: .5rem;
-  --space-md: .75rem;
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 0.75rem;
   --space-lg: 1rem;
   --space-xl: 1.25rem;
   --space-2xl: 1.5rem;
@@ -19,7 +28,13 @@
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family:
+    "Inter",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
   background: var(--bg-primary);
   color: var(--text-primary);
   line-height: 1.5;
@@ -29,16 +44,19 @@ body {
 }
 
 /* ================================================================
-   MAIN CONTAINER
+   2. LAYOUT CONTAINERS
    ================================================================ */
 .main-content {
-
   margin: 0;
   padding: 4px 8px;
 }
 
+.dash-wrap {
+  padding: 0 0 2rem;
+}
+
 /* ================================================================
-   NAVBAR
+   3. NAVBAR
    ================================================================ */
 .navbar {
   background: var(--sidebar-bg);
@@ -55,7 +73,7 @@ body {
 }
 
 .navbar h1 {
-  font-size: clamp(.9rem, 2.2vw, 1.3rem);
+  font-size: clamp(0.9rem, 2.2vw, 1.3rem);
   font-weight: 600;
   margin: 0;
   color: var(--text-white);
@@ -74,7 +92,7 @@ body {
   border-radius: var(--radius-md);
   color: var(--bg-card);
   font-weight: 600;
-  font-size: .85rem;
+  font-size: 0.85rem;
   cursor: pointer;
   transition: var(--transition);
   display: flex;
@@ -84,13 +102,13 @@ body {
 }
 
 .navbar .btn-danger:hover {
-  filter: brightness(.92);
+  filter: brightness(0.92);
   transform: translateY(-1px);
   box-shadow: var(--shadow-md);
 }
 
 /* ================================================================
-   NAVIGATION TABS
+   4. NAVIGATION TABS
    ================================================================ */
 .navigation-tabs {
   background: var(--bg-card);
@@ -115,7 +133,7 @@ body {
   text-decoration: none;
   border-radius: var(--radius-md);
   font-weight: 500;
-  font-size: .85rem;
+  font-size: 0.85rem;
   transition: var(--transition);
   display: flex;
   align-items: center;
@@ -134,21 +152,21 @@ body {
 }
 
 .nav-tab .badge {
-  padding: .1rem .35rem;
+  padding: 0.1rem 0.35rem;
   border-radius: 4px;
-  font-size: .7rem;
+  font-size: 0.7rem;
   font-weight: 700;
   background: var(--bg-hover);
   color: var(--text-primary);
 }
 
 .nav-tab.active .badge {
-  background: rgba(0,0,0,.0);
+  background: rgba(0, 0, 0, 0);
   color: var(--bg-card);
 }
 
 /* ================================================================
-   PAGE HEADER
+   5. PAGE HEADER
    ================================================================ */
 .header {
   background: var(--bg-card);
@@ -171,12 +189,69 @@ body {
 
 .header-title p {
   color: var(--text-secondary);
-  font-size: .875rem;
+  font-size: 0.875rem;
   margin: 0;
 }
 
 /* ================================================================
-   STATS GRID
+   6. BANNERS & GREETINGS
+   ================================================================ */
+/* Approval Banner */
+.approval-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md, 0.75rem);
+  background: var(--bg-tertiary);
+  border-left: 4px solid var(--warning-color);
+  border-radius: var(--radius-md, 8px);
+  padding: 0.7rem 1rem;
+  margin-bottom: 1.25rem;
+  font-size: 0.9rem;
+}
+
+.approval-banner .ab-icon {
+  font-size: 1.1rem;
+}
+
+.approval-banner .ab-text {
+  flex: 1;
+  color: var(--text-primary);
+}
+
+.approval-banner .btn-approve {
+  background: var(--warning-color);
+  color: var(--text-white);
+  border: none;
+  border-radius: var(--radius-sm, 6px);
+  padding: 0.35rem 0.9rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: filter 0.15s;
+}
+
+.approval-banner .btn-approve:hover {
+  filter: brightness(0.92);
+  color: var(--text-white);
+}
+
+/* Greeting */
+.dash-greeting {
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  margin-bottom: 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.dash-greeting strong {
+  color: var(--text-primary);
+}
+
+/* ================================================================
+   7. STATS GRID (Legacy)
    ================================================================ */
 .stats-grid {
   display: grid;
@@ -200,32 +275,21 @@ body {
   transform: translateY(-2px);
 }
 
+/* Stat card variants */
 .stat-card.pending {
   border-left-color: var(--warning-color);
-  background: var(--bg-card);
 }
 
 .stat-card.pushed {
   border-left-color: #f97316;
-  background: var(--bg-card);
-}
-
-.stat-card.pushed .stat-number {
-  color: #f97316;
-}
-
-.stat-card.pushed .stat-change {
-  color: #f97316;
 }
 
 .stat-card.overdue {
   border-left-color: var(--danger-color);
-  background: var(--bg-card);
 }
 
 .stat-card.completed {
   border-left-color: var(--success-color);
-  background: var(--bg-card);
 }
 
 .stat-header {
@@ -270,6 +334,10 @@ body {
   color: var(--warning-color);
 }
 
+.stat-card.pushed .stat-number {
+  color: #f97316;
+}
+
 .stat-card.overdue .stat-number {
   color: var(--danger-color);
 }
@@ -279,16 +347,16 @@ body {
 }
 
 .stat-label {
-  font-size: .775rem;
+  font-size: 0.775rem;
   font-weight: 600;
   color: var(--text-secondary);
   text-transform: uppercase;
-  letter-spacing: .05em;
+  letter-spacing: 0.05em;
   margin-bottom: 2px;
 }
 
 .stat-change {
-  font-size: .775rem;
+  font-size: 0.775rem;
   color: var(--text-muted);
 }
 
@@ -300,8 +368,110 @@ body {
   color: var(--danger-color);
 }
 
+.stat-card.pushed .stat-change {
+  color: #f97316;
+}
+
 /* ================================================================
-   PERFORMANCE METRICS
+   8. KPI GRID (Dashboard Cards)
+   ================================================================ */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.kpi-card {
+  background: var(--bg-card);
+  border-radius: var(--radius-md, 10px);
+  border: 1px solid var(--border-color);
+  padding: 1.1rem 1.2rem;
+  position: relative;
+  overflow: hidden;
+  --kpi-accent: var(--text-secondary);
+  --kpi-accent-soft: var(--bg-tertiary);
+}
+
+.kpi-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  background: var(--kpi-accent);
+}
+
+/* KPI variant colors - single declaration each */
+.kpi-card.kpi-pending {
+  --kpi-accent: var(--warning-color);
+  --kpi-accent-soft: color-mix(
+    in srgb,
+    var(--warning-color) 18%,
+    var(--bg-card)
+  );
+}
+
+.kpi-card.kpi-pushed {
+  --kpi-accent: #8b5cf6;
+  --kpi-accent-soft: color-mix(in srgb, #8b5cf6 18%, var(--bg-card));
+}
+
+.kpi-card.kpi-overdue {
+  --kpi-accent: var(--danger-color);
+  --kpi-accent-soft: color-mix(
+    in srgb,
+    var(--danger-color) 18%,
+    var(--bg-card)
+  );
+}
+
+.kpi-card.kpi-approved {
+  --kpi-accent: var(--success-color);
+  --kpi-accent-soft: color-mix(
+    in srgb,
+    var(--success-color) 18%,
+    var(--bg-card)
+  );
+}
+
+.kpi-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm, 8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  margin-bottom: 0.6rem;
+  background: var(--kpi-accent-soft);
+}
+
+.kpi-num {
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 0.2rem;
+  color: var(--kpi-accent);
+}
+
+.kpi-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.kpi-sub {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.15rem;
+}
+
+/* ================================================================
+   9. PERFORMANCE METRICS
    ================================================================ */
 .performance-metrics {
   display: grid;
@@ -334,21 +504,21 @@ body {
 }
 
 .metric-label {
-  font-size: .775rem;
+  font-size: 0.775rem;
   font-weight: 600;
   color: var(--text-secondary);
   text-transform: uppercase;
-  letter-spacing: .05em;
+  letter-spacing: 0.05em;
   margin-bottom: 2px;
 }
 
 .metric-details {
-  font-size: .775rem;
+  font-size: 0.775rem;
   color: var(--text-muted);
 }
 
 /* ================================================================
-   CARD COMPONENT
+   10. CARD COMPONENT
    ================================================================ */
 .card {
   background: var(--bg-card);
@@ -378,14 +548,294 @@ body {
 }
 
 .card-subtitle {
-  font-size: .8rem;
+  font-size: 0.8rem;
   color: var(--text-muted);
   display: block;
   margin-top: 1px;
 }
 
 /* ================================================================
-   SCHEDULE ITEMS
+   11. PANEL COMPONENT
+   ================================================================ */
+.panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md, 10px);
+  padding: 1.2rem;
+}
+
+.panel-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* ================================================================
+   12. MID ROW (Donut + Gauges)
+   ================================================================ */
+.mid-row {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+/* Donut chart */
+.donut-wrap {
+  position: relative;
+  max-width: 200px;
+  margin: 0 auto;
+}
+
+.donut-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.donut-center .dc-num {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.donut-center .dc-sub {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.9rem;
+  justify-content: center;
+  margin-top: 0.75rem;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.legend-dot.dot-ok {
+  background: var(--success-color);
+}
+
+.legend-dot.dot-warn {
+  background: var(--warning-color);
+}
+
+/* ================================================================
+   13. GAUGES
+   ================================================================ */
+.gauge-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.gauge-label-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  margin-bottom: 0.35rem;
+}
+
+.gauge-label-row .gl-name {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.gauge-label-row .gl-pct {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.gauge-track {
+  height: 8px;
+  background: var(--bg-tertiary);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.gauge-fill {
+  height: 100%;
+  border-radius: 99px;
+  background: var(--gauge-color, var(--primary-color));
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Gauge fill variants - single declaration each */
+.gauge-fill.gf-week {
+  --gauge-color: #6366f1;
+}
+
+.gauge-fill.gf-month {
+  --gauge-color: var(--success-color);
+}
+
+.gauge-fill.gf-equip {
+  --gauge-color: var(--warning-color);
+}
+
+.gauge-sub {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+}
+
+.gauge-total-row {
+  margin-top: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.gauge-total-row .gl-name {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+
+.gauge-total-row .gl-pct {
+  font-size: 1.3rem;
+}
+
+/* ================================================================
+   14. BOTTOM ROW (Sessions + Quick Actions)
+   ================================================================ */
+.bottom-row {
+  display: grid;
+  grid-template-columns: 1fr 240px;
+  gap: 1rem;
+}
+
+/* Sessions table */
+.sessions-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.sessions-table th {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.sessions-table td {
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--border-light, var(--border-color));
+  color: var(--text-secondary);
+}
+
+.sessions-table tr:last-child td {
+  border-bottom: none;
+}
+
+.pass-pill {
+  display: inline-block;
+  padding: 0.15rem 0.55rem;
+  border-radius: 99px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  background: var(--pill-soft);
+  color: var(--pill-text);
+}
+
+.pass-pill.pass {
+  --pill-soft: color-mix(in srgb, var(--success-color) 18%, var(--bg-card));
+  --pill-text: var(--success-color);
+}
+
+.pass-pill.fail {
+  --pill-soft: color-mix(in srgb, var(--danger-color) 18%, var(--bg-card));
+  --pill-text: var(--danger-color);
+}
+
+.sessions-view-all {
+  font-size: 0.78rem;
+  color: var(--primary-color);
+  text-decoration: none;
+}
+
+.sessions-view-all:hover {
+  color: var(--primary-hover);
+}
+
+/* Quick actions */
+.qa-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.qa-item {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--radius-sm, 8px);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  text-decoration: none;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  transition:
+    background 0.12s,
+    border-color 0.12s;
+}
+
+.qa-item:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-mid);
+  color: var(--text-primary);
+}
+
+.qa-item .qi-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.qa-item .qi-label {
+  flex: 1;
+  font-weight: 500;
+}
+
+.qa-item .qi-badge {
+  background: var(--danger-color);
+  color: var(--text-white);
+  border-radius: 99px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.1rem 0.45rem;
+}
+
+/* ================================================================
+   15. SCHEDULE ITEMS
    ================================================================ */
 #upcoming-schedules,
 #recent-sessions {
@@ -393,7 +843,7 @@ body {
 }
 
 .section-title {
-  font-size: .9rem;
+  font-size: 0.9rem;
   font-weight: 700;
   color: var(--text-primary);
   margin: var(--space-md) 0 var(--space-sm) 0;
@@ -438,6 +888,7 @@ body {
   transform: translateX(2px);
 }
 
+/* Schedule item variants - single declaration each */
 .schedule-item.overdue {
   border-left: 3px solid var(--danger-color);
   background: var(--bg-card);
@@ -470,18 +921,18 @@ body {
 .schedule-equipment {
   font-weight: 600;
   color: var(--text-primary);
-  font-size: .875rem;
+  font-size: 0.875rem;
   margin-bottom: 2px;
 }
 
 .serial-number {
   font-weight: 400;
   color: var(--text-secondary);
-  font-size: .825rem;
+  font-size: 0.825rem;
 }
 
 .schedule-details {
-  font-size: .8rem;
+  font-size: 0.8rem;
   color: var(--text-secondary);
   line-height: 1.5;
 }
@@ -494,14 +945,14 @@ body {
 }
 
 .schedule-date {
-  font-size: .825rem;
+  font-size: 0.825rem;
   color: var(--text-secondary);
   font-weight: 500;
   text-align: right;
 }
 
 .time-ago {
-  font-size: .72rem;
+  font-size: 0.72rem;
   color: var(--text-muted);
 }
 
@@ -517,11 +968,10 @@ body {
   padding: 6px 13px;
   border-radius: var(--radius-md);
   font-weight: 600;
-  font-size: .825rem;
+  font-size: 0.825rem;
   cursor: pointer;
   transition: var(--transition);
   white-space: nowrap;
-  box-shadow: 0 2px 8px rgba(0,0,0,.0);
 }
 
 .quick-select-btn:hover {
@@ -530,7 +980,81 @@ body {
 }
 
 /* ================================================================
-   PROGRESS BAR
+   16. PENDING SESSIONS
+   ================================================================ */
+.pending-sessions-summary {
+  padding: var(--space-md);
+}
+
+.pending-sessions-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.pending-count-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-lg);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-left: 4px solid var(--warning-color);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg) var(--space-xl);
+  margin-bottom: var(--space-md);
+}
+
+.pending-count-block {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-md);
+}
+
+.pending-big-number {
+  font-size: clamp(2.5rem, 5vw, 3.5rem);
+  font-weight: 800;
+  line-height: 1;
+  color: var(--warning-color);
+}
+
+.pending-count-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Urgency badges - single declaration each */
+.pending-urgency {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-lg);
+  border-radius: var(--radius-xl);
+  font-size: 0.825rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.urgency-high {
+  color: var(--danger-color);
+  border: 1px solid rgba(0, 0, 0, 0);
+}
+
+.urgency-medium {
+  color: var(--warning-color);
+  border: 1px solid rgba(0, 0, 0, 0);
+}
+
+.urgency-low {
+  color: var(--success-color);
+  border: 1px solid rgba(0, 0, 0, 0);
+}
+
+/* ================================================================
+   17. PROGRESS BAR
    ================================================================ */
 .progress-bar {
   height: 4px;
@@ -543,12 +1067,12 @@ body {
 .progress-fill {
   height: 100%;
   background: var(--success-color);
-  transition: width .3s ease;
+  transition: width 0.3s ease;
   border-radius: 999px;
 }
 
 /* ================================================================
-   EMPTY STATE
+   18. EMPTY STATE
    ================================================================ */
 .empty-state {
   text-align: center;
@@ -559,7 +1083,7 @@ body {
   font-size: 2.5rem;
   margin-bottom: var(--space-sm);
   color: var(--text-muted);
-  opacity: .4;
+  opacity: 0.4;
 }
 
 .empty-state h4 {
@@ -572,12 +1096,45 @@ body {
 .empty-state p {
   color: var(--text-secondary);
   margin-bottom: var(--space-lg);
-  font-size: .875rem;
+  font-size: 0.875rem;
+}
+
+.empty-sessions {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.empty-sessions span {
+  font-size: 2rem;
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.empty-sessions a {
+  color: var(--primary-color);
+}
+
+.empty-sessions a:hover {
+  color: var(--primary-hover);
 }
 
 /* ================================================================
-   MORE ITEMS INDICATOR
+   19. SESSIONS SUMMARY / MORE ITEMS
    ================================================================ */
+.sessions-summary {
+  padding: var(--space-md);
+  text-align: center;
+  border-top: 1px solid var(--border-color);
+  margin-top: var(--space-sm);
+}
+
+.sessions-summary .text-muted {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
 .more-items-indicator {
   text-align: center;
   padding: var(--space-md);
@@ -590,32 +1147,17 @@ body {
 .more-items-indicator p {
   color: var(--text-secondary);
   margin-bottom: var(--space-sm);
-  font-size: .875rem;
+  font-size: 0.875rem;
 }
 
 /* ================================================================
-   SESSIONS SUMMARY
-   ================================================================ */
-.sessions-summary {
-  padding: var(--space-md);
-  text-align: center;
-  border-top: 1px solid var(--border-color);
-  margin-top: var(--space-sm);
-}
-
-.sessions-summary .text-muted {
-  color: var(--text-muted);
-  font-size: .8rem;
-}
-
-/* ================================================================
-   BUTTONS (scoped)
+   20. BUTTONS
    ================================================================ */
 .btn {
   padding: 7px 14px;
   border-radius: var(--radius-md);
   font-weight: 600;
-  font-size: .875rem;
+  font-size: 0.875rem;
   cursor: pointer;
   transition: var(--transition);
   border: none;
@@ -646,7 +1188,11 @@ body {
 }
 
 .btn-warning {
-  background: linear-gradient(135deg, var(--warning-color), var(--warning-color));
+  background: linear-gradient(
+    135deg,
+    var(--warning-color),
+    var(--warning-color)
+  );
   color: var(--bg-card);
 }
 
@@ -665,8 +1211,78 @@ body {
   color: var(--bg-card);
 }
 
+.btn-sm {
+  padding: 4px 10px;
+  font-size: 0.75rem;
+}
+
+.btn-success {
+  background: var(--success-color);
+  color: var(--bg-card);
+}
+
+.btn-success:hover {
+  filter: brightness(1.08);
+}
+
 /* ================================================================
-   ACCESSIBILITY
+   21. THEME FIXES (Override base.css)
+   ================================================================ */
+/* Reset: strip forced white text from calsoft stat cards */
+.stats-grid .stat-card,
+.stats-grid .stat-card * {
+  color: unset !important;
+}
+
+/* Number colours per card type */
+.stats-grid .stat-card .stat-number {
+  color: var(--text-primary) !important;
+}
+
+.stats-grid .stat-card.pending .stat-number {
+  color: var(--warning-color) !important;
+}
+
+.stats-grid .stat-card.pushed .stat-number {
+  color: #f97316 !important;
+}
+
+.stats-grid .stat-card.overdue .stat-number {
+  color: var(--danger-color) !important;
+}
+
+.stats-grid .stat-card.completed .stat-number {
+  color: var(--success-color) !important;
+}
+
+/* Label & change text */
+.stats-grid .stat-card .stat-label {
+  color: var(--text-secondary) !important;
+}
+
+.stats-grid .stat-card .stat-change {
+  color: var(--text-muted) !important;
+}
+
+.stats-grid .stat-card .stat-change.positive {
+  color: var(--success-color) !important;
+}
+
+.stats-grid .stat-card .stat-change.negative {
+  color: var(--danger-color) !important;
+}
+
+.stats-grid .stat-card.pushed .stat-change {
+  color: #f97316 !important;
+}
+
+/* Status indicator dots stay coloured */
+.stats-grid .stat-card .status-indicator {
+  color: transparent !important;
+}
+
+/* ================================================================
+   22. ACCESSIBILITY
    ================================================================ */
 a:focus-visible,
 button:focus-visible {
@@ -674,17 +1290,19 @@ button:focus-visible {
   outline-offset: 2px;
 }
 
-@media (prefers-reduced-motion:reduce) {
+@media (prefers-reduced-motion: reduce) {
   * {
-    animation-duration: .01ms !important;
-    transition-duration: .01ms !important;
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
   }
 }
 
 /* ================================================================
-   RESPONSIVE
+   23. RESPONSIVE BREAKPOINTS
    ================================================================ */
-@media (min-width:1400px) {
+
+/* Extra large screens (1400px+) */
+@media (min-width: 1400px) {
   .stats-grid {
     grid-template-columns: repeat(4, 1fr);
   }
@@ -692,21 +1310,18 @@ button:focus-visible {
   .performance-metrics {
     grid-template-columns: repeat(4, 1fr);
   }
-
-  .main-content {
-
-  }
 }
 
-@media (max-width:1200px) {
-
+/* Large screens (1200px) */
+@media (max-width: 1200px) {
   .stats-grid,
   .performance-metrics {
     grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   }
 }
 
-@media (max-width:992px) {
+/* Desktop (992px) */
+@media (max-width: 992px) {
   .navbar {
     justify-content: center;
     text-align: center;
@@ -736,7 +1351,20 @@ button:focus-visible {
   }
 }
 
-@media (max-width:768px) {
+/* Tablet (900px) */
+@media (max-width: 900px) {
+  .kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .mid-row,
+  .bottom-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Tablet small (768px) */
+@media (max-width: 768px) {
   .main-content {
     padding: 4px 8px;
   }
@@ -759,9 +1387,10 @@ button:focus-visible {
   }
 }
 
-@media (max-width:480px) {
+/* Mobile (480px) */
+@media (max-width: 480px) {
   .navbar h1 {
-    font-size: .9rem;
+    font-size: 0.9rem;
   }
 
   .header-title h2 {
@@ -777,124 +1406,8 @@ button:focus-visible {
   }
 
   .stats-grid,
-  .performance-metrics {
+  .performance-metrics,
+  .kpi-grid {
     grid-template-columns: 1fr;
   }
 }
-
-/* ================================================================
-   PENDING APPROVAL SESSIONS CARD
-   Uses the same --var tokens as the rest of the file so it
-   automatically respects both light and dark themes.
-   ================================================================ */
-
-.pending-sessions-summary {
-  padding: var(--space-md);
-}
-
-/* ── Count + urgency banner ──────────────────────────────────── */
-.pending-count-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-lg);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  border-left: 4px solid var(--warning-color);
-  border-radius: var(--radius-lg);
-  padding: var(--space-lg) var(--space-xl);
-  margin-bottom: var(--space-md);
-}
-
-.pending-count-block {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-md);
-}
-
-.pending-big-number {
-  font-size: clamp(2.5rem, 5vw, 3.5rem);
-  font-weight: 800;
-  line-height: 1;
-  color: var(--warning-color);
-}
-
-.pending-count-label {
-  font-size: .875rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: .05em;
-}
-
-/* ── Urgency badge ───────────────────────────────────────────── */
-.pending-urgency {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: var(--space-sm) var(--space-lg);
-  border-radius: var(--radius-xl);
-  font-size: .825rem;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-/* high  — more than 10 pending */
-.urgency-high {
-  background: rgba(0,0,0,.0);
-  color: var(--danger-color);
-  border: 1px solid rgba(0,0,0,.0);
-}
-
-/* medium — 6–10 pending */
-.urgency-medium {
-  background: rgba(0,0,0,.0);
-  color: var(--warning-color);
-  border: 1px solid rgba(0,0,0,.0);
-}
-
-/* low — 1–5 pending */
-.urgency-low {
-  background: rgba(0,0,0,.0);
-  color: var(--success-color);
-  border: 1px solid rgba(0,0,0,.0);
-}
-
-/* ── Session list ────────────────────────────────────────────── */
-.pending-sessions-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-}
-
-/* ================================================================
-   STAT CARD — THEME FIX
-   base.css has `.stat-card, .stat-card * { color: var(--bg-card) !important; }`
-   which is meant for the gradient coloured cards defined there.
-   Our calsoft stat cards use --bg-card as their BACKGROUND, so we
-   must undo that blanket override with a higher-specificity rule
-   and restore proper theme-aware colours.
-   ================================================================ */
-
-/* Reset: strip the forced white text from calsoft stat cards */
-.stats-grid .stat-card,
-.stats-grid .stat-card * {
-  color: unset !important;
-}
-
-/* Number colours per card type — both themes */
-.stats-grid .stat-card .stat-number     { color: var(--text-primary)   !important; }
-.stats-grid .stat-card.pending  .stat-number { color: var(--warning-color)  !important; }
-.stats-grid .stat-card.pushed   .stat-number { color: #f97316              !important; }
-.stats-grid .stat-card.overdue  .stat-number { color: var(--danger-color)   !important; }
-.stats-grid .stat-card.completed .stat-number { color: var(--success-color) !important; }
-
-/* Label & change text */
-.stats-grid .stat-card .stat-label  { color: var(--text-secondary) !important; }
-.stats-grid .stat-card .stat-change { color: var(--text-muted)     !important; }
-.stats-grid .stat-card .stat-change.positive { color: var(--success-color) !important; }
-.stats-grid .stat-card .stat-change.negative { color: var(--danger-color)  !important; }
-.stats-grid .stat-card.pushed .stat-change   { color: #f97316              !important; }
-
-/* Status indicator dots stay coloured — already set by class, just protect them */
-.stats-grid .stat-card .status-indicator { color: transparent !important; }

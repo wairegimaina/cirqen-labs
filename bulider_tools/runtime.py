@@ -438,7 +438,7 @@ DATA_PATH.mkdir(parents=True, exist_ok=True)
 from logging.handlers import RotatingFileHandler as _RotFH
 LOG_FILE = DATA_PATH / 'logs' / 'cirqen_app.log'
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.WARNING,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[_RotFH(LOG_FILE, maxBytes=5*1024*1024, backupCount=3)]
 )
@@ -447,23 +447,8 @@ logging.getLogger().handlers = [
     h for h in logging.getLogger().handlers
     if isinstance(h, logging.FileHandler)
 ]
-
-# Quiet down noisy third-party loggers so cirqen_app.log stays readable
-# (root is now INFO, which would otherwise flood with HTTP/SQL chatter)
-for _noisy in (
-    "urllib3", "requests", "asyncio", "PIL",
-    "django.utils.autoreload", "django.db.backends", "watchdog",
-):
-    logging.getLogger(_noisy).setLevel(logging.WARNING)
-
-# NOTE: previously this logger had propagate=False *and* no handler of its
-# own, which meant every logger.info()/.error() call made through this
-# 'Cirqen' logger (used throughout app.py / ui.py) was silently discarded —
-# nothing ever reached cirqen_app.log. Let it propagate to the root logger
-# (which owns the RotatingFileHandler above) so its messages are written.
 logger = logging.getLogger('Cirqen')
-logger.setLevel(logging.INFO)
-logger.propagate = True
+logger.propagate = False
 
 # Initialize port manager
 SESSION_FILE = DATA_PATH / 'session.json'
@@ -1154,404 +1139,61 @@ def run_django_server(port, db_config, redis_port, log_file_path, app_path):
 
 
 # ============================================================================
-# UPDATE MANAGER
-# ============================================================================
-# Background thread that:
-#   1. Reads the HQ server URL and API key from config.json
-#   2. Polls /api/updates/latest/ every CHECK_INTERVAL_SECS
-#   3. When a newer version is available, downloads the .zip
-#   4. Writes update_status.json into DATA_PATH/sync_state/ after every
-#      state change so the MainWindow UI can read it at any time.
+# AppUpdateService — imported from bulider_tools.app_updates
+# The old UpdateManager class has been replaced by AppUpdateService which
+# runs as a proper long-running service with periodic polling, Qt signals,
+# and smart restart-vs-hot-reload logic.
 #
-# The UpdateManager is started from ServiceManager.start_services() as service
-# 8 — after the sync agent — so it never blocks application startup.
+# This shim keeps backward-compat for any code that did:
+#   from bulider_tools.runtime import UpdateManager
 # ============================================================================
 
-import hashlib as _hashlib
-import json as _json
-import queue as _queue
-import shutil as _shutil
-import threading as _threading
-import zipfile as _zipfile
-from datetime import datetime as _datetime, timezone as _tz
-from pathlib import Path as _Path
-
-import requests as _requests
+def UpdateManager(*args, **kwargs):           # noqa: N802  (legacy compat alias)
+    """Backward-compat shim — returns an AppUpdateService instance."""
+    from bulider_tools.app_updates import AppUpdateService
+    return AppUpdateService(*args, **kwargs)
 
 
-# Defaults — overridden by config.json values at runtime.
-_DEFAULT_HQ_URL  = "https://cirqen-hq.onrender.com"
-_DEFAULT_API_KEY = ""            # Must be set in config.json / Render env
+# ============================================================================
+# restart_and_apply_update
+# Called by the UI _show_restart_dialog when the user confirms.
+# Delegates to AppUpdateService.apply_and_restart() if the global instance
+# is available, otherwise falls back to writing the sentinel and quitting.
+# ============================================================================
 
-_STARTUP_DELAY_SECS = 15  # wait for services to settle before checking
-_DOWNLOAD_TIMEOUT_SECS  = 120        # max seconds to wait for the .zip stream
-_REQUEST_TIMEOUT_SECS   = 20         # timeout for the version-check request
-
-
-def _sha256_file(path: _Path) -> str:
-    h = _hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(65536), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-
-class UpdateManager:
+def restart_and_apply_update(version: str):
     """
-    Background thread that polls cirqen-hq.onrender.com for new versions
-    and downloads/stages the update package ready for the Updater to apply.
+    Public helper so any module can trigger an update-apply + restart without
+    importing AppUpdateService directly.
 
-    Usage (called from ServiceManager)::
-
-        mgr = UpdateManager(data_path=DATA_PATH, app_path=APPLICATION_PATH)
-        mgr.start()
-        ...
-        mgr.stop()
-
-    All state is written to DATA_PATH/sync_state/update_status.json so the
-    MainWindow can display it without touching this thread.
+    Precedence:
+      1. Use the live AppUpdateService instance (full apply pipeline).
+      2. Fall back to writing the sentinel and quitting Qt directly.
     """
+    global update_manager_instance
 
-    def __init__(self, data_path: _Path, app_path: _Path):
-        self._data_path  = data_path
-        self._app_path   = app_path
-        self._status_dir = data_path / "sync_state"
-        self._status_dir.mkdir(parents=True, exist_ok=True)
-        self._staging    = data_path / "update_staging"
-        self._staging.mkdir(parents=True, exist_ok=True)
+    if update_manager_instance is not None and hasattr(update_manager_instance, "apply_and_restart"):
+        update_manager_instance.apply_and_restart(version)
+        return
 
-        self._stop_event  = _threading.Event()
-        self._thread: _threading.Thread | None = None
-        self._log = logging.getLogger("UpdateManager")
-
-        # Filled from config on first run
-        self._hq_url  = _DEFAULT_HQ_URL
-        self._api_key = _DEFAULT_API_KEY
-
-    # ── Public API ────────────────────────────────────────────────────────────
-
-    def start(self):
-        """Start the background polling thread."""
-        if self._thread and self._thread.is_alive():
-            return
-        self._stop_event.clear()
-        self._thread = _threading.Thread(
-            target=self._run,
-            name="UpdateManager",
-            daemon=True,
-        )
-        self._thread.start()
-        self._log.info("UpdateManager started")
-
-    def stop(self):
-        """Signal the thread to exit (waits up to 5 s)."""
-        self._stop_event.set()
-        if self._thread:
-            self._thread.join(timeout=5)
-            self._log.info("UpdateManager stopped")
-
-    # ── Internal loop ─────────────────────────────────────────────────────────
-
-    def _run(self):
-        # Wait for all services to settle before hitting the network.
-        self._stop_event.wait(timeout=_STARTUP_DELAY_SECS)
-        if self._stop_event.is_set():
-            return
-
-        # Check once on startup, then the thread exits — no polling loop.
-        # The next check happens on the next application launch.
-        self._reload_config()
-        self._check_and_maybe_download()
-        self._log.info("UpdateManager: startup check complete — thread exiting")
-
-    # ── Config ────────────────────────────────────────────────────────────────
-
-    def _reload_config(self):
-        """Read HQ URL and API key from config.json (hot-reload on every cycle)."""
-        cfg_file = self._data_path / "config.json"
-        if not cfg_file.exists():
-            return
+    # Fallback path — write sentinel, quit Qt
+    logger.warning("restart_and_apply_update: no live service instance, using sentinel fallback")
+    _sentinels = [
+        APPLICATION_PATH / ".restart_required",
+        APPLICATION_PATH / "_internal" / ".restart_required",
+        DATA_PATH / ".restart_required",
+    ]
+    for s in _sentinels:
         try:
-            cfg = _json.loads(cfg_file.read_text())
-
-            # Try root-level first, then 'update' section
-            self._hq_url = (
-                cfg.get("hq_server_url") or
-                cfg.get("server_url") or
-                cfg.get("hq_url") or
-                cfg.get("update", {}).get("server_url") or
-                _DEFAULT_HQ_URL
-            ).rstrip("/")
-
-            # Try root-level first, then 'update' section
-            self._api_key = (
-                cfg.get("hq_api_key") or
-                cfg.get("api_key") or
-                cfg.get("update", {}).get("api_key") or
-                _DEFAULT_API_KEY
-            )
-
-            # Also check if update checking is enabled
-            update_enabled = cfg.get("update", {}).get("enabled", True)
-            if not update_enabled:
-                self._log.info("Update checking disabled in config.json")
-
-        except Exception as exc:
-            self._log.warning("Could not read config.json: %s", exc)
-
-    # ── Check + download cycle ────────────────────────────────────────────────
-
-    def _check_and_maybe_download(self) -> bool:
-        """
-        Returns True if the cycle completed without network errors,
-        False if we should retry sooner.
-        """
-        # Check if update checking is enabled
-        cfg_file = self._data_path / "config.json"
-        if cfg_file.exists():
-            try:
-                cfg = _json.loads(cfg_file.read_text())
-                if not cfg.get("update", {}).get("enabled", True):
-                    self._log.info("Update checking disabled by config")
-                    self._write_status(checking=False, server_available=False,
-                                       error="Update checking disabled")
-                    return True
-            except Exception:
-                pass
-
-        current_version = self._read_current_version()
-        self._write_status(checking=True)
-
-        self._log.info(
-            "Update check starting — current_version=%s hq_url=%s api_key=%s",
-            current_version, self._hq_url,
-            "<set>" if self._api_key else "<missing>",
-        )
-
-        # Skip if no API key
-        if not self._api_key:
-            self._log.warning(
-                "No API key configured for %s — update check skipped. "
-                "Set update.api_key in config.json to enable updates.",
-                self._hq_url,
-            )
-            self._write_status(checking=False, server_available=False,
-                               error="No API key configured")
-            return True
-
-        # ── Step 1: version check ─────────────────────────────────────────
-        url = f"{self._hq_url}/api/updates/latest/"
-        self._log.info("Checking for updates: GET %s?current_version=%s",
-                        url, current_version)
-        resp = None
-        try:
-            resp = _requests.get(
-                url,
-                params={"current_version": current_version},
-                headers=self._headers(),
-                timeout=_REQUEST_TIMEOUT_SECS,
-            )
-            self._log.info("Update check response: HTTP %s", resp.status_code)
-            resp.raise_for_status()
-            data = resp.json()
-        except Exception as exc:
-            if resp is not None:
-                self._log.warning(
-                    "Update check failed: %s (HTTP %s, body=%.300r)",
-                    exc, resp.status_code, resp.text,
-                )
-            else:
-                self._log.warning("Update check failed: %s", exc)
-            self._write_status(
-                checking=False,
-                server_available=False,
-                error=str(exc),
-            )
-            return False
-
-        self._log.info("Update check result: %s", data)
-
-        if not data.get("update_available"):
-            self._log.info(
-                "No update available (current_version=%s, latest_version=%s)",
-                current_version, data.get("latest_version", "?"),
-            )
-            self._write_status(
-                checking=False,
-                server_available=True,
-                update_available=False,
-            )
-            return True
-
-        new_version   = data["version"]
-        download_url  = data["download_url"]
-        checksum      = data.get("checksum", "")
-        changes       = data.get("changes", "")
-        critical      = data.get("critical", False)
-
-        self._write_status(
-            checking=False,
-            server_available=True,
-            update_available=True,
-            new_version=new_version,
-            changes=changes,
-            critical=critical,
-        )
-        self._log.info("Update available: v%s → v%s", current_version, new_version)
-
-        # ── Step 2: check if already staged ──────────────────────────────
-        staged_zip = self._staging / f"cirqen_update_v{new_version}.zip"
-        if staged_zip.exists():
-            if checksum and _sha256_file(staged_zip) == checksum:
-                self._log.info("Package v%s already staged and valid", new_version)
-                self._write_status(
-                    update_available=True,
-                    update_ready=True,
-                    new_version=new_version,
-                    changes=changes,
-                    staged_path=str(staged_zip),
-                )
-                return True
-            else:
-                staged_zip.unlink(missing_ok=True)
-
-        # ── Step 3: download ──────────────────────────────────────────────
-        self._log.info("Downloading v%s from %s", new_version, download_url)
-        self._write_status(
-            update_available=True,
-            downloading=True,
-            new_version=new_version,
-            download_progress=0,
-        )
-
-        tmp_path = self._staging / f"cirqen_update_v{new_version}.tmp"
-        try:
-            with _requests.get(
-                download_url,
-                headers=self._headers(),
-                stream=True,
-                timeout=_DOWNLOAD_TIMEOUT_SECS,
-            ) as r:
-                self._log.info("Download response: HTTP %s", r.status_code)
-                r.raise_for_status()
-                total     = int(r.headers.get("Content-Length", 0))
-                received  = 0
-                with tmp_path.open("wb") as f:
-                    for chunk in r.iter_content(chunk_size=65536):
-                        if self._stop_event.is_set():
-                            return False
-                        if chunk:
-                            f.write(chunk)
-                            received += len(chunk)
-                            if total:
-                                pct = int(received / total * 100)
-                                self._write_status(
-                                    update_available=True,
-                                    downloading=True,
-                                    new_version=new_version,
-                                    download_progress=pct,
-                                )
-            self._log.info(
-                "Download complete: v%s — %d bytes received (expected %d)",
-                new_version, received, total,
-            )
-        except Exception as exc:
-            self._log.error("Download failed: %s", exc)
-            tmp_path.unlink(missing_ok=True)
-            self._write_status(
-                update_available=True,
-                new_version=new_version,
-                error=f"Download failed: {exc}",
-            )
-            return False
-
-        # ── Step 4: verify checksum ───────────────────────────────────────
-        if checksum:
-            actual = _sha256_file(tmp_path)
-            if actual != checksum:
-                tmp_path.unlink(missing_ok=True)
-                self._write_status(
-                    update_available=True,
-                    new_version=new_version,
-                    error="Checksum mismatch — download corrupted, will retry",
-                )
-                self._log.error(
-                    "Checksum mismatch for v%s: expected %s got %s",
-                    new_version, checksum[:12], actual[:12],
-                )
-                return False
-
-        # ── Step 5: quick ZIP sanity check ────────────────────────────────
-        try:
-            with _zipfile.ZipFile(tmp_path, "r") as zf:
-                names = zf.namelist()
-                if "manifest.json" not in names:
-                    raise ValueError("manifest.json missing from package")
-        except Exception as exc:
-            tmp_path.unlink(missing_ok=True)
-            self._write_status(
-                update_available=True,
-                new_version=new_version,
-                error=f"Invalid package: {exc}",
-            )
-            return False
-
-        # ── Step 6: promote to final path ────────────────────────────────
-        tmp_path.rename(staged_zip)
-        self._log.info("v%s staged at %s", new_version, staged_zip)
-
-        self._write_status(
-            update_available=True,
-            update_ready=True,
-            downloading=False,
-            new_version=new_version,
-            changes=changes,
-            staged_path=str(staged_zip),
-        )
-        return True
-
-    # ── Helpers ───────────────────────────────────────────────────────────────
-
-    def _headers(self) -> dict:
-        h = {"User-Agent": "Cirqen-UpdateManager/1.0"}
-        if self._api_key:
-            h["X-Api-Key"] = self._api_key
-        return h
-
-    def _read_current_version(self) -> str:
-        """Read version.txt from the application directory."""
-        for candidate in (
-            self._app_path / "version.txt",
-            self._app_path / "_internal" / "version.txt",
-        ):
-            if candidate.exists():
-                return candidate.read_text().strip()
-        return "0.0.0"
-
-    def _write_status(self, **fields):
-        """
-        Merge *fields* into update_status.json, always stamping last_check.
-        All callers pass only the fields relevant to their state; everything
-        else is preserved from the previous write.
-        """
-        status_file = self._status_dir / "update_status.json"
-        try:
-            existing: dict = _json.loads(status_file.read_text()) if status_file.exists() else {}
+            s.write_text(version)
+            logger.info("Restart sentinel written: %s", s)
+            break
         except Exception:
-            existing = {}
+            continue
 
-        # Reset transient flags unless explicitly set by this call
-        if "checking" not in fields:
-            fields["checking"] = False
-        if "downloading" not in fields:
-            fields["downloading"] = False
-
-        # Only stamp last_check when we actually contacted the server
-        if fields.get("server_available") is not None or fields.get("error"):
-            fields["last_check"] = _datetime.now(_tz.utc).isoformat()
-
-        existing.update(fields)
-        try:
-            status_file.write_text(_json.dumps(existing, indent=2))
-        except Exception as exc:
-            self._log.warning("Could not write update_status.json: %s", exc)
+    try:
+        from PySide6.QtWidgets import QApplication
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(300, QApplication.instance().quit)
+    except Exception as exc:
+        logger.error("Could not quit Qt: %s", exc)

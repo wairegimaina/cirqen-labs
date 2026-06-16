@@ -10,17 +10,19 @@ Cirqen Desktop Complete Build System - Fixed Runtime Embedding
 - Configuration management via config.py
 """
 
-import sys
+import argparse
+import json
+import logging
 import os
 import platform
-import subprocess
 import shutil
+import subprocess
+import sys
+import tarfile
 import urllib.request
 import zipfile
-import tarfile
-import logging
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 # ============================
 # Logging Setup
@@ -1475,6 +1477,45 @@ def collect_static():
     print("✅ Static files collected")
     return True
 
+
+def stamp_version_txt():
+    """
+    Read APP_VERSION from settings.py and write it to version.txt so the
+    AppUpdateService can find the running version without Django being set up.
+    This prevents the 0.0.0 fallback that caused infinite restart loops.
+    """
+    print_banner("Stamping version.txt from settings.APP_VERSION")
+
+    settings_file = find_settings_py()
+    if not settings_file:
+        logger.warning("⚠️  settings.py not found — version.txt will not be written")
+        return True   # non-fatal
+
+    import re
+    match = re.search(r"APP_VERSION\s*=\s*['\"]([^'\"]+)['\"]",
+                      settings_file.read_text(errors='replace'))
+    if not match:
+        logger.warning("⚠️  APP_VERSION not found in settings.py — skipping version.txt")
+        return True
+
+    version = match.group(1).strip()
+
+    # Write to project root AND dist so both source runs and frozen runs find it
+    for target in [
+        PROJECT_ROOT / 'version.txt',
+        DIST_DIR / 'Cirqen' / 'version.txt',
+        DIST_DIR / 'Cirqen' / '_internal' / 'version.txt',
+    ]:
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(version)
+            logger.info(f"  ✓ {target.relative_to(PROJECT_ROOT) if PROJECT_ROOT in target.parents else target}  →  {version}")
+        except Exception as exc:
+            logger.warning(f"  ⚠️  Could not write {target}: {exc}")
+
+    logger.info(f"✅ version.txt stamped: {version}")
+    return True
+
 def generate_spec():
     """
     FIXED: Generate comprehensive PyInstaller spec with templates & static
@@ -1532,6 +1573,25 @@ def generate_spec():
             # Warn if update files are missing
             if 'update' in file:
                 logger.warning(f"  ⚠️  {file} not found - update functionality may not work")
+
+    # ── CRITICAL: bulider_tools package ──────────────────────────────────
+    # app_updates.py is a new file added after initial build — must be
+    # included explicitly or PyInstaller won't find it and the frozen app
+    # will crash with ImportError: cannot import name 'main'.
+    logger.info("\n📦 bulider_tools package:")
+    bulider_tools_path = PROJECT_ROOT / 'bulider_tools'
+    if bulider_tools_path.exists():
+        datas_collected.append((str(bulider_tools_path), 'bulider_tools'))
+        logger.info(f"  ✓ bulider_tools/ (full package including app_updates.py)")
+        # Log individual critical files
+        for bt_file in ['app.py', 'app_updates.py', 'runtime.py', 'services.py', 'ui.py', 'database.py', 'setup_ui.py']:
+            bt_path = bulider_tools_path / bt_file
+            if bt_path.exists():
+                logger.info(f"    ✓ {bt_file}")
+            else:
+                logger.warning(f"    ⚠️  {bt_file} MISSING")
+    else:
+        logger.error("  ❌ bulider_tools/ directory not found — build WILL fail")
 
     # -----------------------------------------------------------------------
     # 2. DJANGO APPS (complete directories with templates & static)
@@ -1855,6 +1915,16 @@ def generate_spec():
     'sync.sync_agent',
     'sync.mirror',
     'sync.soft_delete_handler',
+
+    # ===== BULIDER_TOOLS PACKAGE (CRITICAL) =====
+    'bulider_tools',
+    'bulider_tools.app',
+    'bulider_tools.app_updates',   # NEW: AppUpdateService - must be explicit
+    'bulider_tools.runtime',
+    'bulider_tools.services',
+    'bulider_tools.ui',
+    'bulider_tools.database',
+    'bulider_tools.setup_ui',
 
     # ===== UPDATE SYSTEM =====
     'update_manager',       # Update manager with reconnection support
@@ -3807,7 +3877,6 @@ if __name__ == "__main__":
 
     logger.info(f"✅ Created: {dest_path.name}")
 
-
 def verify_utilities_in_dist():
     """
     Verify that all utility scripts are present in dist
@@ -3818,9 +3887,9 @@ def verify_utilities_in_dist():
     dist_dir = DIST_DIR / "Cirqen"
 
     required_utilities = {
-        'cleanup_cirqen.py': 'Cleanup utility (CRITICAL)',
-        'launch_cirqen.py': 'Launch script',
-        'Start_Cirqen.bat' if IS_WINDOWS else 'start_cirqen.sh': 'Platform launcher',
+        "cleanup_cirqen.py": "Cleanup utility (CRITICAL)",
+        "launch_cirqen.py": "Launch script",
+        "Start_Cirqen.bat" if IS_WINDOWS else "start_cirqen.sh": "Platform launcher",
     }
 
     all_present = True
@@ -3851,7 +3920,6 @@ def verify_utilities_in_dist():
         return False
 
 
-
 def verify_update_files_in_dist():
     """
     Verify that update system files are present in _internal
@@ -3861,8 +3929,8 @@ def verify_update_files_in_dist():
     internal_dir = DIST_DIR / "Cirqen" / "_internal"
 
     update_files = {
-        'update_manager.py': 'Update manager with reconnection support',
-        'update_client.py': 'Update client for server communication'
+        "update_manager.py": "Update manager with reconnection support",
+        "update_client.py": "Update client for server communication",
     }
 
     all_present = True
@@ -3895,17 +3963,6 @@ def verify_update_files_in_dist():
         return True  # Don't fail build, just warn
 
 
-# ==============================================================================
-# STEP 2: UPDATE THE main() FUNCTION
-# ==============================================================================
-
-# Find the main() function and UPDATE the steps list:
-
-
-
-# ============================================================================
-# CODE DIRECTORY CREATION FOR UPDATE SYSTEM
-# ============================================================================
 
 def create_code_directory(internal_dir: Path, django_apps: list) -> bool:
     """
@@ -3924,9 +3981,9 @@ def create_code_directory(internal_dir: Path, django_apps: list) -> bool:
     import hashlib
 
     logger.info("")
-    logger.info("="*70)
+    logger.info("=" * 70)
     logger.info("CREATING CODE DIRECTORY FOR UPDATE SYSTEM")
-    logger.info("="*70)
+    logger.info("=" * 70)
 
     try:
         internal_dir = Path(internal_dir)
@@ -3971,8 +4028,15 @@ def create_code_directory(internal_dir: Path, django_apps: list) -> bool:
         # 2. Django management files
         logger.info("")
         logger.info("Scanning for management files:")
-        management_files = ['manage.py', 'config.py', 'settings.py', 'urls.py',
-                          'wsgi.py', 'asgi.py', 'django_runner.py']
+        management_files = [
+            "manage.py",
+            "config.py",
+            "settings.py",
+            "urls.py",
+            "wsgi.py",
+            "asgi.py",
+            "django_runner.py",
+        ]
 
         for filename in management_files:
             filepath = backend_dir / filename
@@ -3986,7 +4050,7 @@ def create_code_directory(internal_dir: Path, django_apps: list) -> bool:
         # 3. Django directories
         logger.info("")
         logger.info("Scanning for Django directories:")
-        django_dirs = ['core', 'utils', 'shared', 'common', 'api', 'apps', 'sync']
+        django_dirs = ["core", "utils", "shared", "common", "api", "apps", "sync"]
 
         for dirname in django_dirs:
             dirpath = backend_dir / dirname
@@ -3994,9 +4058,11 @@ def create_code_directory(internal_dir: Path, django_apps: list) -> bool:
                 dirpath = internal_dir / dirname
 
             if dirpath.exists() and dirpath.is_dir():
-                if (dirpath / '__init__.py').exists() or \
-                   (dirpath / 'models.py').exists() or \
-                   (dirpath / 'views.py').exists():
+                if (
+                    (dirpath / "__init__.py").exists()
+                    or (dirpath / "models.py").exists()
+                    or (dirpath / "views.py").exists()
+                ):
                     items_to_include.append((dirpath, dirname))
                     logger.info(f"   ✓ {dirname}")
 
@@ -4013,8 +4079,9 @@ def create_code_directory(internal_dir: Path, django_apps: list) -> bool:
                     if dst_path.exists():
                         shutil.rmtree(dst_path)
                     shutil.copytree(
-                        src_path, dst_path,
-                        ignore=shutil.ignore_patterns('__pycache__', '*.pyc', '.git')
+                        src_path,
+                        dst_path,
+                        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".git"),
                     )
                 else:
                     shutil.copy2(src_path, dst_path)
@@ -4056,18 +4123,18 @@ Created: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
             "django_apps": django_apps,
             "total_items": copied_count,
             "update_enabled": True,
-            "update_server_url": "https://hq-server-dgs6.onrender.com/api/updates"
+            "update_server_url": "https://hq-server-dgs6.onrender.com/api/updates",
         }
         (code_dir / ".update_config.json").write_text(json.dumps(config, indent=2))
 
         # 7. Calculate checksums
         checksums = {}
         for file_path in code_dir.rglob("*"):
-            if file_path.is_file() and not file_path.name.startswith('.'):
+            if file_path.is_file() and not file_path.name.startswith("."):
                 try:
                     rel_path = str(file_path.relative_to(code_dir))
                     sha256 = hashlib.sha256()
-                    with open(file_path, 'rb') as f:
+                    with open(file_path, "rb") as f:
                         while chunk := f.read(8192):
                             sha256.update(chunk)
                     checksums[rel_path] = sha256.hexdigest()
@@ -4079,21 +4146,22 @@ Created: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 
         # Summary
         logger.info("")
-        logger.info("="*70)
+        logger.info("=" * 70)
         logger.info("CODE DIRECTORY SUMMARY")
-        logger.info("="*70)
+        logger.info("=" * 70)
         logger.info(f"Location: {code_dir}")
         logger.info(f"Django Apps: {len(django_apps)}")
         logger.info(f"Items Copied: {copied_count}")
         logger.info(f"Files Checksummed: {len(checksums)}")
         logger.info(f"Update Ready: Yes")
-        logger.info("="*70)
+        logger.info("=" * 70)
 
         return True
 
     except Exception as e:
         logger.error(f"❌ Error: {e}")
         import traceback
+
         logger.error(traceback.format_exc())
         return False
 
@@ -4124,11 +4192,52 @@ def create_code_directory_step():
         logger.error(f"Failed: {e}")
         return False
 
-
-
 def main():
     """Main build orchestrator"""
 
+    # ------------------------------------------------------------------ #
+    # CLI argument parsing                                               #
+    # ------------------------------------------------------------------ #
+    parser = argparse.ArgumentParser(
+        description="Cirqen Desktop Build System",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python bulid_V1.py               # Normal build on current machine
+  python bulid_V1.py --docker      # Build inside Ubuntu 20.04 container
+                                       # (produces GLIBC-2.31-compatible binary
+                                       #  that runs on Ubuntu 20/22/24/26.04)
+""",
+    )
+    parser.add_argument(
+        "--docker",
+        action="store_true",
+        help=(
+            "Build inside an Ubuntu 20.04 Docker container so the output "
+            "binary is compatible with any Linux running GLIBC >= 2.31. "
+            "Requires Docker to be installed and running."
+        ),
+    )
+    args = parser.parse_args()
+
+    # ------------------------------------------------------------------ #
+    # Docker path                                                         #
+    # ------------------------------------------------------------------ #
+    if args.docker:
+        print("\n" + "=" * 70)
+        print(" " * 15 + "CIRQEN DESKTOP BUILD SYSTEM")
+        print(" " * 15 + "Docker / GLIBC-Compat Mode")
+        print("=" * 70)
+        print("  Strategy : build inside Ubuntu 20.04  →  GLIBC 2.31 baseline")
+        print("  Runs on  : Ubuntu 20/22/24/26.04, Debian 11/12, Fedora 34+, …")
+        print("=" * 70 + "\n")
+
+        success = build_in_docker()
+        return 0 if success else 1
+
+    # ------------------------------------------------------------------ #
+    # Native path (original behaviour)                                   #
+    # ------------------------------------------------------------------ #
     print("\n" + "=" * 70)
     print(" " * 15 + "CIRQEN DESKTOP BUILD SYSTEM")
     print(" " * 15 + "(Enhanced with Dynamic Ports)")  # ← UPDATE THIS LINE
@@ -4150,19 +4259,20 @@ def main():
         ("Install Dependencies", install_dependencies),
         ("Verify Installation", verify_requirements),
         ("Collect Static Files", collect_static),
+        ("Stamp version.txt", stamp_version_txt),
         ("Generate Spec File", generate_spec),
         ("Build Executable + Copy Runtime", build_executable),
         ("Copy Utility Scripts", copy_utilities_to_dist),
-        ("Create Launchers", create_launchers),     # ← ADD THIS LINE
-        ("Verify Utilities", verify_utilities_in_dist),        # ← ADD THIS LINE
-        ("Verify Update Files", verify_update_files_in_dist),  # ← ADD THIS LINE (NEW!)
+        ("Create Launchers", create_launchers),
+        ("Create Code Directory", create_code_directory_step),
+        ("Verify Utilities", verify_utilities_in_dist),
+        ("Verify Update Files", verify_update_files_in_dist),
         ("Verify Build", verify_build),
         ("Create Documentation", create_readme),
         ("Create Build Info", create_build_info),
         ("Package Distribution", package_distribution),
     ]
 
-    # Rest of main() function stays the same...
     total = len(steps)
 
     for i, (name, func) in enumerate(steps, 1):
@@ -4187,10 +4297,10 @@ def main():
     print(f"\n✅ Included Components:")
     print(f"   • {len(django_apps)} Django apps (auto-detected)")
     print(f"   • Configuration manager (config.py)")
-    print(f"   • Enhanced main.py with UpdateManager")      # ← CHANGED
+    print(f"   • Enhanced main.py with UpdateManager")  # ← CHANGED
     print(f"   • Update system (update_manager.py + update_client.py)")  # ← ADD THIS
-    print(f"   • Cleanup utility (cleanup_cirqen.py)")      # ← ADD THIS
-    print(f"   • Launch scripts")                           # ← ADD THIS
+    print(f"   • Cleanup utility (cleanup_cirqen.py)")  # ← ADD THIS
+    print(f"   • Launch scripts")  # ← ADD THIS
     print(f"   • Embedded PostgreSQL ✅ FIXED")
     print(f"   • Embedded Redis ✅ FIXED")
     print(f"   • All static files and templates")
@@ -4202,7 +4312,7 @@ def main():
     print(f"   4. Review: BUILD_INFO.txt")
     print(f"   5. Package for distribution")
 
-    print(f"\n💡 Enhanced Features:")                        # ← ADD THIS SECTION
+    print(f"\n💡 Enhanced Features:")  # ← ADD THIS SECTION
     print(f"   ✓ Dynamic port allocation")
     print(f"   ✓ Session management")
     print(f"   ✓ Robust cleanup utility")
@@ -4214,5 +4324,5 @@ def main():
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

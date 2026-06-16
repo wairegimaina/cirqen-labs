@@ -2,19 +2,17 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QRectF, Qt, QTimer, QUrl
-from PySide6.QtGui import QBrush, QColor, QFont, QIcon, QPainter, QLinearGradient, QPen, QPixmap, QTextCursor
+from PySide6.QtGui import QBrush, QColor, QFont, QIcon, QPainter, QLinearGradient, QPen, QPixmap
 from PySide6.QtWebEngineCore import QWebEngineDownloadRequest
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import (
     QApplication,
-    QComboBox,
     QDialog,
     QHBoxLayout,
     QLabel,
     QMainWindow,
     QMessageBox,
     QFileDialog,
-    QPlainTextEdit,
     QProgressBar,
     QPushButton,
     QSplashScreen,
@@ -47,212 +45,6 @@ class UpdateProgressDialog(QDialog):
         percent = int((current / total) * 100)
         self.progress.setValue(percent)
         self.status.setText(f"Downloaded {current}/{total} files")
-
-
-# ============================
-# Log Viewer
-# ============================
-class LogViewerDialog(QDialog):
-    """
-    Lightweight log viewer — tails the rotating log files written by the
-    desktop app (cirqen_app.log), the bundled Django server (django.log),
-    PostgreSQL (postgres.log), and the subprocess bootstrap
-    (cirqen_subprocess.log).
-
-    This is the main way to see what the UpdateManager (and everything
-    else) is actually doing — e.g. why an update check failed.
-    """
-
-    # How many bytes from the end of the file to read on each refresh.
-    _TAIL_BYTES = 200_000
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Application Logs")
-        self.resize(900, 600)
-        self.setStyleSheet("""
-            QDialog { background-color: #0f0f0f; }
-            QLabel { color: #cfcfcf; font-size: 11px; }
-            QComboBox {
-                background-color: #1a1a1a;
-                color: #e8e8e8;
-                border: 1px solid rgba(255,255,255,0.12);
-                border-radius: 4px;
-                padding: 4px 8px;
-                font-size: 11px;
-            }
-            QPushButton {
-                background-color: rgba(34,197,94,0.15);
-                color: #22c55e;
-                border: 1px solid rgba(34,197,94,0.30);
-                border-radius: 4px;
-                font-size: 11px;
-                font-weight: 600;
-                padding: 4px 12px;
-            }
-            QPushButton:hover { background-color: rgba(34,197,94,0.28); }
-            QPushButton:checked {
-                background-color: rgba(34,197,94,0.35);
-                border-color: #22c55e;
-            }
-        """)
-
-        self._log_dir = DATA_PATH / "logs"
-        self._log_dir.mkdir(parents=True, exist_ok=True)
-        self._current_path: Path | None = None
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(8)
-
-        # ── Top bar: file selector + actions ──────────────────────────
-        top_bar = QHBoxLayout()
-        top_bar.setSpacing(8)
-
-        top_bar.addWidget(QLabel("Log file:"))
-
-        self.file_combo = QComboBox()
-        self.file_combo.setMinimumWidth(220)
-        self.file_combo.currentIndexChanged.connect(self._on_file_changed)
-        top_bar.addWidget(self.file_combo)
-
-        top_bar.addStretch()
-
-        self.path_label = QLabel("")
-        self.path_label.setStyleSheet("color: #707070; font-size: 10px;")
-        top_bar.addWidget(self.path_label)
-
-        top_bar.addStretch()
-
-        self.auto_refresh_btn = QPushButton("⏵ Auto-refresh")
-        self.auto_refresh_btn.setCheckable(True)
-        self.auto_refresh_btn.setChecked(True)
-        self.auto_refresh_btn.toggled.connect(self._on_auto_refresh_toggled)
-        top_bar.addWidget(self.auto_refresh_btn)
-
-        refresh_btn = QPushButton("↻ Refresh now")
-        refresh_btn.clicked.connect(self._refresh)
-        top_bar.addWidget(refresh_btn)
-
-        close_btn = QPushButton("Close")
-        close_btn.clicked.connect(self.close)
-        top_bar.addWidget(close_btn)
-
-        layout.addLayout(top_bar)
-
-        # ── Log text area ───────────────────────────────────────────────
-        self.text_view = QPlainTextEdit()
-        self.text_view.setReadOnly(True)
-        self.text_view.setLineWrapMode(QPlainTextEdit.NoWrap)
-        self.text_view.setStyleSheet("""
-            QPlainTextEdit {
-                background-color: #0a0a0a;
-                color: #d4d4d4;
-                border: 1px solid rgba(255,255,255,0.08);
-                border-radius: 4px;
-                font-family: 'DejaVu Sans Mono', 'Consolas', monospace;
-                font-size: 11px;
-                padding: 6px;
-            }
-        """)
-        layout.addWidget(self.text_view)
-
-        # ── Footer ─────────────────────────────────────────────────────
-        self.status_label = QLabel("")
-        self.status_label.setStyleSheet("color: #707070; font-size: 10px;")
-        layout.addWidget(self.status_label)
-
-        # Auto-refresh timer
-        self._timer = QTimer(self)
-        self._timer.setInterval(2000)
-        self._timer.timeout.connect(self._refresh)
-
-        self._populate_file_list()
-        self._refresh()
-        self._timer.start()
-
-    # ── File list ─────────────────────────────────────────────────────────
-    def _populate_file_list(self):
-        """Find known log files, newest/most-relevant first."""
-        preferred_order = [
-            "cirqen_app.log",
-            "django.log",
-            "cirqen_subprocess.log",
-            "postgres.log",
-        ]
-        found = {p.name: p for p in self._log_dir.glob("*.log")}
-
-        self.file_combo.blockSignals(True)
-        self.file_combo.clear()
-        ordered_names = [n for n in preferred_order if n in found]
-        ordered_names += sorted(n for n in found if n not in preferred_order)
-
-        if not ordered_names:
-            self.file_combo.addItem("(no log files found)")
-            self.file_combo.setEnabled(False)
-        else:
-            for name in ordered_names:
-                self.file_combo.addItem(name, str(found[name]))
-            self.file_combo.setEnabled(True)
-        self.file_combo.blockSignals(False)
-
-        if ordered_names:
-            self._current_path = found[ordered_names[0]]
-            self.path_label.setText(str(self._current_path))
-
-    def _on_file_changed(self, index: int):
-        path_str = self.file_combo.itemData(index)
-        if path_str:
-            self._current_path = Path(path_str)
-            self.path_label.setText(path_str)
-            self.text_view.clear()
-            self._refresh()
-
-    def _on_auto_refresh_toggled(self, checked: bool):
-        if checked:
-            self.auto_refresh_btn.setText("⏵ Auto-refresh")
-            self._timer.start()
-            self._refresh()
-        else:
-            self.auto_refresh_btn.setText("⏸ Paused")
-            self._timer.stop()
-
-    # ── Refresh ───────────────────────────────────────────────────────────
-    def _refresh(self):
-        if not self._current_path or not self._current_path.exists():
-            self.status_label.setText("Log file not found yet — it is created on first write.")
-            return
-
-        try:
-            size = self._current_path.stat().st_size
-            with self._current_path.open("rb") as f:
-                if size > self._TAIL_BYTES:
-                    f.seek(size - self._TAIL_BYTES)
-                    f.readline()  # skip partial first line
-                content = f.read().decode("utf-8", errors="replace")
-        except Exception as exc:
-            self.status_label.setText(f"Could not read log file: {exc}")
-            return
-
-        # Preserve scroll position if the user has scrolled up to read
-        # something; otherwise keep following the tail.
-        sb = self.text_view.verticalScrollBar()
-        at_bottom = sb.value() >= sb.maximum() - 4
-
-        if content != self.text_view.toPlainText():
-            self.text_view.setPlainText(content)
-            if at_bottom:
-                self.text_view.moveCursor(QTextCursor.End)
-                sb.setValue(sb.maximum())
-
-        from datetime import datetime as _dt
-        size_kb = size / 1024
-        self.status_label.setText(
-            f"{self._current_path.name} — {size_kb:.1f} KB"
-            f"  •  last refreshed {_dt.now().strftime('%H:%M:%S')}"
-        )
-
-
 # ============================
 # Splash Screen
 # ============================
@@ -534,12 +326,37 @@ class MainWindow(QMainWindow):
                 padding: 4px 8px;
             }
         """)
-        self.update_status_label.setToolTip("Update system status — click to view logs")
-        self.update_status_label.setCursor(Qt.PointingHandCursor)
-        self.update_status_label.mousePressEvent = lambda _e: self._show_log_viewer()
+        self.update_status_label.setToolTip("Update system status")
         bottom_layout.addWidget(self.update_status_label)
 
-        # ── "Restart & Update" button (hidden until update is ready) ─────
+        # ── "Check Now" button ───────────────────────────────────────────
+        self.check_update_btn = QPushButton("⟳ Check")
+        self.check_update_btn.setFixedHeight(24)
+        self.check_update_btn.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(96, 165, 250, 0.12);
+                color: #60a5fa;
+                border: 1px solid rgba(96, 165, 250, 0.30);
+                border-radius: 4px;
+                font-size: 10px;
+                padding: 0px 8px;
+            }
+            QPushButton:hover {
+                background-color: rgba(96, 165, 250, 0.22);
+                border-color: #60a5fa;
+            }
+            QPushButton:pressed { background-color: rgba(96, 165, 250, 0.35); }
+            QPushButton:disabled {
+                color: #404040;
+                border-color: rgba(255,255,255,0.06);
+                background: rgba(255,255,255,0.03);
+            }
+        """)
+        self.check_update_btn.setToolTip("Check for updates now")
+        self.check_update_btn.clicked.connect(self._on_check_now_clicked)
+        bottom_layout.addWidget(self.check_update_btn)
+
+        # ── "Restart & Update" button (backend / mixed updates) ──────────
         self.restart_update_btn = QPushButton("↺ Restart & Update")
         self.restart_update_btn.setFixedHeight(24)
         self.restart_update_btn.setStyleSheet("""
@@ -562,13 +379,43 @@ class MainWindow(QMainWindow):
         self.restart_update_btn.setToolTip("Restart now to apply the downloaded update")
         self.restart_update_btn.clicked.connect(
             lambda: self._show_restart_dialog(
-                getattr(self, "_pending_update_version", "")
+                getattr(self, "_pending_update_version", ""),
+                getattr(self, "_pending_change_type", "backend"),
             )
         )
         bottom_layout.addWidget(self.restart_update_btn)
 
-        # initialise transient state
-        self._pending_update_version = ""
+        # ── "Apply Update" button (frontend-only updates) ────────────────
+        self.apply_frontend_btn = QPushButton("✨ Apply Update")
+        self.apply_frontend_btn.setFixedHeight(24)
+        self.apply_frontend_btn.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(139, 92, 246, 0.18);
+                color: #a78bfa;
+                border: 1px solid rgba(139, 92, 246, 0.40);
+                border-radius: 4px;
+                font-size: 10px;
+                font-weight: 600;
+                padding: 0px 10px;
+            }
+            QPushButton:hover {
+                background-color: rgba(139, 92, 246, 0.30);
+                border-color: #a78bfa;
+            }
+            QPushButton:pressed { background-color: rgba(139, 92, 246, 0.45); }
+        """)
+        self.apply_frontend_btn.setVisible(False)
+        self.apply_frontend_btn.setToolTip("Apply UI update instantly — no restart needed")
+        self.apply_frontend_btn.clicked.connect(
+            lambda: self._apply_frontend_update(
+                getattr(self, "_pending_update_version", ""),
+            )
+        )
+        bottom_layout.addWidget(self.apply_frontend_btn)
+
+        # ── transient state ──────────────────────────────────────────────
+        self._pending_update_version  = ""
+        self._pending_change_type     = "backend"
         self._restart_dialog_shown_for = None
 
         # Separator
@@ -607,27 +454,6 @@ class MainWindow(QMainWindow):
         bottom_layout.addWidget(self.refresh_btn)
 
         # Logs Button
-        self.logs_btn = QPushButton("📄 Logs")
-        self.logs_btn.setFixedHeight(24)
-        self.logs_btn.setStyleSheet("""
-            QPushButton {
-                background-color: rgba(96, 165, 250, 0.15);
-                color: #60a5fa;
-                border: 1px solid rgba(96, 165, 250, 0.30);
-                border-radius: 4px;
-                font-size: 10px;
-                font-weight: 600;
-                padding: 0px 10px;
-            }
-            QPushButton:hover {
-                background-color: rgba(96, 165, 250, 0.28);
-                border-color: #60a5fa;
-            }
-            QPushButton:pressed { background-color: rgba(96, 165, 250, 0.40); }
-        """)
-        self.logs_btn.setToolTip("View application logs (incl. update checks)")
-        self.logs_btn.clicked.connect(self._show_log_viewer)
-        bottom_layout.addWidget(self.logs_btn)
 
 
         main_layout.addWidget(bottom_bar)
@@ -637,15 +463,19 @@ class MainWindow(QMainWindow):
         # ============================================================
         # TIMERS
         # ============================================================
-        # Update status timer - check update manager status every 30 seconds
-        self.update_status_timer = QTimer()
-        self.update_status_timer.timeout.connect(self.update_update_status)
-        self.update_status_timer.start(30000)  # 30 seconds
+        # No update-status polling timer needed — we use Qt signals directly
+        # from AppUpdateService.  We keep a dummy attribute so old code that
+        # calls self.update_status_timer.stop() doesn't crash.
+        self.update_status_timer = QTimer()   # unused but kept for compat
 
-        # Sync online indicator timer - poll agent_status.json every 30 seconds
+        # Sync online indicator timer
         self.sync_status_timer = QTimer()
         self.sync_status_timer.timeout.connect(self.update_sync_online_indicator)
         self.sync_status_timer.start(30000)  # 30 seconds
+
+        # Wire AppUpdateService signals (connected later by app.py after start)
+        # Stored so app.py can call:  main_window.connect_update_service(svc)
+        self._update_service = None
 
         self.is_loading = False
 
@@ -664,168 +494,225 @@ class MainWindow(QMainWindow):
         """)
         return sep
 
-    def _show_log_viewer(self):
-        """
-        Open (or raise) the LogViewerDialog. Reuses a single instance so
-        repeated clicks don't stack up multiple windows.
-        """
-        dlg = getattr(self, "_log_viewer_dialog", None)
-        if dlg is None or not dlg.isVisible():
-            dlg = LogViewerDialog(self)
-            self._log_viewer_dialog = dlg
-        dlg.show()
-        dlg.raise_()
-        dlg.activateWindow()
+    # ------------------------------------------------------------------
+    # AppUpdateService integration
+    # ------------------------------------------------------------------
 
-    def update_update_status(self):
+    def connect_update_service(self, svc):
         """
-        Update the update status display in bottom bar.
-        Reads from update_status.json written by the UpdateManager thread —
-        same file-based pattern used by the sync agent indicator.
+        Wire AppUpdateService signals into the UI.
+        Called by app.py after both the service and the main window exist.
         """
-        import json as _json
+        self._update_service = svc
+        svc.update_available.connect(self._on_update_available)
+        svc.update_ready.connect(self._on_update_ready)
+        svc.frontend_applied.connect(self._on_frontend_applied)
+        svc.status_changed.connect(self._on_status_changed)
+        svc.error_occurred.connect(self._on_update_error)
+        logger.info("MainWindow: connected to AppUpdateService signals")
 
-        def _set(text, color, tip=""):
-            self.update_status_label.setText(text)
-            self.update_status_label.setStyleSheet(f"""
-                QLabel {{
-                    color: {color};
-                    font-size: 10px;
-                    padding: 4px 8px;
-                }}
-            """)
-            if tip:
-                self.update_status_label.setToolTip(tip)
+    def _on_check_now_clicked(self):
+        """'Check Now' button — disable briefly then delegate to service."""
+        self.check_update_btn.setEnabled(False)
+        self.check_update_btn.setText("⟳ Checking…")
+        if self._update_service:
+            self._update_service.check_now()
+        # Re-enable after 15 s (the service will emit status_changed faster)
+        QTimer.singleShot(15000, self._reset_check_button)
 
-        def _fmt_time(iso_str):
-            if not iso_str:
-                return ''
+    def _reset_check_button(self):
+        self.check_update_btn.setEnabled(True)
+        self.check_update_btn.setText("⟳ Check")
+
+    def _on_update_available(self, version: str, changes: str, critical: bool):
+        """Service found a new version — update the label, hide action buttons."""
+        self._pending_update_version = version
+        label = f"📦 v{version} available"
+        color = "#f59e0b"
+        tip   = f"Update v{version} available — downloading in background…"
+        if critical:
+            label = f"🚨 v{version} (critical)"
+            color = "#ef4444"
+            tip   = f"CRITICAL update v{version} — will be applied on next restart."
+        self._set_update_label(label, color, tip)
+        self.restart_update_btn.setVisible(False)
+        self.apply_frontend_btn.setVisible(False)
+        self._reset_check_button()
+
+    def _on_update_ready(self, version: str, staged_path: str, change_type: str):
+        """
+        Package downloaded and verified.
+        change_type: 'frontend' → show Apply button (no restart)
+                     'backend' / 'mixed' / 'migration' → show Restart button
+        """
+        self._pending_update_version = version
+        self._pending_change_type    = change_type
+        self._reset_check_button()
+
+        if change_type == "frontend":
+            self._set_update_label(
+                f"✨ v{version} ready (UI)",
+                "#a78bfa",
+                f"UI update v{version} ready — click Apply to refresh instantly, no restart needed.",
+            )
+            self.apply_frontend_btn.setVisible(True)
+            self.restart_update_btn.setVisible(False)
+            # Auto-apply frontend-only updates silently
+            self._apply_frontend_update(version)
+
+        elif change_type == "migration":
+            self._set_update_label(
+                f"🗄 v{version} ready (DB)",
+                "#34d399",
+                f"Database migration v{version} ready.",
+            )
+            self.apply_frontend_btn.setVisible(True)
+            self.restart_update_btn.setVisible(False)
+
+        else:
+            # backend or mixed
+            self._set_update_label(
+                f"✅ v{version} ready",
+                "#22c55e",
+                f"Update v{version} downloaded. Click Restart to apply.",
+            )
+            self.restart_update_btn.setVisible(True)
+            self.apply_frontend_btn.setVisible(False)
+            # Auto-show restart dialog once per version
+            if self._restart_dialog_shown_for != version:
+                self._restart_dialog_shown_for = version
+                self._show_restart_dialog(version, change_type)
+
+    def _on_frontend_applied(self, version: str):
+        """Frontend or migration update applied without restart — reload the web view."""
+        logger.info("Frontend update v%s applied — reloading web view", version)
+        self._set_update_label(f"✅ v{version} applied", "#22c55e",
+                               f"v{version} applied. Page reloaded.")
+        self.apply_frontend_btn.setVisible(False)
+        self.restart_update_btn.setVisible(False)
+        QTimer.singleShot(500, self.refresh_page)
+
+    def _on_status_changed(self, status: dict):
+        """Catch-all status update from the service."""
+        checking  = status.get("checking", False)
+        downloading = status.get("downloading", False)
+        progress  = status.get("download_progress", 0)
+        version   = status.get("new_version") or ""
+        error     = status.get("error") or ""
+        server_ok = status.get("server_available")
+        last_check = status.get("last_check", "")
+
+        def _fmt(iso):
+            if not iso:
+                return ""
             try:
                 from datetime import datetime as _dt
-                return _dt.fromisoformat(iso_str).strftime('%H:%M')
+                return _dt.fromisoformat(iso).strftime("%H:%M")
             except Exception:
-                return ''
+                return ""
 
-        try:
-            status_file = DATA_PATH / 'sync_state' / 'update_status.json'
+        lc = _fmt(last_check)
+        lc_text = f"@ {lc}" if lc else ""
 
-            if not status_file.exists():
-                _set("⚙️ Starting...", "#606060", "Update manager initialising…")
-                return
+        if error and not downloading and not checking:
+            self._set_update_label(
+                "⚠️ Update failed", "#f97316",
+                f"Update check failed: {error}"
+            )
+        elif downloading:
+            prog = f" {progress}%" if progress else ""
+            self._set_update_label(
+                f"⬇️ Downloading{prog}", "#3b82f6",
+                f"Downloading v{version}…  Do not close the app."
+            )
+        elif checking:
+            self._set_update_label("⚙️ Checking…", "#60a5fa", "Checking for updates…")
+        elif server_ok is False and not status.get("update_available"):
+            self._set_update_label(
+                f"⚠️ Server offline {lc_text}".strip(), "#f59e0b",
+                "Update server unreachable. Will retry automatically."
+            )
+        elif server_ok and not status.get("update_available"):
+            self._set_update_label(
+                f"✅ Up to date {lc_text}".strip(), "#22c55e",
+                f"Running latest version. Last checked: {lc or 'recently'}"
+            )
+        # update_available / update_ready cases are handled by dedicated slots
 
-            status = _json.loads(status_file.read_text())
+    def _on_update_error(self, message: str):
+        self._set_update_label("⚠️ Update failed", "#f97316", message)
+        self._reset_check_button()
 
-            server_available  = status.get('server_available', False)
-            checking          = status.get('checking', False)
-            downloading       = status.get('downloading', False)
-            update_available  = status.get('update_available', False)
-            update_ready      = status.get('update_ready', False)
-            new_version       = status.get('new_version') or ''
-            last_check        = _fmt_time(status.get('last_check', ''))
-            progress          = status.get('download_progress', 0)
-            error             = status.get('error') or ''
-            last_check_text   = f"@ {last_check}" if last_check else ''
+    def _set_update_label(self, text: str, color: str, tip: str = ""):
+        self.update_status_label.setText(text)
+        self.update_status_label.setStyleSheet(f"""
+            QLabel {{
+                color: {color};
+                font-size: 10px;
+                padding: 4px 8px;
+            }}
+        """)
+        if tip:
+            self.update_status_label.setToolTip(tip)
 
-            if error:
-                _set(
-                    f"⚠️ Update failed",
-                    "#f97316",
-                    f"Update check failed: {error}\nLast checked: {last_check or 'recently'}"
-                )
-                self.restart_update_btn.setVisible(False)
-            elif update_ready:
-                _set(
-                    f"✅ v{new_version} ready",
-                    "#22c55e",
-                    f"Update v{new_version} downloaded.\nClick Restart to apply."
-                )
-                self._pending_update_version = new_version
-                self.restart_update_btn.setVisible(True)
-                # Show the dialog once per version
-                if not getattr(self, '_restart_dialog_shown_for', None) == new_version:
-                    self._restart_dialog_shown_for = new_version
-                    self._show_restart_dialog(new_version)
-            elif downloading:
-                prog_text = f" {progress}%" if progress else ""
-                _set(
-                    f"⬇️ Downloading update{prog_text}",
-                    "#3b82f6",
-                    f"Downloading v{new_version} from update server…\nDo not close the application."
-                )
-                self.restart_update_btn.setVisible(False)
-            elif update_available and new_version:
-                _set(
-                    f"📦 v{new_version} available",
-                    "#f59e0b",
-                    f"Update v{new_version} is available.\nWill be downloaded automatically."
-                )
-                self.restart_update_btn.setVisible(False)
-            elif checking:
-                _set(
-                    "⚙️ Checking updates…",
-                    "#60a5fa",
-                    "Checking for updates…"
-                )
-                self.restart_update_btn.setVisible(False)
-            elif not server_available:
-                _set(
-                    f"⚠️ Server offline {last_check_text}".strip(),
-                    "#f59e0b",
-                    "Update server not reachable.\nWill retry automatically when connection is restored."
-                )
-                self.restart_update_btn.setVisible(False)
-            else:
-                _set(
-                    f"✅ Up to date {last_check_text}".strip(),
-                    "#22c55e",
-                    f"Running latest version.\nLast checked: {last_check or 'recently'}"
-                )
-                self.restart_update_btn.setVisible(False)
+    # kept for backward-compat (called from app.py QTimer.singleShot)
+    def update_update_status(self):
+        pass
 
-        except Exception as e:
-            logger.debug(f"Error reading update status: {e}")
-            _set("⚙️ Checking…", "#606060", "Checking for updates…")
+    def _apply_frontend_update(self, version: str):
+        """Kick off frontend apply in the service (no UI block needed)."""
+        if self._update_service and version:
+            self.apply_frontend_btn.setEnabled(False)
+            self.apply_frontend_btn.setText("✨ Applying…")
+            self._update_service.apply_and_restart(version)
+            QTimer.singleShot(10000, lambda: (
+                self.apply_frontend_btn.setEnabled(True),
+                self.apply_frontend_btn.setText("✨ Apply Update"),
+            ))
 
-    def _show_restart_dialog(self, new_version: str):
+    def _show_restart_dialog(self, new_version: str, change_type: str = "backend"):
         """
-        Show a modal dialog asking the user to confirm the restart.
-        On confirm: kick off the Updater with the staged zip, write the
-        restart sentinel, and quit so the launcher can relaunch the app.
+        Confirm-and-apply dialog.
+        For 'frontend'/'migration' change_type this calls apply_and_restart
+        which will hot-reload rather than quit — but the user asked to apply,
+        so we honour it.
         """
         import json as _j
-        import queue as _q
-        import threading as _thr
 
         if not new_version:
             return
 
+        is_frontend = change_type in ("frontend", "migration")
+
         dlg = QMessageBox(self)
         dlg.setWindowTitle("Update Ready")
         dlg.setIcon(QMessageBox.Information)
-        dlg.setText(
-            f"<b>Cirqen v{new_version} is ready to install.</b>"
-        )
-        dlg.setInformativeText(
-            "A restart is required to apply the update.\n\n"
-            "Save any work before continuing."
-        )
+        dlg.setText(f"<b>Cirqen v{new_version} is ready to install.</b>")
+
+        if is_frontend:
+            dlg.setInformativeText(
+                "This is a UI / database update and can be applied instantly "
+                "without restarting the application.\n\nApply now?"
+            )
+        else:
+            dlg.setInformativeText(
+                "A restart is required to apply this update.\n\n"
+                "Save any work before continuing."
+            )
+
         dlg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
         dlg.setDefaultButton(QMessageBox.Yes)
-        dlg.button(QMessageBox.Yes).setText("Restart Now")
+        dlg.button(QMessageBox.Yes).setText("Apply Now" if is_frontend else "Restart Now")
         dlg.button(QMessageBox.No).setText("Later")
 
         if dlg.exec() != QMessageBox.Yes:
             return
 
-        # ── Locate the staged zip ─────────────────────────────────────────
+        # Locate staged zip
         staged_zip = DATA_PATH / "update_staging" / f"cirqen_update_v{new_version}.zip"
-
-        # Fall back: check update_status.json for staged_path field
         if not staged_zip.exists():
             try:
-                sd = _j.loads(
-                    (DATA_PATH / "sync_state" / "update_status.json").read_text()
-                )
+                sd  = _j.loads((DATA_PATH / "sync_state" / "update_status.json").read_text())
                 alt = sd.get("staged_path", "")
                 if alt and _Path(alt).exists():
                     staged_zip = _Path(alt)
@@ -840,69 +727,16 @@ class MainWindow(QMainWindow):
             )
             return
 
-        # ── Apply via Updater ─────────────────────────────────────────────
-        try:
-            # Import Django's Updater (lives in updates/updater.py or
-            # hq_server/updater.py — whichever is on the path)
-            try:
-                from updates.updater import Updater
-            except ImportError:
-                from hq_server.updater import Updater   # dev layout
+        # Delegate to service (handles frontend vs backend internally)
+        if self._update_service:
+            self.restart_update_btn.setEnabled(False)
+            self.restart_update_btn.setText("↺ Applying…")
+            self._update_service.apply_and_restart(new_version)
+            return
 
-            progress_q = _q.Queue()
-            updater = Updater(
-                package_url=str(staged_zip),
-                version=new_version,
-                progress_queue=progress_q,
-                is_local_file=True,
-            )
-
-            # Run in background; the sentinel triggers app restart on exit
-            _thr.Thread(
-                target=updater.run,
-                name="UpdaterApply",
-                daemon=True,
-            ).start()
-
-            QMessageBox.information(
-                self, "Applying Update",
-                f"Update v{new_version} is being applied.\n"
-                "The application will restart automatically when done."
-            )
-
-        except Exception as _exc:
-            logger.error("Failed to apply update: %s", _exc)
-            # Fallback: just write the sentinel and restart — the Updater
-            # will apply files on next boot (legacy behaviour).
-            sentinel = APPLICATION_PATH / ".restart_required"
-            try:
-                sentinel.write_text(new_version)
-            except Exception:
-                sentinel = DATA_PATH / ".restart_required"
-                sentinel.write_text(new_version)
-
-        # ── Stop timers and quit ──────────────────────────────────────────
-        try:
-            self.update_status_timer.stop()
-        except Exception:
-            pass
-        try:
-            self.sync_status_timer.stop()
-        except Exception:
-            pass
-
-        # Pre-emptively clear update flags
-        try:
-            _sf = DATA_PATH / "sync_state" / "update_status.json"
-            _sd = _j.loads(_sf.read_text()) if _sf.exists() else {}
-            _sd["update_ready"]     = False
-            _sd["update_available"] = False
-            _sf.write_text(_j.dumps(_sd, indent=2))
-        except Exception:
-            pass
-
-        from PySide6.QtWidgets import QApplication as _App
-        _App.instance().quit()
+        # Fallback when service not wired — write sentinel and quit
+        from bulider_tools.runtime import restart_and_apply_update
+        restart_and_apply_update(new_version)
 
     def update_sync_online_indicator(self):
         """
@@ -1224,7 +1058,11 @@ class MainWindow(QMainWindow):
         # Stop timers before exit
         try:
             self.sync_status_timer.stop()
-            self.update_status_timer.stop()
         except Exception:
             pass
+        if self._update_service:
+            try:
+                self._update_service.stop(timeout=2)
+            except Exception:
+                pass
         QApplication.quit()
