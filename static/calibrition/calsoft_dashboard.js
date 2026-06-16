@@ -5,7 +5,6 @@
     refreshInterval: 200000,
   };
 
-  let scheduleDonut = null;
   let refreshTimer = null;
 
   function escapeHTML(value) {
@@ -60,34 +59,7 @@
   }
 
   // ============================================================
-  // HERO SECTION - Pass Rate
-  // ============================================================
-  function renderHero(data) {
-    const monthRate = clamp(data.month_pass_rate ?? 0, 0, 100);
-    const weekRate = clamp(data.week_pass_rate ?? 0, 0, 100);
-    const monthTotal = Number(data.month_total || 0);
-    const weekTotal = Number(data.week_total || 0);
-    const monthLabel = data.current_month || "This month";
-
-    return `
-      <section class="cs-hero">
-        <div class="cs-hero-copy">
-          <span class="cs-eyebrow">Pass Rate Hero</span>
-          <h1>${formatPercent(monthRate)}</h1>
-          <p>${escapeHTML(monthLabel)} pass rate from ${monthTotal} approved ${pluralize(monthTotal, "session")}</p>
-          <div class="cs-hero-meta">
-            <span>Week: <strong>${formatPercent(weekRate)}</strong> (${weekTotal} sessions)</span>
-          </div>
-        </div>
-        <div class="cs-pass-orb" style="--pass-rate: ${monthRate}">
-          <span>${formatPercent(monthRate)}</span>
-          <small>monthly pass rate</small>
-        </div>
-      </section>`;
-  }
-
-  // ============================================================
-  // KPI CARDS - Small cards below hero
+  // KPI CARDS (small, below hero)
   // ============================================================
   function renderKpiCards(data) {
     const totalSessions = data.total_sessions || 0;
@@ -145,6 +117,33 @@
   }
 
   // ============================================================
+  // PASS RATE HERO (big card, now below KPI)
+  // ============================================================
+  function renderHero(data) {
+    const monthRate = clamp(data.month_pass_rate ?? 0, 0, 100);
+    const weekRate = clamp(data.week_pass_rate ?? 0, 0, 100);
+    const monthTotal = Number(data.month_total || 0);
+    const weekTotal = Number(data.week_total || 0);
+    const monthLabel = data.current_month || "This month";
+
+    return `
+      <section class="cs-hero">
+        <div class="cs-hero-copy">
+          <span class="cs-eyebrow">Pass Rate</span>
+          <h1>${formatPercent(monthRate)}</h1>
+          <p>${escapeHTML(monthLabel)} pass rate from ${monthTotal} approved ${pluralize(monthTotal, "session")}</p>
+          <div class="cs-hero-meta">
+            <span>Week: <strong>${formatPercent(weekRate)}</strong> (${weekTotal} sessions)</span>
+          </div>
+        </div>
+        <div class="cs-pass-orb" style="--pass-rate: ${monthRate}">
+          <span>${formatPercent(monthRate)}</span>
+          <small>monthly pass rate</small>
+        </div>
+      </section>`;
+  }
+
+  // ============================================================
   // APPROVAL BANNER
   // ============================================================
   function renderBanner(pendingApproval, urls) {
@@ -160,13 +159,13 @@
   }
 
   // ============================================================
-  // SCHEDULE PANEL - With donut showing percentage
+  // SCHEDULE SNAPSHOT (without donut)
   // ============================================================
   function renderSchedulePanel(counts, month) {
-    const donutTotal = counts.pending + counts.overdue + counts.completed || 1;
-    const donePct = pct(counts.completed, donutTotal);
-    const pendingPct = pct(counts.pending, donutTotal);
-    const overduePct = pct(counts.overdue, donutTotal);
+    const total = counts.pending + counts.overdue + counts.completed || 1;
+    const donePct = pct(counts.completed, total);
+    const pendingPct = pct(counts.pending, total);
+    const overduePct = pct(counts.overdue, total);
 
     return `
       <section class="cs-panel cs-schedule-panel">
@@ -178,7 +177,7 @@
           <span class="cs-panel-period">${escapeHTML(month)}</span>
         </div>
 
-        <div class="cs-schedule-layout">
+        <div class="cs-schedule-grid">
           <div class="cs-schedule-kpis">
             <article>
               <strong>${counts.completed}</strong>
@@ -200,14 +199,6 @@
               <span>Warnings</span>
               <small>Logic-change flags</small>
             </article>
-          </div>
-
-          <div class="cs-schedule-donut">
-            <canvas id="scheduleDonut" width="210" height="210" role="img" aria-label="Schedule completion donut"></canvas>
-            <div class="cs-donut-center">
-              <span class="cs-donut-pct">${donePct}%</span>
-              <small>Completed</small>
-            </div>
           </div>
 
           <div class="cs-schedule-summary">
@@ -258,7 +249,7 @@
   }
 
   // ============================================================
-  // QUICK ACTIONS - Updated URLs
+  // QUICK ACTIONS (with all requested URLs)
   // ============================================================
   function renderQuickActions(urls) {
     const actions = [
@@ -268,6 +259,11 @@
         label: "Perform Calibration",
       },
       { href: urls.scheduleDashboard || "#", icon: "📋", label: "Schedules" },
+      {
+        href: urls.sessionsPendingApproval || "#",
+        icon: "📝",
+        label: "Pending Approval",
+      },
       { href: urls.certificates || "#", icon: "🏅", label: "Certificates" },
     ];
 
@@ -286,7 +282,7 @@
   }
 
   // ============================================================
-  // BOTTOM ROW - Sessions + Quick Actions
+  // BOTTOM ROW
   // ============================================================
   function renderBottomRow(data, urls) {
     return `
@@ -325,64 +321,7 @@
   }
 
   // ============================================================
-  // DONUT CHART - With percentage overlay
-  // ============================================================
-  function drawScheduleDonut(counts) {
-    const canvas = document.getElementById("scheduleDonut");
-    if (!canvas || typeof Chart === "undefined") return;
-
-    const existing =
-      typeof Chart.getChart === "function" ? Chart.getChart(canvas) : null;
-    if (existing) existing.destroy();
-
-    const total = counts.completed + counts.pending + counts.overdue || 1;
-    const completedPct = Math.round((counts.completed / total) * 100);
-
-    scheduleDonut = new Chart(canvas, {
-      type: "doughnut",
-      data: {
-        labels: ["Completed", "Pending", "Overdue"],
-        datasets: [
-          {
-            data: [
-              counts.completed || 0,
-              counts.pending || 0,
-              counts.overdue || 0,
-            ],
-            backgroundColor: ["#10b981", "#f59e0b", "#ef4444"],
-            borderWidth: 0,
-            hoverOffset: 4,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        cutout: "72%",
-        plugins: {
-          legend: { display: false },
-          tooltip: {
-            callbacks: {
-              label: (context) => ` ${context.label}: ${context.parsed}`,
-            },
-          },
-        },
-        animation: {
-          animateRotate: true,
-          duration: 800,
-        },
-      },
-    });
-
-    // Update the percentage overlay
-    const pctEl = document.querySelector(".cs-donut-pct");
-    if (pctEl) {
-      pctEl.textContent = `${completedPct}%`;
-    }
-  }
-
-  // ============================================================
-  // STYLES - No gradient on left side
+  // STYLES (no donut styles, hero below KPI)
   // ============================================================
   function injectStyles() {
     if (document.getElementById("calsoft-dashboard-redesign")) return;
@@ -390,7 +329,7 @@
     const style = document.createElement("style");
     style.id = "calsoft-dashboard-redesign";
     style.textContent = `
-      /* Hero */
+      /* Hero - now below KPI */
       .cs-hero {
         display: grid;
         grid-template-columns: minmax(0, 1fr) 200px;
@@ -416,17 +355,12 @@
         text-transform: uppercase;
       }
 
-      .cs-hero h1,
-      .cs-schedule-panel h2,
-      .cs-bottom-grid h2 {
-        margin: 0;
-        color: var(--text-primary);
-        line-height: 1.05;
-      }
-
       .cs-hero h1 {
         font-size: clamp(2.5rem, 7vw, 4.5rem);
         letter-spacing: -0.07em;
+        margin: 0;
+        color: var(--text-primary);
+        line-height: 1.05;
       }
 
       .cs-hero p {
@@ -496,7 +430,7 @@
         text-transform: uppercase;
       }
 
-      /* KPI Cards - Small */
+      /* KPI Cards - small */
       .cs-kpi-grid {
         display: grid;
         grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -610,6 +544,9 @@
 
       .cs-panel-heading h2 {
         font-size: 0.95rem;
+        margin: 0;
+        color: var(--text-primary);
+        line-height: 1.05;
       }
 
       .cs-panel-period {
@@ -622,10 +559,10 @@
         white-space: nowrap;
       }
 
-      /* Schedule Layout */
-      .cs-schedule-layout {
+      /* Schedule grid without donut */
+      .cs-schedule-grid {
         display: grid;
-        grid-template-columns: minmax(160px, 0.85fr) 200px minmax(180px, 1fr);
+        grid-template-columns: 1fr 1fr;
         gap: 0.85rem;
         align-items: stretch;
       }
@@ -667,49 +604,6 @@
         font-size: 0.65rem;
       }
 
-      /* Donut with percentage */
-      .cs-schedule-donut {
-        min-height: 180px;
-        display: grid;
-        place-items: center;
-        position: relative;
-        border-radius: 18px;
-        background: var(--bg-tertiary);
-        border: 1px solid var(--border-color);
-      }
-
-      .cs-schedule-donut canvas {
-        width: 160px !important;
-        height: 160px !important;
-      }
-
-      .cs-donut-center {
-        position: absolute;
-        inset: 0;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        pointer-events: none;
-      }
-
-      .cs-donut-pct {
-        font-size: 1.6rem;
-        font-weight: 900;
-        color: var(--text-primary);
-        line-height: 1;
-      }
-
-      .cs-donut-center small {
-        font-size: 0.6rem;
-        color: var(--text-secondary);
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        font-weight: 700;
-        margin-top: 0.1rem;
-      }
-
-      /* Summary */
       .cs-schedule-summary {
         display: flex;
         flex-direction: column;
@@ -870,7 +764,7 @@
       /* Responsive */
       @media (max-width: 1100px) {
         .cs-hero,
-        .cs-schedule-layout,
+        .cs-schedule-grid,
         .cs-bottom-grid {
           grid-template-columns: 1fr;
         }
@@ -878,15 +772,6 @@
         .cs-pass-orb {
           width: 150px;
           height: 150px;
-        }
-
-        .cs-schedule-donut {
-          min-height: 160px;
-        }
-
-        .cs-schedule-donut canvas {
-          width: 140px !important;
-          height: 140px !important;
         }
       }
 
@@ -948,13 +833,11 @@
       const pendingApproval = Number(data.pending_approval_count || 0);
 
       content.innerHTML = `
-        ${renderHero(data)}
         ${renderKpiCards(data)}
+        ${renderHero(data)}
         ${renderBanner(pendingApproval, urls)}
         ${renderSchedulePanel(counts, month)}
         ${renderBottomRow(data, urls)}`;
-
-      drawScheduleDonut(counts);
     } catch (error) {
       console.error("[calsoft_dashboard.js] load error:", error);
       content.innerHTML =
