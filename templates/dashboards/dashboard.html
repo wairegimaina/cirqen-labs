@@ -4,7 +4,9 @@
 {% block title %}CMMS Dashboard — Btwelve National Hospital{% endblock %}
 
 {% block extra_css %}
-  <link rel="stylesheet" href="{% static 'dashboards/dashbord.css' %}" />
+  <link rel="stylesheet" href="{% static 'dashboards/cmms-dashboard.css' %}" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 {% endblock %}
 
 {% block page_title %}
@@ -12,74 +14,224 @@
 {% endblock %}
 
 {% block content %}
+<div class="cmms-dash">
 
-  <div id="greeting">
-    <h2>{{ greeting }}</h2>
+  <!-- Header -->
+  <div class="dash-header">
+    <div class="dash-header__left">
+      <div class="dash-greeting">{{ greeting }}</div>
+      <div class="dash-sub" id="dash-clock">
+        Workshop · {{ request.user.userprofile.workshop.name }} · <span id="live-time"></span>
+      </div>
+    </div>
+    <div class="dash-header__right">
+      <span class="live-badge">Live</span>
+      <button class="btn-refresh" id="refresh-btn">
+        <i class="fas fa-sync-alt"></i> Refresh
+      </button>
+    </div>
   </div>
 
+  <!-- Alert banner (shown if overdue PPMs) -->
+  <div class="alert-banner" id="alert-banner">
+    <i class="fas fa-exclamation-triangle"></i>
+    <span id="alert-text"></span>
+  </div>
 
-  <div class="sections-container">
+  <!-- ── KPI Strip ── -->
+  <div class="kpi-strip">
+    <div class="kpi-card" style="--kpi-color: var(--info-color)">
+      <div class="kpi-label">Total Equipment</div>
+      <div class="kpi-value loading" id="kpi-equipment"></div>
+      <div class="kpi-meta" id="kpi-equipment-meta"></div>
+    </div>
+    <div class="kpi-card" style="--kpi-color: var(--success-color)">
+      <div class="kpi-label">Active Equipment</div>
+      <div class="kpi-value loading" id="kpi-active"></div>
+      <div class="kpi-meta up" id="kpi-active-meta"></div>
+    </div>
+    <div class="kpi-card" style="--kpi-color: var(--warning-color)">
+      <div class="kpi-label">PPM Schedules</div>
+      <div class="kpi-value loading" id="kpi-ppm"></div>
+      <div class="kpi-meta" id="kpi-ppm-meta"></div>
+    </div>
+    <div class="kpi-card" style="--kpi-color: var(--danger-color)">
+      <div class="kpi-label">Overdue</div>
+      <div class="kpi-value loading" id="kpi-overdue"></div>
+      <div class="kpi-meta down" id="kpi-overdue-meta"></div>
+    </div>
+    <div class="kpi-card" style="--kpi-color: #a78bfa">
+      <div class="kpi-label">Completed PPMs</div>
+      <div class="kpi-value loading" id="kpi-completed"></div>
+      <div class="kpi-meta up" id="kpi-completed-meta"></div>
+    </div>
+    <div class="kpi-card" style="--kpi-color: #fb923c">
+      <div class="kpi-label">Departments</div>
+      <div class="kpi-value loading" id="kpi-departments"></div>
+      <div class="kpi-meta" id="kpi-departments-meta"></div>
+    </div>
+  </div>
 
-    <section id="ppm">
-      <h2><i class="fas fa-calendar-check"></i> Preventive Maintenance Schedules</h2>
-      <p>Schedule and track maintenance to ensure equipment reliability.</p>
-      <a href="{% url 'ppm_dashboard' %}" class="btn btn-primary">
-        <i class="fas fa-arrow-right"></i> Get Started
-      </a>
-    </section>
+  <!-- ── Mid Row: Charts + PPM Status ── -->
+  <div class="mid-row">
 
-    <section id="reports">
-      <h2><i class="fas fa-chart-bar"></i> Report Hub</h2>
-      <p>Generate and view detailed reports on equipment performance.</p>
-      <a href="{% url 'report_hub:report_hub' %}" class="btn btn-primary">
-        <i class="fas fa-arrow-right"></i> Get Started
-      </a>
-    </section>
+    <!-- PPM Trend (line chart) -->
+    <div class="panel">
+      <div class="panel-title">
+        <span><i class="fas fa-chart-line"></i> &nbsp;PPM Completion Trend</span>
+      </div>
+      <canvas id="chart-ppm-trend"></canvas>
+    </div>
 
-    <section id="job-cards">
-      <h2><i class="fas fa-clipboard-list"></i> Job Cards</h2>
-      <p>Create and track maintenance tasks with job cards.</p>
-      <a href="{% url 'jobcard:create_job_card' %}" class="btn btn-primary">
-        <i class="fas fa-arrow-right"></i> Get Started
-      </a>
-    </section>
+    <!-- Equipment by Category (bar) -->
+    <div class="panel">
+      <div class="panel-title">
+        <span><i class="fas fa-layer-group"></i> &nbsp;Equipment by Category</span>
+      </div>
+      <canvas id="chart-equipment-cat"></canvas>
+    </div>
 
-    <section id="machine-reports">
-      <h2><i class="fas fa-cogs"></i> Machine Reports</h2>
-      <p>Analyze machine-specific performance and issues.</p>
-      <a href="{% url 'equipment_dashboard' %}" class="btn btn-primary">
-        <i class="fas fa-arrow-right"></i> Get Started
-      </a>
-    </section>
-
-    <section id="inventory">
-      <h2><i class="fas fa-warehouse"></i> Inventory</h2>
-      <p>Track equipment and spare parts inventory.</p>
-      <a href="{% url 'inventory' %}" class="btn btn-primary">
-        <i class="fas fa-arrow-right"></i> Get Started
-      </a>
-    </section>
-
-    <section id="calibration-reports">
-      <h2><i class="fas fa-balance-scale"></i> Calibration Reports</h2>
-      <p>Review calibration history and compliance reports.</p>
-      <a href="{% url 'calibration:certificate_list' %}" class="btn btn-primary">
-        <i class="fas fa-arrow-right"></i> Get Started
-      </a>
-    </section>
-
-    <section id="parts-tools">
-      <h2><i class="fas fa-tools"></i> Parts &amp; Tools</h2>
-      <p>Manage spare parts and tools for maintenance.</p>
-      <a href="{% url 'partstools:accessories_dashboard' %}" class="btn btn-primary">
-        <i class="fas fa-arrow-right"></i> Get Started
-      </a>
-    </section>
+    <!-- PPM Status breakdown -->
+    <div class="panel ppm-status-panel">
+      <div class="panel-title">
+        <span><i class="fas fa-tasks"></i> &nbsp;PPM Status</span>
+      </div>
+      <div id="ppm-status-rows">
+        <!-- injected by JS -->
+        <div class="skel"><div class="skel-line" style="width:80%"></div></div>
+        <div class="skel" style="margin-top:12px"><div class="skel-line" style="width:65%"></div></div>
+        <div class="skel" style="margin-top:12px"><div class="skel-line" style="width:72%"></div></div>
+        <div class="skel" style="margin-top:12px"><div class="skel-line" style="width:50%"></div></div>
+      </div>
+    </div>
 
   </div>
 
+  <!-- ── Bottom Row ── -->
+  <div class="bottom-row">
+
+    <!-- Inventory donut + legend -->
+    <div class="panel">
+      <div class="panel-title">
+        <span><i class="fas fa-warehouse"></i> &nbsp;Inventory Overview</span>
+      </div>
+      <div class="donut-wrap">
+        <canvas id="chart-inventory-donut"></canvas>
+        <div class="donut-center">
+          <span class="big" id="donut-total">—</span>
+          <span class="tiny">total items</span>
+        </div>
+      </div>
+      <div id="inventory-legend"></div>
+    </div>
+
+    <!-- Recent activity (top equipment by job cards from analytics) -->
+    <div class="panel">
+      <div class="panel-title">
+        <span><i class="fas fa-history"></i> &nbsp;Top Equipment — Job Cards</span>
+      </div>
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Equipment</th>
+              <th>Department</th>
+              <th>Job Cards</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="activity-table">
+            <tr class="skel"><td><div class="skel-line" style="width:90%"></div></td><td><div class="skel-line" style="width:70%"></div></td><td><div class="skel-line" style="width:40%"></div></td><td><div class="skel-line" style="width:60%"></div></td></tr>
+            <tr class="skel"><td><div class="skel-line" style="width:80%"></div></td><td><div class="skel-line" style="width:60%"></div></td><td><div class="skel-line" style="width:40%"></div></td><td><div class="skel-line" style="width:60%"></div></td></tr>
+            <tr class="skel"><td><div class="skel-line" style="width:85%"></div></td><td><div class="skel-line" style="width:75%"></div></td><td><div class="skel-line" style="width:40%"></div></td><td><div class="skel-line" style="width:60%"></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Quick Links ── -->
+  <div class="panel-title" style="margin-bottom:12px">
+    <span><i class="fas fa-th"></i> &nbsp;Modules</span>
+  </div>
+  <div class="quick-links">
+
+    <a href="{% url 'ppm_dashboard' %}" class="ql-card">
+      <div class="ql-icon" style="background:rgba(245,158,11,.12);color:#f59e0b">
+        <i class="fas fa-calendar-check"></i>
+      </div>
+      <div class="ql-text">
+        <strong>PPM Schedules</strong>
+        <span>Plan & track maintenance</span>
+      </div>
+    </a>
+
+    <a href="{% url 'report_hub:report_hub' %}" class="ql-card">
+      <div class="ql-icon" style="background:rgba(14,165,233,.12);color:#0ea5e9">
+        <i class="fas fa-chart-bar"></i>
+      </div>
+      <div class="ql-text">
+        <strong>Report Hub</strong>
+        <span>Performance reports</span>
+      </div>
+    </a>
+
+    <a href="{% url 'jobcard:create_job_card' %}" class="ql-card">
+      <div class="ql-icon" style="background:rgba(29,185,84,.12);color:#1db954">
+        <i class="fas fa-clipboard-list"></i>
+      </div>
+      <div class="ql-text">
+        <strong>Job Cards</strong>
+        <span>Create & track tasks</span>
+      </div>
+    </a>
+
+    <a href="{% url 'equipment_dashboard' %}" class="ql-card">
+      <div class="ql-icon" style="background:rgba(167,139,250,.12);color:#a78bfa">
+        <i class="fas fa-cogs"></i>
+      </div>
+      <div class="ql-text">
+        <strong>Machine Reports</strong>
+        <span>Equipment analytics</span>
+      </div>
+    </a>
+
+    <a href="{% url 'inventory' %}" class="ql-card">
+      <div class="ql-icon" style="background:rgba(251,146,60,.12);color:#fb923c">
+        <i class="fas fa-warehouse"></i>
+      </div>
+      <div class="ql-text">
+        <strong>Inventory</strong>
+        <span>Equipment & parts</span>
+      </div>
+    </a>
+
+    <a href="{% url 'calibration:certificate_list' %}" class="ql-card">
+      <div class="ql-icon" style="background:rgba(239,68,68,.12);color:#ef4444">
+        <i class="fas fa-balance-scale"></i>
+      </div>
+      <div class="ql-text">
+        <strong>Calibration</strong>
+        <span>Certificates & compliance</span>
+      </div>
+    </a>
+
+    <a href="{% url 'partstools:accessories_dashboard' %}" class="ql-card">
+      <div class="ql-icon" style="background:rgba(20,184,166,.12);color:#14b8a6">
+        <i class="fas fa-tools"></i>
+      </div>
+      <div class="ql-text">
+        <strong>Parts &amp; Tools</strong>
+        <span>Spare parts management</span>
+      </div>
+    </a>
+
+  </div>
+
+</div>
 {% endblock %}
 
 {% block extra_js %}
-  <script src="{% static 'dashboards/dashboard.js' %}"></script>
+  <script src="{% static 'dashboards/cmms-dashboard.js' %}"></script>
 {% endblock %}
