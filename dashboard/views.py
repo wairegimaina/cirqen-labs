@@ -432,3 +432,4 @@ def hod_dashboard(request):
 def hod_logout_view(request):
     logout(request)
     return redirect("custom_login")
+#well
