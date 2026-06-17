@@ -257,29 +257,14 @@ function loadPPMSummaryFromData(d) {
   const pending = d.pending || 0;
   const upcoming = d.upcoming || 0;
 
-  setKPI("kpi-ppm", total);
-  setKPI("kpi-overdue", overdue);
-  setKPI("kpi-completed", completed);
-
   if (overdue > 0) {
-    setMeta("kpi-overdue-meta", `${overdue} need attention`, "down");
     const banner = $("alert-banner");
     if (banner) {
       banner.style.display = "flex";
       $("alert-text").textContent =
         `${overdue} PPM schedule${overdue > 1 ? "s are" : " is"} overdue and require immediate attention.`;
     }
-  } else {
-    setMeta("kpi-overdue-meta", "All on track", "up");
   }
-
-  const compRate = total > 0 ? Math.round((completed / total) * 100) : 0;
-  setMeta(
-    "kpi-completed-meta",
-    `${compRate}% completion rate`,
-    compRate >= 80 ? "up" : "warn",
-  );
-  if (total > 0) setMeta("kpi-ppm-meta", `${total} total schedules`, "");
 
   const statuses = [
     { label: "Completed", count: completed, color: "#1db954" },
@@ -334,29 +319,14 @@ async function loadPPMSummary() {
     const pending = d.pending || 0;
     const upcoming = d.upcoming || 0;
 
-    setKPI("kpi-ppm", total);
-    setKPI("kpi-overdue", overdue);
-    setKPI("kpi-completed", completed);
-
     if (overdue > 0) {
-      setMeta("kpi-overdue-meta", `${overdue} need attention`, "down");
       const banner = $("alert-banner");
       if (banner) {
         banner.style.display = "flex";
         $("alert-text").textContent =
           `${overdue} PPM schedule${overdue > 1 ? "s are" : " is"} overdue and require immediate attention.`;
       }
-    } else {
-      setMeta("kpi-overdue-meta", "All on track", "up");
     }
-
-    const compRate = total > 0 ? Math.round((completed / total) * 100) : 0;
-    setMeta(
-      "kpi-completed-meta",
-      `${compRate}% completion rate`,
-      compRate >= 80 ? "up" : "warn",
-    );
-    if (total > 0) setMeta("kpi-ppm-meta", `${total} total schedules`, "");
 
     const statuses = [
       { label: "Completed", count: completed, color: "#1db954" },
@@ -395,9 +365,6 @@ async function loadPPMSummary() {
     }
   } catch (e) {
     console.warn("PPM summary error", e);
-    setKPI("kpi-ppm", "—");
-    setKPI("kpi-overdue", "—");
-    setKPI("kpi-completed", "—");
     renderTrendChart(null, null);
     const rows = $("ppm-status-rows");
     if (rows)
@@ -466,20 +433,33 @@ function loadInventorySummaryFromData(d) {
   const equipment = d.equipment || 0;
   const accessories = d.accessories || 0;
   const tools = d.tools || 0;
-  const inactive = d.inactive || 0;
-  const total = equipment + accessories + tools;
+  const working = d.equipment_working || 0;
+  const notWorking = d.equipment_not_working || 0;
+  const underRepair = d.equipment_under_repair || 0;
 
-  $("donut-total").textContent = total || "—";
+  const accessoriesStock =
+    d.accessories_stock_count ?? d.accessories_in_stock ?? null;
+
+  setKPI("kpi-accessories", accessoriesStock ?? accessories);
+  setKPI("kpi-tools", tools);
+
+  if (accessoriesStock !== null) {
+    setMeta("kpi-accessories-meta", `${accessories} item types`, "");
+  } else {
+    setMeta("kpi-accessories-meta", "units in stock", "");
+  }
+  setMeta("kpi-tools-meta", `${tools} registered`, "");
+
+  $("donut-total").textContent = equipment || "—";
 
   const segments = [
-    { label: "Equipment", count: equipment, color: "#0ea5e9" },
-    { label: "Accessories", count: accessories, color: "#1db954" },
-    { label: "Tools", count: tools, color: "#f59e0b" },
-    { label: "Inactive", count: inactive, color: "#ef4444" },
+    { label: "Working", count: working, color: "#1db954" },
+    { label: "Not Working", count: notWorking, color: "#ef4444" },
+    { label: "Under Repair", count: underRepair, color: "#f59e0b" },
   ].filter((s) => s.count > 0);
 
   if (!segments.length) {
-    segments.push({ label: "Equipment", count: 1, color: "#0ea5e9" });
+    segments.push({ label: "No equipment", count: 1, color: "#30363d" });
   }
 
   chartDonut = new Chart($("chart-inventory-donut"), {
@@ -535,20 +515,33 @@ async function loadInventorySummary() {
     const equipment = d.equipment || 0;
     const accessories = d.accessories || 0;
     const tools = d.tools || 0;
-    const inactive = d.inactive || 0;
-    const total = equipment + accessories + tools;
+    const working = d.equipment_working || 0;
+    const notWorking = d.equipment_not_working || 0;
+    const underRepair = d.equipment_under_repair || 0;
 
-    $("donut-total").textContent = total || "—";
+    const accessoriesStock =
+      d.accessories_stock_count ?? d.accessories_in_stock ?? null;
+
+    setKPI("kpi-accessories", accessoriesStock ?? accessories);
+    setKPI("kpi-tools", tools);
+
+    if (accessoriesStock !== null) {
+      setMeta("kpi-accessories-meta", `${accessories} item types`, "");
+    } else {
+      setMeta("kpi-accessories-meta", "units in stock", "");
+    }
+    setMeta("kpi-tools-meta", `${tools} registered`, "");
+
+    $("donut-total").textContent = equipment || "—";
 
     const segments = [
-      { label: "Equipment", count: equipment, color: "#0ea5e9" },
-      { label: "Accessories", count: accessories, color: "#1db954" },
-      { label: "Tools", count: tools, color: "#f59e0b" },
-      { label: "Inactive", count: inactive, color: "#ef4444" },
+      { label: "Working", count: working, color: "#1db954" },
+      { label: "Not Working", count: notWorking, color: "#ef4444" },
+      { label: "Under Repair", count: underRepair, color: "#f59e0b" },
     ].filter((s) => s.count > 0);
 
     if (!segments.length) {
-      segments.push({ label: "Equipment", count: 1, color: "#0ea5e9" });
+      segments.push({ label: "No equipment", count: 1, color: "#30363d" });
     }
 
     chartDonut = new Chart($("chart-inventory-donut"), {
@@ -593,6 +586,8 @@ async function loadInventorySummary() {
     }
   } catch (e) {
     console.warn("Inventory summary error", e);
+    setKPI("kpi-accessories", "—");
+    setKPI("kpi-tools", "—");
     chartDonut = new Chart($("chart-inventory-donut"), {
       type: "doughnut",
       data: {

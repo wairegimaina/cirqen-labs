@@ -99,7 +99,7 @@
       </div>
       <div class="ql-text">
         <strong>Inventory</strong>
-        <span>Equipment & parts</span>
+        <span>Equipment </span>
       </div>
     </a>
 
@@ -139,25 +139,20 @@
       <div class="kpi-value loading" id="kpi-active"></div>
       <div class="kpi-meta up" id="kpi-active-meta"></div>
     </div>
-    <div class="kpi-card" style="--kpi-color: #a78bfa;">
-      <div class="kpi-label"><i class="fas fa-calendar-alt"></i> &nbsp;PPM Schedules</div>
-      <div class="kpi-value loading" id="kpi-ppm"></div>
-      <div class="kpi-meta" id="kpi-ppm-meta"></div>
-    </div>
-    <div class="kpi-card" style="--kpi-color: #ef4444;">
-      <div class="kpi-label"><i class="fas fa-exclamation-triangle"></i> &nbsp;Overdue</div>
-      <div class="kpi-value loading" id="kpi-overdue"></div>
-      <div class="kpi-meta down" id="kpi-overdue-meta"></div>
-    </div>
-    <div class="kpi-card" style="--kpi-color: #1db954;">
-      <div class="kpi-label"><i class="fas fa-check-double"></i> &nbsp;Completed PPMs</div>
-      <div class="kpi-value loading" id="kpi-completed"></div>
-      <div class="kpi-meta up" id="kpi-completed-meta"></div>
-    </div>
     <div class="kpi-card" style="--kpi-color: #f59e0b;">
       <div class="kpi-label"><i class="fas fa-sitemap"></i> &nbsp;Departments</div>
       <div class="kpi-value loading" id="kpi-departments"></div>
       <div class="kpi-meta" id="kpi-departments-meta"></div>
+    </div>
+    <div class="kpi-card" style="--kpi-color: #14b8a6;">
+      <div class="kpi-label"><i class="fas fa-box"></i> &nbsp;Accessories in Stock</div>
+      <div class="kpi-value loading" id="kpi-accessories"></div>
+      <div class="kpi-meta" id="kpi-accessories-meta"></div>
+    </div>
+    <div class="kpi-card" style="--kpi-color: #fb923c;">
+      <div class="kpi-label"><i class="fas fa-tools"></i> &nbsp;Tools</div>
+      <div class="kpi-value loading" id="kpi-tools"></div>
+      <div class="kpi-meta" id="kpi-tools-meta"></div>
     </div>
   </div>
 
@@ -209,14 +204,14 @@
     <!-- Inventory donut + legend -->
     <div class="panel">
       <div class="panel-title">
-        <span><i class="fas fa-warehouse"></i> &nbsp;Inventory Overview</span>
-        <span style="font-size:.65rem;color:var(--text-muted)">By Type</span>
+        <span><i class="fas fa-warehouse"></i> &nbsp;Equipment Status</span>
+        <span style="font-size:.65rem;color:var(--text-muted)">Operational Overview</span>
       </div>
       <div class="donut-wrap">
         <canvas id="chart-inventory-donut"></canvas>
         <div class="donut-center">
           <span class="big" id="donut-total">—</span>
-          <span class="tiny">total items</span>
+          <span class="tiny">total equipment</span>
         </div>
       </div>
       <div id="inventory-legend"></div>

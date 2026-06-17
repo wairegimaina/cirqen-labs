@@ -9,7 +9,7 @@ from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import logout
 from django.contrib import messages
-from django.db.models import Count
+from django.db.models import Count, Sum
 from django.utils import timezone
 
 from Inventory.models import Equipment, Department
@@ -187,23 +187,35 @@ def Dashboard(request):
     # ---------- 3. Inventory Overview ----------
     inventory_data = {
         "equipment": 0,
+        "equipment_working": 0,
+        "equipment_not_working": 0,
+        "equipment_under_repair": 0,
         "accessories": 0,
+        "accessories_stock_count": 0,
         "tools": 0,
         "inactive": 0,
     }
     if workshop:
-        equipment_count = Equipment.objects.filter(
-            department__workshop=workshop, active_status=True
-        ).count()
+        equipment_qs = Equipment.objects.filter(department__workshop=workshop, active_status=True)
+        equipment_count = equipment_qs.count()
+        equipment_working = equipment_qs.filter(status="Working").count()
+        equipment_not_working = equipment_qs.filter(status="Not working").count()
+        equipment_under_repair = equipment_qs.filter(status="Under repair").count()
         inactive_count = Equipment.objects.filter(
             department__workshop=workshop, active_status=False
         ).count()
-        accessories_count = Accessories.objects.filter(workshop=workshop).count()
+        accessories_qs = Accessories.objects.filter(workshop=workshop)
+        accessories_count = accessories_qs.count()
+        accessories_stock_count = accessories_qs.aggregate(total=Sum("stock_count"))["total"] or 0
         tools_count = Tools.objects.filter(workshop=workshop).count()
 
         inventory_data = {
             "equipment": equipment_count,
+            "equipment_working": equipment_working,
+            "equipment_not_working": equipment_not_working,
+            "equipment_under_repair": equipment_under_repair,
             "accessories": accessories_count,
+            "accessories_stock_count": accessories_stock_count,
             "tools": tools_count,
             "inactive": inactive_count,
         }
@@ -432,4 +444,6 @@ def hod_dashboard(request):
 def hod_logout_view(request):
     logout(request)
     return redirect("custom_login")
-#well
+
+
+# well

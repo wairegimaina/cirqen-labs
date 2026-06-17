@@ -249,7 +249,24 @@ def main():
             logger.warning(f"Restart sentinel check failed: {sentinel_error}")
 
         if restart_requested:
-            logger.info("Restart requested — relaunching application")
+            logger.info("Restart requested — stopping services before relaunch")
+            try:
+                # CRITICAL: stop_services() must run on the restart path too.
+                # Without this, the old non-daemon Django multiprocessing
+                # Process (and Celery/sync-agent) is left running in the
+                # background after the new process starts. The new window
+                # looks fresh (new Qt process, new splash, new webview) but
+                # the OLD Django process — still holding the previous
+                # in-memory module state from before the update — may still
+                # be alive on its old port, and Celery/sync-agent workers
+                # keep executing old code against shared DB/Redis state.
+                # This is what causes "frontend updates fine, backend doesn't".
+                service_manager.stop_services()
+                service_thread.wait(timeout=15000)
+            except Exception as stop_error:
+                logger.error(f"Error stopping services before restart: {stop_error}")
+
+            logger.info("Relaunching application")
             try:
                 restart_cmd, use_shell, cwd, env = get_restart_command()
                 subprocess.Popen(
