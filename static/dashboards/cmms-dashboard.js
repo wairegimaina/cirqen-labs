@@ -462,29 +462,29 @@ function loadInventorySummaryFromData(d) {
     segments.push({ label: "No equipment", count: 1, color: "#30363d" });
   }
 
-  chartDonut = new Chart($("chart-inventory-donut"), {
-    type: "doughnut",
-    data: {
-      labels: segments.map((s) => s.label),
-      datasets: [
-        {
-          data: segments.map((s) => s.count),
-          backgroundColor: segments.map((s) => s.color + "33"),
-          borderColor: segments.map((s) => s.color),
-          borderWidth: 2,
-          hoverOffset: 8,
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      cutout: "72%",
-      plugins: {
-        legend: { display: false },
-        tooltip: { callbacks: { label: (ctx) => ` ${ctx.label}: ${ctx.raw}` } },
-      },
-    },
-  });
+chartDonut = new Chart($("chart-inventory-donut"), {
+     type: "doughnut",
+     data: {
+       labels: segments.map((s) => s.label),
+       datasets: [
+         {
+           data: segments.map((s) => s.count),
+           backgroundColor: segments.map((s) => s.color),
+           borderColor: segments.map((s) => s.color),
+           borderWidth: 2,
+           hoverOffset: 8,
+         },
+       ],
+     },
+     options: {
+       responsive: true,
+       cutout: "72%",
+       plugins: {
+         legend: { display: false },
+         tooltip: { callbacks: { label: (ctx) => ` ${ctx.label}: ${ctx.raw}` } },
+       },
+     },
+   });
 
   const legend = $("inventory-legend");
   if (legend) {
@@ -551,7 +551,7 @@ async function loadInventorySummary() {
         datasets: [
           {
             data: segments.map((s) => s.count),
-            backgroundColor: segments.map((s) => s.color + "33"),
+            backgroundColor: segments.map((s) => s.color),
             borderColor: segments.map((s) => s.color),
             borderWidth: 2,
             hoverOffset: 8,

@@ -2,13 +2,18 @@
 import random
 import string
 import uuid
+import logging
+import traceback
 from datetime import datetime
 from django.contrib.auth import get_user_model
+
 User = get_user_model()
 
 from django.core.mail import EmailMultiAlternatives
 from django.conf import settings
 from .models import UserProfile, UserPasswordReset
+
+logger = logging.getLogger(__name__)
 
 
 class UserManagementUtils:
@@ -16,10 +21,10 @@ class UserManagementUtils:
     @staticmethod
     def generate_username(first_name):
         """Generate unique username from first name + 4 random numbers"""
-        base_username = first_name.lower().replace(' ', '').replace('-', '')
+        base_username = first_name.lower().replace(" ", "").replace("-", "")
 
         for _ in range(100):
-            random_numbers = ''.join([str(random.randint(0, 9)) for _ in range(4)])
+            random_numbers = "".join([str(random.randint(0, 9)) for _ in range(4)])
             username = f"{base_username}{random_numbers}"
 
             if not User.objects.filter(username=username).exists():
@@ -31,9 +36,7 @@ class UserManagementUtils:
     @staticmethod
     def generate_temp_password():
         """Generate a temporary password"""
-        return ''.join(random.choices(
-            string.ascii_letters + string.digits, k=12
-        ))
+        return "".join(random.choices(string.ascii_letters + string.digits, k=12))
 
     @staticmethod
     def send_welcome_email(user, temp_password, created_by):
@@ -77,7 +80,7 @@ class UserManagementUtils:
                     overflow: hidden;
                 }}
                 .header {{
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
                     color: white;
                     padding: 30px 20px;
                     text-align: center;
@@ -141,7 +144,6 @@ class UserManagementUtils:
                 .temp-password {{
                     font-family: 'Courier New', monospace;
                     font-size: 18px;
-from django.contrib.auth
                     font-weight: bold;
                     color: #e17055;
                     background-color: #ffffff;
@@ -191,16 +193,16 @@ from django.contrib.auth
                 <div class="header">
                     <h1>🔬 Welcome to the Team!</h1>
                 </div>
-                
+
                 <div class="content">
                     <div class="welcome-message">
                         <strong>Dear {user.get_full_name() or user.username},</strong>
                     </div>
-                    
+
                     <p>Welcome to the <strong> Btwelve National hospital Biomedical Engineering Management System</strong>! We're excited to have you on board.</p>
-                    
+
                     <p>Your account has been created by <strong>{created_by.get_full_name() or created_by.username}</strong> and is ready for use.</p>
-                    
+
                     <div class="info-section">
                         <h3>📋 Account Details</h3>
                         <ul class="account-details">
@@ -208,29 +210,28 @@ from django.contrib.auth
                             <li><span class="label">Email:</span><span class="value">{user.email}</span></li>
                         </ul>
                     </div>
-                    
+
                     <div class="password-section">
                         <h3>🔑 Temporary Password</h3>
                         <div class="temp-password">{temp_password}</div>
                         <p><em>Please keep this secure and change it immediately after logging in.</em></p>
                     </div>
-                    
+
                     <div class="warning">
                         ⚠️ <strong>SECURITY IMPORTANT:</strong> Please log in and change your password immediately.
                     </div>
-                    
+
 
                     <p>If you have any questions or need assistance, please don't hesitate to contact your system administrator.</p>
-                    
+
                     <div class="signature">
                         <p><strong>Best regards,</strong><br>
                         System Administrator<br>
                         Btwelve Technologies </p>
                     </div>
                 </div>
-                
+
                 <div class="footer">
-from django.contrib.auth
                     <p>This is an automated message. Please do not reply to this email.</p>
                     <p>© {datetime.now().year} Btwelve Technologies. All rights reserved.</p>
                 </div>
@@ -259,38 +260,67 @@ TEMPORARY PASSWORD: {temp_password}
 
 Login URL: {getattr(settings, "SITE_URL", "http://localhost:8000")}/login/
 
-Best regards,  
-System Administrator  
+Best regards,
+System Administrator
 Biomedical Engineering Management System
 
 ---
 This is an automated message. Please do not reply to this email.
         """
 
+        # --- Email config diagnostics ---
+        from_email = getattr(settings, "DEFAULT_FROM_EMAIL", None)
+        email_backend = getattr(settings, "EMAIL_BACKEND", None)
+        email_host = getattr(settings, "EMAIL_HOST", None)
+        email_port = getattr(settings, "EMAIL_PORT", None)
+        email_use_tls = getattr(settings, "EMAIL_USE_TLS", None)
+        email_use_ssl = getattr(settings, "EMAIL_USE_SSL", None)
+        email_host_user = getattr(settings, "EMAIL_HOST_USER", None)
+
+        logger.info(
+            "[WELCOME EMAIL] Attempting to send welcome email | "
+            "to=%s | from=%s | backend=%s | host=%s | port=%s | "
+            "use_tls=%s | use_ssl=%s | host_user=%s",
+            user.email,
+            from_email,
+            email_backend,
+            email_host,
+            email_port,
+            email_use_tls,
+            email_use_ssl,
+            email_host_user,
+        )
+
         try:
             msg = EmailMultiAlternatives(
                 subject,
                 plain_message,
-                settings.DEFAULT_FROM_EMAIL,
+                from_email,
                 [user.email],
             )
             msg.attach_alternative(html_message, "text/html")
             msg.send(fail_silently=False)
+            logger.info(
+                "[WELCOME EMAIL] Successfully sent welcome email to %s (user: %s)",
+                user.email,
+                user.username,
+            )
             return True
         except Exception as e:
-            print(f"Failed to send welcome email: {e}")
+            logger.error(
+                "[WELCOME EMAIL] FAILED to send welcome email | "
+                "to=%s | user=%s | error=%s | traceback:\n%s",
+                user.email,
+                user.username,
+                str(e),
+                traceback.format_exc(),
+            )
             return False
 
     @staticmethod
     def create_password_reset_token(user, created_by):
         """Create password reset token"""
-        return UserPasswordReset.objects.create(
-            user=user,
-            created_by=created_by
-        )
-
-
-
+        return UserPasswordReset.objects.create(user=user, created_by=created_by)
 
     # for delivering the reset password email
 
@@ -298,7 +328,7 @@ This is an automated message. Please do not reply to this email.
     def send_password_reset_email(user, reset_code):
         """Send password reset email with verification code"""
         subject = f'Password Reset Code - {getattr(settings, "SITE_NAME", "Biomedical Engineering System")}'
-        
+
         # HTML Email Template
         html_message = f"""
         <!DOCTYPE html>
@@ -324,7 +354,7 @@ This is an automated message. Please do not reply to this email.
                     overflow: hidden;
                 }}
                 .header {{
-                    background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+                    background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
                     color: white;
                     padding: 30px 20px;
                     text-align: center;
@@ -425,26 +455,26 @@ This is an automated message. Please do not reply to this email.
                 <div class="header">
                     <h1>🔐 Password Reset Request</h1>
                 </div>
-                
+
                 <div class="content">
                     <div class="security-alert">
                         <h3>⚠️ Security Alert</h3>
                         <p>We received a request to reset your password. If you didn't make this request, please ignore this email and your password will remain unchanged.</p>
                     </div>
-                    
+
                     <p><strong>Dear {user.get_full_name() or user.username},</strong></p>
-                    
+
                     <p>Your password reset verification code is:</p>
-                    
+
                     <div style="text-align: center;">
                         <div class="reset-code">{reset_code}</div>
-                        
+
                     </div>
-                    
+
                     <div class="expiry-info">
                         <strong>⏱️ Important:</strong> This code will expire in <strong>30 minutes</strong> and can only be used once.
                     </div>
-                    
+
                     <div class="instructions">
                         <h3>📋 How to Reset Your Password:</h3>
                         <ol>
@@ -454,8 +484,8 @@ This is an automated message. Please do not reply to this email.
                             <li>Log in with your new password</li>
                         </ol>
                     </div>
-                    
-                    
+
+
                     <div class="warning">
                         <strong>🛡️ Security Tips:</strong>
                         <ul style="text-align: left; margin: 10px 0;">
@@ -465,10 +495,10 @@ This is an automated message. Please do not reply to this email.
                             <li>If you didn't request this, contact support immediately</li>
                         </ul>
                     </div>
-                    
+
                     <p>If you continue to have problems, please contact your system administrator for assistance.</p>
                 </div>
-                
+
                 <div class="footer">
                     <p>This is an automated security message. Please do not reply to this email.</p>
                     <p>© {datetime.now().year} Btwelve Technologies. All rights reserved.</p>
@@ -514,16 +544,51 @@ Biomedical Engineering Management System
 This is an automated security message. Please do not reply to this email.
         """
 
+        # --- Email config diagnostics ---
+        from_email = getattr(settings, "DEFAULT_FROM_EMAIL", None)
+        email_backend = getattr(settings, "EMAIL_BACKEND", None)
+        email_host = getattr(settings, "EMAIL_HOST", None)
+        email_port = getattr(settings, "EMAIL_PORT", None)
+        email_use_tls = getattr(settings, "EMAIL_USE_TLS", None)
+        email_use_ssl = getattr(settings, "EMAIL_USE_SSL", None)
+        email_host_user = getattr(settings, "EMAIL_HOST_USER", None)
+
+        logger.info(
+            "[RESET EMAIL] Attempting to send password reset email | "
+            "to=%s | from=%s | backend=%s | host=%s | port=%s | "
+            "use_tls=%s | use_ssl=%s | host_user=%s",
+            user.email,
+            from_email,
+            email_backend,
+            email_host,
+            email_port,
+            email_use_tls,
+            email_use_ssl,
+            email_host_user,
+        )
+
         try:
             msg = EmailMultiAlternatives(
                 subject,
                 plain_message,
-                settings.DEFAULT_FROM_EMAIL,
+                from_email,
                 [user.email],
             )
             msg.attach_alternative(html_message, "text/html")
             msg.send(fail_silently=False)
+            logger.info(
+                "[RESET EMAIL] Successfully sent password reset email to %s (user: %s)",
+                user.email,
+                user.username,
+            )
             return True
         except Exception as e:
-            print(f"Failed to send password reset email: {e}")
+            logger.error(
+                "[RESET EMAIL] FAILED to send password reset email | "
+                "to=%s | user=%s | error=%s | traceback:\n%s",
+                user.email,
+                user.username,
+                str(e),
+                traceback.format_exc(),
+            )
             return False

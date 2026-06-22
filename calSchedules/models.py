@@ -409,14 +409,23 @@ class CalibrationSchedule(models.Model):
         """
         Check if this schedule can be modified by normalization.
 
+        Uses a denylist rather than an allowlist so that any new
+        generation_source added in the future is automatically
+        normalizable unless explicitly protected here.
+
+        Protected sources (never moved):
+          - signal    : auto-created after completion; maintains calibration interval
+          - locker    : created by the locker module; should stay put
+          - job_card  : triggered by actual job-card completion; interval matters
+
         Returns:
             bool: True if can be normalized, False otherwise
         """
+        PROTECTED_SOURCES = {"signal", "locker", "job_card"}
         return (
             self.status in ["pending", "pushed"]
             and not self.is_locked
-            and self.generation_source
-            in ["manual", "normalization", "initialization", "bulk_import"]
+            and self.generation_source not in PROTECTED_SOURCES
         )
 
     def clear_logic_warning(self):
@@ -493,6 +502,15 @@ class CalibrationSchedule(models.Model):
         """
         Get all schedules that can be normalized.
 
+        Uses a denylist rather than an allowlist so that any new
+        generation_source added in the future is automatically
+        normalizable unless explicitly protected here.
+
+        Protected sources (never moved):
+          - signal    : auto-created after completion; maintains calibration interval
+          - locker    : created by the locker module; should stay put
+          - job_card  : triggered by actual job-card completion; interval matters
+
         Args:
             start_date (date): Optional start date filter
             end_date (date): Optional end date filter
@@ -500,12 +518,13 @@ class CalibrationSchedule(models.Model):
         Returns:
             QuerySet: Schedules that can be normalized
         """
+        PROTECTED_SOURCES = ["signal", "locker", "job_card"]
+
         query = cls.objects.filter(
             active_status=True,
             status__in=["pending", "pushed"],
             is_locked=False,
-            generation_source__in=["manual", "normalization", "initialization", "bulk_import"],
-        )
+        ).exclude(generation_source__in=PROTECTED_SOURCES)
 
         if start_date:
             query = query.filter(scheduled_month__gte=start_date)

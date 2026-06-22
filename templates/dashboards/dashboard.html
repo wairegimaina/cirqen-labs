@@ -5,7 +5,7 @@
 
 {% block extra_css %}
   <link rel="stylesheet" href="{% static 'dashboards/cmms-dashboard.css' %}" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 {% endblock %}
 
@@ -53,75 +53,82 @@
   </div>
   <div class="quick-links">
 
-    <a href="{% url 'ppm_dashboard' %}" class="ql-card" style="--ql-accent: #f59e0b;">
-      <div class="ql-icon" style="background:rgba(245,158,11,.12);color:#f59e0b">
-        <i class="fas fa-calendar-check"></i>
-      </div>
-      <div class="ql-text">
-        <strong>PPM Schedules</strong>
-        <span>Plan & track maintenance</span>
-      </div>
-    </a>
+<a href="{% url 'ppm_dashboard' %}" class="ql-card" style="--ql-accent: #f59e0b;">
+       <div class="ql-icon" style="background:rgba(245,158,11,.15);color:#f59e0b">
+         <i class="fas fa-calendar-check"></i>
+       </div>
+       <div class="ql-text">
+         <strong>PPM Schedules</strong>
+         <span>Plan & track maintenance</span>
+       </div>
+       <button class="ql-get-started">Get Started</button>
+     </a>
 
-    <a href="{% url 'report_hub:report_hub' %}" class="ql-card" style="--ql-accent: #0ea5e9;">
-      <div class="ql-icon" style="background:rgba(14,165,233,.12);color:#0ea5e9">
-        <i class="fas fa-chart-bar"></i>
-      </div>
-      <div class="ql-text">
-        <strong>Report Hub</strong>
-        <span>Performance reports</span>
-      </div>
-    </a>
+<a href="{% url 'report_hub:report_hub' %}" class="ql-card" style="--ql-accent: #0ea5e9;">
+       <div class="ql-icon" style="background:rgba(14,165,233,.15);color:#0ea5e9">
+         <i class="fas fa-chart-bar"></i>
+       </div>
+       <div class="ql-text">
+         <strong>Report Hub</strong>
+         <span>Performance reports</span>
+       </div>
+       <button class="ql-get-started">Get Started</button>
+     </a>
 
-    <a href="{% url 'jobcard:create_job_card' %}" class="ql-card" style="--ql-accent: #1db954;">
-      <div class="ql-icon" style="background:rgba(29,185,84,.12);color:#1db954">
-        <i class="fas fa-clipboard-list"></i>
-      </div>
-      <div class="ql-text">
-        <strong>Job Cards</strong>
-        <span>Create & track tasks</span>
-      </div>
-    </a>
+<a href="{% url 'jobcard:create_job_card' %}" class="ql-card" style="--ql-accent: #1db954;">
+       <div class="ql-icon" style="background:rgba(29,185,84,.15);color:#1db954">
+         <i class="fas fa-clipboard-list"></i>
+       </div>
+       <div class="ql-text">
+         <strong>Job Cards</strong>
+         <span>Create & track tasks</span>
+       </div>
+       <button class="ql-get-started">Get Started</button>
+     </a>
 
-    <a href="{% url 'equipment_dashboard' %}" class="ql-card" style="--ql-accent: #a78bfa;">
-      <div class="ql-icon" style="background:rgba(167,139,250,.12);color:#a78bfa">
-        <i class="fas fa-cogs"></i>
-      </div>
-      <div class="ql-text">
-        <strong>Machine Reports</strong>
-        <span>Equipment analytics</span>
-      </div>
-    </a>
+<a href="{% url 'equipment_dashboard' %}" class="ql-card" style="--ql-accent: #a78bfa;">
+       <div class="ql-icon" style="background:rgba(167,139,250,.15);color:#a78bfa">
+         <i class="fas fa-cogs"></i>
+       </div>
+       <div class="ql-text">
+         <strong>Machine Reports</strong>
+         <span>Equipment analytics</span>
+       </div>
+       <button class="ql-get-started">Get Started</button>
+     </a>
 
-    <a href="{% url 'inventory' %}" class="ql-card" style="--ql-accent: #fb923c;">
-      <div class="ql-icon" style="background:rgba(251,146,60,.12);color:#fb923c">
-        <i class="fas fa-warehouse"></i>
-      </div>
-      <div class="ql-text">
-        <strong>Inventory</strong>
-        <span>Equipment </span>
-      </div>
-    </a>
+<a href="{% url 'inventory' %}" class="ql-card" style="--ql-accent: #fb923c;">
+       <div class="ql-icon" style="background:rgba(251,146,60,.15);color:#fb923c">
+         <i class="fas fa-warehouse"></i>
+       </div>
+       <div class="ql-text">
+         <strong>Inventory</strong>
+         <span>Equipment </span>
+       </div>
+       <button class="ql-get-started">Get Started</button>
+     </a>
 
-    <a href="{% url 'calibration:certificate_list' %}" class="ql-card" style="--ql-accent: #ef4444;">
-      <div class="ql-icon" style="background:rgba(239,68,68,.12);color:#ef4444">
-        <i class="fas fa-balance-scale"></i>
-      </div>
-      <div class="ql-text">
-        <strong>Calibration</strong>
-        <span>Certificates & compliance</span>
-      </div>
-    </a>
+<a href="{% url 'calibration:certificate_list' %}" class="ql-card" style="--ql-accent: #ef4444;">
+       <div class="ql-icon" style="background:rgba(239,68,68,.15);color:#ef4444">
+         <i class="fas fa-balance-scale"></i>
+       </div>
+       <div class="ql-text">
+         <strong>Calibration</strong>
+         <span>Certificates & compliance</span>
+       </div>
+       <button class="ql-get-started">Get Started</button>
+     </a>
 
-    <a href="{% url 'partstools:accessories_dashboard' %}" class="ql-card" style="--ql-accent: #14b8a6;">
-      <div class="ql-icon" style="background:rgba(20,184,166,.12);color:#14b8a6">
-        <i class="fas fa-tools"></i>
-      </div>
-      <div class="ql-text">
-        <strong>Parts &amp; Tools</strong>
-        <span>Spare parts management</span>
-      </div>
-    </a>
+     <a href="{% url 'partstools:accessories_dashboard' %}" class="ql-card" style="--ql-accent: #14b8a6;">
+       <div class="ql-icon" style="background:rgba(20,184,166,.15);color:#14b8a6">
+         <i class="fas fa-tools"></i>
+       </div>
+       <div class="ql-text">
+         <strong>Parts &amp; Tools</strong>
+         <span>Spare parts management</span>
+       </div>
+       <button class="ql-get-started">Get Started</button>
+     </a>
 
   </div>
 
@@ -162,13 +169,7 @@
   <div class="mid-row">
 
     <!-- PPM Trend (line chart) -->
-    <div class="panel">
-      <div class="panel-title">
-        <span><i class="fas fa-chart-line"></i> &nbsp;PPM Completion Trend</span>
-        <span style="font-size:.65rem;color:var(--text-muted)">Last 6 months</span>
-      </div>
-      <canvas id="chart-ppm-trend"></canvas>
-    </div>
+
 
     <!-- Equipment by Category (bar) -->
     <div class="panel">

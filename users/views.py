@@ -630,8 +630,11 @@ def api_create_user(request):
             email_sent = UserManagementUtils.send_welcome_email(
                 user, temp_password, request.user
             )
+            logger.info(
+                "[CREATE USER] send_welcome_email returned %s for user=%s email=%s",
+                email_sent, user.username, user.email,
+            )
 
-            # Prepare response data
             response_data = {
                 'success': True,
                 'message': 'User created successfully',
@@ -721,6 +724,10 @@ def create_user_view(request):
                     # Send welcome email
                     email_sent = UserManagementUtils.send_welcome_email(
                         user, temp_password, request.user
+                    )
+                    logger.info(
+                        "[CREATE USER VIEW] send_welcome_email returned %s for user=%s email=%s",
+                        email_sent, user.username, user.email,
                     )
 
                     success_message = f"""
@@ -882,32 +889,52 @@ def forgot_password_view(request):
         form = ForgotPasswordForm(request.POST)
         if form.is_valid():
             email = form.cleaned_data['email']
-            user = User.objects.get(email=email)
 
-            # Delete any existing reset requests for this user (to avoid unique constraint violation)
-            UserPasswordReset.objects.filter(user=user).delete()
+            try:
+                user = User.objects.get(email=email)
+            except User.DoesNotExist:
+                messages.error(request, 'No account found with that email address.')
+                return render(request, 'users_login/forgot_password.html', {
+                    'form': form,
+                    'title': 'Forgot Password'
+                })
 
-            # Create new reset request
-            reset_request = UserPasswordReset.objects.create(user=user)
+            try:
+                # Delete any existing reset requests for this user
+                UserPasswordReset.objects.filter(user=user).delete()
 
-            # Send email
-            email_sent = UserManagementUtils.send_password_reset_email(
-                user, reset_request.reset_code
-            )
+                # Create new reset request (self-service, no created_by)
+                reset_request = UserPasswordReset.objects.create(user=user)
 
-            if email_sent:
-                request.session['reset_email'] = email
-                messages.success(
-                    request,
-                    f'A 6-digit verification code has been sent to {email}. '
-                    'Please check your email and enter the code below. '
-                    'The code will expire in 30 minutes.'
+                # Send email
+                email_sent = UserManagementUtils.send_password_reset_email(
+                    user, reset_request.reset_code
                 )
-                return redirect('verify_reset_code')
-            else:
+
+                logger.info(
+                    "[FORGOT PASSWORD] send_password_reset_email returned %s for user=%s email=%s",
+                    email_sent, user.username, email,
+                )
+
+                if email_sent:
+                    request.session['reset_email'] = email
+                    messages.success(
+                        request,
+                        f'A 6-digit verification code has been sent to {email}. '
+                        'Please check your email and enter the code below. '
+                        'The code will expire in 30 minutes.'
+                    )
+                    return redirect('verify_reset_code')
+                else:
+                    messages.error(
+                        request,
+                        'Failed to send reset email. Please try again or contact support.'
+                    )
+            except Exception as e:
+                logger.error(f"Password reset error for {email}: {e}")
                 messages.error(
                     request,
-                    'Failed to send reset email. Please try again or contact support.'
+                    'An error occurred while processing your request. Please try again.'
                 )
     else:
         form = ForgotPasswordForm()

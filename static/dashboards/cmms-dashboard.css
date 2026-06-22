@@ -1,7 +1,7 @@
 /* ============================================================
-   CMMS DASHBOARD – Modern Glassmorphism Theme
-   Gradient accents, full-width cards, smooth animations
-   ============================================================ */
+    CMMS DASHBOARD — Clean Solid Theme
+    Full-width cards, improved spacing, solid donut charts
+    ============================================================ */
 
 /* ─── Reset & Base ─────────────────────────────── */
 *,
@@ -36,39 +36,26 @@
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 10px;
-  margin-bottom: 14px;
+  margin-bottom: 24px;
   border-bottom: 1px solid var(--border-color);
-  background: linear-gradient(
-    135deg,
-    rgba(99, 102, 241, 0.05) 0%,
-    rgba(14, 165, 233, 0.05) 100%
-  );
+  background: var(--bg-secondary);
   border-radius: 12px;
-  padding: 14px 18px;
+  padding: 18px 22px;
   border: 1px solid var(--border-color);
 }
 
 .dash-greeting {
-  font-size: 1.25rem;
-  font-weight: 700;
+  font-size: 1.2rem;
+  font-weight: 600;
   color: var(--text-primary);
   line-height: 1.3;
-  background: linear-gradient(
-    135deg,
-    var(--text-primary) 0%,
-    var(--primary-color) 100%
-  );
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
 }
 
 .dash-sub {
   font-size: 0.82rem;
   color: var(--text-muted);
   margin-top: 6px;
-  font-family: "JetBrains Mono", monospace;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
 }
 
 .dash-header__right {
@@ -82,8 +69,8 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: rgba(29, 185, 84, 0.12);
-  border: 1px solid rgba(29, 185, 84, 0.3);
+  background: rgba(29, 185, 84, 0.15);
+  border: 1px solid rgba(29, 185, 84, 0.4);
   color: var(--success-color);
   font-size: 0.72rem;
   font-weight: 600;
@@ -91,7 +78,6 @@
   text-transform: uppercase;
   padding: 6px 12px;
   border-radius: 20px;
-  backdrop-filter: blur(8px);
 }
 
 .live-badge::before {
@@ -129,7 +115,6 @@
   border-radius: 10px;
   cursor: pointer;
   transition: all 0.25s ease;
-  backdrop-filter: blur(8px);
 }
 .btn-refresh:hover {
   border-color: var(--info-color);
@@ -146,10 +131,10 @@
 .alert-banner {
   background: linear-gradient(
     135deg,
-    rgba(245, 158, 11, 0.1) 0%,
-    rgba(239, 68, 68, 0.08) 100%
+    rgba(245, 158, 11, 0.15) 0%,
+    rgba(239, 68, 68, 0.12) 100%
   );
-  border: 1px solid rgba(245, 158, 11, 0.3);
+  border: 1px solid rgba(245, 158, 11, 0.4);
   border-radius: 12px;
   padding: 14px 20px;
   font-size: 0.82rem;
@@ -159,7 +144,6 @@
   align-items: center;
   gap: 10px;
   margin-bottom: 24px;
-  backdrop-filter: blur(8px);
   animation: slideDown 0.3s ease;
   display: none;
 }
@@ -194,25 +178,39 @@
 
 .quick-links {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 10px;
-  margin-bottom: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
 }
 
 .ql-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: 12px;
-  padding: 12px 16px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-decoration: none;
+  color: var(--text-primary);
+  transition:
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.ql-card-top {
   display: flex;
   align-items: center;
   gap: 14px;
+}
+
+.ql-card:hover {
+  border-color: var(--ql-accent, var(--primary-color));
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
   text-decoration: none;
   color: var(--text-primary);
-  transition: all 0.3s ease;
-  backdrop-filter: blur(8px);
-  position: relative;
-  overflow: hidden;
 }
 
 .ql-card::before {
@@ -224,24 +222,33 @@
   height: 3px;
   background: var(--ql-accent, var(--primary-color));
   opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.ql-card:hover {
-  border-color: var(--ql-accent, var(--primary-color));
-  background: linear-gradient(
-    135deg,
-    rgba(99, 102, 241, 0.04) 0%,
-    rgba(14, 165, 233, 0.04) 100%
-  );
-  transform: translateY(-3px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-  text-decoration: none;
-  color: var(--text-primary);
+  transition: opacity 0.2s ease;
 }
 
 .ql-card:hover::before {
   opacity: 1;
+}
+
+.ql-get-started {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--primary-color);
+  color: #fff !important;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  align-self: flex-start;
+  transition: background 0.2s ease;
+  pointer-events: none;
+}
+
+.ql-card:hover .ql-get-started {
+  background: var(--primary-hover);
 }
 
 .ql-icon {
@@ -253,11 +260,6 @@
   justify-content: center;
   font-size: 0.95rem;
   flex-shrink: 0;
-  transition: transform 0.3s ease;
-}
-
-.ql-card:hover .ql-icon {
-  transform: scale(1.08);
 }
 
 .ql-text strong {
@@ -276,61 +278,32 @@
 /* ─── KPI Strip (Full-width immersive) ──────────── */
 .kpi-strip {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 10px;
-  margin-bottom: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
 }
 
 .kpi-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: 12px;
-  padding: 14px 16px;
+  padding: 18px 20px;
   position: relative;
   overflow: hidden;
-  transition: all 0.3s ease;
-  backdrop-filter: blur(8px);
+  transition:
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
 }
 
 .kpi-card:hover {
-  border-color: var(--kpi-color, var(--info-color));
-  transform: translateY(-3px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
-}
-
-.kpi-card::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: var(--kpi-color, var(--info-color));
-  border-radius: 14px 14px 0 0;
-  box-shadow: 0 0 12px var(--kpi-color, var(--info-color));
-}
-
-.kpi-card::before {
-  content: "";
-  position: absolute;
-  top: -50%;
-  right: -50%;
-  width: 100%;
-  height: 100%;
-  background: radial-gradient(
-    circle,
-    var(--kpi-color, var(--info-color)) 0%,
-    transparent 70%
-  );
-  opacity: 0.03;
-  pointer-events: none;
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-sm);
 }
 
 .kpi-label {
-  font-size: 0.65rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
   color: var(--text-muted);
   margin-bottom: 8px;
   display: flex;
@@ -338,11 +311,15 @@
   gap: 6px;
 }
 
+.kpi-label i {
+  color: var(--kpi-color, var(--primary-color));
+}
+
 .kpi-value {
   font-size: 1.7rem;
   font-weight: 700;
   color: var(--text-primary);
-  font-family: "JetBrains Mono", monospace;
+  font-family: "DM Mono", monospace;
   line-height: 1;
 }
 
@@ -388,8 +365,8 @@
 .mid-row {
   display: grid;
   grid-template-columns: 1fr 1fr 320px;
-  gap: 10px;
-  margin-bottom: 14px;
+  gap: 16px;
+  margin-bottom: 24px;
 }
 
 @media (max-width: 1100px) {
@@ -406,14 +383,12 @@
   }
 }
 
-/* ─── Panel base (Modern Glassmorphism) ─────────── */
 .panel {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: 12px;
-  padding: 14px 16px;
+  padding: 20px 24px;
   transition: all 0.3s ease;
-  backdrop-filter: blur(8px);
 }
 
 .panel:hover {
@@ -479,7 +454,7 @@ canvas {
 }
 
 .status-count {
-  font-family: "JetBrains Mono", monospace;
+  font-family: "DM Mono", monospace;
   font-weight: 600;
   color: var(--text-primary);
   background: var(--bg-secondary);
@@ -507,8 +482,8 @@ canvas {
 .bottom-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin-bottom: 16px;
+  gap: 16px;
+  margin-bottom: 24px;
 }
 
 @media (max-width: 900px) {
@@ -593,6 +568,24 @@ canvas {
   border: 1px solid rgba(14, 165, 233, 0.2);
 }
 
+.badge-purple {
+  background: rgba(167, 139, 250, 0.15);
+  color: #a78bfa;
+  border: 1px solid rgba(167, 139, 250, 0.3);
+}
+
+.badge-amber {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.badge-teal {
+  background: rgba(20, 184, 166, 0.15);
+  color: #14b8a6;
+  border: 1px solid rgba(20, 184, 166, 0.3);
+}
+
 /* Skeleton rows */
 .skel td {
   padding: 12px 0;
@@ -608,9 +601,9 @@ canvas {
 /* ─── Inventory Donut ────────────────────────────── */
 .donut-wrap {
   position: relative;
-  width: 150px;
-  height: 150px;
-  margin: 0 auto 12px;
+  width: 180px;
+  height: 180px;
+  margin: 0 auto 16px;
 }
 
 .donut-center {
@@ -626,15 +619,8 @@ canvas {
 .donut-center .big {
   font-size: 1.8rem;
   font-weight: 700;
-  font-family: "JetBrains Mono", monospace;
-  background: linear-gradient(
-    135deg,
-    var(--text-primary) 0%,
-    var(--primary-color) 100%
-  );
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  font-family: "DM Mono", monospace;
+  color: var(--text-primary);
 }
 
 .donut-center .tiny {
@@ -703,4 +689,91 @@ canvas {
   .ql-card {
     padding: 10px 12px;
   }
+}
+
+/* ─── Normal Form Styles ─────────────────────────── */
+.cmms-dash .form-control,
+.cmms-dash select,
+.cmms-dash input[type="text"],
+.cmms-dash input[type="number"],
+.cmms-dash input[type="email"],
+.cmms-dash input[type="date"],
+.cmms-dash textarea {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 0.875rem;
+  font-family: var(--font-base);
+  color: var(--text-primary);
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+  outline: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+  appearance: none;
+  -webkit-appearance: none;
+  line-height: 1.5;
+}
+
+.cmms-dash .form-control:focus,
+.cmms-dash select:focus,
+.cmms-dash input[type="text"]:focus,
+.cmms-dash input[type="number"]:focus,
+.cmms-dash input[type="email"]:focus,
+.cmms-dash input[type="date"]:focus,
+.cmms-dash textarea:focus {
+  border-color: var(--input-focus-border);
+  box-shadow: var(--input-focus-shadow);
+}
+
+.cmms-dash label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 5px;
+}
+
+.cmms-dash .form-group {
+  margin-bottom: 1rem;
+}
+
+.cmms-dash select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 32px;
+}
+
+.cmms-dash .btn,
+.cmms-dash button[type="submit"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  font-family: var(--font-base);
+  border-radius: 8px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+  text-decoration: none;
+}
+
+.cmms-dash .btn-primary,
+.cmms-dash button[type="submit"] {
+  background: var(--primary-color);
+  color: #fff;
+  border-color: var(--primary-color);
+}
+
+.cmms-dash .btn-primary:hover,
+.cmms-dash button[type="submit"]:hover {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
 }

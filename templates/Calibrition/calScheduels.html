@@ -12,6 +12,21 @@
 {% block content %}
 <div class="main-container">
 
+  {% if messages %}
+  <div class="cs-messages px-3 pt-3">
+    {% for message in messages %}
+    <div class="alert alert-dismissible fade show mb-2
+      {% if 'error' in message.tags %}alert-danger
+      {% elif 'warning' in message.tags %}alert-warning
+      {% elif 'success' in message.tags %}alert-success
+      {% else %}alert-info{% endif %}" role="alert">
+      {{ message }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
   <div class="cs-toolbar">
     <div class="cs-toolbar-left">
 
@@ -878,6 +893,52 @@
                 Tick <strong>Dry Run</strong> to preview which schedules would move without saving any changes.
               </div>
             </div>
+
+            {% if logic_change_schedules %}
+            <div class="mb-4">
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <h6 class="fw-bold mb-0">
+                  <i class="fas fa-exclamation-triangle me-1 text-warning"></i>
+                  Equipment needing reorganisation
+                  <span class="badge bg-warning text-dark ms-1">{{ logic_change_warnings_count }}</span>
+                </h6>
+                {% if logic_change_warnings_count > 100 %}
+                <small class="text-muted">Showing first 100 of {{ logic_change_warnings_count }}</small>
+                {% endif %}
+              </div>
+              <div class="table-responsive" style="max-height:260px;overflow-y:auto;border:1px solid var(--bs-border-color);border-radius:6px;">
+                <table class="table table-sm table-hover mb-0">
+                  <thead class="table-light" style="position:sticky;top:0;z-index:1;">
+                    <tr>
+                      <th class="ps-3">Equipment</th>
+                      <th>Serial</th>
+                      <th>Department</th>
+                      <th>Scheduled</th>
+                      <th>Issue</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for sched in logic_change_schedules %}
+                    <tr>
+                      <td class="ps-3">
+                        <span class="fw-medium">{{ sched.equipment.description.name|default:"—" }}</span>
+                      </td>
+                      <td><code class="cs-code">{{ sched.equipment.serial_number|default:"N/A" }}</code></td>
+                      <td><span class="cs-dept-pill">{{ sched.equipment.department.name|default:"—" }}</span></td>
+                      <td class="text-nowrap">{{ sched.scheduled_month|date:"M Y"|default:"—" }}</td>
+                      <td>
+                        <span class="text-warning-emphasis small" title="{{ sched.logic_change_warning }}">
+                          <i class="fas fa-exclamation-circle me-1 text-warning"></i>
+                          {{ sched.logic_change_warning|truncatechars:55 }}
+                        </span>
+                      </td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            {% endif %}
 
             <div class="row g-2 mb-3">
               <div class="col-md-6">

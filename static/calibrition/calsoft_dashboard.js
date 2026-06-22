@@ -7,6 +7,22 @@
 
   let refreshTimer = null;
 
+  // ============================================================
+  // ICONS (inline local SVGs — no emoji, no external requests)
+  // ============================================================
+  const ICONS = {
+    clipboard: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="3" width="12" height="4" rx="1"></rect><path d="M6 5H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-1"></path><path d="M9 12h6"></path><path d="M9 16h6"></path></svg>`,
+    check: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>`,
+    chart: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"></path><rect x="7" y="13" width="3" height="5"></rect><rect x="12" y="9" width="3" height="9"></rect><rect x="17" y="5" width="3" height="13"></rect></svg>`,
+    badge: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"></circle><path d="M9.5 13.5 7 22l5-3 5 3-2.5-8.5"></path></svg>`,
+    flask: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2h6"></path><path d="M10 2v7.31a2 2 0 0 1-.5 1.32L4.6 16.5a2 2 0 0 0 1.5 3.5h11.8a2 2 0 0 0 1.5-3.5l-4.9-5.87A2 2 0 0 1 14 9.31V2"></path><path d="M6.5 14h11"></path></svg>`,
+    note: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"></path></svg>`,
+  };
+
+  function icon(name) {
+    return ICONS[name] || "";
+  }
+
   function escapeHTML(value) {
     return String(value ?? "").replace(
       /[&<>"']/g,
@@ -70,28 +86,28 @@
     const cards = [
       {
         variant: "pending",
-        icon: "📋",
+        icon: "clipboard",
         value: pendingApproval,
         label: "Pending Approval",
         sub: "Sessions awaiting review",
       },
       {
         variant: "approved",
-        icon: "✅",
+        icon: "check",
         value: monthTotal,
         label: "Approved This Month",
         sub: data.current_month || "This month",
       },
       {
         variant: "total",
-        icon: "📊",
+        icon: "chart",
         value: totalSessions,
         label: "Total Approved",
         sub: "All time sessions",
       },
       {
         variant: "certs",
-        icon: "🏅",
+        icon: "badge",
         value: awaitingCerts,
         label: "Awaiting Certificates",
         sub: "Ready for certification",
@@ -105,7 +121,7 @@
             (card) => `
           <article class="cs-kpi-card cs-kpi-${card.variant}">
             <div class="cs-kpi-top">
-              <span>${escapeHTML(card.icon)}</span>
+              <span class="cs-icon">${icon(card.icon)}</span>
               <strong>${escapeHTML(card.value)}</strong>
             </div>
             <div class="cs-kpi-label">${escapeHTML(card.label)}</div>
@@ -116,32 +132,6 @@
       </section>`;
   }
 
-  // ============================================================
-  // PASS RATE HERO (big card, now below KPI)
-  // ============================================================
-  function renderHero(data) {
-    const monthRate = clamp(data.month_pass_rate ?? 0, 0, 100);
-    const weekRate = clamp(data.week_pass_rate ?? 0, 0, 100);
-    const monthTotal = Number(data.month_total || 0);
-    const weekTotal = Number(data.week_total || 0);
-    const monthLabel = data.current_month || "This month";
-
-    return `
-      <section class="cs-hero">
-        <div class="cs-hero-copy">
-          <span class="cs-eyebrow">Pass Rate</span>
-          <h1>${formatPercent(monthRate)}</h1>
-          <p>${escapeHTML(monthLabel)} pass rate from ${monthTotal} approved ${pluralize(monthTotal, "session")}</p>
-          <div class="cs-hero-meta">
-            <span>Week: <strong>${formatPercent(weekRate)}</strong> (${weekTotal} sessions)</span>
-          </div>
-        </div>
-        <div class="cs-pass-orb" style="--pass-rate: ${monthRate}">
-          <span>${formatPercent(monthRate)}</span>
-          <small>monthly pass rate</small>
-        </div>
-      </section>`;
-  }
 
   // ============================================================
   // APPROVAL BANNER
@@ -255,16 +245,20 @@
     const actions = [
       {
         href: urls.pendingCalibrations || "#",
-        icon: "🔬",
+        icon: "flask",
         label: "Perform Calibration",
       },
-      { href: urls.scheduleDashboard || "#", icon: "📋", label: "Schedules" },
+      {
+        href: urls.scheduleDashboard || "#",
+        icon: "clipboard",
+        label: "Schedules",
+      },
       {
         href: urls.sessionsPendingApproval || "#",
-        icon: "📝",
+        icon: "note",
         label: "Pending Approval",
       },
-      { href: urls.certificates || "#", icon: "🏅", label: "Certificates" },
+      { href: urls.certificates || "#", icon: "badge", label: "Certificates" },
     ];
 
     return `
@@ -273,7 +267,7 @@
           .map(
             (action) => `
           <a class="cs-qa-item" href="${escapeHTML(action.href)}">
-            <span class="cs-qa-code">${escapeHTML(action.icon)}</span>
+            <span class="cs-qa-code">${icon(action.icon)}</span>
             <span>${escapeHTML(action.label)}</span>
           </a>`,
           )
@@ -469,13 +463,21 @@
         gap: 0.75rem;
       }
 
-      .cs-kpi-top span {
-        padding: 0.15rem 0.4rem;
+      .cs-kpi-top span.cs-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 26px;
+        height: 26px;
+        padding: 0;
         border-radius: 999px;
         background: color-mix(in srgb, var(--kpi-accent) 14%, var(--bg-card));
         color: var(--kpi-accent);
-        font-size: 0.75rem;
-        font-weight: 700;
+      }
+
+      .cs-kpi-top span.cs-icon svg {
+        width: 15px;
+        height: 15px;
       }
 
       .cs-kpi-top strong {
@@ -761,6 +763,11 @@
         font-weight: 700;
       }
 
+      .cs-qa-code svg {
+        width: 18px;
+        height: 18px;
+      }
+
       /* Responsive */
       @media (max-width: 1100px) {
         .cs-hero,
@@ -834,7 +841,7 @@
 
       content.innerHTML = `
         ${renderKpiCards(data)}
-        ${renderHero(data)}
+
         ${renderBanner(pendingApproval, urls)}
         ${renderSchedulePanel(counts, month)}
         ${renderBottomRow(data, urls)}`;

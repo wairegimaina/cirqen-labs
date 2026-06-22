@@ -22,10 +22,21 @@ from .locker import lock_completed_schedules, auto_lock_and_reschedule, get_lock
 
 
 # ─── PROTECTED SOURCES ────────────────────────────────────────────────────────
+#
+# Denylist approach: any generation_source NOT in PROTECTED_SOURCES is
+# considered normalizable/reorganisable. This matches models.py so that
+# is_normalizable() on an instance and the queryset filters here always agree.
+#
+# Protected (never moved):
+#   signal      - auto-created after completion; maintains calibration interval
+#   locker      - created by the locker module; must stay put
+#   job_card    - triggered by actual job-card work; interval matters
+#
+# auto_advance is intentionally removed from PROTECTED_SOURCES — those schedules
+# are future pending entries that should be reorganisable if the planning logic
+# changes, just like normalization-created ones.
 
-PROTECTED_SOURCES = ['signal', 'locker', 'auto_advance']
-NORMALIZABLE_SOURCES = ['manual', 'normalization', 'initialization', 'bulk_import']
-REORG_SOURCES = NORMALIZABLE_SOURCES + ['reconciliation', 'group_alignment', 'group_fix']
+PROTECTED_SOURCES = ['signal', 'locker', 'job_card']
 
 
 # ─── SHARED HELPERS ───────────────────────────────────────────────────────────
@@ -308,9 +319,10 @@ def normalize_existing_schedules(
         active_status=True,
         status__in=['pending', 'pushed'],
         is_locked=False,
-        generation_source__in=NORMALIZABLE_SOURCES,
         scheduled_month__gte=start_date,
         scheduled_month__lte=end_date
+    ).exclude(
+        generation_source__in=PROTECTED_SOURCES
     ).select_related('equipment__department', 'equipment__description').order_by('id')
 
     if not schedules.exists():
@@ -401,60 +413,65 @@ def smart_reorganize_on_logic_change(
     dry_run=False
 ):
     """
-    Safely re-normalize schedules when planning logic changes.
-    Detects mismatches, emits per-schedule warnings, moves normalizable schedules,
-    and preserves all protected schedules (completed, locked, signal-created).
+    Safely re-normalise ALL pending/pushed schedules when planning logic changes.
+
+    Key design decisions:
+    - No year window — works across all years so schedules in future planning
+      cycles (e.g. June 2027) are not silently skipped.
+    - Directly moves schedules via _apply_schedule_update rather than delegating
+      to normalize_existing_schedules (which is year-scoped and would miss them).
+    - Clears logic_change_warning on every schedule that ends up on the correct
+      logic, whether it was moved or was already correct.
+    - Three-layer protection: completed, is_locked, and PROTECTED_SOURCES are
+      never touched.
     """
     special_class_departments = special_class_departments or []
     special_class_descriptions = special_class_descriptions or []
 
-    base_year = _planning_year()
-    start_date = date(base_year, base_month, 1)
-    end_date = date(base_year, 12, 31)
-
     logger.info("=" * 80)
     logger.info(
         f"[SMART_REORG] {'DRY RUN — ' if dry_run else ''}Smart reorganization "
-        f"-> '{new_planning_logic}' in {base_year}"
+        f"-> '{new_planning_logic}' (all years)"
     )
     logger.info("=" * 80)
 
-    base_filter = dict(
-        active_status=True, status__in=['pending', 'pushed'],
-        is_locked=False, generation_source__in=REORG_SOURCES,
-        scheduled_month__gte=start_date, scheduled_month__lte=end_date,
-    )
-
-    mismatched_ids = set(
-        CalibrationSchedule.objects.filter(**base_filter)
-        .exclude(planning_logic=new_planning_logic)
-        .values_list('id', flat=True)
-    )
-    warned_ids = set(
-        CalibrationSchedule.objects.filter(**base_filter)
-        .exclude(logic_change_warning='')
-        .values_list('id', flat=True)
-    )
-
-    all_to_reorg = CalibrationSchedule.objects.filter(
-        id__in=mismatched_ids | warned_ids
+    # ── 1. Build the candidate queryset — no year restriction ─────────────────
+    # Uses denylist so any new generation_source is automatically included.
+    base_qs = CalibrationSchedule.objects.filter(
+        active_status=True,
+        status__in=['pending', 'pushed'],
+        is_locked=False,
+    ).exclude(
+        generation_source__in=PROTECTED_SOURCES
     ).select_related('equipment__department', 'equipment__description')
+
+    # Schedules to act on: wrong logic OR have an outstanding warning
+    all_to_reorg = base_qs.filter(
+        Q(logic_change_warning__gt='') |
+        ~Q(planning_logic=new_planning_logic)
+    )
     total = all_to_reorg.count()
 
-    # Count protected items
+    # ── 2. Count protected items for reporting ─────────────────────────────────
     protected = {
-        'completed': CalibrationSchedule.objects.filter(active_status=True, status='completed', scheduled_month__gte=start_date, scheduled_month__lte=end_date).count(),
-        'locked': CalibrationSchedule.objects.filter(active_status=True, is_locked=True, status__in=['pending', 'pushed'], scheduled_month__gte=start_date, scheduled_month__lte=end_date).count(),
-        'signal_created': CalibrationSchedule.objects.filter(active_status=True, generation_source__in=PROTECTED_SOURCES, status__in=['pending', 'pushed'], scheduled_month__gte=start_date, scheduled_month__lte=end_date).count(),
+        'completed':     CalibrationSchedule.objects.filter(active_status=True, status='completed').count(),
+        'locked':        CalibrationSchedule.objects.filter(active_status=True, is_locked=True, status__in=['pending', 'pushed']).count(),
+        'signal_created':CalibrationSchedule.objects.filter(active_status=True, generation_source__in=PROTECTED_SOURCES, status__in=['pending', 'pushed']).count(),
     }
     logger.info(f"[SMART_REORG] Found {total} to reorganize. Protected: {protected}")
 
     if total == 0:
-        result = {'status': 'nothing_to_do', 'reorganized': 0, 'warnings': [], 'dry_run': dry_run,
-                  'message': f"All schedules already use '{new_planning_logic}' or are protected."}
+        result = {
+            'status': 'nothing_to_do',
+            'reorganized': 0,
+            'warnings': [],
+            'dry_run': dry_run,
+            'message': f"All schedules already use '{new_planning_logic}' or are protected.",
+        }
         logger.info(f"[SMART_REORG] {result['message']}")
         return result
 
+    # ── 3. Log what will change ────────────────────────────────────────────────
     warnings_list = []
     for sched in all_to_reorg:
         equip = sched.equipment
@@ -466,7 +483,8 @@ def smart_reorganize_on_logic_change(
         msg = (
             f"SCHEDULE {sched.id} — '{equip.description}' ({group_label}): "
             f"'{sched.planning_logic or 'not_set'}' -> '{new_planning_logic}'. "
-            f"Current month: {sched.scheduled_month.strftime('%B %Y')} (will be moved)."
+            f"Scheduled: {sched.scheduled_month.strftime('%B %Y')} | "
+            f"Source: {sched.generation_source}"
         )
         warnings_list.append(msg)
         logger.warning(f"[SMART_REORG] {msg}")
@@ -477,35 +495,111 @@ def smart_reorganize_on_logic_change(
     )
 
     if dry_run:
-        return {'status': 'dry_run', 'reorganized': 0, 'would_reorganize': total,
-                'warnings': warnings_list, 'dry_run': True,
-                'message': f"DRY RUN: {total} schedules would be reorganized."}
+        return {
+            'status': 'dry_run',
+            'reorganized': 0,
+            'would_reorganize': total,
+            'warnings': warnings_list,
+            'dry_run': True,
+            'message': f"DRY RUN: {total} schedules would be reorganized.",
+        }
 
-    normalize_result = normalize_existing_schedules(
-        planning_logic=new_planning_logic, base_month=base_month,
-        max_departments=max_departments, max_descriptions=max_descriptions,
-        calibration_period=calibration_period,
-        special_class_departments=special_class_departments,
-        special_class_descriptions=special_class_descriptions,
+    # ── 4. Group schedules by their group key and find the correct target month ─
+    #
+    # Strategy: for each group (department or description), find the month that
+    # the majority of that group is already scheduled for — and align any
+    # outliers to it. This preserves existing group months rather than
+    # bulldozing everything to a computed offset.
+    #
+    # If a group has no existing consensus (e.g. all are misaligned), fall back
+    # to _find_optimal_month to assign a free month from base_month onwards.
+
+    is_dept = new_planning_logic == 'date_based'
+
+    def get_group_id(sched):
+        eq = sched.equipment
+        if is_dept:
+            return eq.department_id if eq and eq.department else 'no_dept'
+        return eq.description_id if eq and eq.description else 'no_desc'
+
+    # Build group -> consensus_month map from ALL schedules on the new logic
+    # (not just the ones being moved) so we align to what's already correct.
+    consensus_filter = dict(
+        active_status=True,
+        status__in=['pending', 'pushed', 'completed'],
+        planning_logic=new_planning_logic,
     )
-    logger.info(f"[SMART_REORG] Normalize result: {normalize_result}")
+    if is_dept:
+        consensus_filter['equipment__department__isnull'] = False
+    else:
+        consensus_filter['equipment__description__isnull'] = False
 
+    group_month_votes = defaultdict(lambda: defaultdict(int))
+    for s in CalibrationSchedule.objects.filter(**consensus_filter).select_related('equipment'):
+        gid = get_group_id(s)
+        group_month_votes[gid][s.scheduled_month] += 1
+
+    consensus_month = {}
+    for gid, votes in group_month_votes.items():
+        consensus_month[gid] = max(votes, key=votes.get)
+
+    # Fallback month map for groups with no consensus
+    fallback_month_map = {}
+    today = date.today()
+    fallback_start = date(today.year if today.month <= 6 else today.year + 1, base_month, 1)
+    max_per_month = max_departments if is_dept else max_descriptions
+
+    # ── 5. Apply moves ─────────────────────────────────────────────────────────
+    counts = {'normalized': 0, 'skipped': 0, 'duplicates_removed': 0}
+
+    with transaction.atomic():
+        for sched in all_to_reorg:
+            gid = get_group_id(sched)
+
+            if gid in consensus_month:
+                target = consensus_month[gid]
+            else:
+                target = _find_optimal_month(
+                    fallback_start, {}, gid, fallback_month_map, max_per_month,
+                    is_special=False
+                )
+
+            _apply_schedule_update(sched, target, new_planning_logic, calibration_period, counts)
+
+    logger.info(
+        f"[SMART_REORG] Moves complete — "
+        f"moved: {counts['normalized']}, skipped: {counts['skipped']}, "
+        f"duplicates removed: {counts['duplicates_removed']}"
+    )
+
+    # ── 6. Clear logic_change_warning on everything now correctly aligned ──────
     cleared_count = 0
     for sched in all_to_reorg:
         sched.refresh_from_db()
-        if sched.planning_logic == new_planning_logic and sched.logic_change_warning:
+        if sched.planning_logic == new_planning_logic:
             sched.logic_change_warning = ''
             sched.previous_planning_logic = ''
             sched.save(update_fields=['logic_change_warning', 'previous_planning_logic', 'needs_sync'])
             cleared_count += 1
 
-    logger.info(f"[SMART_REORG] Complete. Cleared logic warnings on {cleared_count} schedules.")
+    logger.info(f"[SMART_REORG] Cleared logic warnings on {cleared_count} schedules.")
     logger.info("=" * 80)
 
     return {
-        'status': 'complete', 'message': normalize_result,
-        'reorganized': cleared_count, 'warnings': warnings_list,
-        'warnings_cleared': cleared_count, 'protected': protected, 'dry_run': False,
+        'status': 'complete',
+        'reorganized': counts['normalized'],
+        'warnings_cleared': cleared_count,
+        'duplicates_removed': counts['duplicates_removed'],
+        'skipped': counts['skipped'],
+        'warnings': warnings_list,
+        'protected': protected,
+        'dry_run': False,
+        'message': (
+            f"Reorganized {counts['normalized']} schedules to '{new_planning_logic}' logic. "
+            f"Cleared warnings on {cleared_count}. "
+            f"Removed {counts['duplicates_removed']} duplicates. "
+            f"Skipped {counts['skipped']}."
+        ),
     }
 
 

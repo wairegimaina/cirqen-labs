@@ -999,7 +999,7 @@ def calibration_dashboard(request):
     # ✅ Context with proper defaults for display
     month_choices = [(i, calendar.month_name[i]) for i in range(1, 13)]
     last_task_id = request.session.get('last_calibration_task_id', '')
-    
+
     context = {
         'show_sidebar': True,  # Enable sidebar with hamburger menu
         "schedules": schedules,
@@ -1033,6 +1033,22 @@ def calibration_dashboard(request):
         },
         'overdue_info': overdue_info,
         **_get_logic_change_context(schedules_list),
+        # Full list of schedules flagged for smart reorganisation (shown in the modal)
+        'logic_change_schedules': CalibrationSchedule.objects.exclude(
+            logic_change_warning=''
+        ).exclude(
+            logic_change_warning__isnull=True
+        ).filter(
+            equipment__active_status=True,
+            **(
+                {'equipment__department_id': access_context['department_id']}
+                if access_context['access_type'] == 'department' else {}
+            )
+        ).select_related(
+            'equipment__description', 'equipment__department'
+        ).order_by(
+            'equipment__department__name', 'equipment__description__name'
+        )[:100],
     }
 
     return render(request, "Calibrition/calScheduels.html", context)
@@ -1243,6 +1259,19 @@ def calibration_by_department(request, dept_id):
         },
         'overdue_info': overdue_info,
         **_get_logic_change_context(schedules_list),
+        # Full list of schedules flagged for smart reorganisation (shown in the modal)
+        'logic_change_schedules': CalibrationSchedule.objects.exclude(
+            logic_change_warning=''
+        ).exclude(
+            logic_change_warning__isnull=True
+        ).filter(
+            equipment__active_status=True,
+            equipment__department_id=dept_id,
+        ).select_related(
+            'equipment__description', 'equipment__department'
+        ).order_by(
+            'equipment__description__name'
+        )[:100],
     }
 
     return render(request, "Calibrition/calScheduels.html", context)

@@ -5,7 +5,7 @@
 
 {% block extra_css %}
   <link rel="stylesheet" href="{% static 'dashboards/cmms-dashboard.css' %}" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 {% endblock %}
 
 {% block page_title %}
@@ -45,65 +45,61 @@
   </div>
   <div class="quick-links">
 
-    <a href="{% url 'dashboard:nurse_ppms' %}" class="ql-card" style="--ql-accent: #a78bfa;">
-      <div class="ql-icon" style="background:rgba(167,139,250,.12);color:#a78bfa">
-        <i class="fas fa-calendar-check"></i>
-      </div>
-      <div class="ql-text">
-        <strong>Preventive Maintenance Schedules</strong>
-        <span>Schedule and track maintenance</span>
-      </div>
-    </a>
+<a href="{% url 'dashboard:nurse_ppms' %}" class="ql-card" style="--ql-accent: #a78bfa;">
+       <div class="ql-icon" style="background:rgba(167,139,250,.15);color:#a78bfa">
+         <i class="fas fa-calendar-check"></i>
+       </div>
+       <div class="ql-text">
+         <strong>Preventive Maintenance Schedules</strong>
+         <span>Schedule and track maintenance</span>
+       </div>
+       <button class="ql-get-started">Get Started</button>
+     </a>
 
-    <a href="{% url 'jobcard:waiting_jobcards' %}" class="ql-card" style="--ql-accent: #1db954;">
-      <div class="ql-icon" style="background:rgba(29,185,84,.12);color:#1db954">
-        <i class="fas fa-clipboard-list"></i>
-      </div>
-      <div class="ql-text">
-        <strong>Job Cards</strong>
-        <span>Create and track maintenance tasks</span>
-      </div>
-    </a>
+<a href="{% url 'jobcard:waiting_jobcards' %}" class="ql-card" style="--ql-accent: #1db954;">
+       <div class="ql-icon" style="background:rgba(29,185,84,.15);color:#1db954">
+         <i class="fas fa-clipboard-list"></i>
+       </div>
+       <div class="ql-text">
+         <strong>Job Cards</strong>
+         <span>Create and track maintenance tasks</span>
+       </div>
+       <button class="ql-get-started">Get Started</button>
+     </a>
 
-    <a href="{% url 'inventory' %}" class="ql-card" style="--ql-accent: #0ea5e9;">
-      <div class="ql-icon" style="background:rgba(14,165,233,.12);color:#0ea5e9">
-        <i class="fas fa-warehouse"></i>
-      </div>
-      <div class="ql-text">
-        <strong>Inventory</strong>
-        <span>Track equipment and spare parts</span>
-      </div>
-    </a>
+<a href="{% url 'inventory' %}" class="ql-card" style="--ql-accent: #0ea5e9;">
+       <div class="ql-icon" style="background:rgba(14,165,233,.15);color:#0ea5e9">
+         <i class="fas fa-warehouse"></i>
+       </div>
+       <div class="ql-text">
+         <strong>Inventory</strong>
+         <span>Track equipment and spare parts</span>
+       </div>
+       <button class="ql-get-started">Get Started</button>
+     </a>
 
-    <a href="{% url 'calibration:certificate_list' %}" class="ql-card" style="--ql-accent: #ef4444;">
-      <div class="ql-icon" style="background:rgba(239,68,68,.12);color:#ef4444">
-        <i class="fas fa-balance-scale"></i>
-      </div>
-      <div class="ql-text">
-        <strong>Calibration Reports</strong>
-        <span>Review calibration history & compliance</span>
-      </div>
-    </a>
+<a href="{% url 'calibration:certificate_list' %}" class="ql-card" style="--ql-accent: #ef4444;">
+       <div class="ql-icon" style="background:rgba(239,68,68,.15);color:#ef4444">
+         <i class="fas fa-balance-scale"></i>
+       </div>
+       <div class="ql-text">
+         <strong>Calibration Reports</strong>
+         <span>Review calibration history & compliance</span>
+       </div>
+       <button class="ql-get-started">Get Started</button>
+     </a>
 
-    <a href="{% url 'partstools:accessories_dashboard' %}" class="ql-card" style="--ql-accent: #14b8a6;">
-      <div class="ql-icon" style="background:rgba(20,184,166,.12);color:#14b8a6">
-        <i class="fas fa-tools"></i>
-      </div>
-      <div class="ql-text">
-        <strong>Parts &amp; Tools</strong>
-        <span>Spare parts management</span>
-      </div>
-    </a>
+   </div>
+       <div class="ql-text">
+         <strong>Calibration Reports</strong>
+         <span>Review calibration history & compliance</span>
+       </div>
+       <button class="ql-get-started">Get Started</button>
+     </a>
 
-    <a href="{% url 'report_hub:report_hub' %}" class="ql-card" style="--ql-accent: #f59e0b;">
-      <div class="ql-icon" style="background:rgba(245,158,11,.12);color:#f59e0b">
-        <i class="fas fa-chart-bar"></i>
-      </div>
-      <div class="ql-text">
-        <strong>Report Hub</strong>
-        <span>Performance reports &amp; analytics</span>
-      </div>
-    </a>
+
+
+
 
   </div>
 
@@ -117,13 +113,13 @@
 
     <div class="kpi-card" style="--kpi-color: #0ea5e9;">
       <div class="kpi-label"><i class="fas fa-laptop-medical"></i> &nbsp;Equipment</div>
-      <div class="count" style="font-size: 2rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: var(--text-primary);">{{ equipments.count }}</div>
+      <div class="count" style="font-size: 2rem; font-weight: 700; color: var(--text-primary);">{{ equipments.count }}</div>
       <div class="kpi-meta">In Department</div>
     </div>
 
     <div class="kpi-card" style="--kpi-color: #1db954;">
       <div class="kpi-label"><i class="fas fa-check-circle"></i> &nbsp;Active</div>
-      <div class="count" style="font-size: 2rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: var(--text-primary);">
+      <div class="count" style="font-size: 2rem; font-weight: 700; color: var(--text-primary);">
         {{ equipments|length }}
       </div>
       <div class="kpi-meta">Active Equipment</div>
@@ -131,15 +127,11 @@
 
     <div class="kpi-card" style="--kpi-color: #1db954;">
       <div class="kpi-label"><i class="fas fa-clipboard-list"></i> &nbsp;Job Cards</div>
-      <div class="count" style="font-size: 2rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: var(--text-primary);">{{ jobcards.count }}</div>
+      <div class="count" style="font-size: 2rem; font-weight: 700; color: var(--text-primary);">{{ jobcards.count }}</div>
       <div class="kpi-meta">Total Work Orders</div>
     </div>
 
-    <div class="kpi-card" style="--kpi-color: #a78bfa;">
-      <div class="kpi-label"><i class="fas fa-calendar-alt"></i> &nbsp;PPM Schedules</div>
-      <div class="count" style="font-size: 2rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: var(--text-primary);">{{ PPM_Schedule.count }}</div>
-      <div class="kpi-meta">Scheduled</div>
-    </div>
+
 
    </div>
 
