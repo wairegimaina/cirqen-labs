@@ -2,7 +2,7 @@
 cat ~/.cirqen/data/config.json | python3 -m json.tool
 
 # Edit inline (update hq_db in one shot)
-python3 -c "
+clearYES
 import json; from pathlib import Path
 p = Path.home() / '.cirqen/data/config.json'
 c = json.loads(p.read_text())
