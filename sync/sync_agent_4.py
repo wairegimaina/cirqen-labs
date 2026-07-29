@@ -18,7 +18,8 @@ from .state_manager import StateManager
 from .dependency_manager import DependencyManager
 from .smart_delete import SmartDeleteMixin
 
-class SyncAgent(SmartDeleteMixin):
+class NetworkLoopsMixin(SmartDeleteMixin):
+    """Connectivity (HQ health w/ cold-start retry), the upload/feeder loops, and download_updates orchestration."""
     def handle_inbound_status_changes(self, changes: List[Dict]):
             """
             Handle inbound status changes from HQ broadcast
@@ -107,16 +108,46 @@ class SyncAgent(SmartDeleteMixin):
 
             LOG.error(f"❌ Could not connect to HQ server after {max_wait_seconds} seconds")
             return False
-    def check_hq_online(self):
-            """Quick check if HQ is currently online"""
-            try:
-                response = requests.get(
-                    f"{self.api_url}/health",
-                    timeout=3
-                )
-                return response.status_code == 200
-            except:
-                return False
+    def check_hq_online(self, retries: int = 2):
+            """
+            Check if HQ is currently reachable, resilient to Render free-tier
+            COLD STARTS. A sleeping instance answers a wake request with a 5xx or
+            a timeout (then serves 200 seconds later) — treating that first blip
+            as "offline" caused false disconnects. So we retry with short backoff
+            on TRANSIENT signals (timeout / 502 / 503 / 504), but do NOT retry on
+            a hard ConnectionError (no network → retrying is pointless and slow).
+            """
+            import requests as _rq
+            backoff = 1.0
+            for attempt in range(retries + 1):
+                try:
+                    response = requests.get(f"{self.api_url}/health", timeout=5 + attempt * 5)
+                    if response.status_code == 200:
+                        return True
+                    if response.status_code in (502, 503, 504) and attempt < retries:
+                        # Server waking up — wait and retry.
+                        self._backoff_sleep(backoff)
+                        backoff *= 2
+                        continue
+                    return False
+                except _rq.exceptions.ConnectionError:
+                    return False  # no network — fail fast, don't retry
+                except Exception:
+                    # Timeout or other transient error — retry a couple times.
+                    if attempt < retries:
+                        self._backoff_sleep(backoff)
+                        backoff *= 2
+                        continue
+                    return False
+            return False
+
+    def _backoff_sleep(self, seconds: float):
+            """Interruptible sleep that respects stop_event."""
+            end = time.time() + seconds
+            while time.time() < end:
+                if getattr(self, "stop_event", None) and self.stop_event.is_set():
+                    return
+                time.sleep(0.2)
     def immediate_sync_on_reconnect(self):
             """
             ⚡ OPTIMIZED: Immediately sync all pending changes when connection is restored.
@@ -163,19 +194,6 @@ class SyncAgent(SmartDeleteMixin):
 
             except Exception as e:
                 LOG.error(f"❌ Immediate sync failed: {e}")
-                return False
-    def immediate_download_on_reconnect(self):
-            """
-            Immediately download all updates from HQ when connection is restored.
-            This catches up on everything that happened at HQ while we were offline.
-            """
-            try:
-                LOG.info("📥 IMMEDIATE DOWNLOAD: Fetching updates from HQ...")
-                self.download_updates()
-                LOG.info("✅ Immediate download complete")
-                return True
-            except Exception as e:
-                LOG.error(f"❌ Immediate download failed: {e}")
                 return False
     def enqueue_change(self, entity: str, record_id: Any, operation: str, data: Optional[Dict] = None):
             """
@@ -239,7 +257,13 @@ class SyncAgent(SmartDeleteMixin):
 
             If Redis queue not available:
                 - Falls back to legacy polling mode
+
+            If sync.use_outbox is enabled, trigger-based CDC replaces all of the
+            above (see sync/outbox.py).
             """
+            if self.outbox_enabled():
+                return self.outbox_upload_loop()
+
             if self.redis_queue:
                 # ✅ REDIS QUEUE MODE
                 LOG.info("=" * 80)
@@ -578,11 +602,17 @@ class SyncAgent(SmartDeleteMixin):
                     if is_transfer:
                         LOG.debug(f"   🌍 Processing cross-workshop transfer: {table}[{row_id}]")
 
-                    is_certificate_update = "certificate" in table.lower()
-                    if is_certificate_update:
-                        cert_number = update.get("data", {}).get("certificate_number")
-                        if cert_number:
-                            LOG.debug(f"   📜 Processing certificate: {cert_number}")
+                    # BUGFIX: this previously checked `"certificate" in table.lower()`,
+                    # but the calibration session table name (the only table that
+                    # actually carries certificate_number) is
+                    # "public.CalSoft_calibrationsession" — "certificate" is not a
+                    # substring of that, so this flag was always False in practice
+                    # and certificate-applied counts in the summary log were always
+                    # 0. Check the actual table + payload instead.
+                    is_certificate_update = bool(table) and "calibrationsession" in table.lower()
+                    incoming_cert_number = update.get("data", {}).get("certificate_number") if is_certificate_update else None
+                    if incoming_cert_number:
+                        LOG.debug(f"   📜 Processing certificate: {incoming_cert_number}")
 
                     # === Apply the update ===
                     ok = self.apply_remote_update_locally(table, {
@@ -600,6 +630,20 @@ class SyncAgent(SmartDeleteMixin):
                         if is_certificate_update:
                             certificate_applied += 1
                             LOG.debug(f"   ✅ Certificate applied: {table} id={row_id}")
+                            if incoming_cert_number:
+                                # This is the fast path — normal 15s poll / SSE push,
+                                # not the 60s certificate_pull_loop recovery path.
+                                # Reconcile here too so a stuck pending_certificates
+                                # row (retry_count exhausted on the push side) gets
+                                # cleaned up as soon as the cert is actually confirmed,
+                                # not just whenever the slower recovery loop next runs.
+                                try:
+                                    self.reconcile_pending_certificate_for_session(row_id)
+                                except Exception as _reconcile_err:
+                                    LOG.debug(
+                                        "Could not reconcile pending_certificates for session %s: %s",
+                                        row_id, _reconcile_err,
+                                    )
                         if is_transfer:
                             transfer_applied += 1
                             LOG.debug(f"   ✅ Transfer applied: {table} id={row_id}")
@@ -636,7 +680,48 @@ class SyncAgent(SmartDeleteMixin):
                             failed_updates.remove(update)
                             LOG.debug(f"   ✅ Retry successful: {table} id={row_id}")
 
+                            if table and "calibrationsession" in table.lower():
+                                retry_cert_number = update.get("data", {}).get("certificate_number")
+                                if retry_cert_number:
+                                    try:
+                                        self.reconcile_pending_certificate_for_session(row_id)
+                                    except Exception as _reconcile_err:
+                                        LOG.debug(
+                                            "Could not reconcile pending_certificates for session %s: %s",
+                                            row_id, _reconcile_err,
+                                        )
+
                 failed_count = len(failed_updates)
+
+                # ── SAFE CHECKPOINT CALCULATION ──────────────────────────────
+                # BUGFIX: `latest_ts` above was advanced for every update seen,
+                # including ones that never applied successfully (first pass
+                # failure not fixed by the dependency-ordered retry). Persisting
+                # that value unconditionally meant a permanently-failing update
+                # dropped out of the `since=` window forever — HQ would never be
+                # asked for it again. Instead: if any updates are still failed
+                # after the retry pass, never move the checkpoint past the
+                # EARLIEST of those failures, so the next poll re-fetches them
+                # (and anything after them — safe, since apply is upsert-style
+                # and idempotent). Only use the full `latest_ts` when nothing is
+                # left unresolved.
+                if failed_updates:
+                    failed_timestamps = [
+                        u.get("last_modified") or u.get("updated_at") or u.get("ts")
+                        for u in failed_updates
+                    ]
+                    failed_timestamps = [ts for ts in failed_timestamps if ts]
+                    if failed_timestamps:
+                        earliest_failed_ts = min(failed_timestamps)
+                        safe_checkpoint_ts = min(latest_ts, earliest_failed_ts)
+                    else:
+                        # Failed update has no usable timestamp at all — safest
+                        # option is to not advance the checkpoint this round.
+                        safe_checkpoint_ts = last_ts
+                    if safe_checkpoint_ts < last_ts:
+                        safe_checkpoint_ts = last_ts
+                else:
+                    safe_checkpoint_ts = latest_ts
 
                 # === FINAL SUCCESS LOGGING ===
                 if applied_count > 0:
@@ -654,14 +739,24 @@ class SyncAgent(SmartDeleteMixin):
                     if failed_count == 0:
                         LOG.info(f"   🥳 Perfect sync! All updates applied successfully!")
                     else:
-                        LOG.info(f"   ⚠️  {failed_count} updates failed")
+                        LOG.info(f"   ⚠️  {failed_count} updates permanently failed — checkpoint held back so they are retried next poll")
 
-                    if latest_ts != last_ts:
-                        self.set_last_download_time(latest_ts)
-                        LOG.info(f"   🕐 Last download timestamp updated: {latest_ts}")
+                    if safe_checkpoint_ts != last_ts:
+                        self.set_last_download_time(safe_checkpoint_ts)
+                        LOG.info(f"   🕐 Last download timestamp updated: {safe_checkpoint_ts}")
+                    elif failed_count > 0:
+                        LOG.warning(
+                            f"   ⏸️  Checkpoint NOT advanced — earliest unresolved failure is at or before "
+                            f"the current checkpoint ({last_ts})"
+                        )
 
                 else:
                     LOG.warning(f"⚠️  No updates could be applied from this batch")
+                    if failed_count > 0:
+                        LOG.warning(
+                            f"   ⏸️  {failed_count} update(s) failed and checkpoint was not advanced "
+                            f"— they will be retried on the next poll"
+                        )
 
             except requests.RequestException as e:
                 LOG.error(f"❌ Download request failed: {e}")

@@ -68,11 +68,8 @@
                 </div>
             </div>
             {% empty %}
-            <div class="empty-state">
-                <h3>No Modules Found</h3>
-                <p>Get started by creating your first calibration module.</p>
-                <a href="{% url 'create_module' %}" class="btn btn-primary" style="margin-top: 1rem;">Create Your First Module</a>
-            </div>
+            {% url 'create_module' as create_module_url %}
+            {% include 'includes/empty_state.html' with icon="🧩" title="No modules found" message="Get started by creating your first calibration module." action_url=create_module_url action_label="Create your first module" %}
             {% endfor %}
         </div>
     </div>

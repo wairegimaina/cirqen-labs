@@ -83,28 +83,8 @@
     }
 
     showNotification(message, type = 'info') {
-      // Create toast notification
-      const toast = document.createElement('div');
-      const alertType = type === 'error' ? 'danger' : (type === 'info' ? 'info' : 'success');
-      const iconType = type === 'error' ? 'exclamation-circle' : (type === 'info' ? 'info-circle' : 'check-circle');
-
-      toast.className = `alert alert-${alertType} position-fixed`;
-      toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 250px;';
-      toast.innerHTML = `
-        <div class="d-flex align-items-center">
-          <i class="fas fa-${iconType} me-2"></i>
-          <span>${message}</span>
-        </div>
-      `;
-
-      document.body.appendChild(toast);
-
-      // Auto remove after 3 seconds
-      setTimeout(() => {
-        toast.style.transition = 'opacity 0.3s';
-        toast.style.opacity = '0';
-        setTimeout(() => toast.remove(), 300);
-      }, 3000);
+      // Delegates to the shared toast system (static/js/notify.js)
+      window.notify(message, type);
     }
   }
 

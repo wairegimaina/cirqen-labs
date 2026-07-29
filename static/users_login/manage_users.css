@@ -14,7 +14,7 @@
 :root {
   /* Radius */
   --radius-sm: 6px;
-  --radius-md: 10px;
+  /* --radius-md now comes from the shared base.css token (10px) */
   --radius-lg: 15px;
   --radius-xl: 20px;
 
@@ -26,7 +26,7 @@
    Body
 ================================= */
 body {
-  font-family: 'Segoe UI', Tahoma, sans-serif;
+  font-family: var(--font-base);
   background-color: var(--bg-primary);
   color: var(--text-primary);
   font-size: 15px;
@@ -362,10 +362,7 @@ body {
   box-shadow: var(--shadow-sm);
 }
 
-.btn-primary {
-  background: var(--primary-gradient);
-  color: var(--text-white);
-}
+/* .btn-primary now comes from the shared static/css/components.css */
 
 .btn-primary:hover {
   filter: brightness(1.1);

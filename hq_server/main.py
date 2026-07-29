@@ -11,115 +11,63 @@ On every Render deploy (GitHub push):
 Endpoints
 ---------
 GET  /health/
-     → {"status": "ok", "version": "..."}
-
 GET  /api/updates/latest/?current_version=1.0.0&machine_id=abc
-     → {"update_available": true/false, "version": "...", "download_url": "...", ...}
-
-GET  /api/updates/download/{version}/
-     → streams the .zip to the client
-
-POST /api/updates/register/
-     → client registers itself (machine_id, hostname, version, location)
-
-GET  /api/updates/machines/
-     → admin: list all registered machines and their current versions
-
-GET  /api/updates/packages/
-     → admin: list all built packages
-
-── Migration lock (prevents race when multiple machines update simultaneously) ──
-
-POST /api/migrations/acquire/?machine_id=X&version=Y
-     → {"granted": true}  or  {"granted": false, "locked_by": "..."}
-
-POST /api/migrations/release/?machine_id=X
-     → {"released": true}
-
+     → {"update_available": ..., "download_url": ..., "signed": ..., "tree_hash": ...}
+GET  /api/updates/download/{version}/?from_version=1.0.0
+     → streams the .zip (a slim delta if from_version is given and differs)
+POST /api/updates/register/            → client registers itself
+POST /api/updates/report/             → client reports an update outcome  (#8)
+GET  /api/updates/machines/            → admin: registered machines + versions
+GET  /api/updates/packages/            → admin: built packages
+POST /api/migrations/acquire|release/  → shared-DB migration lock  (#9, persistent)
 GET  /api/migrations/status/
-     → current lock state
-"""
 
+Rollout controls (#7): edit a package's cirqen_update_v<ver>.json to set
+"yanked": true (kill switch), "rollout_percent": 0-100 (canary), or
+"min_version": "x.y.z" (block too-old clients from jumping directly).
+"""
 import hashlib
 import json
 import os
 import secrets
-import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, Header, HTTPException, BackgroundTasks
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import FastAPI, Header, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from build_package import build_package_if_needed
+import store
+from build_package import build_package_if_needed, build_delta_zip
 
 # ── Config ───────────────────────────────────────────────────────────────────
 
 BASE_DIR = Path(__file__).parent
-
 PACKAGES_DIR = BASE_DIR / "packages"
 PACKAGES_DIR.mkdir(exist_ok=True)
-
 VERSION_FILE = BASE_DIR / "version.txt"
 
-# Set HQ_API_KEY in Render → Environment tab.
-# generateValue: true in render.yaml auto-creates one on first deploy.
 API_KEY = os.environ.get("HQ_API_KEY", "change-this-in-render-env-vars")
+LOCK_TIMEOUT_SECONDS = 300  # stale migration locks are auto-stealable after this
 
-# In-memory machine registry (resets on Render restart — acceptable for telemetry)
-registered_machines: dict[str, dict] = {}
+app = FastAPI(title="Cirqen HQ Update Server", version="1.0.0")
 
-# ── Migration lock (in-memory, one lock per HQ server process) ───────────────
-
-_migration_lock = threading.Lock()
-_migration_status: dict = {
-    "locked": False,
-    "locked_by": None,
-    "locked_at": None,
-    "version": None,
-}
-# Auto-expire the lock if a machine crashes mid-migration and never releases.
-# A background thread checks this every 60 s.
-LOCK_TIMEOUT_SECONDS = 300   # 5 minutes — more than enough for any migration
-
-# ── App ───────────────────────────────────────────────────────────────────────
-
-app = FastAPI(
-    title="Cirqen HQ Update Server",
-    description="Broadcasts updates to all Cirqen client machines",
-    version="1.0.0",
-)
-
-
-# ── Startup: auto-build package on every Render deploy ───────────────────────
 
 @app.on_event("startup")
 async def on_startup():
-    print("🚀 HQ Server starting — checking if update package needs building...")
+    store.init()
     current_version = _read_version()
-    print(f"   Current version: {current_version}")
-
+    print(f"🚀 HQ Server starting — version {current_version}")
     result = build_package_if_needed(
-        version=current_version,
-        packages_dir=PACKAGES_DIR,
-        repo_root=BASE_DIR.parent,  # one level up = root of your GitHub repo
+        version=current_version, packages_dir=PACKAGES_DIR, repo_root=BASE_DIR.parent
     )
-
-    if result["built"]:
-        print(f"✅ Built update package v{current_version} → {result['path']}")
-    else:
-        print(f"ℹ️  Package v{current_version} already exists, skipping build.")
-
-    # Start background thread that auto-expires stale migration locks
-    t = threading.Thread(target=_lock_watchdog, daemon=True)
-    t.start()
+    print(f"   package: {'built' if result['built'] else 'exists'} → {result['path']}")
 
 
 # ── Auth ─────────────────────────────────────────────────────────────────────
 
-def _require_api_key(x_api_key: Optional[str] = Header(None)):
+def _require_api_key(x_api_key: Optional[str]):
     if not x_api_key or not secrets.compare_digest(x_api_key, API_KEY):
         raise HTTPException(status_code=401, detail="Invalid or missing X-Api-Key header")
 
@@ -134,7 +82,7 @@ def _read_version() -> str:
 
 def _parse_version(v: str) -> tuple:
     try:
-        parts = [int(x) for x in v.strip().split(".")]
+        parts = [int(x) for x in str(v).strip().split(".")]
         while len(parts) < 3:
             parts.append(0)
         return tuple(parts[:3])
@@ -142,101 +90,138 @@ def _parse_version(v: str) -> tuple:
         return (0, 0, 0)
 
 
-def _get_latest_package() -> Optional[dict]:
-    meta_files = sorted(PACKAGES_DIR.glob("*.json"), reverse=True)
-    for mf in meta_files:
+def _all_metas() -> list[dict]:
+    metas = []
+    for mf in PACKAGES_DIR.glob("cirqen_update_v*.json"):
         try:
-            data = json.loads(mf.read_text())
-            zip_path = PACKAGES_DIR / data["filename"]
-            if zip_path.exists():
-                return data
+            metas.append(json.loads(mf.read_text()))
         except Exception:
             continue
+    return metas
+
+
+def _get_latest_package() -> Optional[dict]:
+    """#4 — highest package by NUMERIC version (not lexical), skipping yanked."""
+    best, best_ver = None, (-1, -1, -1)
+    for data in _all_metas():
+        if data.get("yanked"):
+            continue
+        if not (PACKAGES_DIR / data.get("filename", "")).exists():
+            continue
+        ver = _parse_version(data.get("version", "0.0.0"))
+        if ver > best_ver:
+            best, best_ver = data, ver
+    return best
+
+
+def _meta_for(version: str) -> Optional[dict]:
+    mf = PACKAGES_DIR / f"cirqen_update_v{version}.json"
+    if mf.exists():
+        try:
+            return json.loads(mf.read_text())
+        except Exception:
+            return None
     return None
+
+
+def _in_rollout(machine_id: Optional[str], percent: int) -> bool:
+    """#7 — deterministic per-machine bucketing for staged rollout."""
+    if percent >= 100:
+        return True
+    if percent <= 0:
+        return False
+    if not machine_id:
+        return True  # can't bucket an anonymous client — don't hold it back
+    bucket = int(hashlib.sha256(machine_id.encode()).hexdigest(), 16) % 100
+    return bucket < percent
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
 
 @app.api_route("/health/", methods=["GET", "HEAD"])
 def health():
-    return {
-        "status": "ok",
-        "version": _read_version(),
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "registered_machines": len(registered_machines),
-    }
+    return {"status": "ok", "version": _read_version(),
+            "timestamp": datetime.now(timezone.utc).isoformat()}
+
 
 # ── Check for update ──────────────────────────────────────────────────────────
 
 @app.get("/api/updates/latest/")
-def check_latest(
-    current_version: str = "0.0.0",
-    machine_id: Optional[str] = None,
-    x_api_key: Optional[str] = Header(None),
-):
-    """
-    Called by every Cirqen client on startup / scheduled check.
-    Returns whether a newer version is available and the download URL.
-    """
+def check_latest(current_version: str = "0.0.0", machine_id: Optional[str] = None,
+                 x_api_key: Optional[str] = Header(None)):
     _require_api_key(x_api_key)
+
+    if machine_id:
+        store.touch_check(machine_id, current_version)
 
     latest = _get_latest_package()
     if not latest:
         return {"update_available": False, "message": "No packages available yet"}
 
     latest_version = latest["version"]
-    update_available = _parse_version(latest_version) > _parse_version(current_version)
+    if _parse_version(latest_version) <= _parse_version(current_version):
+        return {"update_available": False, "current_version": current_version,
+                "latest_version": latest_version}
 
-    if machine_id:
-        registered_machines.setdefault(machine_id, {})
-        registered_machines[machine_id].update({
-            "last_check": datetime.now(timezone.utc).isoformat(),
-            "current_version": current_version,
-        })
-
-    if not update_available:
-        return {
-            "update_available": False,
-            "current_version": current_version,
-            "latest_version": latest_version,
-        }
+    # #7 — kill switch / staged rollout / minimum-version gating
+    if latest.get("yanked"):
+        return {"update_available": False, "message": "Latest release is withheld"}
+    if _parse_version(current_version) < _parse_version(latest.get("min_version", "0.0.0")):
+        return {"update_available": False, "message": "Client too old for direct update",
+                "min_version": latest.get("min_version")}
+    if not _in_rollout(machine_id, int(latest.get("rollout_percent", 100))):
+        return {"update_available": False, "message": "Not yet in rollout window"}
 
     base_url = os.environ.get("RENDER_EXTERNAL_URL", "http://localhost:8000").rstrip("/")
+    dl = f"{base_url}/api/updates/download/{latest_version}/"
+    if current_version and current_version != "0.0.0":
+        dl += f"?from_version={current_version}"  # #6 request a delta
 
     return {
         "update_available": True,
         "version": latest_version,
-        "download_url": f"{base_url}/api/updates/download/{latest_version}/",
-        "checksum": latest["checksum"],
+        "download_url": dl,
+        "checksum": latest["checksum"],            # full-package checksum (delta differs; client re-hashes)
         "size_bytes": latest["size_bytes"],
         "changes": latest.get("changes", ""),
         "critical": latest.get("critical", False),
-        "min_version": latest.get("min_version", "0.0.0"),
-        "file_count": latest.get("file_count", 0),
+        "signed": latest.get("signed", False),     # #1
+        "tree_hash": latest.get("tree_hash", ""),  # #10
         "built_at": latest.get("built_at", ""),
     }
 
 
-# ── Download package ──────────────────────────────────────────────────────────
+# ── Download package (full or delta) ──────────────────────────────────────────
 
 @app.get("/api/updates/download/{version}/")
-def download_package(version: str, x_api_key: Optional[str] = Header(None)):
-    """Streams the .zip update package to the requesting client machine."""
+def download_package(version: str, from_version: Optional[str] = None,
+                     x_api_key: Optional[str] = Header(None)):
     _require_api_key(x_api_key)
 
-    zip_path = PACKAGES_DIR / f"cirqen_update_v{version}.zip"
-    if not zip_path.exists():
+    full_zip = PACKAGES_DIR / f"cirqen_update_v{version}.zip"
+    if not full_zip.exists():
         raise HTTPException(status_code=404, detail=f"Package v{version} not found")
 
-    return FileResponse(
-        path=str(zip_path),
-        media_type="application/zip",
-        filename=f"cirqen_update_v{version}.zip",
-        headers={"X-Version": version},
-    )
+    # #6 — serve a slim delta when the client tells us where it's coming from.
+    if from_version and from_version != version:
+        to_meta, from_meta = _meta_for(version), _meta_for(from_version)
+        if to_meta and from_meta:
+            delta_zip = PACKAGES_DIR / f"cirqen_update_v{version}_from_{from_version}.zip"
+            if not delta_zip.exists():
+                try:
+                    build_delta_zip(full_zip, from_meta["manifest"], to_meta["manifest"], delta_zip)
+                except Exception as exc:  # noqa: BLE001
+                    print(f"delta build failed ({exc}); serving full package")
+                    delta_zip = full_zip
+            return FileResponse(str(delta_zip), media_type="application/zip",
+                                filename=delta_zip.name, headers={"X-Version": version,
+                                                                  "X-Delta-From": from_version})
+
+    return FileResponse(str(full_zip), media_type="application/zip",
+                        filename=full_zip.name, headers={"X-Version": version})
 
 
-# ── Machine registration ──────────────────────────────────────────────────────
+# ── Registration + outcome reporting ──────────────────────────────────────────
 
 class MachineInfo(BaseModel):
     machine_id: str
@@ -248,170 +233,70 @@ class MachineInfo(BaseModel):
 @app.post("/api/updates/register/")
 def register_machine(info: MachineInfo, x_api_key: Optional[str] = Header(None)):
     _require_api_key(x_api_key)
-    registered_machines[info.machine_id] = {
-        **info.dict(),
-        "registered_at": datetime.now(timezone.utc).isoformat(),
-        "last_seen": datetime.now(timezone.utc).isoformat(),
-    }
+    store.register_machine(info.machine_id, info.hostname, info.current_version, info.location or "")
     return {"registered": True, "machine_id": info.machine_id}
+
+
+class UpdateReport(BaseModel):
+    machine_id: str
+    version: str
+    status: str            # "success" | "failed" | "rolled_back"
+    error: Optional[str] = ""
+
+
+@app.post("/api/updates/report/")
+def report_outcome(report: UpdateReport, x_api_key: Optional[str] = Header(None)):
+    """#8 — client reports the result of an update so the fleet is observable."""
+    _require_api_key(x_api_key)
+    store.record_report(report.machine_id, report.version, report.status, report.error or "")
+    return {"recorded": True}
+
+
+# Back-compat alias used by updates/sync_hook.py
+@app.post("/api/updates/checkin/")
+def checkin(info: MachineInfo, x_api_key: Optional[str] = Header(None)):
+    _require_api_key(x_api_key)
+    store.touch_check(info.machine_id, info.current_version)
+    return {"ok": True}
 
 
 @app.get("/api/updates/machines/")
 def list_machines(x_api_key: Optional[str] = Header(None)):
     _require_api_key(x_api_key)
-    return {
-        "count": len(registered_machines),
-        "machines": list(registered_machines.values()),
-        "latest_version": _read_version(),
-    }
+    machines = store.list_machines()
+    return {"count": len(machines), "machines": machines, "latest_version": _read_version()}
 
 
 @app.get("/api/updates/packages/")
 def list_packages(x_api_key: Optional[str] = Header(None)):
     _require_api_key(x_api_key)
-    packages = []
-    for mf in sorted(PACKAGES_DIR.glob("*.json"), reverse=True):
-        try:
-            packages.append(json.loads(mf.read_text()))
-        except Exception:
-            pass
-    return {"count": len(packages), "packages": packages}
+    return {"count": len(_all_metas()), "packages": sorted(
+        _all_metas(), key=lambda d: _parse_version(d.get("version", "0.0.0")), reverse=True)}
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Migration lock
-# ─────────────────────────────────────────────────────────────────────────────
-#
-# Problem without this:
-#   Machine 1 starts migrating HQ PostgreSQL...
-#   Machine 2 also starts migrating HQ PostgreSQL at the same time...
-#   Machine 3 also starts migrating HQ PostgreSQL at the same time...
-#   → Django advisory lock handles the DB side BUT machines 2 & 3 hang,
-#     their update process times out, they report failure — even though
-#     nothing is actually wrong.
-#
-# Solution: one machine acquires the lock, migrates, releases.
-# Others poll and wait. After 5 attempts they check if HQ is already
-# fully migrated (showmigrations) and skip if it is.
-#
-# NOTE: This lock is only relevant if you ever add a shared HQ PostgreSQL
-# database (--database=hq). For the current SQLite-per-machine setup the
-# lock acquire/release is a no-op round-trip that takes ~10ms and causes
-# no harm. Wire it in now so it's ready when you add HQ Postgres.
-# ─────────────────────────────────────────────────────────────────────────────
+# ── Migration lock (#9 — persistent + atomic across processes) ─────────────────
 
 @app.post("/api/migrations/acquire/")
-def acquire_migration_lock(
-    machine_id: str,
-    version: str,
-    x_api_key: Optional[str] = Header(None),
-):
-    """
-    Client calls this BEFORE running `manage.py migrate --database=hq`.
-    Returns {"granted": true} if the lock was acquired.
-    Returns {"granted": false, ...} if another machine holds it.
-    The client should retry up to 5 times with 30 s between attempts.
-    """
+def acquire_migration_lock(machine_id: str, version: str, x_api_key: Optional[str] = Header(None)):
     _require_api_key(x_api_key)
-
-    # Non-blocking attempt — if another thread holds it we return immediately
-    if _migration_lock.acquire(blocking=False):
-        _migration_status.update({
-            "locked": True,
-            "locked_by": machine_id,
-            "locked_at": datetime.now(timezone.utc).isoformat(),
-            "version": version,
-        })
-        return {
-            "granted": True,
-            "message": "Lock acquired. You may migrate HQ database.",
-        }
-
-    return {
-        "granted": False,
-        "locked_by": _migration_status["locked_by"],
-        "locked_at": _migration_status["locked_at"],
-        "version": _migration_status["version"],
-        "message": "Another machine is currently migrating. Retry in 30 s.",
-    }
+    if store.acquire_lock(machine_id, version, LOCK_TIMEOUT_SECONDS):
+        return {"granted": True, "message": "Lock acquired. You may migrate HQ database."}
+    st = store.lock_status()
+    return {"granted": False, "locked_by": st["locked_by"], "locked_at": st["locked_at"],
+            "message": "Another machine is currently migrating. Retry in 30 s."}
 
 
 @app.post("/api/migrations/release/")
-def release_migration_lock(
-    machine_id: str,
-    x_api_key: Optional[str] = Header(None),
-):
-    """
-    Client calls this AFTER migrate finishes — success or failure.
-    Always released in a finally block on the client side.
-    """
+def release_migration_lock(machine_id: str, x_api_key: Optional[str] = Header(None)):
     _require_api_key(x_api_key)
-
-    if _migration_status["locked_by"] != machine_id:
-        raise HTTPException(
-            status_code=403,
-            detail=f"You ({machine_id}) do not hold the lock "
-                   f"(held by {_migration_status['locked_by']})",
-        )
-
-    _migration_status.update({
-        "locked": False,
-        "locked_by": None,
-        "locked_at": None,
-        "version": None,
-    })
-    try:
-        _migration_lock.release()
-    except RuntimeError:
-        pass  # already released — safe to ignore
-
+    if not store.release_lock(machine_id):
+        st = store.lock_status()
+        raise HTTPException(status_code=403,
+                            detail=f"You ({machine_id}) do not hold the lock (held by {st['locked_by']})")
     return {"released": True, "machine_id": machine_id}
 
 
 @app.get("/api/migrations/status/")
 def migration_lock_status(x_api_key: Optional[str] = Header(None)):
-    """Check current migration lock state — useful for debugging."""
     _require_api_key(x_api_key)
-    return _migration_status
-
-
-# ── Lock watchdog (auto-expire stale locks) ───────────────────────────────────
-
-def _lock_watchdog():
-    """
-    Background thread. Checks every 60 s whether the migration lock has been
-    held for longer than LOCK_TIMEOUT_SECONDS. If so it force-releases it so
-    other machines aren't blocked forever by a crashed client.
-    """
-    import time
-    while True:
-        time.sleep(60)
-        if not _migration_status["locked"]:
-            continue
-        locked_at_str = _migration_status.get("locked_at")
-        if not locked_at_str:
-            continue
-        try:
-            locked_at = datetime.fromisoformat(locked_at_str)
-            # Make locked_at offset-aware if it isn't
-            if locked_at.tzinfo is None:
-                locked_at = locked_at.replace(tzinfo=timezone.utc)
-            age = (datetime.now(timezone.utc) - locked_at).total_seconds()
-            if age > LOCK_TIMEOUT_SECONDS:
-                stale_holder = _migration_status["locked_by"]
-                _migration_status.update({
-                    "locked": False,
-                    "locked_by": None,
-                    "locked_at": None,
-                    "version": None,
-                })
-                try:
-                    _migration_lock.release()
-                except RuntimeError:
-                    pass
-                print(
-                    f"⚠️  Migration lock held by {stale_holder} for {age:.0f}s "
-                    f"(>{LOCK_TIMEOUT_SECONDS}s) — force-released."
-                )
-        except Exception as exc:
-            print(f"Lock watchdog error: {exc}")
+    return store.lock_status()

@@ -26,7 +26,7 @@
   --space-2xl: 3rem;
 
   --radius-sm: 0.25rem;
-  --radius-md: 0.5rem;
+  /* --radius-md now comes from the shared base.css token (10px) */
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
   --radius-2xl: 1.5rem;
@@ -39,7 +39,7 @@
    BODY
    ============================================================ */
 body {
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  font-family: var(--font-base);
   background-color: var(--bg-primary);
   color: var(--text-primary);
   line-height: 1.6;

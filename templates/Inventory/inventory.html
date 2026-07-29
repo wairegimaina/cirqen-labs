@@ -30,6 +30,7 @@
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="mb-0"><i class="fas fa-filter me-2"></i>Filter Equipment</h5>
                 <div class="d-flex gap-2">
+                    {% include 'includes/saved_filters.html' with view_name="inventory" %}
                     <button type="button" class="btn btn-outline-danger btn-sm" id="clearFiltersBtn">
                         <i class="fas fa-times"></i> Clear
                     </button>
@@ -92,12 +93,12 @@
                     <thead>
                         <tr>
                             <th>No</th>
-                            <th>Description</th>
-                            <th>Manufacturer</th>
-                            <th>Model</th>
-                            <th>Serial No.</th>
-                            <th>Department</th>
-                            <th>Status</th>
+                            <th data-sort="text">Description</th>
+                            <th data-sort="text">Manufacturer</th>
+                            <th data-sort="text">Model</th>
+                            <th data-sort="text">Serial No.</th>
+                            <th data-sort="text">Department</th>
+                            <th data-sort="text">Status</th>
                             <th class="text-end">Actions</th>
                         </tr>
                     </thead>
@@ -128,14 +129,14 @@
                                         data-serial="{{ equipment.serial_number|default:'' }}"
                                         data-department="{{ equipment.department.id }}"
                                         data-status="{{ equipment.status }}"
-                                        title="Edit">
+                                        title="Edit" aria-label="Edit">
                                         <i class="fas fa-pen"></i>
                                     </button>
 
                                     <button class="btn btn-outline-danger delete-button"
                                         data-url="/Inventory/delete_equipment/{{ equipment.pk }}/"
                                         data-equipment-id="{{ equipment.pk }}"
-                                        title="Delete">
+                                        title="Delete" aria-label="Delete">
                                         <i class="fas fa-trash"></i>
                                     </button>
 
@@ -150,7 +151,7 @@
                                         data-workshop="{{ equipment.department.workshop.name }}"
                                         data-workshop-id="{{ equipment.department.workshop.id }}"
                                         data-status="{{ equipment.status }}"
-                                        title="Transfer">
+                                        title="Transfer" aria-label="Transfer">
                                         <i class="fas fa-exchange-alt"></i>
                                     </button>
                                 </div>
@@ -158,10 +159,8 @@
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="8" class="text-center py-5 text-muted">
-                                <i class="fas fa-box-open fa-3x mb-3 opacity-50"></i>
-                                <h5>No equipment found</h5>
-                                <p>Try adjusting your search or filters.</p>
+                            <td colspan="8">
+                                {% include 'includes/empty_state.html' with icon="📦" title="No equipment found" message="Try adjusting your search or filters." %}
                             </td>
                         </tr>
                         {% endfor %}
@@ -177,7 +176,7 @@
                     </small>
                     <div class="pagination-controls">
                         {% if page_obj.has_previous %}
-                        <button class="btn btn-sm btn-outline-secondary ajax-page-btn" data-page="{{ page_obj.previous_page_number }}">
+                        <button class="btn btn-sm btn-outline-secondary ajax-page-btn" data-page="{{ page_obj.previous_page_number }}" aria-label="Previous page">
                             <i class="fas fa-chevron-left"></i>
                         </button>
                         {% endif %}
@@ -191,7 +190,7 @@
                         {% endfor %}
 
                         {% if page_obj.has_next %}
-                        <button class="btn btn-sm btn-outline-secondary ajax-page-btn" data-page="{{ page_obj.next_page_number }}">
+                        <button class="btn btn-sm btn-outline-secondary ajax-page-btn" data-page="{{ page_obj.next_page_number }}" aria-label="Next page">
                             <i class="fas fa-chevron-right"></i>
                         </button>
                         {% endif %}
@@ -406,7 +405,7 @@
                     {% csrf_token %}
 
                     <div class="mb-3">
-                        <label class="form-label">Description <span class="text-danger">*</span></label>
+                        <label class="form-label" for="equipment_description_select">Description <span class="text-danger">*</span></label>
                         <div class="input-group">
                             <select name="description" id="equipment_description_select" class="form-select" required onchange="toggleNewEquipmentDescription()">
                                 <option value="" disabled selected>Select...</option>
@@ -414,7 +413,7 @@
                                 <option value="{{ desc.id }}">{{ desc.name }}</option>
                                 {% endfor %}
                             </select>
-                            <button class="btn btn-outline-secondary" type="button" onclick="toggleNewEquipmentDescriptionInput()">
+                            <button class="btn btn-outline-secondary" type="button" onclick="toggleNewEquipmentDescriptionInput()" aria-label="Add new description">
                                 <i class="fas fa-plus"></i>
                             </button>
                         </div>
@@ -428,7 +427,7 @@
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label">Manufacturer <span class="text-danger">*</span></label>
+                        <label class="form-label" for="manufacturer_select">Manufacturer <span class="text-danger">*</span></label>
                         <div class="input-group">
                             <select name="manufacturer" id="manufacturer_select" class="form-select" required onchange="toggleNewManufacturer()">
                                 <option value="" disabled selected>Select...</option>
@@ -436,7 +435,7 @@
                                 <option value="{{ m.id }}">{{ m.name }}</option>
                                 {% endfor %}
                             </select>
-                            <button class="btn btn-outline-secondary" type="button" onclick="toggleNewManufacturerInput()">
+                            <button class="btn btn-outline-secondary" type="button" onclick="toggleNewManufacturerInput()" aria-label="Add new manufacturer">
                                 <i class="fas fa-plus"></i>
                             </button>
                         </div>
@@ -450,27 +449,27 @@
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label">Model</label>
+                        <label class="form-label" for="model">Model</label>
                         <input type="text" name="model" id="model" class="form-control" required>
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label">Serial Number</label>
-                        <input type="text" name="serial_number" class="form-control text-uppercase font-monospace" required>
+                        <label class="form-label" for="add_serial_number">Serial Number</label>
+                        <input type="text" name="serial_number" id="add_serial_number" class="form-control text-uppercase font-monospace" required>
                     </div>
 
                     <div class="row g-2">
                         <div class="col-6">
-                            <label class="form-label">Department</label>
-                            <select name="department" class="form-select" required>
+                            <label class="form-label" for="add_department">Department</label>
+                            <select name="department" id="add_department" class="form-select" required>
                                 {% for dept in departments %}
                                 <option value="{{ dept.id }}">{{ dept.name }}</option>
                                 {% endfor %}
                             </select>
                         </div>
                         <div class="col-6">
-                            <label class="form-label">Status</label>
-                            <select name="status" class="form-select" required>
+                            <label class="form-label" for="add_status">Status</label>
+                            <select name="status" id="add_status" class="form-select" required>
                                 <option value="Working">Working</option>
                                 <option value="Not working">Not working</option>
                                 <option value="Under repair">Under repair</option>
@@ -498,7 +497,7 @@
                     <input type="hidden" name="equipment_id" id="edit_equipment_id">
 
                     <div class="mb-3">
-                        <label class="form-label">Description</label>
+                        <label class="form-label" for="edit_description">Description</label>
                         <select name="description" id="edit_description" class="form-select" required>
                             {% for desc in equipment_descriptions %}
                             <option value="{{ desc.id }}">{{ desc.name }}</option>
@@ -507,7 +506,7 @@
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label">Manufacturer</label>
+                        <label class="form-label" for="edit_manufacturer">Manufacturer</label>
                         <select name="manufacturer" id="edit_manufacturer" class="form-select" required>
                             {% for m in manufacturers %}
                             <option value="{{ m.id }}">{{ m.name }}</option>
@@ -516,18 +515,18 @@
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label">Model</label>
+                        <label class="form-label" for="edit_model">Model</label>
                         <input type="text" name="model" id="edit_model" class="form-control" required>
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label">Serial Number</label>
+                        <label class="form-label" for="edit_serial_number">Serial Number</label>
                         <input type="text" name="serial_number" id="edit_serial_number" class="form-control text-uppercase font-monospace" required>
                     </div>
 
                     <div class="row g-2">
                         <div class="col-6">
-                            <label class="form-label">Department</label>
+                            <label class="form-label" for="edit_department">Department</label>
                             <select name="department" id="edit_department" class="form-select" required>
                                 {% for dept in departments %}
                                 <option value="{{ dept.id }}">{{ dept.name }}</option>
@@ -535,7 +534,7 @@
                             </select>
                         </div>
                         <div class="col-6">
-                            <label class="form-label">Status</label>
+                            <label class="form-label" for="edit_status">Status</label>
                             <select name="status" id="edit_status" class="form-select" required>
                                 <option value="Working">Working</option>
                                 <option value="Not working">Not working</option>
@@ -577,7 +576,7 @@
                     <div class="col-md-6">
                         <h6 class="text-muted mb-3">Target Location</h6>
                         <div class="mb-3">
-                            <label class="form-label">Target Department <span class="text-danger">*</span></label>
+                            <label class="form-label" for="transfer-target-department">Target Department <span class="text-danger">*</span></label>
                             <select id="transfer-target-department" class="form-select">
                                 <option value="">Loading...</option>
                             </select>
@@ -586,7 +585,7 @@
                             </div>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Status</label>
+                            <label class="form-label" for="transfer-new-status">Status</label>
                             <select id="transfer-new-status" class="form-select">
                                 <option value="">Keep Current Status</option>
                                 <option value="Working">Working</option>
@@ -631,13 +630,13 @@
                         </table>
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label">New Department</label>
+                        <label class="form-label" for="reactivate-new-department">New Department</label>
                         <select id="reactivate-new-department" class="form-select mb-3">
                             {% for dept in departments %}
                             <option value="{{ dept.id }}">{{ dept.name }}</option>
                             {% endfor %}
                         </select>
-                        <label class="form-label">Status</label>
+                        <label class="form-label" for="reactivate-new-status">Status</label>
                         <select id="reactivate-new-status" class="form-select mb-3">
                             <option value="Working">Working</option>
                             <option value="Not working">Not working</option>
@@ -687,8 +686,8 @@
                     <input type="hidden" name="report_type" id="reportType">
                     <input type="hidden" name="workshop" value="{{ selected_workshop.id }}">
                     <div class="mb-3">
-                        <label class="form-label">Department (Optional)</label>
-                        <select name="department" class="form-select">
+                        <label class="form-label" for="report_department">Department (Optional)</label>
+                        <select name="department" id="report_department" class="form-select">
                             <option value="">All Departments</option>
                             {% for dept in departments %}
                             <option value="{{ dept.id }}">{{ dept.name }}</option>
@@ -696,8 +695,8 @@
                         </select>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Notes</label>
-                        <textarea name="notes" class="form-control" rows="3"></textarea>
+                        <label class="form-label" for="report_notes">Notes</label>
+                        <textarea name="notes" id="report_notes" class="form-control" rows="3"></textarea>
                     </div>
                     <button type="submit" class="btn btn-primary w-100">Download PDF</button>
                 </form>
@@ -730,6 +729,7 @@
   "userRole": "{{ user_role }}"
 }
 </script>
+<script src="{% static 'js/table-sort.js' %}"></script>
 <script src="{% static 'Inventory/inventory.js' %}"></script>
 <script src="{% static 'js/chart.min.js' %}"></script>
 {% endblock %}

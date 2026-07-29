@@ -162,7 +162,7 @@
               <td>
                 <button class="btn btn-outline-primary btn-sm"
                         data-action="edit-accessory"
-                        data-id="{{ accessory.pk }}" title="Edit">
+                        data-id="{{ accessory.pk }}" title="Edit" aria-label="Edit">
                   <i class="fas fa-edit"></i>
                 </button>
                 <button class="btn btn-outline-danger btn-sm"
@@ -170,7 +170,7 @@
                         data-type="accessory"
                         data-id="{{ accessory.pk }}"
                         data-name="{{ accessory.name.name|default:'this accessory' }}"
-                        title="Delete">
+                        title="Delete" aria-label="Delete">
                   <i class="fas fa-trash"></i>
                 </button>
               </td>
@@ -240,7 +240,7 @@
               <td>
                 <button class="btn btn-outline-primary btn-sm"
                         data-action="edit-tool"
-                        data-id="{{ tool.pk }}" title="Edit">
+                        data-id="{{ tool.pk }}" title="Edit" aria-label="Edit">
                   <i class="fas fa-edit"></i>
                 </button>
                 <button class="btn btn-outline-danger btn-sm"
@@ -248,7 +248,7 @@
                         data-type="tool"
                         data-id="{{ tool.pk }}"
                         data-name="{{ tool.name.name|default:'this tool' }}"
-                        title="Delete">
+                        title="Delete" aria-label="Delete">
                   <i class="fas fa-trash"></i>
                 </button>
               </td>
@@ -521,7 +521,7 @@
             </select>
             <button type="button" class="btn btn-outline-primary"
                     onclick="toggleNewItemInput('new-tool-name-group','tool-name','new-tool-name-btn','new-tool-name')"
-                    id="new-tool-name-btn" title="Add new name">
+                    id="new-tool-name-btn" title="Add new name" aria-label="Add new name">
               <i class="fas fa-plus"></i>
             </button>
           </div>
@@ -543,7 +543,7 @@
             </select>
             <button type="button" class="btn btn-outline-primary"
                     onclick="toggleNewItemInput('new-tool-manufacturer-group','tool-manufacturer','new-tool-manufacturer-btn','new-tool-manufacturer')"
-                    id="new-tool-manufacturer-btn" title="Add new manufacturer">
+                    id="new-tool-manufacturer-btn" title="Add new manufacturer" aria-label="Add new manufacturer">
               <i class="fas fa-plus"></i>
             </button>
           </div>
@@ -596,7 +596,7 @@
             </select>
             <button type="button" class="btn btn-outline-primary"
                     onclick="toggleNewItemInput('edit-new-tool-name-group','edit-tool-name','edit-new-tool-name-btn','edit-new-tool-name')"
-                    id="edit-new-tool-name-btn" title="Add new name">
+                    id="edit-new-tool-name-btn" title="Add new name" aria-label="Add new name">
               <i class="fas fa-plus"></i>
             </button>
           </div>
@@ -617,7 +617,7 @@
             </select>
             <button type="button" class="btn btn-outline-primary"
                     onclick="toggleNewItemInput('edit-new-tool-manufacturer-group','edit-tool-manufacturer','edit-new-tool-manufacturer-btn','edit-new-tool-manufacturer')"
-                    id="edit-new-tool-manufacturer-btn" title="Add new manufacturer">
+                    id="edit-new-tool-manufacturer-btn" title="Add new manufacturer" aria-label="Add new manufacturer">
               <i class="fas fa-plus"></i>
             </button>
           </div>
@@ -909,6 +909,5 @@
 
 
 {% block extra_js %}
-<script src="{% static 'js/bootstrap.bundle.min.js' %}"></script>
 <script src="{% static 'parts_tools/accessories.js' %}"></script>
 {% endblock %}

@@ -146,7 +146,7 @@
         </tbody>
       </table>
       {% else %}
-      <p class="info">No workshops available.</p>
+      {% include 'includes/empty_state.html' with icon="🏭" title="No Workshops Yet" message="No workshops have been created yet. Use the form above to add the first one." %}
       {% endif %} {% else %}
       <p class="error">Access Denied: Only Heads of Department can manage workshops.</p>
       {% endif %}
@@ -160,7 +160,7 @@
             <i class="fas fa-edit"></i>
             Edit Workshop
           </h3>
-          <button type="button" class="modal-close" onclick="closeEditModal()">
+          <button type="button" class="modal-close" onclick="closeEditModal()" aria-label="Close">
             <i class="fas fa-times"></i>
           </button>
         </div>

@@ -493,7 +493,16 @@ class CalibrationSession(models.Model):
 
     @classmethod
     def generate_certificate_number(cls):
-        """Generate the next unique sequential certificate number safely."""
+        """Generate the next unique sequential certificate number safely.
+
+        The DB read (locked, to serialise concurrent minting) stays here; the
+        pure parse/increment lives in ``calSchedules.grouping.next_certificate_number``
+        so it can be unit-tested without a database.
+        """
+        # Local import avoids a circular import: calSchedules.models imports
+        # CalSoft.models, and grouping imports calSchedules.models.
+        from calSchedules.grouping import next_certificate_number
+
         prefix_pattern = "BNH-"
 
         with transaction.atomic():
@@ -506,15 +515,7 @@ class CalibrationSession(models.Model):
                 .first()
             )
 
-            if last_cert:
-                try:
-                    last_seq = int(last_cert.split("-")[-1])
-                except ValueError:
-                    last_seq = 0
-            else:
-                last_seq = 0
-
-            return f"{prefix_pattern}{last_seq + 1:04d}"
+            return next_certificate_number(last_cert, prefix=prefix_pattern)
 
     def save(self, *args, **kwargs):
         self.needs_sync = True  # mark for sync

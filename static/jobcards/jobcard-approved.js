@@ -25,15 +25,7 @@ class JobCardManager {
 
   applyLocalFilters() {
     const searchTerm = this.searchInput.value.toLowerCase().trim();
-    let visibleCount = 0;
-
-    this.allCards.forEach(card => {
-      const content = card.dataset.search.toLowerCase();
-      const match = content.includes(searchTerm);
-      card.style.display = match ? 'block' : 'none';
-      if (match) visibleCount++;
-    });
-
+    const visibleCount = filterElementsBySearch(this.allCards, searchTerm, 'block');
     this.updateStats(visibleCount);
     this.updateResultsInfo(searchTerm, visibleCount);
   }

@@ -24,6 +24,9 @@ from .views import (
     update_theme,
     update_sidebar,
     update_settings,
+    saved_filters_list_api,
+    saved_filter_create_ajax,
+    saved_filter_delete_ajax,
 )
 
 urlpatterns = [
@@ -86,5 +89,11 @@ urlpatterns = [
     path('update-sidebar/', update_sidebar, name='update_sidebar'),
     path('update-settings/', update_settings, name='update_settings'),
 
+    # ============================================================================
+    # SAVED FILTERS (generic — any GET-filtered list page can use these)
+    # ============================================================================
+    path('api/saved-filters/', saved_filters_list_api, name='saved_filters_list_api'),
+    path('api/saved-filters/create/', saved_filter_create_ajax, name='saved_filter_create_ajax'),
+    path('api/saved-filters/<uuid:pk>/delete/', saved_filter_delete_ajax, name='saved_filter_delete_ajax'),
 
 ]

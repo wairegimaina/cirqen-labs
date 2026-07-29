@@ -9,7 +9,9 @@ from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import logout
 from django.contrib import messages
-from django.db.models import Count, Sum
+from django.db.models import Count, Sum, Q
+from django.http import JsonResponse
+from django.urls import reverse
 from django.utils import timezone
 
 from Inventory.models import Equipment, Department
@@ -19,6 +21,8 @@ from ppms.models import PPMSchedule
 from parts_tools.models import Tools, Accessories
 from reporthub.models import Report
 from users.models import UserProfile
+from users.control import get_user_role
+from CalSoft.models import Standard
 
 logger = logging.getLogger(__name__)
 
@@ -253,6 +257,16 @@ def nic_dashboard(request):
     equipments = Equipment.objects.filter(department=department, active_status=True)
     jobcards = jobcard.objects.filter(equipment__department=department)
     ppm_schedules = PPMSchedule.objects.filter(equipment__department=department)
+
+    equipment_status = {
+        item["status"]: item["count"]
+        for item in equipments.values("status").annotate(count=Count("id"))
+    }
+    jobcard_status = {
+        item["status"]: item["count"]
+        for item in jobcards.values("status").annotate(count=Count("id"))
+    }
+
     context = {
         "department": department,
         "equipments": equipments,
@@ -260,6 +274,8 @@ def nic_dashboard(request):
         "ppm_schedules": ppm_schedules,
         "greeting": generate_greeting(request.user.first_name),
         "username": request.user.username,
+        "equipment_status_json": json.dumps(equipment_status),
+        "jobcard_status_json": json.dumps(jobcard_status),
     }
     return render(request, "dashboards/nurse_dashboard.html", context)
 
@@ -305,6 +321,13 @@ def nurse_ppms(request):
         )
         messages.info(request, f"No PPM schedules available for {department.name}.")
 
+    # Simple, genuinely meaningful counts for the KPI strip — no new
+    # queries beyond what's already filtered above, just aggregated.
+    today = timezone.localdate()
+    total_count = schedules.count()
+    completed_count = schedules.filter(status="completed").count()
+    overdue_count = schedules.filter(status="pending", scheduled_month__lt=today.replace(day=1)).count()
+
     return render(
         request,
         "PPM/nurse_ppms.html",
@@ -313,6 +336,16 @@ def nurse_ppms(request):
             "department": department,
             "greeting": generate_greeting(request.user.first_name),
             "username": request.user.username,
+            "total_ppm_count": total_count,
+            "completed_ppm_count": completed_count,
+            "overdue_ppm_count": overdue_count,
+            # The template already referenced these two (current_month_name/
+            # current_year) and access_context.department_name without this
+            # view ever providing them — rendered silently blank. Fixed here;
+            # department_name below now matches the template's own reference.
+            "current_month_name": today.strftime("%B"),
+            "current_year": today.year,
+            "access_context": {"department_name": department.name},
         },
     )
 
@@ -339,6 +372,8 @@ def hod_dashboard(request):
     }
 
     total_monthly_breakdown = {}
+    per_workshop_monthly_by_key = {}  # workshop.name -> {"YYYY-MM": count}
+    month_label_by_key = {}  # "YYYY-MM" -> "Mon YYYY", for chronological sorting
 
     for workshop in workshops:
         # ---- Job card counts ----
@@ -383,10 +418,17 @@ def hod_dashboard(request):
             .order_by("scheduled_month")
         )
         workshop_monthly = {}
+        workshop_monthly_by_key = {}
         for item in monthly_completed:
             dt = item["scheduled_month"]
             key = dt.strftime("%b %Y")
             workshop_monthly[key] = item["count"]
+
+            sort_key = dt.strftime("%Y-%m")
+            workshop_monthly_by_key[sort_key] = item["count"]
+            month_label_by_key[sort_key] = key
+
+        per_workshop_monthly_by_key[workshop.name] = workshop_monthly_by_key
 
         # Aggregate totals
         for key, count in workshop_monthly.items():
@@ -438,12 +480,114 @@ def hod_dashboard(request):
         "total_ppm_monthly_breakdown": total_monthly_breakdown,
     }
 
+    context["jobcard_status_json"] = json.dumps(
+        {
+            "Approved": context["totals"]["total_approved"],
+            "Waiting Approval": context["totals"]["total_waiting_approval"],
+            "Declined": context["totals"]["total_declined"],
+        }
+    )
+    context["ppm_monthly_json"] = json.dumps(total_monthly_breakdown)
+
+    # Per-workshop PPM completions, one colour-coded series per workshop,
+    # sharing a single chronologically-sorted month axis.
+    sorted_month_keys = sorted(month_label_by_key.keys())
+    context["ppm_monthly_labels_json"] = json.dumps(
+        [month_label_by_key[k] for k in sorted_month_keys]
+    )
+    context["ppm_monthly_by_workshop_json"] = json.dumps(
+        {
+            name: [counts.get(k, 0) for k in sorted_month_keys]
+            for name, counts in per_workshop_monthly_by_key.items()
+        }
+    )
+
     return render(request, "dashboards/hod_dashboard.html", context)
 
 
 def hod_logout_view(request):
     logout(request)
     return redirect("custom_login")
+
+
+@login_required
+def global_search(request):
+    """
+    Cross-app search endpoint for the header command palette (Ctrl+K).
+    Scoped by role the same way the existing list views are: HODs see
+    everything, Techs/NICs see only their own workshop/department.
+    """
+    query = request.GET.get("q", "").strip()
+    results = {"equipment": [], "jobcards": [], "standards": []}
+
+    if len(query) < 2:
+        return JsonResponse({"results": results})
+
+    try:
+        profile = request.user.userprofile
+    except AttributeError:
+        return JsonResponse({"results": results})
+
+    role = get_user_role(request.user)
+
+    equipment_qs = Equipment.objects.filter(active_status=True).select_related(
+        "description", "department"
+    )
+    jobcard_qs = jobcard.objects.filter(active_status=True).select_related(
+        "equipment", "department"
+    )
+
+    if role != "HOD":
+        if getattr(profile, "workshop", None):
+            equipment_qs = equipment_qs.filter(department__workshop=profile.workshop)
+            jobcard_qs = jobcard_qs.filter(department__workshop=profile.workshop)
+        elif getattr(profile, "department", None):
+            equipment_qs = equipment_qs.filter(department=profile.department)
+            jobcard_qs = jobcard_qs.filter(department=profile.department)
+        else:
+            equipment_qs = equipment_qs.none()
+            jobcard_qs = jobcard_qs.none()
+
+    for eq in equipment_qs.filter(
+        Q(serial_number__icontains=query)
+        | Q(model__icontains=query)
+        | Q(description__name__icontains=query)
+    )[:8]:
+        results["equipment"].append(
+            {
+                "title": f"{eq.description.name if eq.description else 'Equipment'} — {eq.serial_number}",
+                "subtitle": eq.department.name if eq.department else "",
+                "url": reverse("edit_inventory", args=[eq.id]),
+            }
+        )
+
+    for jc in jobcard_qs.filter(
+        Q(job_description__icontains=query)
+        | Q(equipment__serial_number__icontains=query)
+        | Q(equipment__description__name__icontains=query)
+    )[:8]:
+        results["jobcards"].append(
+            {
+                "title": f"{jc.get_action_taken_display()} — {jc.equipment.description.name if jc.equipment and jc.equipment.description else 'Job card'}",
+                "subtitle": f"{jc.status} · {jc.equipment.serial_number if jc.equipment else ''}",
+                "url": reverse("jobcard:download_jobcard_pdf", args=[jc.id]),
+            }
+        )
+
+    for std in Standard.objects.filter(active_status=True).filter(
+        Q(name__icontains=query)
+        | Q(serial_number__icontains=query)
+        | Q(certificate_number__icontains=query)
+    )[:8]:
+        results["standards"].append(
+            {
+                "title": std.name,
+                "subtitle": f"S/N {std.serial_number}",
+                "url": reverse("calibration:standard_edit", args=[std.id]),
+            }
+        )
+
+    return JsonResponse({"results": results})
 
 
 # well

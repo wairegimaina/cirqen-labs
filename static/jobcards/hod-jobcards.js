@@ -31,19 +31,7 @@ class HODJobCardManager {
 
   applyLocalSearch() {
     const term = this.searchInput?.value.toLowerCase().trim() || "";
-    let visibleCount = 0;
-
-    // Efficiently toggle visibility
-    this.allRows.forEach(row => {
-      const searchData = row.dataset.search || "";
-      const isMatch = searchData.includes(term);
-
-      // Toggle display directly
-      row.style.display = isMatch ? '' : 'none';
-
-      if (isMatch) visibleCount++;
-    });
-
+    const visibleCount = filterElementsBySearch(this.allRows, term, '');
     this.updateUI(visibleCount, term);
   }
 

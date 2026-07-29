@@ -21,7 +21,8 @@ from .state_manager import StateManager
 from .dependency_manager import DependencyManager
 from .smart_delete import SmartDeleteMixin
 
-class SyncAgent(SmartDeleteMixin):
+class LifecycleMixin(SmartDeleteMixin):
+    """Agent lifecycle: start() thread orchestration, background init, stop(), and mirror loops."""
     def start(self):
             """
             ⚡ OPTIMIZED: Instant startup - threads start immediately
@@ -208,88 +209,50 @@ class SyncAgent(SmartDeleteMixin):
             LOG.info("🎬 STARTING BACKGROUND THREADS")
             LOG.info("=" * 80)
 
-            # 1. Upload Thread (handles initial sync in background)
-            upload_thread = threading.Thread(
-                target=self.upload_loop_with_background_init,
-                name="UploadThread"
-            )
-            upload_thread.daemon = True
-            upload_thread.start()
-            self.threads.append(upload_thread)
-            LOG.info("   ✅ Upload thread started")
-
-            # 2. Download Thread
-            download_thread = threading.Thread(
-                target=self.download_loop,
-                name="DownloadThread"
-            )
-            download_thread.daemon = True
-            download_thread.start()
-            self.threads.append(download_thread)
-            LOG.info("   ✅ Download thread started")
-
-            # 2b. ⚡ Instant HQ SSE Thread
-            sse_thread = threading.Thread(
-                target=self.sync_notify_listener,
-                name="SyncNotifyThread"
-            )
-            sse_thread.daemon = True
-            sse_thread.start()
-            self.threads.append(sse_thread)
-            LOG.info("   ✅ HQ SSE listener thread started")
-
-            # 2c. ⚡ Instant Cert Notify Thread (Redis pub/sub — wakes up on cert_ready)
-            cert_notify_thread = threading.Thread(
-                target=self.cert_notify_listener,
-                name="CertNotifyThread"
-            )
-            cert_notify_thread.daemon = True
-            cert_notify_thread.start()
-            self.threads.append(cert_notify_thread)
-            LOG.info("   ✅ Cert notify listener thread started (instant cert delivery via Redis)")
-
-            # 3. Certificate Sync Thread
-            cert_thread = threading.Thread(
-                target=self.certificate_sync_loop,
-                name="CertificateSyncThread"
-            )
-            cert_thread.daemon = True
-            cert_thread.start()
-            self.threads.append(cert_thread)
-            LOG.info("   ✅ Certificate sync thread started")
-
-            # 4. Heartbeat Thread
-            heartbeat_thread = threading.Thread(
-                target=self.heartbeat_loop,
-                name="HeartbeatThread"
-            )
-            heartbeat_thread.daemon = True
-            heartbeat_thread.start()
-            self.threads.append(heartbeat_thread)
-            LOG.info("   ✅ Heartbeat thread started")
-
-            # 5. Mirror Sync Thread (delayed start)
+            # ── PER-THREAD SUPERVISION ──────────────────────────────────────
+            # BUGFIX: previously the only liveness check was
+            # `while any(t.is_alive() for t in self.threads)` in the main loop
+            # below — that only notices total death of the sync subsystem
+            # (every single thread gone). If, say, CertificateSyncThread alone
+            # hit an unhandled exception and died, the other 8 threads kept
+            # the process looking "healthy" forever with certificate syncing
+            # silently gone and nothing logging it as a problem. Building the
+            # spawn table up front lets the monitoring loop check + restart
+            # each thread individually.
+            self._thread_specs = [
+                ("UploadThread", self.upload_loop_with_background_init, "Upload thread"),
+                ("DownloadThread", self.download_loop, "Download thread"),
+                ("SyncNotifyThread", self.sync_notify_listener, "HQ SSE listener thread"),
+                ("CertNotifyThread", self.cert_notify_listener,
+                 "Cert notify listener thread (instant cert delivery via Redis)"),
+                ("CertificateSyncThread", self.certificate_sync_loop, "Certificate sync thread"),
+                ("HeartbeatThread", self.heartbeat_loop, "Heartbeat thread"),
+            ]
             if self.mirror_enabled:
-                mirror_thread = threading.Thread(
-                    target=self.delayed_mirror_sync_loop,
-                    name="MirrorSyncThread"
+                self._thread_specs.append(
+                    ("MirrorSyncThread", self.delayed_mirror_sync_loop, "Mirror sync thread (delayed)")
                 )
-                mirror_thread.daemon = True
-                mirror_thread.start()
-                self.threads.append(mirror_thread)
-                LOG.info("   ✅ Mirror sync thread started (delayed)")
+            self._thread_specs.append(
+                ("CertificatePullThread", self.certificate_pull_loop, "Certificate pull thread")
+            )
+            self._thread_specs.append(
+                # Certificate Conflict Guard Thread — self-heals cross-DB
+                # certificate_number clashes (see
+                # helper_scripts/fix_cert_conflicts.py for the one-off
+                # maintenance version of this same logic).
+                ("CertConflictGuardThread", self.cert_conflict_guard_loop, "Certificate conflict guard thread")
+            )
+
+            self._named_threads = {}
+            self._thread_restart_counts = {name: 0 for name, _, _ in self._thread_specs}
+            self._thread_last_restart_time = {}
+            self._thread_last_exception = {}
+
+            for name, target, friendly in self._thread_specs:
+                self._spawn_named_thread(name, target)
+                LOG.info("   ✅ %s started", friendly)
 
             elapsed = time.time() - startup_time
-
-            # 6. Certificate Pull Thread (NEW!)
-            cert_pull_thread = threading.Thread(
-                target=self.certificate_pull_loop,
-                name="CertificatePullThread"
-            )
-            cert_pull_thread.daemon = True
-            cert_pull_thread.start()
-            self.threads.append(cert_pull_thread)
-            LOG.info("   ✅ Certificate pull thread started")
 
             LOG.info("")
             LOG.info("=" * 80)
@@ -306,6 +269,10 @@ class SyncAgent(SmartDeleteMixin):
             LOG.info("   • 📥 Download: Every %ds", self.sync_cfg.get("download_interval_seconds", 15))
             LOG.info("   • 📜 Certificates: Every %ds", self.sync_cfg.get("certificate_sync_interval", 30))
             LOG.info("   • 💓 Heartbeat: Every %ds", self.sync_cfg.get("heartbeat_interval", 60))
+            LOG.info(
+                "   • 🛡️  Cert conflict guard: Every %ds",
+                self.sync_cfg.get("cert_conflict_check_interval", int(os.getenv("CERT_CONFLICT_CHECK_INTERVAL", "1800"))),
+            )
             if self.mirror_enabled:
                 LOG.info("   • 🔄 Mirror: Every %.1fh (starts in 5 min)", self.mirror_interval_hours)
             LOG.info("")
@@ -322,16 +289,109 @@ class SyncAgent(SmartDeleteMixin):
             LOG.info("")
 
             # ============================================================
-            # MAIN LOOP - Monitor threads
+            # MAIN LOOP - Per-thread supervision
             # ============================================================
-            try:
-                while any(t.is_alive() for t in self.threads):
-                    for t in self.threads:
-                        t.join(timeout=1)
+            # Each of the 9 loops already wraps its own body in try/except
+            # (see download_loop, certificate_sync_loop, heartbeat_loop, etc.)
+            # so an ordinary per-iteration error never kills the thread. This
+            # loop exists for the rarer case: something escapes that inner
+            # try/except (e.g. a bug in setup code before the while loop) and
+            # the thread object itself dies. Restart is per-thread and
+            # bounded — a thread that keeps dying stops being restarted after
+            # SYNC_THREAD_MAX_RESTARTS attempts (default 5) rather than
+            # spinning forever, but the other threads are never affected by
+            # one thread exhausting its budget.
+            max_restarts = int(os.getenv("SYNC_THREAD_MAX_RESTARTS", "5"))
+            restart_reset_after_seconds = int(os.getenv("SYNC_THREAD_RESTART_RESET_SECONDS", "1800"))
 
-                    if self.stop_event.is_set():
-                        LOG.info("🛑 Stop event detected")
-                        break
+            try:
+                while not self.stop_event.is_set():
+                    for name, target, friendly in self._thread_specs:
+                        t = self._named_threads.get(name)
+
+                        if t is not None and t.is_alive():
+                            # Healthy for a good while — forgive past restarts
+                            # so a rare hiccup early in a multi-day run doesn't
+                            # eat into the budget needed for a later one.
+                            last_restart = self._thread_last_restart_time.get(name)
+                            if (
+                                last_restart
+                                and self._thread_restart_counts.get(name, 0) > 0
+                                and (time.time() - last_restart) > restart_reset_after_seconds
+                            ):
+                                LOG.info(
+                                    "✅ %s stable for %d+ min — resetting restart counter",
+                                    friendly, restart_reset_after_seconds // 60,
+                                )
+                                self._thread_restart_counts[name] = 0
+                            continue
+
+                        if self.stop_event.is_set():
+                            break
+
+                        restarts = self._thread_restart_counts.get(name, 0)
+                        if restarts >= max_restarts:
+                            if restarts == max_restarts:
+                                LOG.error(
+                                    "❌ %s died and exceeded %d restart attempts — giving up on "
+                                    "this loop. Other sync threads continue running normally, but "
+                                    "this function (%s) is now permanently down until the app is "
+                                    "restarted.",
+                                    name, max_restarts, friendly,
+                                )
+                                # "Overall downtime, not just sync" alert channel:
+                                # push this to HQ immediately instead of waiting
+                                # for the ~10 min stale-client watchdog to
+                                # eventually notice. Best-effort — if HQ is
+                                # unreachable that watchdog is still the fallback.
+                                # Include the FULL captured traceback (if any
+                                # exception actually escaped the loop — see
+                                # _spawn_named_thread's wrapper) so the alert
+                                # email contains the real error, not just a
+                                # one-line summary.
+                                last_exc = self._thread_last_exception.get(name)
+                                full_message = (
+                                    f"{friendly} ({name}) died and exceeded "
+                                    f"{max_restarts} restart attempts — this "
+                                    f"function is permanently down until the "
+                                    f"app is restarted.\n\n"
+                                )
+                                if last_exc:
+                                    full_message += f"Last captured exception:\n{last_exc}"
+                                else:
+                                    full_message += (
+                                        "No exception was captured for the final death — the "
+                                        "thread likely exited without raising (e.g. returned "
+                                        "early), or died on an earlier restart whose traceback "
+                                        "was overwritten by a later one. Check sync_agent.log "
+                                        "around this thread's name for more context."
+                                    )
+                                try:
+                                    self.report_critical_failure(
+                                        failure_type="thread_permanently_down",
+                                        message=full_message,
+                                    )
+                                except Exception as _report_err:
+                                    LOG.debug("Could not report thread failure to HQ: %s", _report_err)
+                                # Bump past max_restarts so this branch only logs once.
+                                self._thread_restart_counts[name] = restarts + 1
+                            continue
+
+                        LOG.error(
+                            "❌ %s died unexpectedly — restarting (attempt %d/%d)",
+                            friendly, restarts + 1, max_restarts,
+                        )
+                        self._thread_restart_counts[name] = restarts + 1
+                        self._thread_last_restart_time[name] = time.time()
+                        try:
+                            self._spawn_named_thread(name, target)
+                            LOG.info("✅ %s restarted", friendly)
+                        except Exception as _respawn_err:
+                            LOG.error("💥 Failed to restart %s: %s", friendly, _respawn_err)
+
+                    time.sleep(1)
+
+                LOG.info("🛑 Stop event detected")
 
             except KeyboardInterrupt:
                 LOG.info("")
@@ -345,6 +405,39 @@ class SyncAgent(SmartDeleteMixin):
 
             finally:
                 LOG.info("👋 SYNC AGENT SHUTDOWN COMPLETE")
+    def _spawn_named_thread(self, name, target):
+            """
+            Create, register, and start a daemon thread for one sync loop.
+
+            Shared by both the initial spawn in start() and the per-thread
+            restart logic in the monitoring loop, so there is exactly one
+            code path that creates a sync thread.
+
+            The target is wrapped so that IF an exception ever escapes it
+            (each loop already catches its own per-iteration errors, so this
+            only fires for the rarer case of something failing before/outside
+            that inner try/except), the full traceback is captured in
+            self._thread_last_exception[name]. When the supervision loop
+            eventually gives up restarting this thread, that traceback is
+            what gets sent to HQ via report_critical_failure() — a full
+            error, not just a one-line description of what happened.
+            """
+            def _wrapped():
+                import traceback as _tb
+                try:
+                    target()
+                except Exception:
+                    self._thread_last_exception[name] = _tb.format_exc()
+                    LOG.exception("💥 %s exited via unhandled exception", name)
+                    raise
+
+            t = threading.Thread(target=_wrapped, name=name)
+            t.daemon = True
+            t.start()
+            self._named_threads[name] = t
+            # Keep self.threads in sync — stop() and __del__ still iterate it.
+            self.threads = list(self._named_threads.values())
+            return t
     def delayed_mirror_sync_loop(self):
             """
             🔄 Mirror sync with delayed start to avoid blocking startup
@@ -371,6 +464,42 @@ class SyncAgent(SmartDeleteMixin):
 
             # Now run normal mirror sync loop
             self.mirror_sync_loop()
+
+    def _count_pending_changes(self) -> int:
+        """Real local backlog count for status reporting while offline.
+
+        discover_recent_changes() is a pure local-DB read (no network call),
+        already used elsewhere in this loop at startup/reconnect — safe to
+        call while offline. Without this, status writes during an outage
+        hardcoded pending_changes=0, so nothing observing the device (a UI,
+        or HQ via the heartbeat agent_status field) could tell it was behind
+        while it was happening. Falls back to 0 (not None) on error so the
+        status file's pending_changes field stays a plain int.
+        """
+        try:
+            return len(self.discover_recent_changes())
+        except Exception as e:
+            LOG.debug("Could not count pending changes: %s", e)
+            return 0
+
+    @staticmethod
+    def _parse_throttle_retry_after(error) -> Optional[int]:
+        """Extract the server-requested backoff from upload_batch's
+        "throttled:<status>:<retry_after>" marker (sync_agent_3.upload_batch),
+        so a 429/503 is honored immediately instead of waiting for
+        consecutive_failures to escalate on a flat schedule — matters most
+        right after an outage, when many devices reconnect at once and HQ
+        signals it needs everyone to back off.
+        """
+        if not error or not str(error).startswith("throttled:"):
+            return None
+        parts = str(error).split(":", 2)
+        try:
+            seconds = int(float(parts[2])) if len(parts) > 2 and parts[2] else 30
+        except (TypeError, ValueError):
+            seconds = 30
+        return max(1, min(seconds, 300))
+
     def upload_loop_with_background_init(self):
             """
             ⚡ OPTIMIZED: Upload loop that does initial sync in background
@@ -493,7 +622,10 @@ class SyncAgent(SmartDeleteMixin):
 
                         # 📊 UPDATE STATUS: Connection state changed
                         if is_online != was_online:
-                            self.write_status_file(hq_online=is_online, pending_changes=0)
+                            self.write_status_file(
+                                hq_online=is_online,
+                                pending_changes=self._count_pending_changes(),
+                            )
 
                         if is_online and not was_online:
                             LOG.info("✅ HQ RECONNECTED at %s", format_kenyan_time(now_kenyan()))
@@ -523,7 +655,10 @@ class SyncAgent(SmartDeleteMixin):
                         if loop_count % 30 == 1:
                             LOG.warning("💤 Agent idle - HQ offline, waiting for connection...")
                             # 📊 UPDATE STATUS: Offline (every 30 loops = ~5 minutes)
-                            self.write_status_file(hq_online=False, pending_changes=0)
+                            self.write_status_file(
+                                hq_online=False,
+                                pending_changes=self._count_pending_changes(),
+                            )
 
                         time.sleep(poll_interval)
                         continue
@@ -607,7 +742,17 @@ class SyncAgent(SmartDeleteMixin):
                                         pending_changes=len(all_changes) - i
                                     )
 
-                                    if consecutive_failures >= max_consecutive_failures:
+                                    retry_after = self._parse_throttle_retry_after(error)
+                                    if retry_after is not None:
+                                        LOG.warning(
+                                            f"⏳ HQ requested backoff of {retry_after}s "
+                                            f"(throttled) — honoring before retrying"
+                                        )
+                                        for _ in range(retry_after):
+                                            if self.stop_event.is_set():
+                                                break
+                                            time.sleep(1)
+                                    elif consecutive_failures >= max_consecutive_failures:
                                         backoff_time = min(300, 60 * consecutive_failures)
                                         LOG.warning(f"Too many failures, backing off {backoff_time}s")
 

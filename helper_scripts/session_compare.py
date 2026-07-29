@@ -26,21 +26,11 @@ from datetime import datetime, timezone
 
 # ── Connection configs ────────────────────────────────────────────────────────
 
-LOCAL_DB = {
-    "host":     "127.0.0.1",
-    "port":     2215,
-    "database": "cirqen1",
-    "user":     "cirqen1",
-    "password": "Btwelvetech@2024",
-}
+import os, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _creds import LOCAL_DB, HQ_DB, require  # loaded from .env / config.json — no secrets here
 
-HQ_DB = {
-    "host":     "dpg-d8fj2c59j78s738al2vg-a.ohio-postgres.render.com",
-    "port":     5432,
-    "database": "cirqen_hq_db1",
-    "user":     "cirqen_hq_db1_user",
-    "password": "cTAU3kJL3NNlUYA9rR07kh87FKHA6c24",
-}
+require("local", "hq")
 
 # Status display labels
 STATUS_LABELS = {

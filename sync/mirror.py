@@ -1238,12 +1238,146 @@ class DatabaseMirror:
                 LOG.debug(f"   ✅ Synced to HQ: {table}[{row_id}]")
                 return True
 
+        except psycopg2.errors.UniqueViolation as uv_error:
+            # HQ is the source of truth. This local row collides with a
+            # *different* row HQ already has under the same non-PK unique
+            # value (e.g. two branches each auto-created their own "next
+            # cycle" schedule for the same equipment+month). HQ's existing
+            # row wins: re-point local references onto it and retire the
+            # local duplicate instead of leaving it stuck retrying forever.
+            try:
+                self.hq_conn.rollback()
+            except Exception:
+                pass
+
+            error_msg = str(uv_error)
+            try:
+                dup_columns = error_msg.split("Key (")[1].split(")=")[0]
+                dup_values = error_msg.split(")=(")[1].split(")")[0]
+            except Exception:
+                dup_columns = dup_values = None
+
+            resolved = False
+            if dup_columns and dup_values:
+                try:
+                    resolved = self._resolve_unique_conflict_hq_wins_upload(
+                        schema=schema, table=tbl,
+                        dup_columns=dup_columns, dup_values=dup_values,
+                        local_loser_id=row_id,
+                    )
+                except Exception as resolve_error:
+                    LOG.error(f"   ❌ Auto-resolve raised an error for {table}: {resolve_error}")
+
+            if resolved:
+                LOG.info(
+                    f"✅ Auto-resolved unique conflict on {table}[{row_id}] — "
+                    f"HQ's existing row wins, local duplicate retired."
+                )
+            else:
+                LOG.warning(
+                    f"   ⚠️  Unique conflict syncing {table}[{row_id}] to HQ could not be "
+                    f"auto-resolved ({error_msg[:200]}) — leaving for manual review."
+                )
+            return False
+
         except Exception as e:
             LOG.error(f"   ❌ Failed to sync to HQ {table}[{row_id}]: {e}")
             try:
                 self.hq_conn.rollback()
             except:
                 pass
+            return False
+
+    def _resolve_unique_conflict_hq_wins_upload(
+        self, schema: str, table: str, dup_columns: str, dup_values: str, local_loser_id: str,
+    ) -> bool:
+        """
+        Upload-direction counterpart to the download-apply auto-resolver in
+        sync_agent_6.py. HQ already has a row occupying this unique slot
+        under a different id; find it, re-point every *local* FK reference
+        from ``local_loser_id`` onto HQ's id, and delete the local duplicate.
+        """
+        columns = [c.strip().strip('"') for c in dup_columns.split(",")]
+        values = [v.strip() for v in dup_values.split(",")]
+        if not columns or len(columns) != len(values):
+            return False
+
+        with self.hq_conn.cursor(cursor_factory=RealDictCursor) as hq_cur:
+            hq_cur.execute(
+                """
+                SELECT kcu.column_name
+                FROM information_schema.table_constraints tc
+                JOIN information_schema.key_column_usage kcu
+                    ON tc.constraint_name = kcu.constraint_name
+                    AND tc.table_schema = kcu.table_schema
+                WHERE tc.constraint_type = 'PRIMARY KEY'
+                  AND tc.table_schema = %s AND tc.table_name = %s
+                """,
+                (schema, table),
+            )
+            pk_row = hq_cur.fetchone()
+            if not pk_row:
+                return False
+            pk_column = pk_row["column_name"]
+
+            where_clause = " AND ".join(f'"{c}" = %s' for c in columns)
+            hq_cur.execute(
+                f'SELECT "{pk_column}" AS pk FROM "{table}" WHERE {where_clause}',
+                tuple(values),
+            )
+            hq_row = hq_cur.fetchone()
+            if not hq_row:
+                return False
+            hq_winner_id = hq_row["pk"]
+
+        if str(hq_winner_id) == str(local_loser_id):
+            return False  # not actually a different row — nothing to resolve
+
+        try:
+            with self.local_conn.cursor(cursor_factory=RealDictCursor) as local_cur:
+                local_cur.execute(
+                    """
+                    SELECT tc.table_name, kcu.column_name
+                    FROM information_schema.table_constraints tc
+                    JOIN information_schema.key_column_usage kcu
+                        ON tc.constraint_name = kcu.constraint_name
+                    JOIN information_schema.constraint_column_usage ccu
+                        ON tc.constraint_name = ccu.constraint_name
+                    WHERE tc.constraint_type = 'FOREIGN KEY'
+                      AND ccu.table_schema = %s AND ccu.table_name = %s
+                    """,
+                    (schema, table),
+                )
+                referencing = local_cur.fetchall()
+
+                for ref in referencing:
+                    local_cur.execute(
+                        f'UPDATE "{ref["table_name"]}" SET "{ref["column_name"]}" = %s '
+                        f'WHERE "{ref["column_name"]}" = %s',
+                        (hq_winner_id, local_loser_id),
+                    )
+                    if local_cur.rowcount:
+                        LOG.info(
+                            f"   ↳ re-pointed {local_cur.rowcount} row(s) in "
+                            f"{ref['table_name']}.{ref['column_name']} from "
+                            f"{local_loser_id} to {hq_winner_id}"
+                        )
+
+                local_cur.execute(
+                    f'DELETE FROM "{table}" WHERE "{pk_column}" = %s', (local_loser_id,)
+                )
+                self.local_conn.commit()
+                LOG.info(
+                    f"   ↳ retired local duplicate {table}[{local_loser_id}] "
+                    f"in favour of HQ's {hq_winner_id}"
+                )
+                return True
+        except Exception as e:
+            try:
+                self.local_conn.rollback()
+            except Exception:
+                pass
+            LOG.error(f"   ❌ Failed retiring local duplicate {table}[{local_loser_id}]: {e}")
             return False
 
 
@@ -1817,6 +1951,12 @@ def main():
     )
 
     parser.add_argument(
+        "--hq-sslmode",
+        default=os.getenv("POSTGRES_SSLMODE", "require"),
+        help="HQ database sslmode (e.g. 'require' for Supabase pooler)"
+    )
+
+    parser.add_argument(
         "--local-host",
         default=os.getenv("POSTGRES_LOCAL_HOST", "127.0.0.1"),
         help="Local database host"
@@ -1888,7 +2028,8 @@ def main():
         "port": args.hq_port,
         "dbname": args.hq_db,
         "user": args.hq_user,
-        "password": args.hq_password
+        "password": args.hq_password,
+        "sslmode": args.hq_sslmode
     }
 
     local_config = {

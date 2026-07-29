@@ -30,6 +30,12 @@
         </div>
     </header>
 
+    <div class="kpi-strip">
+        {% include 'includes/kpi_card.html' with value=total_ppm_count label="Total Scheduled" variant="primary" icon="fa-clipboard-list" %}
+        {% include 'includes/kpi_card.html' with value=completed_ppm_count label="Completed" variant="approved" icon="fa-check-circle" %}
+        {% include 'includes/kpi_card.html' with value=overdue_ppm_count label="Overdue" variant="overdue" icon="fa-exclamation-triangle" %}
+    </div>
+
     <div class="row g-3 mb-4">
         <div class="col-md-8">
             <div class="theme-card h-100 p-3 mb-0 d-flex align-items-center">

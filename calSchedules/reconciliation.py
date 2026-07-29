@@ -21,6 +21,7 @@ import logging
 import uuid
 from .models import CalibrationSchedule
 from Inventory.models import Equipment
+from . import grouping
 
 logger = logging.getLogger(__name__)
 
@@ -260,7 +261,7 @@ def _basic_auto_reschedule(completed_schedules):
 
     for schedule in completed_schedules:
         period = schedule.calibration_period or 12
-        next_month = schedule.scheduled_month + relativedelta(months=period)
+        next_month = grouping.next_period_month(schedule.scheduled_month, period)
 
         existing = CalibrationSchedule.objects.filter(
             equipment=schedule.equipment,
@@ -378,14 +379,9 @@ def _basic_grouping_check(planning_logic='department'):
         status__in=['pending', 'pushed']
     )
 
-    if planning_logic == 'department':
-        groups = schedules.values('equipment__department_id', 'scheduled_month').annotate(
-            count=Count('id')
-        )
-    else:
-        groups = schedules.values('equipment__description_id', 'scheduled_month').annotate(
-            count=Count('id')
-        )
+    groups = schedules.values(
+        grouping.group_field_lookup(planning_logic), 'scheduled_month'
+    ).annotate(count=Count('id'))
 
     return {
         'status': 'checked',

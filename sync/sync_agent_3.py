@@ -19,7 +19,8 @@ from .state_manager import StateManager
 from .dependency_manager import DependencyManager
 from .smart_delete import SmartDeleteMixin
 
-class SyncAgent(SmartDeleteMixin):
+class UploadMixin(SmartDeleteMixin):
+    """Upload path: event construction, upload_batch (with idempotency + backpressure), and upload/download checkpoints."""
     def _is_record_soft_deleted(self, row: dict, has_pending_delete: bool,
                                     has_active_status: bool, has_deleted_at: bool) -> bool:
             """Check if record is soft deleted"""
@@ -143,15 +144,32 @@ class SyncAgent(SmartDeleteMixin):
                 LOG.info(f"   • {len(status_events)} status changes")
 
             url = f"{self.api_url}/upload"
+            # Batch-level idempotency key: deterministic over the events' own
+            # idempotency keys, so a retried identical batch carries the same key
+            # and HQ can treat it as a no-op (safe at-least-once delivery).
+            _keys = ",".join(
+                sorted(str(e.get("idempotency_key") or e.get("event_id", "")) for e in events)
+            )
+            batch_key = hashlib.sha256(_keys.encode("utf-8")).hexdigest() if _keys else None
             data = {
                 "events": events,
                 "client_id": self.client_id,
-                "machine_id": self.machine_id
+                "machine_id": self.machine_id,
+                "idempotency_key": batch_key,
             }
             headers = self._http_headers()
 
             try:
                 r = requests.post(url, json=data, headers=headers, timeout=30)
+
+                # Backpressure: honor throttling / server-busy so we back off
+                # instead of hammering a struggling HQ.
+                if r.status_code in (429, 503):
+                    retry_after = r.headers.get("Retry-After")
+                    LOG.warning("⏳ HQ throttling upload (%s)%s — backing off",
+                                r.status_code,
+                                f", Retry-After={retry_after}s" if retry_after else "")
+                    return False, f"throttled:{r.status_code}:{retry_after or ''}"
 
                 if r.status_code == 200:
                     LOG.info("✅ Batch uploaded successfully")

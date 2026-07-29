@@ -229,8 +229,8 @@
         <div class="parameter-row border rounded p-3 mb-3" data-index="">
             <div class="row g-3 align-items-end">
                 <div class="col-md-5">
-                    <label class="form-label fw-bold">Parameter</label>
-                    <select class="form-select parameter-select" name="parameters-__INDEX__-parameter" required>
+                    <label class="form-label fw-bold" for="param-select-__INDEX__">Parameter</label>
+                    <select class="form-select parameter-select" id="param-select-__INDEX__" name="parameters-__INDEX__-parameter" required>
                         <option value="">Select Parameter</option>
                         {% for param in parameters %}
                             <option value="{{ param.pk }}">{{ param.name }} ({{ param.unit }})</option>
@@ -239,16 +239,16 @@
                     <div class="invalid-feedback"></div>
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label fw-bold">Uncertainty (k=2)</label>
+                    <label class="form-label fw-bold" for="param-uncertainty-__INDEX__">Uncertainty (k=2)</label>
                     <div class="input-group">
-                        <input type="number" class="form-control" name="parameters-__INDEX__-uncertainty"
+                        <input type="number" class="form-control" id="param-uncertainty-__INDEX__" name="parameters-__INDEX__-uncertainty"
                                step="0.000001" placeholder="0.001" required>
                         <span class="input-group-text">±</span>
                     </div>
                     <div class="invalid-feedback"></div>
                 </div>
                 <div class="col-md-2">
-                    <button type="button" class="btn btn-danger btn-sm w-100 remove-parameter" title="Remove Parameter">
+                    <button type="button" class="btn btn-danger btn-sm w-100 remove-parameter" title="Remove Parameter" aria-label="Remove Parameter">
                         <i class="fas fa-trash"></i>
                     </button>
                 </div>

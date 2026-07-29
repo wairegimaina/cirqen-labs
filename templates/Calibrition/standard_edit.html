@@ -16,49 +16,25 @@
         <!-- Standard Form -->
         <form id="standardForm" method="POST" action="/calibration/standards/{{ standard.pk }}/edit/" class="bg-white p-6 rounded-lg shadow-md">
             {% csrf_token %}
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="row g-3">
                 <!-- Standard Fields -->
-                <div>
-                    <label for="id_name" class="block text-sm font-medium text-gray-700">Name</label>
-                    {{ form.name|add_class:"mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" }}
-                    {% if form.name.errors %}
-                        <p class="text-red-600 text-sm mt-1">{{ form.name.errors }}</p>
-                    {% endif %}
+                <div class="col-md-6">
+                    {% include 'includes/form_field.html' with field=form.name %}
                 </div>
-                <div>
-                    <label for="id_model_number" class="block text-sm font-medium text-gray-700">Model Number</label>
-                    {{ form.model_number|add_class:"mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" }}
-                    {% if form.model_number.errors %}
-                        <p class="text-red-600 text-sm mt-1">{{ form.model_number.errors }}</p>
-                    {% endif %}
+                <div class="col-md-6">
+                    {% include 'includes/form_field.html' with field=form.model_number %}
                 </div>
-                <div>
-                    <label for="id_serial_number" class="block text-sm font-medium text-gray-700">Serial Number</label>
-                    {{ form.serial_number|add_class:"mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" }}
-                    {% if form.serial_number.errors %}
-                        <p class="text-red-600 text-sm mt-1">{{ form.serial_number.errors }}</p>
-                    {% endif %}
+                <div class="col-md-6">
+                    {% include 'includes/form_field.html' with field=form.serial_number %}
                 </div>
-                <div>
-                    <label for="id_manufacturer" class="block text-sm font-medium text-gray-700">Manufacturer</label>
-                    {{ form.manufacturer|add_class:"mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" }}
-                    {% if form.manufacturer.errors %}
-                        <p class="text-red-600 text-sm mt-1">{{ form.manufacturer.errors }}</p>
-                    {% endif %}
+                <div class="col-md-6">
+                    {% include 'includes/form_field.html' with field=form.manufacturer %}
                 </div>
-                <div>
-                    <label for="id_calibration_date" class="block text-sm font-medium text-gray-700">Calibration Date</label>
-                    {{ form.calibration_date|add_class:"mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" }}
-                    {% if form.calibration_date.errors %}
-                        <p class="text-red-600 text-sm mt-1">{{ form.calibration_date.errors }}</p>
-                    {% endif %}
+                <div class="col-md-6">
+                    {% include 'includes/form_field.html' with field=form.calibration_date %}
                 </div>
-                <div>
-                    <label for="id_calibration_due_date" class="block text-sm font-medium text-gray-700">Calibration Due Date</label>
-                    {{ form.calibration_due_date|add_class:"mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" }}
-                    {% if form.calibration_due_date.errors %}
-                        <p class="text-red-600 text-sm mt-1">{{ form.calibration_due_date.errors }}</p>
-                    {% endif %}
+                <div class="col-md-6">
+                    {% include 'includes/form_field.html' with field=form.calibration_due_date %}
                 </div>
             </div>
 
@@ -71,20 +47,12 @@
                         {{ param_form.id }}
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label for="{{ param_form.parameter.id_for_label }}" class="block text-sm font-medium text-gray-700">Parameter</label>
-                                {{ param_form.parameter|add_class:"mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" }}
-                                {% if param_form.parameter.errors %}
-                                    <p class="text-red-600 text-sm mt-1">{{ param_form.parameter.errors }}</p>
-                                {% endif %}
+                                {% include 'includes/form_field.html' with field=param_form.parameter %}
                             </div>
                             <div>
-                                <label for="{{ param_form.uncertainty.id_for_label }}" class="block text-sm font-medium text-gray-700">Uncertainty</label>
-                                {{ param_form.uncertainty|add_class:"mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" }}
-                                {% if param_form.uncertainty.errors %}
-                                    <p class="text-red-600 text-sm mt-1">{{ param_form.uncertainty.errors }}</p>
-                                {% endif %}
+                                {% include 'includes/form_field.html' with field=param_form.uncertainty %}
                             </div>
-                            {{ param_form.DELETE|add_class:"hidden" }}
+                            <div style="display:none;">{{ param_form.DELETE }}</div>
                         </div>
                         <button type="button" class="delete-parameter mt-2 text-red-600 hover:text-red-800 text-sm">Delete Parameter</button>
                     </div>
@@ -100,17 +68,6 @@
                 <a href="{% url 'calibration:StandardsParameters_lists' %}" class="bg-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-400">Cancel</a>
             </div>
         </form>
-
-        <!-- Success/Error Messages -->
-        {% if messages %}
-            <div class="mt-4">
-                {% for message in messages %}
-                    <div class="p-4 rounded-md {% if message.tags == 'success' %}bg-green-100 text-green-700{% else %}bg-red-100 text-red-700{% endif %}">
-                        {{ message }}
-                    </div>
-                {% endfor %}
-            </div>
-        {% endif %}
     </div>
 
     <script>

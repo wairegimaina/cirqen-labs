@@ -25,7 +25,8 @@ from .dependency_manager import DependencyManager
 from .smart_delete import SmartDeleteMixin
 
 
-class SyncAgent(SmartDeleteMixin):
+class ParentRecoveryMixin(SmartDeleteMixin):
+    """Auto-recovery of missing FK parent records from HQ."""
     def auto_recover_missing_parents_from_hq(
         self, table: str, row_id: str, fk_column: str, parent_table: str, parent_id: str
     ) -> bool:

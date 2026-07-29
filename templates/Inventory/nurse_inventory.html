@@ -213,12 +213,12 @@
                     data-serial="{{ equipment.serial_number|default:'' }}"
                     data-department="{{ equipment.department.id }}"
                     data-status="{{ equipment.status }}"
-                    title="Edit">
+                    title="Edit" aria-label="Edit">
                     <i class="fas fa-pen"></i>
                   </button>
                   <button class="btn btn-outline-danger delete-button"
                     data-equipment-id="{{ equipment.id }}"
-                    title="Delete">
+                    title="Delete" aria-label="Delete">
                     <i class="fas fa-trash"></i>
                   </button>
                   <button class="btn btn-outline-info transfer-button"
@@ -230,7 +230,7 @@
                     data-workshop="{{ equipment.department.workshop.name }}"
                     data-workshop-id="{{ equipment.department.workshop.id }}"
                     data-status="{{ equipment.status }}"
-                    title="Transfer">
+                    title="Transfer" aria-label="Transfer">
                     <i class="fas fa-exchange-alt"></i>
                   </button>
                 </div>
@@ -238,10 +238,8 @@
             </tr>
             {% empty %}
             <tr>
-              <td colspan="{% if user_role != 'NIC' or user_departments.count > 1 %}8{% else %}7{% endif %}" class="text-center text-muted py-5">
-                <i class="fas fa-search fa-3x mb-3" style="opacity: 0.5;"></i>
-                <h5>No equipment found</h5>
-                <p>Try adjusting your search criteria or filters</p>
+              <td colspan="{% if user_role != 'NIC' or user_departments.count > 1 %}8{% else %}7{% endif %}">
+                {% include 'includes/empty_state.html' with icon="📦" title="No equipment found" message="Try adjusting your search criteria or filters." %}
               </td>
             </tr>
             {% endfor %}

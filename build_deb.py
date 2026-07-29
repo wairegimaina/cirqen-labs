@@ -124,6 +124,20 @@ PKG_ICONS_SC = PKG_ROOT / "usr/share/icons/hicolor/scalable/apps"
 PKG_DOC      = PKG_ROOT / f"usr/share/doc/{APP_NAME}"
 PKG_DEBIAN   = PKG_ROOT / "DEBIAN"                  # control files
 
+# ── Process supervision (closes the "nobody restarted the app / it was
+# never running" gap — see the incident where two sessions sat unsynced
+# for ~11h because launch_cirqen.py was started manually and nothing
+# relaunched it). Two independent, complementary mechanisms:
+#   1. XDG autostart .desktop entry — guarantees the app launches on every
+#      login with zero manual steps and zero systemd feature dependency.
+#      This alone would have prevented the specific incident above.
+#   2. systemd --user unit with Restart=on-failure — additionally respawns
+#      the app if it crashes or gets OOM-killed while the session stays up,
+#      the same Restart=on-failure/RestartSec pattern PostgresSystemdManager
+#      already uses for cirqen-postgres (bulider_tools/runtime.py).
+PKG_AUTOSTART     = PKG_ROOT / "etc/xdg/autostart"
+PKG_SYSTEMD_USER  = PKG_ROOT / "usr/lib/systemd/user"
+
 
 # ──────────────────────────────────────────────────────────────────
 # Helpers
@@ -270,6 +284,40 @@ StartupWMClass=Cirqen
 Keywords=cirqen;hospital;equipment;management;erp;
 """
 
+AUTOSTART_ENTRY = f"""\
+[Desktop Entry]
+Type=Application
+Name={APP_PRETTY}
+Comment=Build Smarter. Scale Faster.
+Exec=/opt/{APP_NAME}/Cirqen --no-sandbox
+Icon={APP_NAME}
+Terminal=false
+StartupNotify=false
+X-GNOME-Autostart-enabled=true
+Hidden=false
+X-GNOME-Autostart-Delay=5
+"""
+
+SYSTEMD_USER_UNIT = f"""\
+[Unit]
+Description=Cirqen Desktop Application
+After=graphical-session.target network-online.target
+Wants=network-online.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/opt/{APP_NAME}/Cirqen --no-sandbox
+Restart=on-failure
+RestartSec=10
+StartLimitIntervalSec=300
+StartLimitBurst=5
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target
+"""
+
 FALLBACK_SVG = """\
 <?xml version="1.0" encoding="UTF-8"?>
 <svg width="256" height="256" viewBox="0 0 256 256"
@@ -304,7 +352,30 @@ find "$MEDIA_DIR" -maxdepth 0 -type d -exec chmod 0755 {{}} \;
 gtk-update-icon-cache /usr/share/icons/hicolor/ 2>/dev/null || true
 update-desktop-database /usr/share/applications/        2>/dev/null || true
 
-echo "✅ Cirqen installed. Launch from Applications menu or run: {APP_NAME}"
+# ── Process supervision ─────────────────────────────────────────────
+# The XDG autostart entry (etc/xdg/autostart/{APP_NAME}-autostart.desktop)
+# needs no activation step — every standard desktop environment picks it
+# up automatically at next login. That alone guarantees the app is
+# actually running after a reboot without anyone opening a terminal.
+#
+# The systemd --user unit additionally respawns the app if it crashes
+# mid-session. Enabling a --user unit from a root postinst has to reach
+# into each real user's session — best-effort only; a failure here must
+# never break the package install, and the autostart entry above already
+# covers the primary failure mode this exists for.
+for uid_line in $(loginctl list-users --no-legend 2>/dev/null | awk '{{print $1}}'); do
+    target_user="$(id -nu "$uid_line" 2>/dev/null || true)"
+    [ -z "$target_user" ] && continue
+    runtime_dir="/run/user/$uid_line"
+    [ -d "$runtime_dir" ] || continue
+    sudo -u "$target_user" XDG_RUNTIME_DIR="$runtime_dir" \
+        systemctl --user daemon-reload 2>/dev/null || true
+    sudo -u "$target_user" XDG_RUNTIME_DIR="$runtime_dir" \
+        systemctl --user enable --now {APP_NAME}-desktop.service 2>/dev/null || true
+done
+
+echo "✅ Cirqen installed. Will launch automatically at next login."
+echo "   (Or run now: {APP_NAME})"
 exit 0
 """
 
@@ -312,6 +383,17 @@ exit 0
 PRERM = f"""\
 #!/bin/bash
 set -e
+
+# Disable the per-user supervision unit before the binary it points at
+# disappears, so systemd --user doesn't keep trying to respawn a missing
+# executable after removal.
+for uid_line in $(loginctl list-users --no-legend 2>/dev/null | awk '{{print $1}}'); do
+    target_user="$(id -nu "$uid_line" 2>/dev/null || true)"
+    [ -z "$target_user" ] && continue
+    runtime_dir="/run/user/$uid_line"
+    [ -d "$runtime_dir" ] || continue
+    sudo -u "$target_user" XDG_RUNTIME_DIR="$runtime_dir" systemctl --user disable --now {APP_NAME}-desktop.service 2>/dev/null || true
+done
 
 # Kill any running instance
 pkill -f "Cirqen" 2>/dev/null || true
@@ -375,6 +457,12 @@ def build_package_tree(dist_path: Path):
     # ── 3b. .desktop entry ──────────────────────────────────────────
     write(PKG_APPS / f"{APP_NAME}.desktop", DESKTOP_ENTRY)
     logger.info("✅ .desktop entry written")
+
+    # ── 3b-ii. Process supervision: autostart entry + systemd --user unit ──
+    write(PKG_AUTOSTART / f"{APP_NAME}-autostart.desktop", AUTOSTART_ENTRY)
+    logger.info("✅ XDG autostart entry written")
+    write(PKG_SYSTEMD_USER / f"{APP_NAME}-desktop.service", SYSTEMD_USER_UNIT)
+    logger.info("✅ systemd --user unit written")
 
     # ── 3c. Icons — map pre-generated sizes from static/images/ ────────
     #

@@ -89,12 +89,12 @@
                     <form method="get" action="{% url 'jobcard:bulk_download_waiting_jobcards' %}" class="d-inline-flex flex-wrap gap-2 align-items-end justify-content-lg-end w-100">
                         <div class="d-flex gap-2">
                             <div>
-                                <label class="form-label small fw-bold text-muted d-block text-start">FROM</label>
-                                <input type="date" name="start_date" class="form-control form-control-sm" required>
+                                <label for="bulk_dl_start_date" class="form-label small fw-bold text-muted d-block text-start">FROM</label>
+                                <input type="date" id="bulk_dl_start_date" name="start_date" class="form-control form-control-sm" required>
                             </div>
                             <div>
-                                <label class="form-label small fw-bold text-muted d-block text-start">TO</label>
-                                <input type="date" name="end_date" class="form-control form-control-sm" required>
+                                <label for="bulk_dl_end_date" class="form-label small fw-bold text-muted d-block text-start">TO</label>
+                                <input type="date" id="bulk_dl_end_date" name="end_date" class="form-control form-control-sm" required>
                             </div>
                         </div>
                         <button type="submit" class="btn btn-success btn-sm h-100 px-3 py-2">
@@ -112,11 +112,11 @@
                 <table class="table table-hover align-middle mb-0">
                     <thead>
                         <tr>
-                            <th scope="col" class="ps-3">ID</th>
-                            <th scope="col">Equipment Details</th>
-                            <th scope="col">Department</th>
-                            <th scope="col">Technician</th>
-                            <th scope="col">Priority</th>
+                            <th scope="col" class="ps-3" data-sort="text">ID</th>
+                            <th scope="col" data-sort="text">Equipment Details</th>
+                            <th scope="col" data-sort="text">Department</th>
+                            <th scope="col" data-sort="text">Technician</th>
+                            <th scope="col" data-sort="text">Priority</th>
                             <th scope="col" class="text-end pe-3">Actions</th>
                         </tr>
                     </thead>
@@ -165,14 +165,20 @@
                             <td class="text-end pe-3">
                                 <div class="btn-group">
                                     <button type="button" class="btn btn-sm btn-outline-primary"
-                                            onclick="viewJobCardDetails({{ job_card.id }})">
+                                            onclick="viewJobCardDetails({{ job_card.id }})" aria-label="View job card details">
                                         <i class="fas fa-eye"></i>
                                     </button>
                                     <a href="{% url 'jobcard:download_jobcard_pdf' job_card.id %}"
-                                       class="btn btn-sm btn-outline-success">
+                                       class="btn btn-sm btn-outline-success" aria-label="Download job card">
                                         <i class="fas fa-download"></i>
                                     </a>
                                 </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6">
+                                {% include 'includes/empty_state.html' with icon="🗂️" title="No Job Cards" message="No job cards have been created for this workshop yet." %}
                             </td>
                         </tr>
                         {% endfor %}
@@ -232,5 +238,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{% static 'js/list-search.js' %}"></script>
+<script src="{% static 'js/table-sort.js' %}"></script>
 <script src="{% static 'jobcards/hod-jobcards.js' %}"></script>
 {% endblock %}

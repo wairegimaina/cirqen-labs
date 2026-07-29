@@ -322,20 +322,8 @@ const UI = {
     });
   },
 
-  showNotification: (msg, type = 'info') => {
-    const existing = document.querySelector('.custom-toast');
-    if (existing) existing.remove();
-
-    const div = document.createElement('div');
-    div.className = `alert alert-${type} position-fixed top-0 end-0 m-3 shadow-lg fade-in custom-toast`;
-    div.style.zIndex = '99999';
-    div.innerHTML = `<i class="fas fa-info-circle me-2"></i> ${msg}`;
-    document.body.appendChild(div);
-    setTimeout(() => {
-      div.style.opacity = '0';
-      setTimeout(() => div.remove(), 500);
-    }, 3000);
-  },
+  // Delegates to the shared toast system (static/js/notify.js, loaded globally in base.html)
+  showNotification: (msg, type = 'info') => window.notify(msg, type),
 };
 
 // ==========================================

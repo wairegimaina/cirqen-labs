@@ -1,7 +1,7 @@
 # Auto-generated refactor of the original Cirqen main.py UI layer.
 from __future__ import annotations
 
-from PySide6.QtCore import QRectF, Qt, QTimer, QUrl
+from PySide6.QtCore import QRectF, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QBrush, QColor, QFont, QIcon, QPainter, QLinearGradient, QPen, QPixmap
 from PySide6.QtWebEngineCore import QWebEngineDownloadRequest
 from PySide6.QtWebEngineWidgets import QWebEngineView
@@ -203,6 +203,14 @@ class CustomSplashScreen(QSplashScreen):
 class MainWindow(QMainWindow):
     """Main window with embedded Django application - Modern Clean Design"""
 
+    # The HQ-reachability ping in update_sync_online_indicator() runs on a
+    # plain background thread (no Qt event loop), so it cannot safely touch
+    # widgets directly or rely on QTimer.singleShot to hop back to the main
+    # thread — that combination is what left the indicator stuck on
+    # "Checking…" forever. A Qt signal is the one thing that IS safe to
+    # emit cross-thread; the connected slot below runs on the main thread.
+    _sync_check_result = Signal(bool, int, str)
+
     def __init__(self, port_manager: PortManager, service_manager: ServiceManager):
         """
         Initialize Main Window with modern, minimal UI
@@ -214,6 +222,7 @@ class MainWindow(QMainWindow):
         self.django_port = port_manager.get_port('django')
         self.django_ready = False
         self.update_info = None
+        self._sync_check_result.connect(self._apply_sync_status)
 
         # ============================================================
         # WINDOW CONFIGURATION
@@ -754,15 +763,6 @@ class MainWindow(QMainWindow):
             except Exception:
                 return {}
 
-        def _fmt_time(iso_str):
-            if not iso_str:
-                return ''
-            try:
-                from datetime import datetime as _dt
-                return _dt.fromisoformat(iso_str).strftime('%H:%M')
-            except Exception:
-                return ''
-
         def _ping_hq(url: str, timeout: float = 5.0) -> bool:
             import urllib.request as _req
             import urllib.error as _uerr
@@ -773,53 +773,6 @@ class MainWindow(QMainWindow):
                 return True
             except Exception:
                 return False
-
-        def _apply_indicator(hq_online, pending, last_sync):
-            """Update UI — must run on main thread via QTimer.singleShot."""
-            try:
-                last_sync_text = _fmt_time(last_sync)
-                if hq_online:
-                    dot    = '🟢'
-                    color  = '#22c55e'
-                    bg     = 'rgba(34,197,94,0.12)'
-                    border = 'rgba(34,197,94,0.35)'
-                    label_text = f"{dot} Online"
-                    if pending:
-                        label_text = f"{dot} Syncing ({pending})"
-                    tip = (
-                        f"HQ server: connected\n"
-                        f"Pending changes: {pending}\n"
-                        f"Last sync: {last_sync_text or 'unknown'}"
-                    )
-                else:
-                    dot    = '⚫'
-                    color  = '#ef4444'
-                    bg     = 'rgba(239,68,68,0.10)'
-                    border = 'rgba(239,68,68,0.25)'
-                    label_text = f"{dot} HQ Offline"
-                    if pending:
-                        label_text = f"{dot} Offline ({pending} pending)"
-                    tip = (
-                        f"HQ server: unreachable\n"
-                        f"Pending changes: {pending}\n"
-                        f"Will sync automatically when reconnected"
-                    )
-
-                self.sync_online_label.setText(label_text)
-                self.sync_online_label.setStyleSheet(f"""
-                    QLabel {{
-                        color: {color};
-                        font-size: 10px;
-                        font-weight: 500;
-                        padding: 2px 8px;
-                        background-color: {bg};
-                        border-radius: 4px;
-                        border: 1px solid {border};
-                    }}
-                """)
-                self.sync_online_label.setToolTip(tip)
-            except Exception as e:
-                logger.debug(f"Sync indicator apply error: {e}")
 
         try:
             sync_state_dir = DATA_PATH / 'sync_state'
@@ -856,7 +809,7 @@ class MainWindow(QMainWindow):
 
             if hq_online is not None:
                 # Layers 1/2 gave us an answer — update immediately on main thread
-                _apply_indicator(hq_online, pending, last_sync)
+                self._apply_sync_status(hq_online, pending, last_sync)
             else:
                 # ── Layer 3: HTTP ping — run in background thread ──────────
                 hq_url = 'https://cirqen-hq.onrender.com'
@@ -874,12 +827,66 @@ class MainWindow(QMainWindow):
 
                 def _bg_ping():
                     result = _ping_hq(hq_url)
-                    QTimer.singleShot(0, lambda: _apply_indicator(result, _pending, _last))
+                    # Emit, don't QTimer.singleShot — this runs on a plain
+                    # background thread with no Qt event loop, so singleShot
+                    # here silently never fires and the label was stuck on
+                    # "Checking…" forever. A signal is safe to emit from any
+                    # thread; the connected slot runs on the main thread.
+                    self._sync_check_result.emit(result, _pending, _last)
 
                 threading.Thread(target=_bg_ping, daemon=True).start()
 
         except Exception as e:
             logger.debug(f"Sync indicator update error: {e}")
+
+    def _apply_sync_status(self, hq_online: bool, pending: int, last_sync: str):
+        """Update the bottom-bar sync indicator. Always runs on the main
+        thread (direct call from layers 1/2, or via _sync_check_result for
+        the background-thread HTTP ping in layer 3)."""
+        try:
+            def _fmt_time(iso_str):
+                if not iso_str:
+                    return ''
+                try:
+                    from datetime import datetime as _dt
+                    return _dt.fromisoformat(iso_str).strftime('%H:%M')
+                except Exception:
+                    return ''
+
+            last_sync_text = _fmt_time(last_sync)
+
+            # No raw pending-change counts here — the number reported by the
+            # sync agent is a transient in-flight batch size, not a stable
+            # backlog total, so it reads as arbitrary/untrustworthy. Only the
+            # qualitative state (syncing vs. idle) is shown.
+            if hq_online and pending:
+                dot, color, bg, border = '🔄', '#60a5fa', 'rgba(96,165,250,0.12)', 'rgba(96,165,250,0.35)'
+                label_text = f"{dot} Syncing"
+                tip = "HQ server: connected\nUploading local changes…"
+            elif hq_online:
+                dot, color, bg, border = '🟢', '#22c55e', 'rgba(34,197,94,0.12)', 'rgba(34,197,94,0.35)'
+                label_text = f"{dot} Online"
+                tip = f"HQ server: connected\nLast sync: {last_sync_text or 'unknown'}"
+            else:
+                dot, color, bg, border = '⚫', '#ef4444', 'rgba(239,68,68,0.10)', 'rgba(239,68,68,0.25)'
+                label_text = f"{dot} HQ Offline"
+                tip = "HQ server: unreachable\nWill sync automatically when reconnected"
+
+            self.sync_online_label.setText(label_text)
+            self.sync_online_label.setStyleSheet(f"""
+                QLabel {{
+                    color: {color};
+                    font-size: 10px;
+                    font-weight: 500;
+                    padding: 2px 8px;
+                    background-color: {bg};
+                    border-radius: 4px;
+                    border: 1px solid {border};
+                }}
+            """)
+            self.sync_online_label.setToolTip(tip)
+        except Exception as e:
+            logger.debug(f"Sync indicator apply error: {e}")
 
     def setup_download_handler(self):
         """Set up download handling for the web view"""
@@ -955,6 +962,7 @@ class MainWindow(QMainWindow):
         logger.info("Refreshing page...")
         self.web_view.reload()
         self.status_label.setText("🔄 Refreshing...")
+        self.update_sync_online_indicator()
 
     def open_logs_directory(self):
         """Open logs directory in system file explorer"""

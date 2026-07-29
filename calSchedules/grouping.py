@@ -1,0 +1,231 @@
+"""
+grouping.py — single source of truth for calibration scheduling "group" logic.
+
+Historically the same concepts were re-implemented across ``tasks.py``,
+``instant_reconciliation.py``, ``locker.py`` and ``reconciliation.py``:
+
+    * what group an equipment belongs to (department- or description-based),
+    * who the group members are for a given month,
+    * whether a group is complete,
+    * what month comes next for a completed schedule,
+    * whether a schedule is protected from reorganization,
+    * the next sequential certificate number.
+
+Those copies had **diverged** (e.g. some filtered on the *schedule's*
+``active_status`` while others filtered on the *equipment's*), so they are NOT
+freely interchangeable. This module centralises the logic while *preserving*
+every caller's behaviour: the pure helpers are shared verbatim, and the one ORM
+query builder (:func:`group_members_qs`) takes **explicit flags** so each caller
+reproduces its exact historical filters. See ``SCHEDULING_NOTES.md`` for the
+documented divergences that are intentionally left for a later decision.
+
+Design rule: everything above :func:`group_members_qs` is pure (no ORM, no
+side effects) and unit-tested with ``SimpleTestCase``.
+"""
+from datetime import date
+
+from dateutil.relativedelta import relativedelta
+
+
+# ── Planning-logic vocabulary ─────────────────────────────────────────────────
+#
+# Two vocabularies for the same two concepts coexist in the codebase:
+#   * runtime cycle (instant_reconciliation, locker): 'department' / 'description'
+#   * reorganizer + UI + model defaults:              'date_based' / 'description_based'
+# They historically did NOT reconcile, so a schedule reorganized "by department"
+# (stored as 'date_based') was regrouped by *description* during the PPM
+# auto-reschedule cycle. canonical_logic() collapses both vocabularies to the
+# runtime pair so every group decision agrees, without a data migration.
+
+LOGIC_ALIASES = {
+    "date_based": "department",
+    "description_based": "description",
+}
+
+
+def canonical_logic(planning_logic):
+    """Normalise a planning_logic value to the runtime pair.
+
+    ``date_based`` -> ``department``, ``description_based`` -> ``description``;
+    ``department`` / ``description`` (and anything else) pass through unchanged.
+    """
+    return LOGIC_ALIASES.get(planning_logic, planning_logic)
+
+
+# ── Group identity ────────────────────────────────────────────────────────────
+
+def group_field_lookup(planning_logic):
+    """ORM lookup prefix for the group id field given the planning logic.
+
+    Convention shared by every scheduler module: department-based logic groups by
+    the equipment's department; anything else groups by its description. Both
+    logic vocabularies are accepted (see :func:`canonical_logic`).
+    """
+    return "equipment__department_id" if canonical_logic(planning_logic) == "department" else "equipment__description_id"
+
+
+def group_id_for(equipment, planning_logic):
+    """Return the group id (department_id or description_id) for ``equipment``.
+
+    Mirrors the ``_get_group_members`` / ``find_group_members`` convention:
+    returns ``None`` when equipment is falsy or the id attribute is absent.
+    """
+    if not equipment:
+        return None
+    if canonical_logic(planning_logic) == "department":
+        return getattr(equipment, "department_id", None)
+    return getattr(equipment, "description_id", None)
+
+
+def group_key(schedule, planning_logic):
+    """Stable, human-readable group key ``"<logic>_<gid>_<YYYY-MM>"``.
+
+    Note the sentinels (``'no_department'`` / ``'no_description'`` /
+    ``'unknown'``) and that it inspects the *related object*
+    (``equipment.department``). The logic is canonicalised first so the two
+    vocabularies produce the *same* key for the same real group.
+    """
+    planning_logic = canonical_logic(planning_logic)
+    if planning_logic == "department":
+        group_id = (
+            schedule.equipment.department_id
+            if schedule.equipment and schedule.equipment.department
+            else "no_department"
+        )
+    else:
+        group_id = (
+            schedule.equipment.description_id
+            if schedule.equipment and schedule.equipment.description
+            else "no_description"
+        )
+    month_key = schedule.scheduled_month.strftime("%Y-%m") if schedule.scheduled_month else "unknown"
+    return f"{planning_logic}_{group_id}_{month_key}"
+
+
+# ── Date / period math ────────────────────────────────────────────────────────
+
+def planning_year(today=None):
+    """Current planning year (rolls to next year once past June)."""
+    today = today or date.today()
+    return today.year + 1 if today.month > 6 else today.year
+
+
+def next_period_month(current_month, period):
+    """The month one calibration ``period`` (in months) after ``current_month``."""
+    return current_month + relativedelta(months=period)
+
+
+def clamp_far_future_month(next_month, today, period, slack_months=6):
+    """Guard against a stale base month producing an absurd future date.
+
+    Reproduces the rule in ``instant.get_next_group_month``: if ``next_month`` is
+    more than ``period + slack_months`` ahead of today, rebase on today instead.
+    """
+    max_future = today + relativedelta(months=period + slack_months)
+    if next_month > max_future:
+        return today.replace(day=1) + relativedelta(months=period)
+    return next_month
+
+
+def find_optimal_month(start_date, month_count, group_id, month_map, max_per_month,
+                       is_special, max_attempts=36):
+    """Find the first available month for a group (load-balancing across months).
+
+    Moved verbatim from ``tasks._find_optimal_month``. ``month_map`` is mutated
+    in place (memoises the chosen month per group id).
+    """
+    if group_id in month_map:
+        return month_map[group_id]
+
+    for offset in range(max_attempts):
+        candidate = start_date + relativedelta(months=offset)
+        count = sum(1 for m in month_map.values() if m == candidate)
+        if is_special or count < max_per_month:
+            month_map[group_id] = candidate
+            return candidate
+
+    fallback = start_date + relativedelta(months=max_attempts)
+    month_map[group_id] = fallback
+    return fallback
+
+
+# ── Protection & completion ───────────────────────────────────────────────────
+
+def is_protected(status, is_locked, generation_source, protected_sources):
+    """Whether a schedule must never be moved by normalization/reorganization.
+
+    Pure form of ``tasks._is_protected`` — caller passes the schedule's fields
+    and its module's ``PROTECTED_SOURCES`` list.
+    """
+    return (
+        status == "completed"
+        or is_locked
+        or generation_source in protected_sources
+    )
+
+
+def completion_stats(total, completed):
+    """Group completion summary. ``all_completed`` is False for an empty group."""
+    return {
+        "total": total,
+        "completed": completed,
+        "all_completed": total > 0 and total == completed,
+    }
+
+
+# ── Certificate numbering ─────────────────────────────────────────────────────
+
+def next_certificate_number(last_cert, prefix="BNH-"):
+    """Next sequential certificate number given the current highest one.
+
+    Pure form of ``CalSoft.models.CalibrationSession.generate_certificate_number``
+    (the caller still runs the ``select_for_update`` query to obtain
+    ``last_cert``). ``last_cert`` may be ``None``/empty for the first certificate.
+    Unparseable suffixes reset the sequence to 0 → ``0001``.
+    """
+    if last_cert:
+        try:
+            last_seq = int(last_cert.split("-")[-1])
+        except ValueError:
+            last_seq = 0
+    else:
+        last_seq = 0
+    return f"{prefix}{last_seq + 1:04d}"
+
+
+# ── ORM query builder (the ONLY DB-touching function here) ────────────────────
+
+def group_members_qs(equipment, scheduled_month, planning_logic, *,
+                     require_equipment_active, require_schedule_active,
+                     statuses=None, select_related=("equipment",)):
+    """Return the ``CalibrationSchedule`` queryset for a group in one month.
+
+    The historical implementations differed in their filters, so the flags are
+    **required** (no defaults) to force each caller to state exactly what it
+    wants — reproducing its prior behaviour:
+
+      * ``tasks._get_group_members``      → require_schedule_active=True,
+                                            require_equipment_active=False
+      * ``instant.find_group_members``    → require_equipment_active=True,
+                                            require_schedule_active=False
+
+    ``statuses`` optionally restricts ``status__in`` (neither of the two legacy
+    member-listers filtered on status, so they pass ``None``).
+    """
+    from .models import CalibrationSchedule  # local import: avoids import cycles
+
+    filters = {
+        group_field_lookup(planning_logic): group_id_for(equipment, planning_logic),
+        "scheduled_month": scheduled_month,
+    }
+    if require_equipment_active:
+        filters["equipment__active_status"] = True
+    if require_schedule_active:
+        filters["active_status"] = True
+    if statuses is not None:
+        filters["status__in"] = statuses
+
+    qs = CalibrationSchedule.objects.filter(**filters)
+    if select_related:
+        qs = qs.select_related(*select_related)
+    return qs

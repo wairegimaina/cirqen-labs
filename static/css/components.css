@@ -1,0 +1,437 @@
+/* ============================================================
+   SHARED COMPONENTS
+   Consolidates markup/CSS that was previously declared
+   independently in multiple places under the same class names:
+     - static/calibrition/calsoft.css      (.kpi-card, .kpi-num, kpi-pending/pushed/overdue/approved)
+     - static/dashboards/cmms-dashboard.css (.kpi-card, .kpi-value, .kpi-meta, loading shimmer)
+     - templates/Reporthub/report.html      (.kpi-primary/success/info/warning — had NO matching
+       CSS anywhere before this file; those cards rendered unstyled)
+   Loaded globally from base.html so every page gets one real,
+   consistent implementation instead of three-different-or-none.
+   ============================================================ */
+
+/* ---------- KPI card ---------- */
+.kpi-strip,
+.kpi-grid,
+.annual-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.kpi-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1.1rem 1.25rem;
+  position: relative;
+  overflow: hidden;
+  /* --kpi-color is the per-card inline override already used by the 3
+     dashboard templates (style="--kpi-color: #hex"), e.g. dashboard.html,
+     hod_dashboard.html, nurse_dashboard.html — respected here so those
+     21 existing inline colors keep working unchanged. A kpi-* variant
+     class (below) takes precedence over both when present. */
+  --kpi-accent: var(--kpi-color, var(--text-secondary));
+  --kpi-accent-soft: var(--bg-tertiary);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.kpi-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-sm);
+}
+.kpi-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  background: var(--kpi-accent);
+}
+
+/* Generic severity/emphasis variants (report.html's convention) */
+.kpi-card.kpi-primary { --kpi-accent: var(--primary-color); --kpi-accent-soft: color-mix(in srgb, var(--primary-color) 18%, var(--bg-card)); }
+.kpi-card.kpi-success { --kpi-accent: var(--success-color); --kpi-accent-soft: color-mix(in srgb, var(--success-color) 18%, var(--bg-card)); }
+.kpi-card.kpi-info     { --kpi-accent: var(--info-color);    --kpi-accent-soft: color-mix(in srgb, var(--info-color) 18%, var(--bg-card)); }
+.kpi-card.kpi-warning  { --kpi-accent: var(--warning-color); --kpi-accent-soft: color-mix(in srgb, var(--warning-color) 18%, var(--bg-card)); }
+
+/* Calibration-workflow-state variants (calsoft.css's convention) */
+.kpi-card.kpi-pending  { --kpi-accent: var(--warning-color); --kpi-accent-soft: color-mix(in srgb, var(--warning-color) 18%, var(--bg-card)); }
+.kpi-card.kpi-pushed   { --kpi-accent: #8b5cf6; --kpi-accent-soft: color-mix(in srgb, #8b5cf6 18%, var(--bg-card)); }
+.kpi-card.kpi-overdue  { --kpi-accent: var(--danger-color);  --kpi-accent-soft: color-mix(in srgb, var(--danger-color) 18%, var(--bg-card)); }
+.kpi-card.kpi-approved { --kpi-accent: var(--success-color); --kpi-accent-soft: color-mix(in srgb, var(--success-color) 18%, var(--bg-card)); }
+
+.kpi-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  margin-bottom: 0.6rem;
+  background: var(--kpi-accent-soft);
+  color: var(--kpi-accent);
+}
+
+/* .kpi-num (calsoft.css) and .kpi-value (cmms-dashboard.css) are the
+   same element styled two different ways under two different names —
+   both selectors kept so neither call-site needs to change markup. */
+.kpi-num,
+.kpi-value {
+  font-size: 1.85rem;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 0.2rem;
+  /* Neutral by default (matches cmms-dashboard.css's original design,
+     used by 21 dashboard cards) — only the icon/top-bar take the accent
+     color. calsoft.css restores its own accent-colored number locally,
+     since that page's design intentionally differs. */
+  color: var(--text-primary);
+  font-family: "DM Mono", monospace;
+  font-variant-numeric: tabular-nums;
+}
+.kpi-value.loading {
+  width: 70px;
+  height: 30px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  animation: kpi-shimmer 1.4s ease infinite;
+}
+@keyframes kpi-shimmer {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 1; }
+}
+
+.kpi-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.kpi-label i { color: var(--kpi-accent, var(--primary-color)); }
+
+.kpi-sub {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.15rem;
+}
+
+/* Trend/delta line under a KPI value */
+.kpi-meta {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  margin-top: 5px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 500;
+}
+.kpi-meta.up   { color: var(--success-color); }
+.kpi-meta.warn { color: var(--warning-color); }
+.kpi-meta.down { color: var(--danger-color); }
+
+/* ---------- Empty state ---------- */
+.empty-state {
+  text-align: center;
+  padding: 2.5rem 1.5rem;
+  color: var(--text-muted);
+}
+.empty-state-icon {
+  font-size: 2.5rem;
+  margin-bottom: 0.75rem;
+  line-height: 1;
+}
+.empty-state h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.35rem;
+}
+.empty-state p {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  max-width: 42ch;
+  margin: 0 auto;
+}
+.empty-state .empty-state-action { margin-top: 1rem; }
+
+@media (max-width: 680px) {
+  .kpi-card { padding: 0.85rem 1rem; }
+  .kpi-num, .kpi-value { font-size: 1.4rem; }
+  .kpi-strip, .kpi-grid { gap: 8px; }
+}
+
+/* ---------- Notification bell + dropdown ---------- */
+.notif-wrap { position: relative; }
+.notif-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--danger-color);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+.notif-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 340px;
+  max-width: min(340px, calc(100vw - 24px));
+  max-height: 420px;
+  overflow-y: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg);
+  z-index: 200;
+}
+.notif-dropdown[hidden] { display: none; }
+.notif-dropdown-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  position: sticky;
+  top: 0;
+  background: var(--bg-card);
+}
+.notif-mark-all {
+  background: none;
+  border: none;
+  color: var(--primary-color);
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+.notif-mark-all:hover { text-decoration: underline; }
+.notif-loading, .notif-empty {
+  padding: 1.75rem 1rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+.notif-item {
+  display: block;
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--border-light);
+  cursor: pointer;
+  transition: background 0.12s;
+  text-decoration: none;
+  color: inherit;
+}
+.notif-item:last-child { border-bottom: none; }
+.notif-item:hover { background: var(--bg-hover); }
+.notif-item.is-unread { background: color-mix(in srgb, var(--primary-color) 5%, var(--bg-card)); }
+.notif-item.is-unread::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.notif-item-title { font-weight: 600; font-size: 0.84rem; color: var(--text-primary); }
+.notif-item-message { font-size: 0.78rem; color: var(--text-secondary); margin-top: 2px; }
+.notif-item-time { font-size: 0.68rem; color: var(--text-muted); margin-top: 4px; }
+
+/* ---------- Sidebar queue-count badges ---------- */
+.menu-link .queue-badge,
+.dropdown-link .queue-badge {
+  margin-left: auto;
+  background: var(--danger-color);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+  line-height: 1.4;
+}
+
+/* ---------- Saved filters widget ---------- */
+.saved-filters { position: relative; display: inline-block; }
+.saved-filters-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 280px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+  z-index: 150;
+  padding: 0.5rem;
+}
+.saved-filters-dropdown[hidden] { display: none; }
+.saved-filters-list { max-height: 220px; overflow-y: auto; margin-bottom: 0.5rem; }
+.saved-filter-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 0.4rem 0.5rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  color: var(--text-primary);
+  text-decoration: none;
+}
+.saved-filter-item:hover { background: var(--bg-hover); }
+.saved-filter-item .sf-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.saved-filter-item .sf-delete {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px 5px;
+  font-size: 0.75rem;
+}
+.saved-filter-item .sf-delete:hover { color: var(--danger-color); }
+.saved-filters-save-row { display: flex; gap: 6px; border-top: 1px solid var(--border-light); padding-top: 0.5rem; }
+.saved-filters-name-input { flex: 1; }
+.saved-filters-empty { padding: 0.75rem 0.5rem; text-align: center; color: var(--text-muted); font-size: 0.8rem; }
+
+/* ============================================================
+   SHARED FORM FIELD (templates/includes/form_field.html)
+   ============================================================ */
+.form-field.has-error .form-control,
+.form-field.has-error select,
+.form-field.has-error textarea {
+  border-color: var(--danger-color);
+}
+.form-field-error {
+  margin-top: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--danger-color);
+}
+
+/* ============================================================
+   COMMAND PALETTE / GLOBAL SEARCH (Ctrl+K)
+   templates/base.html + static/js/command-palette.js
+   ============================================================ */
+.cmdk-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 10000;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+}
+
+.cmdk-panel {
+  width: min(560px, 92vw);
+  max-height: 60vh;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  box-shadow: var(--shadow-xl);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.cmdk-input-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.9rem 1.1rem;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-muted);
+}
+
+.cmdk-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+}
+
+.cmdk-esc {
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+}
+
+.cmdk-results {
+  overflow-y: auto;
+  padding: 0.5rem;
+}
+
+.cmdk-empty {
+  padding: 1.5rem 1rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.cmdk-group-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  padding: 0.5rem 0.6rem 0.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.cmdk-result {
+  display: block;
+  padding: 0.55rem 0.75rem;
+  border-radius: 8px;
+  text-decoration: none;
+  color: var(--text-primary);
+}
+
+.cmdk-result:hover,
+.cmdk-result.is-active {
+  background: var(--bg-hover);
+}
+
+.cmdk-result-title {
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.cmdk-result-subtitle {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  margin-top: 0.1rem;
+}
+
+/* ============================================================
+   SHARED BUTTON PRIMITIVE
+   This exact .btn-primary rule was duplicated verbatim across
+   11 page-specific stylesheets — consolidated here.
+   ============================================================ */
+.btn-primary {
+  background: var(--primary-gradient);
+  color: var(--text-white);
+}

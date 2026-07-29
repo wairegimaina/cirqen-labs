@@ -141,10 +141,8 @@
             </tr>
             {% empty %}
             <tr>
-              <td colspan="7" class="text-center text-muted py-5">
-                <i class="fas fa-search fa-3x mb-3" style="opacity: 0.5;"></i>
-                <h5>No equipment found</h5>
-                <p>Try adjusting your search criteria or filters.</p>
+              <td colspan="7">
+                {% include 'includes/empty_state.html' with icon="📦" title="No equipment found" message="Try adjusting your search criteria or filters." %}
               </td>
             </tr>
             {% endfor %}
@@ -163,10 +161,10 @@
           <nav>
             <div class="btn-group">
               {% if page_obj.has_previous %}
-              <button class="btn btn-sm btn-outline-secondary ajax-page-btn" data-page="1" title="First page">
+              <button class="btn btn-sm btn-outline-secondary ajax-page-btn" data-page="1" title="First page" aria-label="First page">
                 <i class="fas fa-angle-double-left"></i>
               </button>
-              <button class="btn btn-sm btn-outline-secondary ajax-page-btn" data-page="{{ page_obj.previous_page_number }}">
+              <button class="btn btn-sm btn-outline-secondary ajax-page-btn" data-page="{{ page_obj.previous_page_number }}" aria-label="Previous page">
                 <i class="fas fa-chevron-left"></i>
               </button>
               {% endif %}
@@ -180,10 +178,10 @@
               {% endfor %}
 
               {% if page_obj.has_next %}
-              <button class="btn btn-sm btn-outline-secondary ajax-page-btn" data-page="{{ page_obj.next_page_number }}">
+              <button class="btn btn-sm btn-outline-secondary ajax-page-btn" data-page="{{ page_obj.next_page_number }}" aria-label="Next page">
                 <i class="fas fa-chevron-right"></i>
               </button>
-              <button class="btn btn-sm btn-outline-secondary ajax-page-btn" data-page="{{ page_obj.paginator.num_pages }}" title="Last page">
+              <button class="btn btn-sm btn-outline-secondary ajax-page-btn" data-page="{{ page_obj.paginator.num_pages }}" title="Last page" aria-label="Last page">
                 <i class="fas fa-angle-double-right"></i>
               </button>
               {% endif %}

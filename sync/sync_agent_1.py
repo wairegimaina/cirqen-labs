@@ -40,7 +40,9 @@ from .dependency_manager import DependencyManager
 from .smart_delete import SmartDeleteMixin
 
 
-class SyncAgent(SmartDeleteMixin):
+class AgentInitMixin(SmartDeleteMixin):
+    """Agent construction: config load, Redis/pool wiring, client registration, mirror init, and data validation helpers."""
+
     def __init__(self, config: Dict[str, Any] = None, data_path: Path = None):
         """
         Initialize SyncAgent with unified configuration support
@@ -395,6 +397,34 @@ class SyncAgent(SmartDeleteMixin):
                         updated_count += 1
                         LOG.info(f"      ✅ Updated locally")
 
+                        # ── Un-stick any pending_certificates row for this session ──
+                        # BUGFIX: get_pending_certificates() (sync_agent_7.py) only
+                        # ever considers rows with retry_count < 5, and
+                        # mark_certificates_failed() sets sync_status='failed' with
+                        # no code path anywhere that resets it. A session that failed
+                        # to generate 5 times over the normal push path but got its
+                        # certificate anyway via this pull-recovery path (or HQ's own
+                        # independent session-level self-heal) would otherwise leave
+                        # its pending_certificates row permanently marked 'failed'
+                        # forever — a false-positive for anyone monitoring that table.
+                        # Reconcile it here since we just confirmed HQ has the cert.
+                        cur.execute(
+                            """
+                                UPDATE pending_certificates
+                                SET sync_status = 'completed',
+                                    processed_at = NOW(),
+                                    updated_at = NOW()
+                                WHERE session_id = %s
+                                AND sync_status != 'completed'
+                            """,
+                            (session_id,),
+                        )
+                        if cur.rowcount > 0:
+                            LOG.info(
+                                f"      🧹 Reconciled {cur.rowcount} stale pending_certificates "
+                                f"row(s) for session {session_id} (now confirmed via HQ)"
+                            )
+
                         # Also update schedule if needed
                         if schedule_id and hq_session.get("schedule_status") == "completed":
                             schedule_updates.append((schedule_id, hq_session.get("completed_date")))
@@ -521,9 +551,12 @@ class SyncAgent(SmartDeleteMixin):
 
     def certificate_pull_loop(self):
         """
-        ✅ NEW: Background thread that actively pulls missing certificates
+        Background thread that actively pulls missing certificates.
 
-        Runs every 15 minutes to ensure certificates sync down from HQ
+        Runs every CERT_PULL_INTERVAL seconds (default 60s — NOT 15 minutes;
+        an earlier version of this docstring said 15 min but the code default
+        was already 60s, which is the more useful value for faster recovery,
+        so the default was left as-is and only the stale comment is fixed).
         """
         import time
 
@@ -576,16 +609,16 @@ class SyncAgent(SmartDeleteMixin):
         try:
             LOG.info("🔄 Initializing integrated mirror system...")
 
-            # Create HQ config
-            hq_config = {
-                "host": os.getenv(
-                    "POSTGRES_HQ_HOST", "dpg-d7rk2sa8qa3s73diimb0-a.ohio-postgres.render.com"
-                ),
-                "port": int(os.getenv("POSTGRES_HQ_PORT", "5432")),
-                "dbname": os.getenv("POSTGRES_HQ_DB", "b12technologies"),
-                "user": os.getenv("POSTGRES_HQ_USER", "b12technologies"),
-                "password": os.getenv("POSTGRES_HQ_PASSWORD", ""),
-            }
+            # Create HQ config — sourced from the same loaded config as
+            # local_config below (config.json / unified manager), NOT from
+            # raw os.getenv() calls. Re-reading env vars here with hardcoded
+            # fallback defaults let this silently diverge from config.json
+            # (e.g. still pointing at an old/decommissioned Render host after
+            # hq_db was migrated to Supabase). sslmode is required by
+            # Supabase's pooler; it's a no-op/harmless for plain Postgres.
+            hq_config = dict(self.config["hq_db"])
+            hq_config.pop("enabled", None)
+            hq_config.setdefault("sslmode", os.getenv("POSTGRES_SSLMODE", "require"))
 
             # Use existing local config
             local_config = self.config["local_db"]

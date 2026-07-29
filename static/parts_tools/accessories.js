@@ -25,25 +25,9 @@ const Utils = {
     );
   },
 
+  // Delegates to the shared toast system (static/js/notify.js, loaded globally in base.html)
   showNotification(message, type = 'info', duration = 4000) {
-    const el = document.createElement('div');
-    el.className = `alert alert-${type} dynamic-alert`;
-    el.setAttribute('role', 'alert');
-    el.textContent = message;
-    Object.assign(el.style, {
-      position: 'fixed',
-      top: '1rem',
-      right: '1rem',
-      zIndex: 10000,
-      minWidth: '260px',
-      boxShadow: '0 4px 12px rgba(0,0,0,.15)',
-    });
-    document.body.appendChild(el);
-    setTimeout(() => {
-      el.style.transition = 'opacity .3s';
-      el.style.opacity = '0';
-      setTimeout(() => el.remove(), 350);
-    }, duration);
+    window.notify(message, type, duration);
   },
 
   toggleLoading(show) {

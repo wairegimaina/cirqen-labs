@@ -88,10 +88,10 @@
       </select>
       <select class="cs-select cs-select--year" id="yearFilter" aria-label="Filter by year"></select>
 
-      <button type="button" class="cs-btn-ghost" onclick="goToCurrentMonth()" title="Go to current month">
+      <button type="button" class="cs-btn-ghost" onclick="goToCurrentMonth()" title="Go to current month" aria-label="Go to current month">
         <i class="fas fa-calendar-day"></i>
       </button>
-      <button type="button" class="cs-btn-ghost" id="showAllBtn" title="Show all (no date filter)">
+      <button type="button" class="cs-btn-ghost" id="showAllBtn" title="Show all (no date filter)" aria-label="Show all (no date filter)">
         <i class="fas fa-expand-alt"></i>
       </button>
     </div>
@@ -110,7 +110,7 @@
         <button type="button" class="cs-btn cs-btn--warning" id="bulkPushSchedules" disabled>
           <i class="fas fa-arrow-right me-1"></i>Push
         </button>
-        <button type="button" class="cs-btn cs-btn--danger" id="bulkDeleteBtn" disabled>
+        <button type="button" class="cs-btn cs-btn--danger" id="bulkDeleteBtn" disabled aria-label="Delete selected schedules">
           <i class="fas fa-trash"></i>
         </button>
         <button type="button" class="cs-btn cs-btn--success" id="bulkCompleteBtn" disabled>
@@ -129,7 +129,7 @@
 
 
       <div class="dropdown">
-        <button class="cs-btn cs-btn--ghost" type="button" data-bs-toggle="dropdown" title="Export">
+        <button class="cs-btn cs-btn--ghost" type="button" data-bs-toggle="dropdown" title="Export" aria-label="Export">
           <i class="fas fa-download"></i>
         </button>
         <ul class="dropdown-menu dropdown-menu-end">
@@ -160,7 +160,7 @@
       </button>
 
       {% if selected_department %}
-      <button type="button" id="clearFilterBtn" class="cs-btn cs-btn--ghost" title="Clear department filter">
+      <button type="button" id="clearFilterBtn" class="cs-btn cs-btn--ghost" title="Clear department filter" aria-label="Clear department filter">
         <i class="fas fa-times"></i>
       </button>
       {% endif %}
@@ -196,7 +196,7 @@
     <button type="button" class="cs-alert-action" data-bs-toggle="modal" data-bs-target="#smartReorgModal">
       Run Smart Organiser
     </button>
-    <button type="button" class="cs-alert-close ms-2"
+    <button type="button" class="cs-alert-close ms-2" aria-label="Dismiss"
       onclick="document.getElementById('logicChangeWarningBanner').style.display='none'">
       <i class="fas fa-times"></i>
     </button>
@@ -318,20 +318,20 @@
                 <td>
                   <div class="cs-row-actions">
                     <button type="button" class="cs-icon-btn" title="Edit"
-                      data-bs-toggle="modal" data-bs-target="#editModal{{ schedule.id }}">
+                      data-bs-toggle="modal" data-bs-target="#editModal{{ schedule.id }}" aria-label="Edit">
                       <i class="fas fa-pencil-alt"></i>
                     </button>
                     <a href="{% url 'schedule:mark_calibration_completed' schedule.id %}"
-                      class="cs-icon-btn cs-icon-btn--success" title="Mark complete">
+                      class="cs-icon-btn cs-icon-btn--success" title="Mark complete" aria-label="Mark complete">
                       <i class="fas fa-check"></i>
                     </a>
                     <a href="{% url 'schedule:push_calibration_schedule' schedule.id %}"
-                      class="cs-icon-btn" title="Push schedule">
+                      class="cs-icon-btn" title="Push schedule" aria-label="Push schedule">
                       <i class="fas fa-arrow-right"></i>
                     </a>
                     <a href="{% url 'schedule:delete_calibration_schedule' schedule.id %}"
                       class="cs-icon-btn cs-icon-btn--danger" title="Delete"
-                      onclick="return confirm('Delete this schedule?')">
+                      onclick="return confirm('Delete this schedule?')" aria-label="Delete">
                       <i class="fas fa-trash"></i>
                     </a>
                   </div>
@@ -447,7 +447,7 @@
             <td>{{ equipment.model|default:"N/A" }}</td>
             <td>
               <a href="{% url 'schedule:schedule_calibration_equipment' equipment.id %}"
-                class="cs-icon-btn cs-icon-btn--success" title="Schedule">
+                class="cs-icon-btn cs-icon-btn--success" title="Schedule" aria-label="Schedule">
                 <i class="fas fa-plus"></i>
               </a>
             </td>
@@ -601,8 +601,8 @@
           {% csrf_token %}
           <div class="modal-body">
             <div class="mb-3">
-              <label class="form-label">Equipment</label>
-              <input type="text" class="form-control"
+              <label class="form-label" for="equipment_display{{ schedule.id }}">Equipment</label>
+              <input type="text" class="form-control" id="equipment_display{{ schedule.id }}"
                 value="{{ schedule.equipment.description.name|default:'No Description' }}" readonly>
             </div>
             <div class="mb-3">
@@ -731,7 +731,7 @@
             <div class="mb-4" id="specialClassSection">
               <h6 class="border-bottom pb-2 mb-3"><i class="fas fa-star me-2 text-warning"></i>Special Class <span class="badge bg-warning text-dark">Optional</span></h6>
               <div id="specialDepartmentSection">
-                <label class="form-label fw-bold small">Special Departments</label>
+                <div class="form-label fw-bold small">Special Departments</div>
                 <div class="row g-2 mb-3">
                   {% for dept in departments %}
                   <div class="col-md-4 col-sm-6">
@@ -745,7 +745,7 @@
                 </div>
               </div>
               <div id="specialDescriptionSection" style="display:none;">
-                <label class="form-label fw-bold small">Special Descriptions</label>
+                <div class="form-label fw-bold small">Special Descriptions</div>
                 <input type="text" class="form-control form-control-sm mb-2" id="descriptionSearchInput" placeholder="Search...">
                 <div class="row g-2 mb-3" id="descriptionCheckboxList" style="max-height:240px;overflow-y:auto;">
                   {% for desc in equipment_descriptions %}
@@ -763,7 +763,7 @@
 
             <div class="row g-3 mb-4">
               <div class="col-md-3">
-                <label class="form-label fw-bold small">Period</label>
+                <div class="form-label fw-bold small">Period</div>
                 <div class="d-flex gap-2">
                   <button type="button" class="btn btn-outline-primary period-btn" data-period="6">6 mo</button>
                   <button type="button" class="btn btn-primary period-btn active" data-period="12">12 mo</button>
@@ -993,6 +993,57 @@
               </div>
             </div>
 
+            <div class="row g-3 mb-3">
+              <div class="col-md-4">
+                <label class="form-label small" for="reorgPeriod">Calibration Period</label>
+                <select class="form-select form-select-sm" name="calibration_period" id="reorgPeriod">
+                  <option value="12" selected>12 months</option>
+                  <option value="6">6 months</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="mb-3" id="reorgSpecialClassSection">
+              <h6 class="border-bottom pb-2 mb-2">
+                <i class="fas fa-star me-1 text-warning"></i>Special Class
+                <span class="badge bg-warning text-dark">Optional</span>
+                <small class="text-muted d-block fw-normal">
+                  Special groups skip the per-month cap and all land on the start month.
+                  Only the list matching the selected logic is applied.
+                </small>
+              </h6>
+
+              <div id="reorgSpecialDepartments">
+                <div class="form-label fw-bold small">Special Departments (for Department-Based)</div>
+                <div class="row g-2 mb-2">
+                  {% for dept in departments %}
+                  <div class="col-md-4 col-sm-6">
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" name="special_class_departments"
+                        value="{{ dept.id }}" id="reorg_special_dept_{{ dept.id }}">
+                      <label class="form-check-label small" for="reorg_special_dept_{{ dept.id }}">{{ dept.name }}</label>
+                    </div>
+                  </div>
+                  {% endfor %}
+                </div>
+              </div>
+
+              <div id="reorgSpecialDescriptions">
+                <div class="form-label fw-bold small">Special Descriptions (for Description-Based)</div>
+                <div class="row g-2 mb-2" style="max-height:200px;overflow-y:auto;">
+                  {% for desc in equipment_descriptions %}
+                  <div class="col-md-4 col-sm-6">
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" name="special_class_descriptions"
+                        value="{{ desc.id }}" id="reorg_special_desc_{{ desc.id }}">
+                      <label class="form-check-label small" for="reorg_special_desc_{{ desc.id }}">{{ desc.name }}</label>
+                    </div>
+                  </div>
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
+
             <div class="form-check mb-2">
               <input class="form-check-input" type="checkbox" id="reorgDryRun" name="dry_run" value="true">
               <label class="form-check-label" for="reorgDryRun">
@@ -1022,11 +1073,11 @@
         <form method="get" action="{% url 'schedule:export_calibration_pdf' %}">
           <div class="modal-body">
             <div class="mb-3">
-              <label class="form-label fw-bold">Date Range</label>
+              <div class="form-label fw-bold">Date Range</div>
               <div class="row g-2">
                 <div class="col-6">
-                  <label class="form-label small text-muted">Month</label>
-                  <select class="form-select" name="month">
+                  <label class="form-label small text-muted" for="customReportMonthSelect">Month</label>
+                  <select class="form-select" name="month" id="customReportMonthSelect">
                     <option value="">All Months</option>
                     <option value="1"  {% if selected_month == '1'  %}selected{% endif %}>January</option>
                     <option value="2"  {% if selected_month == '2'  %}selected{% endif %}>February</option>
@@ -1043,7 +1094,7 @@
                   </select>
                 </div>
                 <div class="col-6">
-                  <label class="form-label small text-muted">Year</label>
+                  <label class="form-label small text-muted" for="customReportYearSelect">Year</label>
                   <select class="form-select" name="year" id="customReportYearSelect">
                     {# Populated by JS using CalibrationConfig #}
                   </select>
@@ -1052,8 +1103,8 @@
             </div>
             {% if departments %}
             <div class="mb-3">
-              <label class="form-label fw-bold">Department</label>
-              <select class="form-select" name="department">
+              <label class="form-label fw-bold" for="customReportDepartmentSelect">Department</label>
+              <select class="form-select" name="department" id="customReportDepartmentSelect">
                 <option value="">All Departments</option>
                 {% for dept in departments %}
                 <option value="{{ dept.id }}" {% if selected_department_id == dept.id|stringformat:"s" %}selected{% endif %}>
@@ -1078,7 +1129,6 @@
 </div>
 
 
-<script src="{% static 'js/bootstrap.bundle.min.js' %}"></script>
 
 <script>
   window.CalibrationConfig = {

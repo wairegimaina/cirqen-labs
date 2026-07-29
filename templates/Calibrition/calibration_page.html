@@ -34,15 +34,15 @@
                     <h3>Environmental Conditions</h3>
                     <div class="row">
                         <div class="col">
-                            <label>Temperature (°C)</label>
+                            <label for="envTemp">Temperature (°C)</label>
                             <input type="number" id="envTemp" class="form-control" value="23" step="0.1">
                         </div>
                         <div class="col">
-                            <label>Humidity (%RH)</label>
+                            <label for="envHumidity">Humidity (%RH)</label>
                             <input type="number" id="envHumidity" class="form-control" value="50" step="0.1">
                         </div>
                         <div class="col">
-                            <label>Pressure (kPa)</label>
+                            <label for="envPressure">Pressure (kPa)</label>
                             <input type="number" id="envPressure" class="form-control" value="101.325" step="0.001">
                         </div>
                     </div>
@@ -136,50 +136,50 @@
 
                 <div class="row">
                     <div class="col">
-                        <label>Parameter Name</label>
-                        <input type="text" class="form-control parameter-name" placeholder="e.g., Pressure, Temperature">
+                        <label for="paramName-${parameterCount}">Parameter Name</label>
+                        <input type="text" id="paramName-${parameterCount}" class="form-control parameter-name" placeholder="e.g., Pressure, Temperature">
                     </div>
                     <div class="col">
-                        <label>Unit</label>
-                        <input type="text" class="form-control parameter-unit" placeholder="e.g., Pa, °C, V">
-                    </div>
-                </div>
-
-                <div class="row">
-                    <div class="col">
-                        <label>Number of Readings</label>
-                        <input type="number" class="form-control parameter-inputs" min="3" max="10" value="5">
-                    </div>
-                    <div class="col">
-                        <label>Resolution</label>
-                        <input type="number" class="form-control parameter-resolution" step="0.0001" placeholder="0.001">
+                        <label for="paramUnit-${parameterCount}">Unit</label>
+                        <input type="text" id="paramUnit-${parameterCount}" class="form-control parameter-unit" placeholder="e.g., Pa, °C, V">
                     </div>
                 </div>
 
                 <div class="row">
                     <div class="col">
-                        <label>Standard Reference</label>
-                        <input type="text" class="form-control standard-reference" placeholder="e.g., NIST Standard XYZ">
+                        <label for="paramReadings-${parameterCount}">Number of Readings</label>
+                        <input type="number" id="paramReadings-${parameterCount}" class="form-control parameter-inputs" min="3" max="10" value="5">
                     </div>
                     <div class="col">
-                        <label>Reference Uncertainty (k=2)</label>
-                        <input type="number" class="form-control reference-uncertainty" step="0.0001" placeholder="0.001">
+                        <label for="paramResolution-${parameterCount}">Resolution</label>
+                        <input type="number" id="paramResolution-${parameterCount}" class="form-control parameter-resolution" step="0.0001" placeholder="0.001">
                     </div>
                 </div>
 
                 <div class="row">
                     <div class="col">
-                        <label>Tolerance (±)</label>
-                        <input type="number" class="form-control tolerance" step="0.01" placeholder="1.0">
+                        <label for="paramStdRef-${parameterCount}">Standard Reference</label>
+                        <input type="text" id="paramStdRef-${parameterCount}" class="form-control standard-reference" placeholder="e.g., NIST Standard XYZ">
                     </div>
                     <div class="col">
-                        <label>Coverage Factor (k)</label>
-                        <input type="number" class="form-control coverage-factor" value="2" step="0.1">
+                        <label for="paramRefUncertainty-${parameterCount}">Reference Uncertainty (k=2)</label>
+                        <input type="number" id="paramRefUncertainty-${parameterCount}" class="form-control reference-uncertainty" step="0.0001" placeholder="0.001">
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col">
+                        <label for="paramTolerance-${parameterCount}">Tolerance (±)</label>
+                        <input type="number" id="paramTolerance-${parameterCount}" class="form-control tolerance" step="0.01" placeholder="1.0">
+                    </div>
+                    <div class="col">
+                        <label for="paramCoverageFactor-${parameterCount}">Coverage Factor (k)</label>
+                        <input type="number" id="paramCoverageFactor-${parameterCount}" class="form-control coverage-factor" value="2" step="0.1">
                     </div>
                 </div>
 
                 <div class="form-group">
-                    <label>Set Values</label>
+                    <label id="setValuesLabel-${parameterCount}">Set Values</label>
                     <button type="button" class="btn btn-primary" onclick="addSetValue(${parameterCount})">Add Set Value</button>
                     <div id="setValues-${parameterCount}" class="set-values-container"></div>
                 </div>

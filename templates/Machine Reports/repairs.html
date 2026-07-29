@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load custom_filters %}
 
 {% block title %}Repair History Analytics - Equiper National Hospital{% endblock %}
 
@@ -120,13 +121,13 @@
                 <table id="repairTable">
                     <thead>
                         <tr>
-                            <th>Equipment</th>
-                            <th>Workshop</th>
-                            <th>Period</th>
-                            <th>Repair Count</th>
-                            <th>Downtime (Hours)</th>
-                            <th>Parts Cost</th>
-                            <th>Avg Cost/Repair</th>
+                            <th data-sort="text">Equipment</th>
+                            <th data-sort="text">Workshop</th>
+                            <th data-sort="text">Period</th>
+                            <th data-sort="number">Repair Count</th>
+                            <th data-sort="number">Downtime (Hours)</th>
+                            <th data-sort="number">Parts Cost</th>
+                            <th data-sort="number">Avg Cost/Repair</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -182,6 +183,7 @@
         </div>
     </div>
 
+    <script src="{% static 'js/table-sort.js' %}"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             initializeSearch();

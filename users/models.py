@@ -752,3 +752,49 @@ def mark_user_for_sync_on_security_log(sender, instance, **kwargs):
         needs_sync=True,
         updated_at=timezone.now()
     )
+
+
+class SavedFilter(models.Model):
+    """A user's saved set of query-string filters for a given list view.
+
+    Deliberately generic: filter_params stores the page's raw query string
+    (e.g. "status=Waiting+Approval&department=3") rather than named,
+    per-page fields, so the same model/UI works unchanged on any list page
+    that filters via GET params (Inventory, Job Cards, PPM, ...) without a
+    schema change per page.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="saved_filters")
+    view_name = models.CharField(max_length=100, help_text="e.g. 'inventory', 'jobcard_waiting' — scopes filters to one page")
+    name = models.CharField(max_length=100, help_text="User-chosen label, e.g. 'My overdue equipment'")
+    filter_params = models.JSONField(default=dict, blank=True, help_text="Raw query-string params to re-apply")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    pending_delete = models.BooleanField(default=False)
+    active_status = models.BooleanField(default=True)
+
+    needs_sync = models.BooleanField(default=True)
+    syncable = True
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Saved Filter"
+        verbose_name_plural = "Saved Filters"
+        indexes = [
+            models.Index(fields=["user", "view_name"]),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} — {self.view_name}: {self.name}"
+
+
+@receiver(post_save, sender=SavedFilter)
+def mark_user_for_sync_on_saved_filter(sender, instance, **kwargs):
+    if 'update_fields' in kwargs and kwargs['update_fields'] == ['needs_sync']:
+        return
+    User.objects.filter(pk=instance.user_id).update(
+        needs_sync=True,
+        updated_at=timezone.now()
+    )

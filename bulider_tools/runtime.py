@@ -24,6 +24,29 @@ logger = logging.getLogger(__name__)
 update_manager_instance = None
 
 # ============================
+# LOG ROTATION for plain append-mode subprocess logs (postgres/redis/celery).
+# These are handed to Popen(stdout=...) as raw file objects rather than going
+# through Python logging, so they never got Python's RotatingFileHandler —
+# left alone they grow forever for the life of the install.
+# ============================
+
+def rotate_log_if_large(log_path, max_bytes: int = 20 * 1024 * 1024, keep: int = 1):
+    """If log_path exceeds max_bytes, rename it to log_path.1 (dropping any
+    older .1) before the caller reopens it in append mode. Best-effort: a
+    failure here (e.g. file locked) should never block service startup."""
+    try:
+        path = Path(log_path)
+        if not path.exists() or path.stat().st_size <= max_bytes:
+            return
+        backup = path.with_suffix(path.suffix + f".{keep}")
+        if backup.exists():
+            backup.unlink()
+        path.rename(backup)
+    except Exception:
+        pass  # Rotation is a nice-to-have; never let it block service startup.
+
+
+# ============================
 # CRITICAL: SUBPROCESS DETECTION - MUST BE FIRST
 # ============================
 
@@ -730,6 +753,54 @@ class PostgresSystemdManager:
 
 
 # ============================
+# Orphaned service-process sweep
+# ============================
+# A graceful close (window X) or SIGTERM now stops every child service (see
+# app.py's cleanup_on_exit), but a hard `kill -9` or a crash can't be caught
+# by ANY process — there is no code that runs on SIGKILL. Left unchecked,
+# that leaves Redis/Celery running forever, each holding a port, so every
+# future launch just finds a new one instead of reclaiming the old one
+# (this is exactly how multiple orphaned redis-server instances were found
+# stacked up in practice). Call this once, right after SingleInstanceLock
+# confirms we're the only Cirqen instance — anything matching below is by
+# definition a leftover from a previous, now-dead session.
+def kill_orphaned_service_processes():
+    """Kill leftover redis-server/celery processes from a previous session
+    that died without cleaning up (crash, kill -9, power loss, etc.)."""
+    killed = []
+    try:
+        redis_marker = str(Path('runtime') / 'redis' / 'redis-server')
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                cmdline = ' '.join(proc.info.get('cmdline') or [])
+                if not cmdline:
+                    continue
+
+                is_our_redis = redis_marker in cmdline
+                is_our_celery = 'Equiper.celery:app' in cmdline
+
+                if is_our_redis or is_our_celery:
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=5)
+                    except psutil.TimeoutExpired:
+                        proc.kill()
+                        proc.wait(timeout=3)
+                    killed.append((proc.pid, 'redis' if is_our_redis else 'celery'))
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                continue
+    except Exception as e:
+        logger.warning(f"Orphan process sweep failed: {e}")
+
+    if killed:
+        logger.warning(
+            "Cleaned up %d orphaned process(es) from a previous session: %s",
+            len(killed), ', '.join(f"{name}(pid {pid})" for pid, name in killed),
+        )
+    return killed
+
+
+# ============================
 # ENHANCED: Single Instance Lock
 # ============================
 class SingleInstanceLock:
@@ -921,7 +992,8 @@ def setup_environment(port_manager: PortManager):
             'port':     port_manager.get_port('postgresql_local'),   # dynamic
             'database': _local.get('database', 'cirqen1'),
             'user':     _local.get('user',     'cirqen1'),
-            'password': _local.get('password', 'Btwelvetech@2024'),
+            # Secret — from config / env, never hardcoded.
+            'password': _local.get('password') or os.getenv('POSTGRES_LOCAL_PASSWORD', ''),
         }
     else:
         DB_CONFIG = {
@@ -929,7 +1001,7 @@ def setup_environment(port_manager: PortManager):
             'port':     port_manager.get_port('postgresql_local'),
             'database': 'cirqen1',
             'user':     'cirqen1',
-            'password': 'Btwelvetech@2024',
+            'password': os.getenv('POSTGRES_LOCAL_PASSWORD', ''),
         }
 
     # ── HQ DB — Render PostgreSQL pulled straight from config ─────────────────
@@ -944,13 +1016,13 @@ def setup_environment(port_manager: PortManager):
             'enabled':  _hq.get('enabled',  True),
         }
     else:
-        # Fallback — Render creds from config DEFAULT_CONFIG
+        # Fallback — HQ creds from environment (never hardcoded).
         HQ_DB_CONFIG = {
-            'host':     'dpg-d7rk2sa8qa3s73diimb0-a',
-            'port':     5432,
-            'database': 'cirqen_hq',
-            'user':     'cirqen_hq',
-            'password': 'RyJEzkPmYWrdC2472TzWnFUMaOIueaye',
+            'host':     os.getenv('POSTGRES_HQ_HOST', ''),
+            'port':     int(os.getenv('POSTGRES_HQ_PORT', '5432')),
+            'database': os.getenv('POSTGRES_HQ_DB', ''),
+            'user':     os.getenv('POSTGRES_HQ_USER', ''),
+            'password': os.getenv('POSTGRES_HQ_PASSWORD', ''),
             'enabled':  True,
         }
 
@@ -1066,6 +1138,15 @@ def run_django_server(port, db_config, redis_port, log_file_path, app_path):
         from django.core.management import call_command
         from django.core.wsgi import get_wsgi_application   # noqa: F401  (ensures WSGI is ready)
 
+        # If a previous update died mid-apply, roll back to the last good state
+        # BEFORE importing app code, so we never boot a half-patched tree.
+        try:
+            from updates.updater import recover_if_needed
+            if recover_if_needed():
+                print("[DJANGO] Recovered from an interrupted update (rolled back).", flush=True)
+        except Exception as _rec_exc:  # never let recovery block startup
+            print(f"[DJANGO] Update-recovery check skipped: {_rec_exc}", flush=True)
+
         print(f"[DJANGO] Setting up Django...", flush=True)
         import django
         django.setup()
@@ -1092,31 +1173,42 @@ def run_django_server(port, db_config, redis_port, log_file_path, app_path):
             else:
                 print(f"[DJANGO] No pending local migrations", flush=True)
 
-            # HQ DB (Render PostgreSQL) — optional
+            # HQ DB (Render PostgreSQL) — optional, and checked in the
+            # background: this is a network call to the remote HQ database
+            # (connect_timeout=10s), so doing it inline here would make every
+            # single app launch wait on HQ reachability just to check for
+            # schema migrations that only ever change rarely. The local
+            # server starts immediately regardless of how this turns out.
             hq_host = (
                 os.environ.get('HQ_DB_HOST', '') or
                 os.environ.get('POSTGRES_HQ_HOST', '')
             )
             if hq_host:
-                print(f"[DJANGO] Checking HQ migrations ({hq_host})...", flush=True)
-                try:
-                    hq_conn = connections['hq']
-                    hq_conn.prepare_database()
-                    hq_exec = MigrationExecutor(hq_conn)
-                    hq_plan = hq_exec.migration_plan(
-                        hq_exec.loader.graph.leaf_nodes()
-                    )
-                    if hq_plan:
-                        print(
-                            f"[DJANGO] Found {len(hq_plan)} unapplied HQ migrations",
-                            flush=True,
+                def _check_hq_migrations():
+                    print(f"[DJANGO] Checking HQ migrations ({hq_host})...", flush=True)
+                    try:
+                        hq_conn = connections['hq']
+                        hq_conn.prepare_database()
+                        hq_exec = MigrationExecutor(hq_conn)
+                        hq_plan = hq_exec.migration_plan(
+                            hq_exec.loader.graph.leaf_nodes()
                         )
-                        call_command('migrate', '--noinput', '--database=hq', verbosity=1)
-                        print(f"[DJANGO] HQ migrations completed", flush=True)
-                    else:
-                        print(f"[DJANGO] No pending HQ migrations", flush=True)
-                except Exception as hq_e:
-                    print(f"[DJANGO] HQ migration skipped: {hq_e}", flush=True)
+                        if hq_plan:
+                            print(
+                                f"[DJANGO] Found {len(hq_plan)} unapplied HQ migrations",
+                                flush=True,
+                            )
+                            call_command('migrate', '--noinput', '--database=hq', verbosity=1)
+                            print(f"[DJANGO] HQ migrations completed", flush=True)
+                        else:
+                            print(f"[DJANGO] No pending HQ migrations", flush=True)
+                    except Exception as hq_e:
+                        print(f"[DJANGO] HQ migration skipped: {hq_e}", flush=True)
+
+                import threading as _threading
+                _threading.Thread(
+                    target=_check_hq_migrations, name="HQMigrationCheck", daemon=True
+                ).start()
             else:
                 print(f"[DJANGO] HQ DB not configured — skipping HQ migrations", flush=True)
 

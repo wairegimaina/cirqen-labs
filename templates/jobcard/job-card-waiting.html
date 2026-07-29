@@ -42,14 +42,16 @@
         <div class="card-body">
             <div class="row g-3 align-items-end">
                 <div class="col-lg-6">
-                    <label class="form-label small fw-bold text-muted">SEARCH PENDING</label>
+                    <label for="searchInput" class="form-label small fw-bold text-muted">SEARCH PENDING</label>
                     <input type="text" id="searchInput" class="form-control" placeholder="Search ID, Equipment...">
                 </div>
                 <div class="col-lg-6">
                     <form method="get" action="{% url 'jobcard:bulk_download_waiting_jobcards' %}" class="d-flex gap-2 justify-content-lg-end">
-                        <input type="date" name="start_date" class="form-control form-control-sm w-auto" required>
-                        <input type="date" name="end_date" class="form-control form-control-sm w-auto" required>
-                        <button class="btn btn-sm btn-outline-warning text-dark"><i class="fas fa-download"></i></button>
+                        <label for="waiting_start_date" class="visually-hidden">Start date</label>
+                        <input type="date" id="waiting_start_date" name="start_date" class="form-control form-control-sm w-auto" required>
+                        <label for="waiting_end_date" class="visually-hidden">End date</label>
+                        <input type="date" id="waiting_end_date" name="end_date" class="form-control form-control-sm w-auto" required>
+                        <button class="btn btn-sm btn-outline-warning text-dark" aria-label="Download job card"><i class="fas fa-download"></i></button>
                     </form>
                 </div>
             </div>
@@ -87,7 +89,7 @@
                         Review & Approve
                     </a>
                     {% else %}
-                    <a href="{% url 'jobcard:download_jobcard_pdf' card.id %}" class="btn btn-sm btn-light border">
+                    <a href="{% url 'jobcard:download_jobcard_pdf' card.id %}" class="btn btn-sm btn-light border" aria-label="Download job card">
                         <i class="fas fa-download text-muted"></i>
                     </a>
                     {% endif %}
@@ -95,10 +97,8 @@
             </div>
         </div>
         {% empty %}
-        <div class="col-12 text-center py-5">
-            <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
-            <h5 style="color: var(--text-primary);">All caught up!</h5>
-            <p class="text-muted">No job cards are waiting for approval.</p>
+        <div class="col-12">
+            {% include 'includes/empty_state.html' with icon="✅" title="All caught up!" message="No job cards are waiting for approval." %}
         </div>
         {% endfor %}
     </div>
@@ -122,5 +122,6 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{% static 'js/list-search.js' %}"></script>
 <script src="{% static 'jobcards/jobcards-common.js' %}"></script>
 {% endblock %}

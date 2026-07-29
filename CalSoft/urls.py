@@ -142,4 +142,16 @@ urlpatterns = [
         views.api_standards_parameters_data,
         name="api_standards_parameters_data",
     ),
+    # Notification center (header dropdown, every page)
+    path("api/notifications/", views.notifications_list_api, name="notifications_list_api"),
+    path(
+        "api/notifications/<uuid:pk>/read/",
+        views.notification_mark_read_ajax,
+        name="notification_mark_read_ajax",
+    ),
+    path(
+        "api/notifications/read-all/",
+        views.notifications_mark_all_read_ajax,
+        name="notifications_mark_all_read_ajax",
+    ),
 ]

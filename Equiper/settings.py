@@ -54,7 +54,20 @@ config.setup_environment_variables()
 # ============================================================
 # 🔒 CORE DJANGO SETTINGS
 # ============================================================
-DEBUG = config.get("app.debug")
+# DEBUG: an explicit DJANGO_DEBUG env var wins so production/packaged builds can
+# force it OFF (config.json app.debug is only the fallback). Running Django with
+# DEBUG=True leaks stack traces + settings and disables ALLOWED_HOSTS enforcement,
+# so production should set DJANGO_DEBUG=0 (after running collectstatic).
+_debug_env = os.getenv("DJANGO_DEBUG")
+if _debug_env is not None:
+    DEBUG = _debug_env.strip().lower() in ("1", "true", "yes", "on")
+else:
+    DEBUG = bool(config.get("app.debug"))
+if DEBUG:
+    import sys as _sys
+    print("⚠️  SECURITY: Django DEBUG is ON — do not run production this way "
+          "(set DJANGO_DEBUG=0).", file=_sys.stderr)
+
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 
@@ -135,6 +148,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "Equiper.context_processors.nav_context",
             ],
         },
     },
@@ -200,7 +214,12 @@ SYNC_CONFIG = {
 # 🔴 REDIS & CACHING
 # ============================================================
 redis_host = config.get("redis.host")
-redis_port = config.get("redis.port")
+# PortManager dynamically reallocates this port whenever the configured
+# default is still busy (e.g. a just-closed previous session's redis-server
+# still releasing it) and publishes the real port via REDIS_PORT — prefer
+# that over the static config.json value, or Django's cache/session backend
+# ends up pointed at a port nothing is actually listening on.
+redis_port = os.getenv("REDIS_PORT") or config.get("redis.port")
 redis_password = config.get("redis.password")
 
 if redis_password:

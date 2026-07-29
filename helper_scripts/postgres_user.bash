@@ -22,6 +22,9 @@ DATA_DIR="${HOME}/.local/share/cirqen/postgres"
 SOCKET_DIR="${HOME}/.local/share/cirqen/sockets"
 PORT=2215
 
+# Local DB password — never hardcoded. Provide via env (see .env.example).
+CIRQEN_LOCAL_PW="${POSTGRES_LOCAL_PASSWORD:?Set POSTGRES_LOCAL_PASSWORD before running (see .env.example)}"
+
 # Set library path
 export LD_LIBRARY_PATH="${CIRQEN_DIR}/runtime/postgresql/lib:${LD_LIBRARY_PATH}"
 
@@ -84,10 +87,10 @@ echo "Connecting as system user: ${CURRENT_USER}"
     -h 127.0.0.1 \
     -p ${PORT} \
     -U ${CURRENT_USER} \
-    -d postgres << 'EOSQL'
+    -d postgres << EOSQL
 
 -- Check if postgres user exists, create if not
-DO $$
+DO \$\$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'postgres') THEN
         CREATE ROLE postgres WITH LOGIN PASSWORD 'postgres' SUPERUSER CREATEDB CREATEROLE;
@@ -96,22 +99,22 @@ BEGIN
         RAISE NOTICE 'postgres user already exists';
     END IF;
 END
-$$;
+\$\$;
 
 -- Check if cirqen1 user exists, create if not
-DO $$
+DO \$\$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cirqen1') THEN
-        CREATE ROLE cirqen1 WITH LOGIN PASSWORD 'Btwelvetech@2024' SUPERUSER CREATEDB CREATEROLE;
+        CREATE ROLE cirqen1 WITH LOGIN PASSWORD '${CIRQEN_LOCAL_PW}' SUPERUSER CREATEDB CREATEROLE;
         RAISE NOTICE 'Created cirqen1 user';
     ELSE
         RAISE NOTICE 'cirqen1 user already exists';
         -- Update password just in case
-        ALTER ROLE cirqen1 WITH PASSWORD 'Btwelvetech@2024';
+        ALTER ROLE cirqen1 WITH PASSWORD '${CIRQEN_LOCAL_PW}';
         RAISE NOTICE 'Updated cirqen1 password';
     END IF;
 END
-$$;
+\$\$;
 
 -- Check if cirqen1 database exists, create if not
 SELECT 'Checking cirqen1 database...' AS status;
@@ -183,7 +186,7 @@ echo -e "${GREEN}===============================================================
 echo
 echo "PostgreSQL Users Created:"
 echo "  • postgres (password: postgres)"
-echo "  • cirqen1  (password: Btwelvetech@2024)"
+echo "  • cirqen1  (password: from \$POSTGRES_LOCAL_PASSWORD)"
 echo
 echo "Database Created:"
 echo "  • cirqen1 (owner: cirqen1)"
@@ -193,7 +196,7 @@ echo "  Host:     127.0.0.1"
 echo "  Port:     ${PORT}"
 echo "  Database: cirqen1"
 echo "  User:     cirqen1"
-echo "  Password: Btwelvetech@2024"
+echo "  Password: (from \$POSTGRES_LOCAL_PASSWORD)"
 echo
 echo -e "${GREEN}You can now start Cirqen!${NC}"
 echo "  cd ~/Desktop/cirqen_desktop/dist/Cirqen"

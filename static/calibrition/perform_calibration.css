@@ -15,7 +15,7 @@
 body {
   background: var(--bg-primary);
   color: var(--text-primary);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-base);
   margin: 0;
   padding: 0;
   min-height: 100vh;
@@ -449,7 +449,7 @@ form>.form-group:last-child {
   color: var(--primary-color);
   padding: 2px 8px;
   border-radius: 5px;
-  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: .82rem;
   font-weight: 700;
 }
@@ -817,7 +817,7 @@ option.recommended-procedure {
 /* JS: class="form-control resolution-input" */
 .resolution-input {
   max-width: 280px;
-  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: .9rem;
 }
 
@@ -869,7 +869,7 @@ option.recommended-procedure {
   font-size: .86rem;
   font-weight: 600;
   color: var(--text-primary);
-  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-family: var(--font-mono);
 }
 
 /* ===================================
@@ -968,7 +968,7 @@ option.recommended-procedure {
 
 /* JS: class="set-value-cell" */
 .set-value-cell {
-  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-family: var(--font-mono);
   font-weight: 700;
   font-size: .85rem;
   color: var(--text-primary);
@@ -1001,7 +1001,7 @@ option.recommended-procedure {
   border-radius: 7px;
   color: var(--text-primary);
   font-size: .84rem;
-  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-family: var(--font-mono);
   text-align: right;
   transition: border-color .2s, box-shadow .2s, background .2s;
   appearance: none;
@@ -1305,11 +1305,7 @@ option.recommended-procedure {
   box-shadow: none !important;
 }
 
-.btn-primary {
-  background: var(--primary-gradient);
-  color: #fff;
-}
-
+/* .btn-primary now comes from the shared static/css/components.css */
 .btn-primary:hover {
   filter: brightness(1.1);
   color: #fff;
@@ -1798,7 +1794,7 @@ option.recommended-procedure {
 }
 
 .serial-number {
-  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: .82rem;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);

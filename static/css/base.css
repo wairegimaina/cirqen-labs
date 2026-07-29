@@ -72,6 +72,12 @@
   --transition-speed:        .3s;
   --transition-timing:       cubic-bezier(.4,0,.2,1);
 
+  /* Single source of truth for corner radius — page CSS previously
+     redeclared this with three different values (8px/10px). */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+
   --font-base: 'DM Sans', 'Segoe UI', system-ui, sans-serif;
   --font-mono: 'DM Mono', monospace;
 }
@@ -80,67 +86,11 @@
 .equiper-alert.alert-info .alert-inner,
 .equiper-alert.alert-info * { color: var(--primary-dark); }
 
-/* ============================================================
-   DARK THEME — Black & Silver
-   ============================================================ */
-[data-theme="dark"] {
-  --primary-color:    #e2e8f0;
-  --primary-hover:    #ffffff;
-  --primary-dark:     #f8fafc;
-  --primary-light:    #1e2530;
-  --primary-muted:    #151a23;
-  --primary-gradient: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);
-  --primary-ring:     rgba(226,232,240,.18);
-
-  --secondary-color: #888888;
-  --success-color:   #22c55e;
-  --danger-color:    #f87171;
-  --warning-color:   #fbbf24;
-  --info-color:      #60a5fa;
-
-  --bg-primary:   #0a0a0a;
-  --bg-secondary: #111111;
-  --bg-tertiary:  #161616;
-  --bg-hover:     #1c1c1c;
-  --bg-card:      #111111;
-  --bg-surface:   #111111;
-
-  --text-primary:   #f1f5f9;
-  --text-secondary: #94a3b8;
-  --text-muted:     #4b5563;
-  --text-white:     #ffffff;
-
-  --border-color:  #1e1e1e;
-  --border-mid:    #282828;
-  --border-strong: #3a3a3a;
-  --border-light:  #1a1a1a;
-
-  --shadow-xs: 0 1px 2px rgba(0,0,0,.60);
-  --shadow-sm: 0 2px 6px rgba(0,0,0,.60);
-  --shadow-md: 0 4px 16px rgba(0,0,0,.70);
-  --shadow-lg: 0 10px 32px rgba(0,0,0,.80);
-  --shadow-xl: 0 20px 48px rgba(0,0,0,.85);
-
-  --input-bg:           #111111;
-  --input-border:       #252525;
-  --input-focus-border: #94a3b8;
-  --input-focus-shadow: 0 0 0 3px rgba(148,163,184,.12);
-
-  --scrollbar-track:       #111111;
-  --scrollbar-thumb:       #262626;
-  --scrollbar-thumb-hover: #3a3a3a;
-
-  --header-bg:     #0d0d0d;
-  --header-border: #1a1a1a;
-  --header-shadow: 0 1px 6px rgba(0,0,0,.5);
-
-  --accent:     #e2e8f0;
-  --accent-mid: #888888;
-
-  --btn-close-filter: invert(1) brightness(2);
-  --card-shadow:       0 1px 4px rgba(0,0,0,.5),  0 0 0 1px rgba(255,255,255,.04);
-  --card-shadow-hover: 0 6px 20px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.08);
-}
+/* Dark-theme token overrides live in theme.css exclusively (loaded right
+   after this file in base.html) — they used to be duplicated verbatim
+   here too, which is a maintenance hazard (edit one, forget the other,
+   themes silently drift apart). Removed; theme.css is now the single
+   source of truth for the dark palette. */
 
 /* ============================================================
    GLOBAL RESET
@@ -279,7 +229,7 @@ body {
   border-left: 4px solid transparent;
 }
 .equiper-alert.alert-success {
-  background: #bbf7d0;
+  background: var(--border-mid);
   border-left-color: var(--primary-color);
   color: var(--primary-dark);
 }
@@ -287,7 +237,7 @@ body {
 .equiper-alert.alert-success * { color: var(--primary-dark); }
 
 .equiper-alert.alert-info {
-  background: #bbf7d0;
+  background: var(--border-mid);
   border-left-color: var(--primary-color);
   color: var(--primary-dark);
 }

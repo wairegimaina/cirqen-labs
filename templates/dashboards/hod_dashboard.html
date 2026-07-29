@@ -210,6 +210,29 @@
   </div>
 
   <!-- ═══════════════════════════════════════════════
+       CHARTS ROW — System-wide Analytics
+       ═══════════════════════════════════════════════ -->
+  <div class="mid-row" style="margin-bottom: 32px;">
+
+    <div class="panel">
+      <div class="panel-title">
+        <span><i class="fas fa-clipboard-check"></i> &nbsp;Job Card Status</span>
+        <span style="font-size:.65rem;color:var(--text-muted)">All Workshops</span>
+      </div>
+      <canvas id="chart-jobcard-status"></canvas>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">
+        <span><i class="fas fa-calendar-check"></i> &nbsp;PPM Completions</span>
+        <span style="font-size:.65rem;color:var(--text-muted)">By Workshop &amp; Month</span>
+      </div>
+      <canvas id="chart-ppm-monthly"></canvas>
+    </div>
+
+  </div>
+
+  <!-- ═══════════════════════════════════════════════
        WORKSHOP DETAILS CARDS
        ═══════════════════════════════════════════════ -->
   <div class="workshops-section">
@@ -336,5 +359,93 @@
 {% endblock %}
 
 {% block extra_js %}
+  <script src="{% static 'js/chart.min.js' %}"></script>
   <script src="{% static 'dashboards/cmms-dashboard.js' %}"></script>
+  <script>
+    (function () {
+      function cssVar(name, fallback) {
+        var v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+        return v || fallback;
+      }
+
+      var jobcardStatus = {{ jobcard_status_json|safe }};
+      var ppmMonthlyLabels = {{ ppm_monthly_labels_json|safe }};
+      var ppmMonthlyByWorkshop = {{ ppm_monthly_by_workshop_json|safe }};
+
+      // One distinct colour per workshop, cycling if there are more
+      // workshops than swatches.
+      var WORKSHOP_PALETTE = [
+        cssVar('--primary-color', '#16a34a'),
+        cssVar('--info-color', '#0284c7'),
+        cssVar('--warning-color', '#d97706'),
+        cssVar('--danger-color', '#ef4444'),
+        '#8b5cf6',
+        '#0ea5e9',
+        '#f97316',
+        '#14b8a6',
+        '#ec4899',
+        '#84cc16',
+      ];
+
+      var jobcardCanvas = document.getElementById('chart-jobcard-status');
+      if (jobcardCanvas && typeof Chart !== 'undefined') {
+        new Chart(jobcardCanvas, {
+          type: 'doughnut',
+          data: {
+            labels: Object.keys(jobcardStatus),
+            datasets: [{
+              data: Object.values(jobcardStatus),
+              backgroundColor: [
+                cssVar('--success-color', '#059669'),
+                cssVar('--warning-color', '#d97706'),
+                cssVar('--danger-color', '#ef4444'),
+              ],
+              borderColor: cssVar('--bg-card', '#ffffff'),
+              borderWidth: 2,
+            }],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '65%',
+            plugins: {
+              legend: { position: 'bottom', labels: { color: cssVar('--text-secondary', '#4b5563'), boxWidth: 10, font: { size: 11 } } },
+            },
+          },
+        });
+      }
+
+      var ppmCanvas = document.getElementById('chart-ppm-monthly');
+      if (ppmCanvas && typeof Chart !== 'undefined') {
+        var workshopNames = Object.keys(ppmMonthlyByWorkshop);
+        new Chart(ppmCanvas, {
+          type: 'bar',
+          data: {
+            labels: ppmMonthlyLabels,
+            datasets: workshopNames.map(function (name, i) {
+              var color = WORKSHOP_PALETTE[i % WORKSHOP_PALETTE.length];
+              return {
+                label: name,
+                data: ppmMonthlyByWorkshop[name],
+                backgroundColor: color,
+                borderRadius: 4,
+              };
+            }),
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { position: 'bottom', labels: { color: cssVar('--text-secondary', '#4b5563'), boxWidth: 10, font: { size: 11 } } },
+              tooltip: { mode: 'index', intersect: false },
+            },
+            scales: {
+              x: { stacked: true, ticks: { color: cssVar('--text-secondary', '#4b5563') } },
+              y: { stacked: true, beginAtZero: true, ticks: { precision: 0, color: cssVar('--text-secondary', '#4b5563') } },
+            },
+          },
+        });
+      }
+    })();
+  </script>
 {% endblock %}

@@ -31,8 +31,7 @@
               <strong>Date:</strong> {{ session.timestamp|date:"Y-m-d H:i" }}
             </p>
             <p>
-              <strong>Performed by:</strong> {{
-              session.performed_by.get_full_name|default:session.performed_by.username }}
+              <strong>Performed by:</strong> {{ session.performed_by.get_full_name|default:session.performed_by.username }}
             </p>
           </div>
         </div>
@@ -48,8 +47,7 @@
             {% for parameter_key, readings in readings_by_parameter.items %}
             <div class="parameter-section">
               <div class="parameter-header">
-                {{ readings.0.parameter.name }}{% if readings.0.sub_parameter %} - {{
-                readings.0.sub_parameter.name }}{% endif %} ({{ readings.0.parameter.unit }})
+                {{ readings.0.parameter.name }}{% if readings.0.sub_parameter %} - {{ readings.0.sub_parameter.name }}{% endif %} ({{ readings.0.parameter.unit }})
               </div>
               <div class="parameter-content">
                 <div class="reading-row header">
@@ -67,8 +65,7 @@
                     {% if reading.mean %}{{ reading.mean|floatformat:6 }}{% else %}N/A{% endif %}
                   </div>
                   <div>
-                    {% if reading.standard_deviation %}{{ reading.standard_deviation|floatformat:6
-                    }}{% else %}N/A{% endif %}
+                    {% if reading.standard_deviation %}{{ reading.standard_deviation|floatformat:6 }}{% else %}N/A{% endif %}
                   </div>
                   <div
                     class="error-value {% if reading.error > 0 %}error-positive{% else %}error-negative{% endif %}"
@@ -76,8 +73,7 @@
                     {% if reading.error %}{{ reading.error|floatformat:6 }}{% else %}N/A{% endif %}
                   </div>
                   <div>
-                    {% if reading.expanded_uncertainty %}±{{
-                    reading.expanded_uncertainty|floatformat:6 }}{% else %}N/A{% endif %}
+                    {% if reading.expanded_uncertainty %}±{{ reading.expanded_uncertainty|floatformat:6 }}{% else %}N/A{% endif %}
                   </div>
                   <div
                     class="{% if reading.passes_tolerance %}tolerance-pass{% else %}tolerance-fail{% endif %}"
@@ -145,8 +141,7 @@
               <!-- General Trend Information -->
               {% if drift_analysis.trend %}
               <div class="alert alert-info">
-                <strong><i class="bx fas fa-info-circle"></i> Overall Drift Trend:</strong> {{
-                drift_analysis.trend }}
+                <strong><i class="bx fas fa-info-circle"></i> Overall Drift Trend:</strong> {{ drift_analysis.trend }}
               </div>
               {% endif %}
 
@@ -158,8 +153,7 @@
                 <div class="drift-parameter">
                   <div class="parameter-drift-header">
                     <span class="parameter-name">
-                      {{ param_drift.name }} {% if param_drift.sub_parameter %} - {{
-                      param_drift.sub_parameter }}{% endif %}
+                      {{ param_drift.name }} {% if param_drift.sub_parameter %} - {{ param_drift.sub_parameter }}{% endif %}
                     </span>
                     <div class="drift-direction">
                       {% if param_drift.drift_direction == 'increasing' %}
@@ -178,17 +172,17 @@
                   <div class="drift-details">
                     {% if param_drift.drift_rate %}
                     <div class="drift-detail">
-                      <label>Drift Rate</label>
+                      <div class="detail-label">Drift Rate</div>
                       <div class="value">{{ param_drift.drift_rate|floatformat:6 }}/day</div>
                     </div>
                     {% endif %} {% if param_drift.confidence %}
                     <div class="drift-detail">
-                      <label>Confidence</label>
+                      <div class="detail-label">Confidence</div>
                       <div class="value">{{ param_drift.confidence|floatformat:1 }}%</div>
                     </div>
                     {% endif %} {% if param_drift.historical_readings %}
                     <div class="drift-detail">
-                      <label>Data Points</label>
+                      <div class="detail-label">Data Points</div>
                       <div class="value">{{ param_drift.historical_readings }}</div>
                     </div>
                     {% endif %}
@@ -204,19 +198,19 @@
                 <h4><i class="bx bx-history"></i> Historical Performance Comparison</h4>
                 <div class="comparison-grid">
                   <div class="comparison-item">
-                    <label>Previous Session</label>
+                    <div class="detail-label">Previous Session</div>
                     <div class="value">
                       {{ drift_analysis.previous_session_date|default:"N/A" }}
                     </div>
                   </div>
                   <div class="comparison-item">
-                    <label>Avg Drift/Month</label>
+                    <div class="detail-label">Avg Drift/Month</div>
                     <div class="value">
                       {{ drift_analysis.monthly_drift|default:"N/A"|floatformat:4 }}
                     </div>
                   </div>
                   <div class="comparison-item">
-                    <label>Stability Trend</label>
+                    <div class="detail-label">Stability Trend</div>
                     <div class="value">{{ drift_analysis.stability_trend|default:"Unknown" }}</div>
                   </div>
                 </div>
@@ -283,35 +277,29 @@
           <div class="card uncertainty-section">
             <h2>Uncertainty Budget</h2>
             <div class="uncertainty-grid">
-              {% for parameter_key, readings in readings_by_parameter.items %} {% with readings.0 as
-              first_reading %} {% if first_reading.type_a_uncertainty or
-              first_reading.type_b_uncertainty %}
+              {% for parameter_key, readings in readings_by_parameter.items %} {% with readings.0 as first_reading %} {% if first_reading.type_a_uncertainty or first_reading.type_b_uncertainty %}
               <div class="uncertainty-item">
                 <h4>{{ first_reading.parameter.name }} - Type A</h4>
                 <div class="value">
-                  {% if first_reading.type_a_uncertainty %}±{{
-                  first_reading.type_a_uncertainty|floatformat:6 }}{% else %}N/A{% endif %}
+                  {% if first_reading.type_a_uncertainty %}±{{ first_reading.type_a_uncertainty|floatformat:6 }}{% else %}N/A{% endif %}
                 </div>
               </div>
               <div class="uncertainty-item">
                 <h4>{{ first_reading.parameter.name }} - Type B</h4>
                 <div class="value">
-                  {% if first_reading.type_b_uncertainty %}±{{
-                  first_reading.type_b_uncertainty|floatformat:6 }}{% else %}N/A{% endif %}
+                  {% if first_reading.type_b_uncertainty %}±{{ first_reading.type_b_uncertainty|floatformat:6 }}{% else %}N/A{% endif %}
                 </div>
               </div>
               <div class="uncertainty-item">
                 <h4>{{ first_reading.parameter.name }} - Combined</h4>
                 <div class="value">
-                  {% if first_reading.combined_uncertainty %}±{{
-                  first_reading.combined_uncertainty|floatformat:6 }}{% else %}N/A{% endif %}
+                  {% if first_reading.combined_uncertainty %}±{{ first_reading.combined_uncertainty|floatformat:6 }}{% else %}N/A{% endif %}
                 </div>
               </div>
               <div class="uncertainty-item">
                 <h4>{{ first_reading.parameter.name }} - Expanded</h4>
                 <div class="value">
-                  {% if first_reading.expanded_uncertainty %}±{{
-                  first_reading.expanded_uncertainty|floatformat:6 }}{% else %}N/A{% endif %}
+                  {% if first_reading.expanded_uncertainty %}±{{ first_reading.expanded_uncertainty|floatformat:6 }}{% else %}N/A{% endif %}
                 </div>
               </div>
               {% endif %} {% endwith %} {% endfor %}
@@ -395,8 +383,7 @@
               <div><strong>Uncertainty:</strong> ±{{ standard.uncertainty }}</div>
               {% endif %} {% else %}
               <div>
-                <strong>Reference:</strong> {{ standard.standard_reference|default:"Not specified"
-                }}
+                <strong>Reference:</strong> {{ standard.standard_reference|default:"Not specified" }}
               </div>
               {% endif %}
             </div>

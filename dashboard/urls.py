@@ -9,6 +9,7 @@ urlpatterns = [
     path('Department_inventory/', views.nurse_inventory, name='Department_inventory'),
     path('nurse_ppms/', views.nurse_ppms, name='nurse_ppms'),
     path('hod-dashboard/', views.hod_dashboard, name='hod_dashboard'),
-    path('log-out/',views.hod_logout_view, name='hod_logout')
+    path('log-out/',views.hod_logout_view, name='hod_logout'),
+    path('search/', views.global_search, name='global_search'),
 
 ]

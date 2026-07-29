@@ -22,10 +22,12 @@
       this.sidebar = document.getElementById('equiperSidebar');
       this.mainWrapper = document.getElementById('mainWrapper');
       this.toggleBtn = document.getElementById('sidebarToggle');
+      this.collapseToggleBtn = document.getElementById('sidebarCollapseToggle');
 
       if (!this.sidebar) return; // No sidebar on this page
 
       this.isOpen = false; // Default: closed
+      this.isCollapsed = this.sidebar.dataset.sidebarCollapsed === 'true';
 
       this._init();
     }
@@ -41,6 +43,7 @@
       this._setupNestedToggles();
       this._autoExpandActiveMenus();
       this._injectCopyrightYear();
+      this._bindCollapseToggle();
 
       // Always start closed
       this._close();
@@ -95,6 +98,41 @@
     _bindKeyboard() {
       document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && this.isOpen) this._close();
+      });
+    }
+
+    /* ─────────────────────────────────────────────────────────
+       COLLAPSE TOGGLE (desktop icon-rail mode)
+       Independent of open/close — persists across page loads via
+       UserProfile.sidebar_collapsed (users/views/settings.py).
+    ───────────────────────────────────────────────────────── */
+    _bindCollapseToggle() {
+      if (!this.collapseToggleBtn) return;
+      this.collapseToggleBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.isCollapsed = !this.isCollapsed;
+        this.sidebar.classList.toggle('sidebar-collapsed', this.isCollapsed);
+        this.mainWrapper?.classList.toggle('sidebar-collapsed', this.isCollapsed);
+        this.collapseToggleBtn.setAttribute('aria-pressed', String(this.isCollapsed));
+        this._persistCollapsed(this.isCollapsed);
+      });
+    }
+
+    _persistCollapsed(collapsed) {
+      const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+      const csrfToken = csrfMeta ? csrfMeta.content : '';
+      fetch('/login/update-sidebar/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken,
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify({ collapsed }),
+      }).catch((err) => {
+        console.error('[sidebar.js] failed to persist collapsed state:', err);
       });
     }
 
@@ -294,7 +332,7 @@
     close() { this._close(); }
 
     getState() {
-      return { isOpen: this.isOpen };
+      return { isOpen: this.isOpen, isCollapsed: this.isCollapsed };
     }
 
     closeAllDropdowns() {

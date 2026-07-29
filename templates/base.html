@@ -81,6 +81,7 @@
   <link rel="stylesheet" href="{% static 'css/sidebar.css' %}"  />
   <link rel="stylesheet" href="{% static 'css/theme.css' %}"    />
   <link rel="stylesheet" href="{% static 'css/enhancements.css' %}" />
+  <link rel="stylesheet" href="{% static 'css/components.css' %}" />
   <link rel="stylesheet" href="{% static 'dashboards/dashboard-common.css' %}" />
 
   <!-- Page-specific CSS -->
@@ -108,7 +109,7 @@
   <!-- ═══════════════════════════════════════
        MAIN WRAPPER
        ═══════════════════════════════════════ -->
-  <div class="main-wrapper {% if show_sidebar %}with-sidebar{% endif %}" id="mainWrapper">
+  <div class="main-wrapper {% if show_sidebar %}with-sidebar{% endif %}{% if request.user.userprofile.sidebar_collapsed %} sidebar-collapsed{% endif %}" id="mainWrapper">
 
     <!-- ═══════════════ HEADER ═══════════════ -->
     {% block header %}
@@ -134,6 +135,13 @@
 
       <div class="header-right">
 
+        <!-- Global search (Ctrl+K / Cmd+K) -->
+        {% if user.is_authenticated %}
+        <button class="icon-btn" id="searchTrigger" aria-label="Search" title="Search (Ctrl+K)">
+          <i class="fas fa-search" aria-hidden="true"></i>
+        </button>
+        {% endif %}
+
         <!-- Theme toggle -->
         <button class="icon-btn" id="themeToggle" aria-label="Toggle theme" title="Toggle theme">
           <i class="fas fa-sun  light-icon" aria-hidden="true"></i>
@@ -141,7 +149,28 @@
         </button>
 
         <!-- Notifications (optional — remove if unused) -->
-        {% block header_notifications %}{% endblock %}
+        {% block header_notifications %}
+        {% if user.is_authenticated %}
+        <div class="notif-wrap">
+          <button class="icon-btn" id="notifBell" aria-label="Notifications" title="Notifications"
+                  aria-haspopup="true" aria-expanded="false">
+            <i class="fas fa-bell" aria-hidden="true"></i>
+            {% if nav.unread_notification_count %}
+            <span class="notif-badge" id="notifBadge">{{ nav.unread_notification_count }}</span>
+            {% endif %}
+          </button>
+          <div class="notif-dropdown" id="notifDropdown" role="menu" aria-label="Notifications" hidden>
+            <div class="notif-dropdown-header">
+              <span>Notifications</span>
+              <button type="button" class="notif-mark-all" id="notifMarkAll">Mark all read</button>
+            </div>
+            <div class="notif-list" id="notifList">
+              <div class="notif-loading">Loading…</div>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+        {% endblock %}
 
         <!-- User info -->
 
@@ -198,6 +227,24 @@
 
   </div>
 
+  <!-- ═══════════════════════════════════════
+       GLOBAL SEARCH / COMMAND PALETTE (Ctrl+K)
+       ═══════════════════════════════════════ -->
+  {% if user.is_authenticated %}
+  <div class="cmdk-overlay" id="cmdkOverlay" hidden>
+    <div class="cmdk-panel" role="dialog" aria-modal="true" aria-label="Search">
+      <div class="cmdk-input-row">
+        <i class="fas fa-search" aria-hidden="true"></i>
+        <input type="text" id="cmdkInput" class="cmdk-input" placeholder="Search equipment, job cards, standards…" autocomplete="off">
+        <kbd class="cmdk-esc">Esc</kbd>
+      </div>
+      <div class="cmdk-results" id="cmdkResults">
+        <div class="cmdk-empty">Start typing to search — equipment, job cards, and calibration standards.</div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   {% endblock %}
 
   <!-- ═══════════════════════════════════════
@@ -206,7 +253,11 @@
        ═══════════════════════════════════════ -->
   <script src="{% static 'js/bootstrap.bundle.min.js' %}"></script>
   <script src="{% static 'js/theme.js' %}"></script>
+  <script src="{% static 'js/notify.js' %}"></script>
   <script src="{% static 'js/sidebar.js' %}"></script>
+  <script src="{% static 'js/command-palette.js' %}"></script>
+  <script src="{% static 'js/notifications.js' %}"></script>
+  <script src="{% static 'js/saved-filters.js' %}"></script>
 
   <!-- Auto-fill year everywhere -->
   <script>

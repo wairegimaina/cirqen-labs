@@ -166,7 +166,7 @@
                                 <div class="parameter-row p-3" data-parameter-index="{{ forloop.counter0 }}">
                                     <div class="row g-3 align-items-end">
                                         <div class="col-md-5">
-                                            <label class="form-label fw-bold">Parameter</label>
+                                            <label class="form-label fw-bold" for="{{ form.parameter.id_for_label }}">Parameter</label>
                                             {{ form.parameter }}
                                             {% if form.parameter.errors %}
                                             <ul class="errorlist">
@@ -177,7 +177,7 @@
                                             {% endif %}
                                         </div>
                                         <div class="col-md-4">
-                                            <label class="form-label fw-bold">Uncertainty (k=2)</label>
+                                            <label class="form-label fw-bold" for="{{ form.uncertainty.id_for_label }}">Uncertainty (k=2)</label>
                                             <div class="input-group">
                                                 {{ form.uncertainty }}
                                                 <span class="input-group-text">±</span>
@@ -192,7 +192,7 @@
                                         </div>
                                         <div class="col-md-2">
                                             <button type="button" class="delete-parameter"
-                                                onclick="removeParameter(this)" title="Remove Parameter">
+                                                onclick="removeParameter(this)" title="Remove Parameter" aria-label="Remove Parameter">
                                                 <i class="fas fa-trash"></i>
                                             </button>
                                         </div>
@@ -282,7 +282,6 @@
     </div>
 
     <!-- JavaScript -->
-    <script src="{% static 'js/bootstrap.bundle.min.js' %}"></script>
     <script src="{% static 'js/jquery-3.6.0.min.js' %}"></script>
     <script>
         // Config consumed by standard_form.js — keep this block to the

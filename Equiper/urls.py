@@ -47,6 +47,7 @@ urlpatterns = [
     path("machineReports/", include("machineReports.urls")),
     path("", include("machineReports.urls")),
     path("parts-tools/", include("parts_tools.urls")),
+    path("audit-log/", include("audit_log.urls")),
     path("health/", health_check, name="health_check"),
 ]
 
@@ -60,10 +61,12 @@ if settings.DEBUG:
     except ImportError:
         pass
 
-# ✅ Static and Media files for development
-if settings.DEBUG:
-    # Add staticfiles URL patterns (serves from STATICFILES_DIRS)
-    urlpatterns += staticfiles_urlpatterns()
-
-    # Add media files
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+# ✅ Static and media files.
+# Not gated behind settings.DEBUG: this app always runs its own embedded
+# Django server (runserver --insecure, see bulider_tools/runtime.py) rather
+# than a separate production WSGI/static stack, and it only ever binds to
+# 127.0.0.1 (ALLOWED_HOSTS), so serving these unconditionally is safe and
+# is what keeps the UI (CSS/JS/certificates/signatures) working now that
+# DEBUG defaults to off.
+urlpatterns += staticfiles_urlpatterns()
+urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

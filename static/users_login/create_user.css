@@ -53,7 +53,7 @@
 
   /* Border Radius */
   --radius-sm: 0.25rem;
-  --radius-md: 0.5rem;
+  /* --radius-md now comes from the shared base.css token (10px) */
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
   --radius-2xl: 1.5rem;
@@ -73,7 +73,7 @@
 
 /* Body Styles */
 body {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: var(--font-base);
   background: linear-gradient(135deg, var(--gray-50) 0%, var(--primary-light) 100%);
   color: var(--gray-700);
   line-height: 1.6;

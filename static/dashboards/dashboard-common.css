@@ -108,3 +108,21 @@
 .is-stale    { color: var(--warning-color); }
 .is-offline  { color: var(--text-muted); }
 .is-error    { color: var(--danger-color); }
+
+/* ============================================================
+   RESPONSIVE — this file previously had zero @media coverage,
+   so cards/stat-boxes/empty-states never scaled down for phones
+   even though .stat-strip's auto-fit grid already reflows.
+   ============================================================ */
+@media (max-width: 768px) {
+  .stat-strip { gap: .6rem; }
+  .stat-box { padding: .7rem .8rem; }
+  .stat-box .value { font-size: 1.5rem; }
+}
+
+@media (max-width: 480px) {
+  .stat-box .value { font-size: 1.3rem; }
+  .s-empty { padding: 2.5rem 1rem; }
+  .s-empty .s-empty-icon { font-size: 2rem; }
+  .pill-link { padding: .24rem .7rem; font-size: .75rem; }
+}

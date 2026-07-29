@@ -79,6 +79,11 @@ from .view_modules.analytics import (
     performance_analysis,
     reports_dashboard,
 )
+from .view_modules.notifications import (
+    notifications_list_api,
+    notification_mark_read_ajax,
+    notifications_mark_all_read_ajax,
+)
 
 from .models import CalibrationSession, CalibrationSchedule, CalibrationAuditLog
 from .forms import CalibrationScheduleForm

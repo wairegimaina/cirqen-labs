@@ -6,6 +6,8 @@
   };
 
   let refreshTimer = null;
+  let statusChart = null;
+  let lastCounts = null;
 
   // ============================================================
   // ICONS (inline local SVGs — no emoji, no external requests)
@@ -39,6 +41,13 @@
 
   function pct(value, total) {
     return total > 0 ? Math.round((value / total) * 100) : 0;
+  }
+
+  function cssVar(name, fallback) {
+    const value = getComputedStyle(document.documentElement)
+      .getPropertyValue(name)
+      .trim();
+    return value || fallback;
   }
 
   function clamp(value, min, max) {
@@ -189,6 +198,10 @@
               <span>Warnings</span>
               <small>Logic-change flags</small>
             </article>
+          </div>
+
+          <div class="cs-schedule-chart">
+            <canvas id="cs-status-chart" role="img" aria-label="Schedule status distribution: ${donePct}% completed, ${pendingPct}% pending, ${overduePct}% overdue"></canvas>
           </div>
 
           <div class="cs-schedule-summary">
@@ -561,12 +574,27 @@
         white-space: nowrap;
       }
 
-      /* Schedule grid without donut */
       .cs-schedule-grid {
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: 1fr 200px 1fr;
         gap: 0.85rem;
         align-items: stretch;
+      }
+
+      .cs-schedule-chart {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.85rem;
+        border-radius: 18px;
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border-color);
+        min-height: 180px;
+      }
+
+      .cs-schedule-chart canvas {
+        max-width: 100%;
+        max-height: 200px;
       }
 
       .cs-schedule-kpis {
@@ -802,6 +830,57 @@
   }
 
   // ============================================================
+  // STATUS DISTRIBUTION CHART
+  // ============================================================
+  function renderStatusChartInstance(counts) {
+    if (!counts || typeof window.Chart === "undefined") return;
+
+    const canvas = document.getElementById("cs-status-chart");
+    if (!canvas) return;
+
+    if (statusChart) {
+      statusChart.destroy();
+      statusChart = null;
+    }
+
+    statusChart = new window.Chart(canvas.getContext("2d"), {
+      type: "doughnut",
+      data: {
+        labels: ["Completed", "Pending", "Overdue"],
+        datasets: [
+          {
+            data: [counts.completed, counts.pending, counts.overdue],
+            backgroundColor: [
+              cssVar("--success-color", "#059669"),
+              cssVar("--warning-color", "#d97706"),
+              cssVar("--danger-color", "#ef4444"),
+            ],
+            borderColor: cssVar("--bg-tertiary", "#f0fdf4"),
+            borderWidth: 2,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: "68%",
+        plugins: {
+          legend: {
+            position: "bottom",
+            labels: {
+              color: cssVar("--text-secondary", "#4b5563"),
+              boxWidth: 10,
+              padding: 10,
+              font: { size: 11 },
+            },
+          },
+          tooltip: { enabled: true },
+        },
+      },
+    });
+  }
+
+  // ============================================================
   // LOAD DASHBOARD
   // ============================================================
   async function loadDashboard() {
@@ -845,6 +924,9 @@
         ${renderBanner(pendingApproval, urls)}
         ${renderSchedulePanel(counts, month)}
         ${renderBottomRow(data, urls)}`;
+
+      lastCounts = counts;
+      renderStatusChartInstance(counts);
     } catch (error) {
       console.error("[calsoft_dashboard.js] load error:", error);
       content.innerHTML =
@@ -873,7 +955,7 @@
     window.CalSoftDashboard = {
       load: loadDashboard,
       refresh: loadDashboard,
-      showChart: () => {},
+      showChart: () => renderStatusChartInstance(lastCounts),
       filterSchedules: (type) => {
         const base = "/calibration/schedules/";
         const params = {

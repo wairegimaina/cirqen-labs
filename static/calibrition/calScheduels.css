@@ -693,11 +693,7 @@ body {
   opacity: 1;
 }
 
-.btn-primary {
-  background: var(--primary-gradient);
-  color: #fff;
-}
-
+/* .btn-primary now comes from the shared static/css/components.css */
 .btn-primary:hover {
   filter: brightness(1.08);
   transform: translateY(-1px);
@@ -1954,7 +1950,7 @@ body {
 :root {
   --cs-primary: var(--primary-color, #0d6efd);
   --cs-muted: var(--text-muted, #6c757d);
-  --cs-danger: var(--danger-color, #ef4444);
+  --cs-danger: var(--danger-color, var(--danger-color));
 }
 
 /* ----------------------------------------------------------------
@@ -2130,10 +2126,10 @@ body {
   background: var(--warning-color, #f59e0b);
 }
 .cs-stat.overdue::before {
-  background: var(--danger-color, #ef4444);
+  background: var(--danger-color, var(--danger-color));
 }
 .cs-stat.done::before {
-  background: var(--success-color, #22c55e);
+  background: var(--success-color, var(--success-color));
 }
 .cs-stat.warn::before {
   background: var(--info-color, #06b6d4);
@@ -2317,7 +2313,7 @@ body {
 }
 
 .cs-tab-badge.green {
-  background: var(--success-color, #22c55e);
+  background: var(--success-color, var(--success-color));
 }
 
 .cs-tab-badge.amber {
@@ -2575,10 +2571,10 @@ tr.cs-row-selected {
 
 /* Overdue row */
 .cs-table .cs-row--danger {
-  border-left: 3px solid var(--danger-color, #ef4444);
+  border-left: 3px solid var(--danger-color, var(--danger-color));
   background: color-mix(
     in srgb,
-    var(--danger-color, #ef4444) 5%,
+    var(--danger-color, var(--danger-color)) 5%,
     var(--bg-card)
   );
 }
@@ -2586,7 +2582,7 @@ tr.cs-row-selected {
 .cs-table .cs-row--danger:hover {
   background: color-mix(
     in srgb,
-    var(--danger-color, #ef4444) 10%,
+    var(--danger-color, var(--danger-color)) 10%,
     var(--bg-card)
   );
 }
@@ -2673,11 +2669,11 @@ tr.cs-row-selected {
 }
 
 .cs-stat--danger .cs-stat-value {
-  color: var(--danger-color, #ef4444);
+  color: var(--danger-color, var(--danger-color));
 }
 
 .cs-stat--success .cs-stat-value {
-  color: var(--success-color, #22c55e);
+  color: var(--success-color, var(--success-color));
 }
 
 /* ----------------------------------------------------------------
@@ -2723,12 +2719,12 @@ tr.cs-row-selected {
 }
 
 .cs-btn--success {
-  background: var(--success-color, #22c55e);
+  background: var(--success-color, var(--success-color));
   color: #fff;
 }
 
 .cs-btn--danger {
-  background: var(--danger-color, #ef4444);
+  background: var(--danger-color, var(--danger-color));
   color: #fff;
 }
 
@@ -2763,7 +2759,7 @@ tr.cs-row-selected {
 }
 
 .cs-btn-dot--danger {
-  background: var(--danger-color, #ef4444);
+  background: var(--danger-color, var(--danger-color));
 }
 
 /* Icon-only row-action buttons */
@@ -2797,39 +2793,39 @@ tr.cs-row-selected {
 .cs-icon-btn--success {
   border-color: color-mix(
     in srgb,
-    var(--success-color, #22c55e) 40%,
+    var(--success-color, var(--success-color)) 40%,
     transparent
   );
-  color: var(--success-color, #22c55e);
+  color: var(--success-color, var(--success-color));
 }
 
 .cs-icon-btn--success:hover {
   background: color-mix(
     in srgb,
-    var(--success-color, #22c55e) 12%,
+    var(--success-color, var(--success-color)) 12%,
     var(--bg-card)
   );
-  border-color: var(--success-color, #22c55e);
-  color: var(--success-color, #22c55e);
+  border-color: var(--success-color, var(--success-color));
+  color: var(--success-color, var(--success-color));
 }
 
 .cs-icon-btn--danger {
   border-color: color-mix(
     in srgb,
-    var(--danger-color, #ef4444) 40%,
+    var(--danger-color, var(--danger-color)) 40%,
     transparent
   );
-  color: var(--danger-color, #ef4444);
+  color: var(--danger-color, var(--danger-color));
 }
 
 .cs-icon-btn--danger:hover {
   background: color-mix(
     in srgb,
-    var(--danger-color, #ef4444) 12%,
+    var(--danger-color, var(--danger-color)) 12%,
     var(--bg-card)
   );
-  border-color: var(--danger-color, #ef4444);
-  color: var(--danger-color, #ef4444);
+  border-color: var(--danger-color, var(--danger-color));
+  color: var(--danger-color, var(--danger-color));
 }
 
 .cs-row-actions {
@@ -2875,13 +2871,13 @@ tr.cs-row-selected {
 .cs-badge--done {
   background: color-mix(
     in srgb,
-    var(--success-color, #22c55e) 16%,
+    var(--success-color, var(--success-color)) 16%,
     transparent
   );
-  color: var(--success-color, #22c55e);
+  color: var(--success-color, var(--success-color));
   border-color: color-mix(
     in srgb,
-    var(--success-color, #22c55e) 35%,
+    var(--success-color, var(--success-color)) 35%,
     transparent
   );
 }
@@ -2893,11 +2889,11 @@ tr.cs-row-selected {
 }
 
 .cs-badge--danger {
-  background: color-mix(in srgb, var(--danger-color, #ef4444) 16%, transparent);
-  color: var(--danger-color, #ef4444);
+  background: color-mix(in srgb, var(--danger-color, var(--danger-color)) 16%, transparent);
+  color: var(--danger-color, var(--danger-color));
   border-color: color-mix(
     in srgb,
-    var(--danger-color, #ef4444) 35%,
+    var(--danger-color, var(--danger-color)) 35%,
     transparent
   );
 }
@@ -2931,7 +2927,7 @@ tr.cs-row-selected {
    CS-TAB BADGE colour modifiers (--green, --amber)
    ---------------------------------------------------------------- */
 .cs-tab-badge--green {
-  background: var(--success-color, #22c55e) !important;
+  background: var(--success-color, var(--success-color)) !important;
 }
 
 .cs-tab-badge--amber {
@@ -2965,7 +2961,7 @@ tr.cs-row-selected {
 }
 
 .cs-code {
-  font-family: "Fira Mono", "Cascadia Code", "Consolas", monospace;
+  font-family: var(--font-mono);
   font-size: 0.78rem;
   background: var(--bg-tertiary);
   color: var(--primary-color, #0d6efd);
@@ -3139,15 +3135,15 @@ tr.cs-row-selected {
 }
 
 .cs-report-icon--green {
-  background: linear-gradient(135deg, var(--success-color, #22c55e), #4ade80);
+  background: linear-gradient(135deg, var(--success-color, var(--success-color)), #4ade80);
 }
 
 .cs-report-icon--amber {
-  background: linear-gradient(135deg, var(--warning-color, #f59e0b), #fbbf24);
+  background: linear-gradient(135deg, var(--warning-color, #f59e0b), var(--warning-color));
 }
 
 .cs-report-icon--red {
-  background: linear-gradient(135deg, var(--danger-color, #ef4444), #f87171);
+  background: linear-gradient(135deg, var(--danger-color, var(--danger-color)), var(--danger-color));
 }
 
 .cs-report-icon--indigo {

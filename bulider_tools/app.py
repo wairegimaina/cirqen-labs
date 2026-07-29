@@ -10,6 +10,7 @@ from .database import FirstRunSetup
 from .services import ServiceManager, ServiceThread
 from .setup_ui import SetupDialog, SetupThread, _themed_dialog, perform_startup_cleanup
 from .ui import CustomSplashScreen, MainWindow
+from sync.startup_warmup import StartupStateManager
 
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QIcon
@@ -68,10 +69,35 @@ def main():
     else:
         logger.info("⚠️  Skipping instance lock (subprocess/migration mode)")
 
+    # The lock above just confirmed we're the only Cirqen instance, so
+    # anything matching here is a leftover from a previous session that
+    # died without cleaning up (crash / kill -9 / power loss) rather than
+    # exiting normally.
+    try:
+        kill_orphaned_service_processes()
+    except Exception as _sweep_error:
+        logger.warning(f"Orphan process sweep skipped: {_sweep_error}")
+
+    service_manager = None  # bound below once created; referenced here so
+                             # cleanup_on_exit() can stop child processes
+                             # (Postgres/Redis/Celery/Django) on ANY exit
+                             # path, not just a graceful window-close.
+
     def cleanup_on_exit():
         logger.info("=" * 70)
         logger.info("CLEANUP ON EXIT")
         logger.info("=" * 70)
+
+        # Without this, SIGTERM/SIGINT/crash exits (anything that skips
+        # MainWindow.closeEvent's confirmation dialog) leave Postgres-HQ,
+        # Redis, Celery, and the Django subprocess running as orphans —
+        # observed in practice as redis-server instances stacking up across
+        # restarts, each still holding its port.
+        if service_manager is not None:
+            try:
+                service_manager.stop_services()
+            except Exception as stop_error:
+                logger.error(f"Error stopping services during cleanup: {stop_error}")
 
         if instance_lock:
             instance_lock.release()

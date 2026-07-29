@@ -2988,8 +2988,29 @@ if sys.platform != "win32":
     env.setdefault("QTWEBENGINE_DISABLE_SANDBOX", "1")
     env.setdefault("QT_LOGGING_RULES", "*.debug=false;qt.webenginecontext.info=false")
 
-print("🚀 Starting Cirqen...")
-subprocess.run([str(exe)], env=env)
+# Production mode: keep the terminal clean. Cirqen's own startup chatter
+# (config loading, service checks, Qt/Chromium diagnostics) is redirected
+# to a log file instead of the console -- nothing is lost, it just is not
+# printed to whatever terminal happened to launch this script.
+if sys.platform == "win32":
+    log_dir = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "Cirqen" / "logs"
+else:
+    log_dir = Path.home() / ".local" / "share" / "cirqen" / "logs"
+log_dir.mkdir(parents=True, exist_ok=True)
+log_path = log_dir / "launcher.log"
+
+# Keep this bounded -- it captures everything printed during the run, so
+# left unchecked it would grow forever across restarts.
+try:
+    if log_path.exists() and log_path.stat().st_size > 20 * 1024 * 1024:
+        backup = log_path.with_suffix(".log.1")
+        backup.unlink(missing_ok=True)
+        log_path.rename(backup)
+except OSError:
+    pass
+
+with open(log_path, "a", buffering=1) as log_file:
+    subprocess.run([str(exe)], env=env, stdout=log_file, stderr=log_file)
 '''
     (dist_dir / "launch_cirqen.py").write_text(launcher_content)
     print("✅ Created launch_cirqen.py")
@@ -3095,7 +3116,6 @@ export QT_LOGGING_RULES="*.debug=false;qt.webenginecontext.info=false"
 
 # ── Run setup if needed, then launch ────────────────────────
 fix_pg_permissions
-echo "🚀  Starting Cirqen ${APP_NAME}..."
 python3 launch_cirqen.py
 ''')
         launcher.chmod(0o755)

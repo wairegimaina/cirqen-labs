@@ -1,0 +1,105 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Audit Log — Equiper{% endblock %}
+{% block page_title %}Audit Log{% endblock %}
+
+{% block content %}
+<div class="card mb-4">
+  <div class="card-body">
+    <form method="get" class="row g-3 align-items-end">
+      <div class="col-md-4">
+        <label for="filter_table_name" class="form-label small fw-bold text-muted">TABLE</label>
+        <input type="text" id="filter_table_name" name="table_name" class="form-control"
+               value="{{ selected_table_name }}" placeholder="e.g. Inventory_equipment">
+      </div>
+      <div class="col-md-4">
+        <label for="filter_operation" class="form-label small fw-bold text-muted">OPERATION</label>
+        <select id="filter_operation" name="operation" class="form-control">
+          <option value="">All operations</option>
+          {% for value, label in operation_choices %}
+          <option value="{{ value }}" {% if selected_operation == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <button type="submit" class="btn btn-primary w-100">Filter</button>
+      </div>
+      <div class="col-md-2">
+        <a href="{% url 'audit_log:list' %}" class="btn btn-outline-secondary w-100">Reset</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Table</th>
+          <th>Operation</th>
+          <th>Row ID</th>
+          <th>Source</th>
+          <th>Details</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in page_obj %}
+        <tr>
+          <td class="text-nowrap"><small>{{ entry.received_at|date:"d M Y, H:i" }}</small></td>
+          <td><code class="small">{{ entry.table_name }}</code></td>
+          <td>
+            {% if entry.operation == 'c' %}<span class="badge bg-success">{{ entry.get_operation_display }}</span>
+            {% elif entry.operation == 'd' %}<span class="badge bg-danger">{{ entry.get_operation_display }}</span>
+            {% elif entry.operation == 's' %}<span class="badge bg-danger">{{ entry.get_operation_display }}</span>
+            {% elif entry.operation == 'u' %}<span class="badge bg-info">{{ entry.get_operation_display }}</span>
+            {% elif entry.operation == 't' %}<span class="badge bg-warning">{{ entry.get_operation_display }}</span>
+            {% elif entry.operation == 'r' %}<span class="badge bg-success">{{ entry.get_operation_display }}</span>
+            {% else %}<span class="badge bg-secondary">{{ entry.get_operation_display }}</span>
+            {% endif %}
+          </td>
+          <td><small class="text-muted">{{ entry.row_id }}</small></td>
+          <td><small>{{ entry.source }}</small></td>
+          <td>
+            {% if entry.metadata %}
+            <details>
+              <summary class="small text-primary" style="cursor:pointer;">View metadata</summary>
+              <pre class="small mb-0 mt-2">{{ entry.metadata }}</pre>
+            </details>
+            {% elif entry.changed_fields %}
+            <small class="text-muted">Changed: {{ entry.changed_fields|join:", " }}</small>
+            {% else %}
+            <small class="text-muted">—</small>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="6">
+            {% include 'includes/empty_state.html' with icon="🗒️" title="No audit entries found" message="Try adjusting the table or operation filter." %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if page_obj.paginator.num_pages > 1 %}
+  <div class="card-body d-flex justify-content-center gap-2">
+    {% if page_obj.has_previous %}
+    <a class="btn btn-sm btn-outline-secondary" href="?page={{ page_obj.previous_page_number }}&table_name={{ selected_table_name }}&operation={{ selected_operation }}">
+      <i class="fas fa-chevron-left"></i> Previous
+    </a>
+    {% endif %}
+    <span class="btn btn-sm btn-primary disabled">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}
+    <a class="btn btn-sm btn-outline-secondary" href="?page={{ page_obj.next_page_number }}&table_name={{ selected_table_name }}&operation={{ selected_operation }}">
+      Next <i class="fas fa-chevron-right"></i>
+    </a>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -19,16 +19,19 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from collections import defaultdict
 
-# ── Connection configs ────────────────────────────────────────────────────────
+# ── Connection configs (loaded from .env / config.json — no secrets here) ─────
+import os as _os
+sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+from _creds import hq_dsn, LOCAL_DB, require
 
-HQ_DSN = "postgresql://cirqen_hq_db1_user:cTAU3kJL3NNlUYA9rR07kh87FKHA6c24@dpg-d8fj2c59j78s738al2vg-a.ohio-postgres.render.com/cirqen_hq_db1"
-
+require("local", "hq")
+HQ_DSN = hq_dsn()
 LOCAL_CFG = dict(
-    host="127.0.0.1",
-    port=2215,
-    dbname="cirqen1",
-    user="cirqen1",
-    password="Btwelvetech@2024",
+    host=LOCAL_DB["host"],
+    port=LOCAL_DB["port"],
+    dbname=LOCAL_DB["database"],
+    user=LOCAL_DB["user"],
+    password=LOCAL_DB["password"],
 )
 
 SESSION_TABLE  = 'public."CalSoft_calibrationsession"'

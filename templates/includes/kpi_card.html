@@ -1,0 +1,33 @@
+{% comment %}
+Shared KPI card — extracts the pattern already proven in
+Reporthub/report.html (kpi-card + kpi-primary/success/info/warning),
+styled centrally in static/css/components.css (loaded globally).
+
+Usage (semantic variant, e.g. report/summary pages):
+  {% include 'includes/kpi_card.html' with value=42 label="Total Jobs" variant="primary" %}
+
+Usage (calibration workflow-state variant):
+  {% include 'includes/kpi_card.html' with value=7 label="Overdue" variant="overdue" icon="fa-clock" %}
+
+Usage (dashboard per-card custom color, matching the existing
+dashboard.html/hod_dashboard.html/nurse_dashboard.html convention):
+  {% include 'includes/kpi_card.html' with value=12 label="Open Jobs" kpi_color="#0ea5e9" icon="fa-clipboard-list" %}
+
+Optional: sub="…" for a one-line footnote, meta="…" + meta_direction="up|warn|down" for a trend line.
+{% endcomment %}
+<div class="kpi-card{% if variant %} kpi-{{ variant }}{% endif %}"{% if kpi_color %} style="--kpi-color: {{ kpi_color }};"{% endif %}>
+  {% if icon %}
+  <div class="kpi-icon"><i class="fas {{ icon }}" aria-hidden="true"></i></div>
+  {% endif %}
+  <div class="kpi-label">{% if label_icon %}<i class="fas {{ label_icon }}" aria-hidden="true"></i>{% endif %}{{ label }}</div>
+  <div class="kpi-value">{{ value }}</div>
+  {% if sub %}<div class="kpi-sub">{{ sub }}</div>{% endif %}
+  {% if meta %}
+  <div class="kpi-meta{% if meta_direction %} {{ meta_direction }}{% endif %}">
+    {% if meta_direction == 'up' %}<i class="fas fa-arrow-up" aria-hidden="true"></i>
+    {% elif meta_direction == 'down' %}<i class="fas fa-arrow-down" aria-hidden="true"></i>
+    {% endif %}
+    {{ meta }}
+  </div>
+  {% endif %}
+</div>

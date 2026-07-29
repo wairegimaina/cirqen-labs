@@ -835,17 +835,8 @@ function formatDate(dateString) {
 }
 
 function showNotification(message, type) {
-  type = type || 'info';
-  var notification = $(
-    '<div class="alert alert-' + type + ' alert-dismissible fade show position-fixed"' +
-         ' style="top:20px;right:20px;z-index:10000;min-width:300px;">' +
-      message +
-      '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>' +
-    '</div>'
-  );
-
-  $('body').append(notification);
-  setTimeout(function () { notification.alert('close'); }, 5000);
+  // Delegates to the shared toast system (static/js/notify.js, loaded globally in base.html)
+  window.notify(message, type || 'info');
 }
 
 // ==========================================

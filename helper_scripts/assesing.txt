@@ -10,9 +10,11 @@ c['hq_db'].update({
     'host': 'dpg-d8fj2c59j78s738al2vg-a.ohio-postgres.render.com',
     'database': 'cirqen_hq_db1',
     'user': 'cirqen_hq_db1_user',
-    'password': 'cTAU3kJL3NNlUYA9rR07kh87FKHA6c24'
+    'password': '<hq-db-password>'  # do not hardcode — pull from env / .env
 })
 p.write_text(json.dumps(c, indent=2))
 print('Done')
 "
 python3 manage.py migrate --database=hq
+ tail -f ~/.local/share/cirqen/logs/errors.log
+/home/cirqen/.local/share/cirqen/config.json

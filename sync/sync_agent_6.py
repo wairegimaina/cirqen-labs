@@ -18,7 +18,8 @@ from .state_manager import StateManager
 from .dependency_manager import DependencyManager
 from .smart_delete import SmartDeleteMixin
 
-class SyncAgent(SmartDeleteMixin):
+class ApplyRemoteUpdateMixin(SmartDeleteMixin):
+    """apply_remote_update_locally: the download-apply path incl. conflict quarantine, deterministic LWW, schema-drift guard, and smart delete."""
     def apply_remote_update_locally(self, table: str, payload: Dict[str, Any]) -> bool:
             """
             Apply a remote update to local DB with comprehensive smart delete support and auto-recovery.
@@ -290,34 +291,34 @@ class SyncAgent(SmartDeleteMixin):
                         if result and result[0]:
                             local_updated_at = result[0]
 
-                            def normalize_to_utc(timestamp):
-                                if isinstance(timestamp, datetime):
-                                    if timestamp.tzinfo is None:
-                                        return timestamp.replace(tzinfo=timezone.utc)
-                                    else:
-                                        return timestamp.astimezone(timezone.utc)
-                                elif isinstance(timestamp, str):
-                                    try:
-                                        dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-                                        if dt.tzinfo is None:
-                                            return dt.replace(tzinfo=timezone.utc)
-                                        return dt.astimezone(timezone.utc)
-                                    except ValueError:
-                                        return datetime.now(timezone.utc)
-                                else:
-                                    return datetime.now(timezone.utc)
+                            # Deterministic, convergent LWW: newer (updated_at,
+                            # tiebreak-key) wins; exact ties broken by a stable
+                            # key so client and HQ agree on the same winner.
+                            winner = self.resolve_conflict(
+                                local_ts=local_updated_at,
+                                remote_ts=remote_updated_at,
+                                local_key=getattr(self, "machine_id", "") or "",
+                                remote_key=source or "",
+                            )
 
-                            local_utc = normalize_to_utc(local_updated_at)
-                            remote_utc = normalize_to_utc(remote_updated_at)
-                            time_diff = abs((local_utc - remote_utc).total_seconds())
-
-                            if local_utc > remote_utc and time_diff > 1.0:
-                                LOG.warning("⚠️  Conflict detected for %s id=%s: local is newer, skipping",
-                                        table, row_id)
+                            if winner == "local":
+                                LOG.warning("⚠️  Conflict on %s id=%s: local wins, "
+                                        "discarding remote change (quarantined)", table, row_id)
+                                # Do NOT silently drop the losing remote change —
+                                # persist it to sync_conflicts for later review.
+                                self.record_conflict(
+                                    table=table,
+                                    row_id=row_id,
+                                    operation=operation,
+                                    winner="local",
+                                    resolution="local_newer_remote_discarded",
+                                    local_updated_at=local_updated_at,
+                                    remote_updated_at=remote_updated_at,
+                                    remote_data=data,
+                                    source=source,
+                                )
                                 return True
-                            elif time_diff <= 1.0:
-                                LOG.debug("Timestamps represent same moment (diff=%.3fs): %s id=%s",
-                                        time_diff, table, row_id)
+                            # else: remote wins -> fall through and overwrite.
 
                     # ✅ CRITICAL FIX: Validate data before processing
                     is_valid, validation_error = self.validate_update_data(table, row_id, data, operation)
@@ -387,22 +388,25 @@ class SyncAgent(SmartDeleteMixin):
 
                     local_columns = schema_info.get('columns', set())
                     processed_data = {}
+                    drifted_columns = []
                     for key, value in data.items():
                         if key == 'pending_delete' and not schema_info['has_pending_delete']:
                             continue
                         if key == 'active_status' and not schema_info['has_active_status']:
                             continue
-                        # Drop columns that don't exist locally — these are HQ-only
-                        # fields added by migrations not yet applied on this client
-                        # (e.g. previous_status, fixed_by). Silently skipping them
-                        # prevents UndefinedColumn crashes; they'll be picked up once
-                        # the client migration runs.
+                        # Column exists at HQ but not locally — a migration applied
+                        # at HQ but not yet on this client. Dropping it prevents an
+                        # UndefinedColumn crash, but is NOT silent: it is recorded
+                        # durably (sync_schema_drift) and surfaced so the operator
+                        # applies the pending migration instead of losing the field.
                         if local_columns and key not in local_columns:
-                            LOG.warning(
-                                "Warning: Skipping column '%s' for %s — not in local schema "                            "(migration pending?)", key, table
-                            )
+                            drifted_columns.append(key)
                             continue
                         processed_data[key] = prepare_value(key, value)
+
+                    if drifted_columns:
+                        # Fail loud (deduplicated) rather than a scrolling warning.
+                        self.record_schema_drift(table, drifted_columns, row_id=row_id)
 
                     cols = list(processed_data.keys())
                     vals = [processed_data[c] for c in cols] if cols else []
@@ -534,10 +538,18 @@ class SyncAgent(SmartDeleteMixin):
                     return False
 
             except psycopg2.errors.UniqueViolation as uv_error:
-                # ── Duplicate value on a non-PK unique constraint (e.g. certificate_number) ──
+                # ── Duplicate value on a non-PK unique constraint (e.g. certificate_number,
+                # or (equipment_id, scheduled_month) on calibration schedules) ──
                 # The upsert only conflicts on (id), so a second unique column that already
-                # belongs to a different row triggers this.  Treat as a skip: the record
-                # already exists locally under a different id — applying it would corrupt data.
+                # belongs to a *different* local row triggers this — typically two branches
+                # independently creating "the same" record (e.g. a next-cycle schedule) before
+                # they'd synced with each other.
+                #
+                # HQ is the source of truth: auto-resolve by re-pointing every local reference
+                # from the local duplicate onto the incoming HQ row, deleting the local
+                # duplicate, then retrying — instead of leaving both sides stuck indefinitely
+                # (see the 2026-07-26 incident: a duplicate schedule row blocked its session
+                # and certificate from ever syncing, with no automatic recovery).
                 if conn:
                     conn.rollback()
 
@@ -548,24 +560,44 @@ class SyncAgent(SmartDeleteMixin):
                 except Exception:
                     constraint = "unknown"
                 try:
-                    dup_value = error_msg.split("Key (")[1].split(")=")[0] + "=" + error_msg.split(")=(")[1].split(")")[0]
+                    dup_columns = error_msg.split("Key (")[1].split(")=")[0]
+                    dup_values = error_msg.split(")=(")[1].split(")")[0]
+                    dup_value = dup_columns + "=" + dup_values
                 except Exception:
+                    dup_columns = dup_values = None
                     dup_value = error_msg[:120]
+
+                if dup_columns and dup_values and row_id:
+                    try:
+                        resolved = self._resolve_unique_conflict_hq_wins(
+                            schema=schema,
+                            table=tbl,
+                            dup_columns=dup_columns,
+                            dup_values=dup_values,
+                            remote_row_id=row_id,
+                        )
+                    except Exception as resolve_error:
+                        resolved = False
+                        LOG.error(f"   ❌ Auto-resolve raised an error for {table}: {resolve_error}")
+
+                    if resolved:
+                        LOG.info(
+                            f"✅ Auto-resolved unique conflict on {table} ({constraint}) — "
+                            f"HQ's row wins, local duplicate retired. Retrying."
+                        )
+                        return self.apply_remote_update_locally(table, payload)
 
                 LOG.warning("")
                 LOG.warning("=" * 80)
-                LOG.warning("⚠️  UNIQUE CONSTRAINT VIOLATION — SKIPPING RECORD")
+                LOG.warning("⚠️  UNIQUE CONSTRAINT VIOLATION — COULD NOT AUTO-RESOLVE, SKIPPING")
                 LOG.warning("=" * 80)
                 LOG.warning(f"   Table     : {table}")
                 LOG.warning(f"   Row ID    : {row_id}")
                 LOG.warning(f"   Constraint: {constraint}")
                 LOG.warning(f"   Duplicate : {dup_value}")
                 LOG.warning("")
-                LOG.warning("   This means the local DB already has a *different* row with the")
-                LOG.warning("   same unique value.  Possible causes:")
-                LOG.warning("   • Certificate was generated locally AND at HQ before sync completed")
-                LOG.warning("   • Record was inserted locally with a conflicting number")
-                LOG.warning("")
+                LOG.warning("   Auto-resolution (HQ wins) did not find a matching local row to")
+                LOG.warning("   retire, or failed to re-point its references safely.")
                 LOG.warning("   The remote record has been SKIPPED to protect local data integrity.")
                 LOG.warning("   Review both records manually and merge if needed.")
                 LOG.warning("=" * 80)
@@ -673,3 +705,112 @@ class SyncAgent(SmartDeleteMixin):
             finally:
                 if conn:
                     self.pool.putconn(conn)
+
+    def _resolve_unique_conflict_hq_wins(
+        self,
+        schema: str,
+        table: str,
+        dup_columns: str,
+        dup_values: str,
+        remote_row_id: str,
+    ) -> bool:
+        """
+        HQ is the source of truth. Called when a downloaded HQ row fails to
+        insert locally because a *different* local row already occupies the
+        same non-PK unique slot (e.g. two branches each auto-created their own
+        "next cycle" schedule for the same equipment+month before syncing).
+
+        Finds the local row occupying that slot, re-points every local FK
+        reference to it onto ``remote_row_id`` (HQ's row), deletes the local
+        duplicate, and returns True so the caller can retry the insert.
+
+        Returns False (touches nothing) if the unique columns/values can't be
+        parsed, no matching local row is found, or anything looks unsafe —
+        the caller then falls back to skip-and-log.
+        """
+        columns = [c.strip().strip('"') for c in dup_columns.split(",")]
+        values = [v.strip() for v in dup_values.split(",")]
+        if not columns or len(columns) != len(values):
+            return False
+
+        conn = None
+        try:
+            conn = self.pool.getconn()
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                # Resolve the table's real primary-key column instead of
+                # assuming "id" — safer if a future table differs.
+                cur.execute(
+                    """
+                    SELECT kcu.column_name
+                    FROM information_schema.table_constraints tc
+                    JOIN information_schema.key_column_usage kcu
+                        ON tc.constraint_name = kcu.constraint_name
+                        AND tc.table_schema = kcu.table_schema
+                    WHERE tc.constraint_type = 'PRIMARY KEY'
+                      AND tc.table_schema = %s AND tc.table_name = %s
+                    """,
+                    (schema, table),
+                )
+                pk_row = cur.fetchone()
+                if not pk_row:
+                    return False
+                pk_column = pk_row["column_name"]
+
+                where_clause = " AND ".join(f'"{c}" = %s' for c in columns)
+                cur.execute(
+                    f'SELECT "{pk_column}" AS pk FROM "{table}" '
+                    f'WHERE {where_clause} AND "{pk_column}" != %s',
+                    (*values, remote_row_id),
+                )
+                local_row = cur.fetchone()
+                if not local_row:
+                    # No conflicting local row found under this exact reading —
+                    # not safe to guess further.
+                    return False
+                local_loser_id = local_row["pk"]
+
+                # Every table with a FK pointing at this one — re-home their
+                # rows onto HQ's id before the local duplicate is deleted.
+                cur.execute(
+                    """
+                    SELECT tc.table_name, kcu.column_name
+                    FROM information_schema.table_constraints tc
+                    JOIN information_schema.key_column_usage kcu
+                        ON tc.constraint_name = kcu.constraint_name
+                    JOIN information_schema.constraint_column_usage ccu
+                        ON tc.constraint_name = ccu.constraint_name
+                    WHERE tc.constraint_type = 'FOREIGN KEY'
+                      AND ccu.table_schema = %s AND ccu.table_name = %s
+                    """,
+                    (schema, table),
+                )
+                referencing = cur.fetchall()
+
+                for ref in referencing:
+                    cur.execute(
+                        f'UPDATE "{ref["table_name"]}" SET "{ref["column_name"]}" = %s '
+                        f'WHERE "{ref["column_name"]}" = %s',
+                        (remote_row_id, local_loser_id),
+                    )
+                    if cur.rowcount:
+                        LOG.info(
+                            f"   ↳ re-pointed {cur.rowcount} row(s) in "
+                            f"{ref['table_name']}.{ref['column_name']} from "
+                            f"{local_loser_id} to {remote_row_id}"
+                        )
+
+                cur.execute(f'DELETE FROM "{table}" WHERE "{pk_column}" = %s', (local_loser_id,))
+                conn.commit()
+                LOG.info(
+                    f"   ↳ retired local duplicate {table}[{local_loser_id}] "
+                    f"in favour of HQ's {remote_row_id}"
+                )
+                return True
+        except Exception as resolve_error:
+            if conn:
+                conn.rollback()
+            LOG.error(f"   ❌ Auto-resolve failed for {table} unique conflict: {resolve_error}")
+            return False
+        finally:
+            if conn:
+                self.pool.putconn(conn)

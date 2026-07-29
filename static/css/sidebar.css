@@ -670,3 +670,77 @@
     display: none !important;
   }
 }
+
+/* ========================================
+   SIDEBAR COLLAPSE TOGGLE (desktop icon-rail mode)
+   Persisted via UserProfile.sidebar_collapsed —
+   see users/views/settings.py::update_sidebar.
+   ======================================== */
+.sidebar-collapse-toggle {
+  background: none;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  transition: var(--sb-transition-fast);
+}
+
+.sidebar-collapse-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.sidebar-collapse-toggle i {
+  transition: transform 0.25s ease;
+}
+
+.equiper-sidebar.sidebar-collapsed .sidebar-collapse-toggle i {
+  transform: rotate(180deg);
+}
+
+@media (min-width: 769px) {
+  .equiper-sidebar.sidebar-collapsed {
+    width: var(--sidebar-collapsed-width, 70px);
+  }
+
+  .equiper-sidebar.sidebar-collapsed .brand-identity,
+  .equiper-sidebar.sidebar-collapsed .section-label,
+  .equiper-sidebar.sidebar-collapsed .link-label,
+  .equiper-sidebar.sidebar-collapsed .user-info-header,
+  .equiper-sidebar.sidebar-collapsed .sidebar-copyright,
+  .equiper-sidebar.sidebar-collapsed .submenu-toggle-arrow,
+  .equiper-sidebar.sidebar-collapsed .nested-toggle-arrow,
+  .equiper-sidebar.sidebar-collapsed .queue-badge {
+    display: none;
+  }
+
+  .equiper-sidebar.sidebar-collapsed .sidebar-brand {
+    justify-content: center;
+    padding: 0 0.5rem;
+  }
+
+  .equiper-sidebar.sidebar-collapsed .menu-link,
+  .equiper-sidebar.sidebar-collapsed .dropdown-link {
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  /* Dropdown/nested submenus don't make sense collapsed to icons —
+     keep them closed and let the parent link behave like a direct link. */
+  .equiper-sidebar.sidebar-collapsed .dropdown-menu,
+  .equiper-sidebar.sidebar-collapsed .nested-dropdown {
+    display: none !important;
+  }
+
+  .main-wrapper.with-sidebar.sidebar-visible.sidebar-collapsed {
+    margin-left: var(--sidebar-collapsed-width, 70px);
+  }
+}

@@ -4,11 +4,12 @@ import json
 with open('/home/maina/.cirqen/data/config.json', 'r') as f:
     cfg = json.load(f)
 
-cfg['hq_db']['host'] = 'dpg-d7rk2sa8qa3s73diimb0-a.ohio-postgres.render.com'
-cfg['hq_db']['port'] = 5432
-cfg['hq_db']['database'] = 'cirqen_hq'
-cfg['hq_db']['user'] = 'cirqen_hq'
-cfg['hq_db']['password'] = 'RyJEzkPmYWrdC2472TzWnFUMaOIueaye'
+import os
+cfg['hq_db']['host'] = os.environ['POSTGRES_HQ_HOST']
+cfg['hq_db']['port'] = int(os.environ.get('POSTGRES_HQ_PORT', '5432'))
+cfg['hq_db']['database'] = os.environ['POSTGRES_HQ_DB']
+cfg['hq_db']['user'] = os.environ['POSTGRES_HQ_USER']
+cfg['hq_db']['password'] = os.environ['POSTGRES_HQ_PASSWORD']
 cfg['hq_db']['enabled'] = True
 
 with open('/home/maina/.cirqen/data/config.json', 'w') as f:

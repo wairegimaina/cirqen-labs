@@ -188,7 +188,7 @@
                         <button type="submit" class="btn btn-primary flex-grow-1">
                             <i class="fas fa-check me-1"></i> Apply
                         </button>
-                        <button type="button" class="btn btn-outline-secondary" onclick="clearFilters()">
+                        <button type="button" class="btn btn-outline-secondary" onclick="clearFilters()" aria-label="Clear filters">
                             <i class="fas fa-undo"></i>
                         </button>
                     </div>
@@ -223,7 +223,7 @@
                             <td class="text-danger fw-bold">KSh {{ item.total_cost|floatformat:2 }}</td>
                             <td>{{ item.downtime_hours }} hrs</td>
                             <td class="text-center">
-                                <button class="btn-icon" onclick="showRepairDetails('{{ item.equipment.id }}')" title="View Details">
+                                <button class="btn-icon" onclick="showRepairDetails('{{ item.equipment.id }}')" title="View Details" aria-label="View Details">
                                     <i class="fas fa-eye"></i>
                                 </button>
                             </td>

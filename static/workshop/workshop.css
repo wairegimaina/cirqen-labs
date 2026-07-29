@@ -10,7 +10,7 @@
 body {
   background: var(--bg-primary);
   color: var(--text-primary);
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: var(--font-base);
   margin: 0;
   padding: 0;
   min-height: 100vh;
@@ -621,10 +621,7 @@ h2::after {
   color: #fff;
 }
 
-.btn-primary {
-  background: var(--primary-gradient);
-  color: var(--text-white);
-}
+/* .btn-primary now comes from the shared static/css/components.css */
 
 .btn-primary:hover {
   filter: brightness(1.12);

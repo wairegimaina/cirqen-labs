@@ -277,24 +277,27 @@
                                             <div class="row">
                                                 <div class="col-md-4">
                                                     <div class="mb-3">
-                                                        <label class="form-label">Name*</label>
+                                                        <label class="form-label" for="id_parameters-{{ forloop.parentloop.counter0 }}-sub_parameters-{{ forloop.counter0 }}-name">Name*</label>
                                                         <input type="text" class="form-control sub-parameter-name-input"
+                                                               id="id_parameters-{{ forloop.parentloop.counter0 }}-sub_parameters-{{ forloop.counter0 }}-name"
                                                                name="parameters-{{ forloop.parentloop.counter0 }}-sub_parameters-{{ forloop.counter0 }}-name"
                                                                value="{{ sub_param.name }}" required>
                                                     </div>
                                                 </div>
                                                 <div class="col-md-3">
                                                     <div class="mb-3">
-                                                        <label class="form-label">Tolerance (±)</label>
+                                                        <label class="form-label" for="id_parameters-{{ forloop.parentloop.counter0 }}-sub_parameters-{{ forloop.counter0 }}-tolerance">Tolerance (±)</label>
                                                         <input type="number" step="0.0001" class="form-control"
+                                                               id="id_parameters-{{ forloop.parentloop.counter0 }}-sub_parameters-{{ forloop.counter0 }}-tolerance"
                                                                name="parameters-{{ forloop.parentloop.counter0 }}-sub_parameters-{{ forloop.counter0 }}-tolerance"
                                                                value="{{ sub_param.tolerance }}">
                                                     </div>
                                                 </div>
                                                 <div class="col-md-3">
                                                     <div class="mb-3">
-                                                        <label class="form-label">Order</label>
+                                                        <label class="form-label" for="id_parameters-{{ forloop.parentloop.counter0 }}-sub_parameters-{{ forloop.counter0 }}-order">Order</label>
                                                         <input type="number" class="form-control"
+                                                               id="id_parameters-{{ forloop.parentloop.counter0 }}-sub_parameters-{{ forloop.counter0 }}-order"
                                                                name="parameters-{{ forloop.parentloop.counter0 }}-sub_parameters-{{ forloop.counter0 }}-order"
                                                                value="{{ sub_param.order }}">
                                                     </div>
@@ -345,7 +348,7 @@
                                                                value="{{ sv.order }}">
                                                     </div>
                                                     <div class="col-md-2">
-                                                        <button type="button" class="btn btn-sm btn-danger delete-set-value">
+                                                        <button type="button" class="btn btn-sm btn-danger delete-set-value" aria-label="Remove set value">
                                                             <i class="fas fa-trash"></i>
                                                         </button>
                                                     </div>
@@ -371,7 +374,7 @@
                                                            name="parameters-{{ forloop.counter0 }}-set_values-0-order" value="0">
                                                 </div>
                                                 <div class="col-md-2">
-                                                    <button type="button" class="btn btn-sm btn-danger delete-set-value">
+                                                    <button type="button" class="btn btn-sm btn-danger delete-set-value" aria-label="Remove set value">
                                                         <i class="fas fa-trash"></i>
                                                     </button>
                                                 </div>
@@ -408,7 +411,6 @@
     </div>
 
     <!-- Bootstrap Bundle with Popper -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <!-- jQuery -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
@@ -852,7 +854,7 @@
                                                name="parameters-${newIndex}-set_values-0-order" value="0">
                                     </div>
                                     <div class="col-md-2">
-                                        <button type="button" class="btn btn-sm btn-danger delete-set-value">
+                                        <button type="button" class="btn btn-sm btn-danger delete-set-value" aria-label="Remove set value">
                                             <i class="fas fa-trash"></i>
                                         </button>
                                     </div>
@@ -896,22 +898,25 @@
                     <div class="row">
                         <div class="col-md-4">
                             <div class="mb-3">
-                                <label class="form-label">Name*</label>
+                                <label class="form-label" for="id_parameters-${parameterIndex}-sub_parameters-${subParamCount}-name">Name*</label>
                                 <input type="text" class="form-control sub-parameter-name-input"
+                                       id="id_parameters-${parameterIndex}-sub_parameters-${subParamCount}-name"
                                        name="parameters-${parameterIndex}-sub_parameters-${subParamCount}-name" required>
                             </div>
                         </div>
                         <div class="col-md-3">
                             <div class="mb-3">
-                                <label class="form-label">Tolerance (±)</label>
+                                <label class="form-label" for="id_parameters-${parameterIndex}-sub_parameters-${subParamCount}-tolerance">Tolerance (±)</label>
                                 <input type="number" step="0.0001" class="form-control"
+                                       id="id_parameters-${parameterIndex}-sub_parameters-${subParamCount}-tolerance"
                                        name="parameters-${parameterIndex}-sub_parameters-${subParamCount}-tolerance">
                             </div>
                         </div>
                         <div class="col-md-3">
                             <div class="mb-3">
-                                <label class="form-label">Order</label>
+                                <label class="form-label" for="id_parameters-${parameterIndex}-sub_parameters-${subParamCount}-order">Order</label>
                                 <input type="number" class="form-control"
+                                       id="id_parameters-${parameterIndex}-sub_parameters-${subParamCount}-order"
                                        name="parameters-${parameterIndex}-sub_parameters-${subParamCount}-order" value="${subParamCount}">
                             </div>
                         </div>
@@ -952,7 +957,7 @@
                                    name="parameters-${parameterIndex}-set_values-${setValueCount}-order" value="${setValueCount}">
                         </div>
                         <div class="col-md-2">
-                            <button type="button" class="btn btn-sm btn-danger delete-set-value">
+                            <button type="button" class="btn btn-sm btn-danger delete-set-value" aria-label="Remove set value">
                                 <i class="fas fa-trash"></i>
                             </button>
                         </div>

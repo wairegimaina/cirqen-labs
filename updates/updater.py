@@ -66,6 +66,107 @@ UPDATE_BACKUPS = _CIRQEN_DATA / "update_backups"
 UPDATE_STAGING.mkdir(parents=True, exist_ok=True)
 UPDATE_BACKUPS.mkdir(parents=True, exist_ok=True)
 
+STATE_FILE = _CIRQEN_DATA / "update_state.json"      # #5 crash-recovery breadcrumb
+LOCK_FILE = _CIRQEN_DATA / "update.lock"             # #5 single-flight guard
+BACKUP_KEEP = 5                                      # #10 backup retention
+
+# #1 — Ed25519 public key that authenticates HQ packages. Embed the value
+# printed by `python hq_server/build_package.py --genkeys`. If left empty the
+# updater runs in unsigned (legacy) mode; once set, an unsigned/forged package
+# is refused. Source of truth: settings.UPDATE_SYSTEM["public_key"], with this
+# constant as a fallback for builds that don't route it through config.
+UPDATE_PUBLIC_KEY = ""
+
+
+def _public_key():
+    raw = (getattr(settings, "UPDATE_SYSTEM", {}) or {}).get("public_key") or UPDATE_PUBLIC_KEY
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+    try:
+        import base64
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+        return Ed25519PublicKey.from_public_bytes(base64.b64decode(raw))
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Invalid UPDATE_PUBLIC_KEY: %s", exc)
+        return None
+
+
+def _verify_signature(manifest_bytes: bytes, signature_b64: Optional[str]):
+    """Raise ValueError unless the manifest is authentic (when a key is set)."""
+    pub = _public_key()
+    if pub is None:
+        logger.warning("Update signature NOT verified — no public key configured (unsigned mode)")
+        return
+    if not signature_b64:
+        raise ValueError("Package is unsigned but a signing key is configured — refusing to apply")
+    import base64
+    try:
+        pub.verify(base64.b64decode(signature_b64), manifest_bytes)
+    except Exception as exc:  # noqa: BLE001 — cryptography raises InvalidSignature
+        raise ValueError(f"Package signature verification FAILED: {exc}") from exc
+
+
+# ── Persisted state (crash recovery) ──────────────────────────────────────────
+
+def _write_state(phase: str, version: str, **extra):
+    try:
+        STATE_FILE.write_text(json.dumps({"phase": phase, "version": version,
+                                          "ts": datetime.now().isoformat(), **extra}))
+    except OSError:
+        pass
+
+
+def _clear_state():
+    try:
+        STATE_FILE.unlink()
+    except OSError:
+        pass
+
+
+def _acquire_lock() -> bool:
+    """Best-effort single-flight lock; steals a stale (>1h) lock from a dead run."""
+    try:
+        if LOCK_FILE.exists():
+            age = time.time() - LOCK_FILE.stat().st_mtime
+            if age < 3600:
+                return False
+        LOCK_FILE.write_text(str(os.getpid()))
+        return True
+    except OSError:
+        return True  # never let lock IO block an update outright
+
+
+def _release_lock():
+    try:
+        LOCK_FILE.unlink()
+    except OSError:
+        pass
+
+
+def recover_if_needed(progress_queue: "Optional[queue.Queue]" = None) -> bool:
+    """
+    #5 — Call once at app startup. If a previous update died mid-apply, restore
+    the most recent backup for that version so the app never boots half-patched.
+    Returns True if a recovery rollback was performed.
+    """
+    if not STATE_FILE.exists():
+        return False
+    try:
+        state = json.loads(STATE_FILE.read_text())
+    except Exception:
+        _clear_state()
+        return False
+    phase, version = state.get("phase"), state.get("version", "")
+    if phase in {"complete", None}:
+        _clear_state()
+        return False
+    logger.warning("Detected interrupted update (phase=%s, v=%s) — rolling back", phase, version)
+    ok = rollback(version, progress_queue)
+    _clear_state()
+    _release_lock()
+    return ok
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -79,6 +180,31 @@ def _sha256(path: Path) -> str:
 
 def _emit(q: queue.Queue, event: str, data: dict):
     q.put({"event": event, "data": data})
+
+
+def _invalidate_bytecode(py_path: Path):
+    """
+    Ensure a freshly written .py is not shadowed by a stale compiled copy.
+
+    The backend now loads from loose source under _internal/ (see cirqen.spec),
+    so Python caches each module's bytecode in an adjacent __pycache__/*.pyc.
+    After we overwrite the .py we (a) bump its mtime so CPython's source-newer
+    check forces a recompile, and (b) delete the matching cached .pyc outright.
+    """
+    if py_path.suffix != ".py":
+        return
+    try:
+        os.utime(py_path, None)  # mark as modified "now"
+    except OSError:
+        pass
+    cache = py_path.parent / "__pycache__"
+    if cache.is_dir():
+        stem = py_path.stem
+        for pyc in cache.glob(f"{stem}.*.pyc"):
+            try:
+                pyc.unlink()
+            except OSError:
+                pass
 
 
 # ── Main updater ──────────────────────────────────────────────────────────────
@@ -134,25 +260,51 @@ class Updater:
     # ── Public entry point ────────────────────────────────────────────────────
 
     def run(self):
+        # #5 — single-flight: never let two updates apply files concurrently.
+        if not _acquire_lock():
+            self._emit("error", {"message": "Another update is already in progress."})
+            return
         try:
             self._emit("started", {"message": f"Starting update to v{self.version}"})
+            self._preflight()                                   # #5 disk + writability
 
-            archive_path = self._acquire()
-            manifest, extract_dir = self._validate_and_extract(archive_path)
+            _write_state("acquiring", self.version)
+            archive_path = self._acquire()                      # #5 resumable download
+            manifest, extract_dir = self._validate_and_extract(archive_path)  # #1 verify signature
+
+            _write_state("backing_up", self.version)
             self._backup(manifest, extract_dir)
-            self._apply_files(manifest, extract_dir)
-            self._run_migrations()
-            self._signal_restart()
+            self._backup_database()                             # #3 snapshot DB before migrate
 
+            _write_state("applying", self.version)
+            self._apply_files(manifest, extract_dir)            # #2 atomic + skip-unchanged
+            self._apply_deletions(manifest)
+            self._verify_tree(manifest)                         # #10 on-disk verification
+
+            _write_state("migrating", self.version)
+            self._run_migrations()
+
+            _write_state("verifying", self.version)
+            if not self._health_check():                        # #2 fresh-process health gate
+                raise RuntimeError("Post-update health check failed")
+
+            _write_state("complete", self.version)
+            self._signal_restart()
+            self._report("success")                             # #8
             self._emit("complete", {
                 "message": f"Update to v{self.version} applied. Restart required.",
                 "restart_required": True,
             })
 
         except Exception as exc:
-            logger.exception("Update failed")
+            logger.exception("Update failed — attempting rollback")
             self._emit("error", {"message": str(exc)})
+            rolled = self._rollback(str(exc))                   # #2 auto-rollback
+            self._report("rolled_back" if rolled else "failed", str(exc))  # #8
         finally:
+            _clear_state()
+            _release_lock()
+            self._prune_backups()                               # #10 retention
             try:
                 if self.staging_dir.exists():
                     shutil.rmtree(self.staging_dir, ignore_errors=True)
@@ -189,45 +341,53 @@ class Updater:
         return dest
 
     def _download(self) -> Path:
-        self._emit("downloading", {"message": "Downloading update package…", "progress": 0})
-
-        response = requests.get(
-            self.package_url,
-            stream=True,
-            timeout=120,
-            headers=self.download_headers,  # carries X-Api-Key for Render auth
-        )
-        response.raise_for_status()
-
-        url_lower = self.package_url.lower()
-        if url_lower.endswith(".tar.xz"):
+        # Detect extension from the path only (URLs may carry ?from_version=…).
+        path_part = self.package_url.split("?", 1)[0].lower()
+        if path_part.endswith(".tar.xz"):
             ext = ".tar.xz"
-        elif url_lower.endswith(".tar.gz"):
+        elif path_part.endswith(".tar.gz"):
             ext = ".tar.gz"
-        elif url_lower.endswith(".zip"):
-            ext = ".zip"
         else:
             ext = ".zip"
 
         archive_path = self.staging_dir / f"update_v{self.version}{ext}"
-        total = int(response.headers.get("Content-Length", 0))
-        downloaded = 0
+        part = archive_path.with_name(archive_path.name + ".part")
 
-        with archive_path.open("wb") as f:
+        # #5 — resume a partial download if one is present.
+        resume_from = part.stat().st_size if part.exists() else 0
+        headers = dict(self.download_headers)
+        if resume_from:
+            headers["Range"] = f"bytes={resume_from}-"
+
+        self._emit("downloading", {
+            "message": "Resuming download…" if resume_from else "Downloading update package…",
+            "progress": 0,
+        })
+        response = requests.get(self.package_url, stream=True, timeout=120, headers=headers)
+
+        # Server ignored our Range (sent 200, not 206) → start clean.
+        if resume_from and response.status_code == 200:
+            resume_from = 0
+            try:
+                part.unlink()
+            except OSError:
+                pass
+        response.raise_for_status()
+
+        total = int(response.headers.get("Content-Length", 0)) + resume_from
+        downloaded = resume_from
+        with part.open("ab" if resume_from else "wb") as f:
             for chunk in response.iter_content(chunk_size=65536):
                 if chunk:
                     f.write(chunk)
                     downloaded += len(chunk)
                     if total:
-                        pct = int(downloaded / total * 100)
                         self._emit("downloading", {
-                            "message": (
-                                f"Downloading… {downloaded // 1024} KB"
-                                f" / {total // 1024} KB"
-                            ),
-                            "progress": pct,
+                            "message": f"Downloading… {downloaded // 1024} KB / {total // 1024} KB",
+                            "progress": int(downloaded / total * 100),
                         })
 
+        os.replace(part, archive_path)  # atomic promote of the completed download
         self._emit("downloading", {"message": "Download complete.", "progress": 100})
         return archive_path
 
@@ -266,7 +426,15 @@ class Updater:
         if not manifest_path.exists():
             raise FileNotFoundError("manifest.json not found in update package")
 
-        manifest = json.loads(manifest_path.read_text())
+        # #1 — authenticate the manifest BEFORE trusting anything inside it.
+        manifest_bytes = manifest_path.read_bytes()
+        sig_path = extract_dir / "manifest.sig"
+        signature = sig_path.read_text().strip() if sig_path.exists() else None
+        _verify_signature(manifest_bytes, signature)
+        self._emit("validating", {"message": "Package signature verified."
+                                  if _public_key() else "Package accepted (unsigned mode)."})
+
+        manifest = json.loads(manifest_bytes)
 
         # Per-file checksum verification
         files_dir = extract_dir / "files"
@@ -319,11 +487,24 @@ class Updater:
             "migration": "🗄  Migration",
         }
 
+        skipped = 0
         for i, entry in enumerate(file_list, 1):
             src = files_dir / entry["path"]
             dest = BASE_DIR / entry["path"]
+            if not src.exists():
+                continue  # delta packages only ship changed files
+            # #6 — skip files already identical on disk (saves writes + mtime churn)
+            want = entry.get("sha256")
+            if want and dest.exists() and _sha256(dest) == want:
+                skipped += 1
+                continue
             dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dest)
+            # #2 — write to a temp sibling then atomically replace, so a crash
+            # mid-write can never leave a half-written module on disk.
+            tmp = dest.parent / f".{dest.name}.new"
+            shutil.copy2(src, tmp)
+            os.replace(tmp, dest)
+            _invalidate_bytecode(dest)  # backend loads loose source — drop stale .pyc
             label = type_labels.get(entry.get("type", "backend"), "📄 File")
             self._emit("applying", {
                 "message": f"{label}: {entry['path']}",
@@ -332,7 +513,156 @@ class Updater:
                 "total": total,
             })
 
-        self._emit("applying", {"message": f"All {total} files applied.", "progress": 100})
+        self._emit("applying", {
+            "message": f"Applied {total - skipped} file(s); {skipped} already current.",
+            "progress": 100,
+        })
+
+    # ── Deletions (files removed in the new version, e.g. after a refactor) ────
+
+    def _apply_deletions(self, manifest: dict):
+        """
+        Remove files that no longer exist in the new version.
+
+        Without this a structural refactor (e.g. ``Inventory/views.py`` becoming
+        the ``Inventory/views/`` package) would leave the old module on disk,
+        shadowing or colliding with the replacement. Each removed file is backed
+        up first (so ``rollback`` can restore it) and its cached bytecode dropped.
+        Empty parent directories left behind are pruned.
+        """
+        deletions = manifest.get("deletions", [])
+        if not deletions:
+            return
+
+        removed = 0
+        for rel in deletions:
+            dest = BASE_DIR / rel
+            if not dest.exists():
+                continue
+            # Back up before removing, so rollback is complete.
+            bak = self.backup_dir / "__deleted__" / rel
+            bak.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                shutil.copy2(dest, bak)
+            except OSError:
+                pass
+            _invalidate_bytecode(dest)
+            try:
+                dest.unlink()
+                removed += 1
+            except OSError as exc:
+                logger.warning("Could not delete %s: %s", rel, exc)
+                continue
+            # Prune now-empty parent directories (but never climb past BASE_DIR).
+            parent = dest.parent
+            while parent != BASE_DIR and parent.is_dir() and not any(parent.iterdir()):
+                try:
+                    parent.rmdir()
+                except OSError:
+                    break
+                parent = parent.parent
+
+        self._emit("applying", {"message": f"Removed {removed} obsolete file(s)."})
+
+    # ── Preflight / verification / health / rollback (#2, #3, #5, #10) ─────────
+
+    def _preflight(self):
+        """#5 — fail fast before touching anything if we can't safely apply."""
+        if not os.access(BASE_DIR, os.W_OK):
+            raise RuntimeError(f"Install directory is not writable: {BASE_DIR}")
+        try:
+            free = shutil.disk_usage(str(BASE_DIR)).free
+            if free < 500 * 1024 * 1024:  # 500 MB headroom for staging + backup
+                raise RuntimeError(f"Insufficient disk space ({free // (1024 * 1024)} MB free)")
+        except OSError:
+            pass
+        self._emit("preflight", {"message": "Preflight checks passed."})
+
+    def _backup_database(self):
+        """#3 — snapshot SQLite DB files so a bad migration can be rolled back."""
+        self._db_backups = []
+        for alias, cfg in (getattr(settings, "DATABASES", {}) or {}).items():
+            engine = cfg.get("ENGINE", "")
+            name = cfg.get("NAME", "")
+            if engine.endswith("sqlite3") and name and Path(name).exists():
+                dest = self.backup_dir / "__db__" / f"{alias}.sqlite3"
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(name, dest)
+                self._db_backups.append((alias, str(name), str(dest)))
+        if self._db_backups:
+            self._emit("backing_up", {"message": f"Backed up {len(self._db_backups)} database file(s)."})
+
+    def _verify_tree(self, manifest: dict):
+        """#10 — re-hash applied files on disk; abort if any didn't land intact."""
+        bad = []
+        for entry in manifest.get("files", []):
+            dest = BASE_DIR / entry["path"]
+            want = entry.get("sha256")
+            if want and dest.exists() and _sha256(dest) != want:
+                bad.append(entry["path"])
+        if bad:
+            raise ValueError(f"Post-apply verification failed for {len(bad)} file(s): {bad[:5]}")
+        self._emit("verifying", {"message": f"Verified {len(manifest.get('files', []))} file(s) on disk."})
+
+    def _health_check(self) -> bool:
+        """#2 — run `manage.py check` in a fresh process against the NEW code."""
+        manage_py = BASE_DIR / "manage.py"
+        if not manage_py.exists():
+            logger.warning("manage.py not found — skipping health check")
+            return True
+        self._emit("verifying", {"message": "Running post-update health check…"})
+        try:
+            result = subprocess.run(
+                [sys.executable, str(manage_py), "check"],
+                capture_output=True, text=True, cwd=str(BASE_DIR), timeout=180,
+            )
+        except subprocess.TimeoutExpired:
+            logger.error("Health check timed out")
+            return False
+        if result.returncode != 0:
+            logger.error("Health check FAILED:\n%s", (result.stderr or result.stdout)[:800])
+            return False
+        return True
+
+    def _rollback(self, reason: str) -> bool:
+        """#2 — restore the pre-update state (files + deletions + DB)."""
+        if not self.backup_dir.exists() or not any(self.backup_dir.iterdir()):
+            return False  # nothing was applied yet — nothing to undo
+        self._emit("rolling_back", {"message": f"Rolling back: {reason}"})
+        _restore_from_backup(self.backup_dir)  # restores files + deletions + DB snapshots
+        SENTINEL_FILE.write_text(f"rollback_{self.version}")
+        self._emit("rolled_back", {
+            "message": "Rolled back to the previous version. Restart required.",
+            "restart_required": True,
+        })
+        return True
+
+    def _report(self, status: str, error: str = ""):
+        """#8 — best-effort report of the outcome to HQ (fleet observability)."""
+        cfg = getattr(settings, "UPDATE_SYSTEM", {}) or {}
+        url = (cfg.get("server_url") or "").rstrip("/")
+        api_key = cfg.get("api_key") or ""
+        if not url or not api_key:
+            return
+        try:
+            requests.post(
+                f"{url}/api/updates/report/",
+                json={"machine_id": self._machine_id(), "version": self.version,
+                      "status": status, "error": error[:1000]},
+                headers={"X-Api-Key": api_key}, timeout=10,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Failed to report update outcome: %s", exc)
+
+    def _prune_backups(self):
+        """#10 — keep only the most recent BACKUP_KEEP backups."""
+        try:
+            backups = sorted([d for d in UPDATE_BACKUPS.iterdir() if d.is_dir()],
+                             key=lambda d: d.stat().st_mtime, reverse=True)
+            for old in backups[BACKUP_KEEP:]:
+                shutil.rmtree(old, ignore_errors=True)
+        except OSError:
+            pass
 
     # ── Migrations ────────────────────────────────────────────────────────────
 
@@ -356,6 +686,7 @@ class Updater:
             capture_output=True,
             text=True,
             cwd=str(BASE_DIR),
+            timeout=600,  # never let a stuck migration hang the whole update
         )
         if result.returncode != 0:
             logger.error("local migrate stderr: %s", result.stderr)
@@ -460,6 +791,7 @@ class Updater:
                 capture_output=True,
                 text=True,
                 cwd=str(BASE_DIR),
+                timeout=600,
             )
             if result.returncode != 0:
                 logger.error("HQ migrate stderr: %s", result.stderr)
@@ -492,6 +824,7 @@ class Updater:
             capture_output=True,
             text=True,
             cwd=str(BASE_DIR),
+            timeout=120,
         )
         unapplied = [
             line for line in result.stdout.splitlines()
@@ -529,6 +862,43 @@ class Updater:
 
 # ── Rollback helper ───────────────────────────────────────────────────────────
 
+def _restore_from_backup(backup_dir: Path):
+    """Restore changed files, re-create deleted files, and restore DB snapshots."""
+    manifest_path = backup_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
+
+    # Changed files that were overwritten.
+    for entry in manifest.get("files", []):
+        src = backup_dir / entry["path"]
+        dest = BASE_DIR / entry["path"]
+        if src.exists():
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dest)
+            _invalidate_bytecode(dest)
+
+    # Files the update had deleted (backed up under __deleted__/).
+    deleted_root = backup_dir / "__deleted__"
+    if deleted_root.is_dir():
+        for src in deleted_root.rglob("*"):
+            if src.is_file():
+                dest = BASE_DIR / src.relative_to(deleted_root)
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dest)
+                _invalidate_bytecode(dest)
+
+    # #3 — DB snapshots taken before migrating, keyed by alias.
+    db_root = backup_dir / "__db__"
+    if db_root.is_dir():
+        for alias, cfg in (getattr(settings, "DATABASES", {}) or {}).items():
+            snap = db_root / f"{alias}.sqlite3"
+            name = cfg.get("NAME", "")
+            if snap.exists() and name:
+                try:
+                    shutil.copy2(snap, name)
+                except OSError as exc:
+                    logger.error("DB restore failed for %s: %s", alias, exc)
+
+
 def rollback(version: str, progress_queue: Optional[queue.Queue] = None) -> bool:
     q = progress_queue or queue.Queue()
 
@@ -541,21 +911,12 @@ def rollback(version: str, progress_queue: Optional[queue.Queue] = None) -> bool
         return False
 
     backup_dir = candidates[0]
-    manifest_path = backup_dir / "manifest.json"
-    if not manifest_path.exists():
+    if not (backup_dir / "manifest.json").exists():
         _emit(q, "error", {"message": "Backup manifest missing"})
         return False
 
-    manifest = json.loads(manifest_path.read_text())
     _emit(q, "rolling_back", {"message": f"Restoring from {backup_dir.name}…"})
-
-    for entry in manifest.get("files", []):
-        src = backup_dir / entry["path"]
-        dest = BASE_DIR / entry["path"]
-        if src.exists():
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dest)
-
+    _restore_from_backup(backup_dir)
     _emit(q, "complete", {
         "message": "Rollback complete. Restart required.",
         "restart_required": True,

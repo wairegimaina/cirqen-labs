@@ -126,22 +126,22 @@
                     <form method="GET" class="row g-3 align-items-center" id="filterForm">
                         <input type="hidden" name="tab" value="{{ active_tab }}">
                         <div class="col-md-3">
-                            <label class="form-label">Date From</label>
-                            <input type="date" class="form-control form-control-sm" name="date_from"
+                            <label class="form-label" for="filter_date_from">Date From</label>
+                            <input type="date" class="form-control form-control-sm" id="filter_date_from" name="date_from"
                                    value="{{ current_filters.date_from }}">
                         </div>
                         <div class="col-md-3">
-                            <label class="form-label">Date To</label>
-                            <input type="date" class="form-control form-control-sm" name="date_to"
+                            <label class="form-label" for="filter_date_to">Date To</label>
+                            <input type="date" class="form-control form-control-sm" id="filter_date_to" name="date_to"
                                    value="{{ current_filters.date_to }}">
                         </div>
                         <div class="col-md-3">
-                            <label class="form-label">Equipment</label>
-                            <input type="text" class="form-control form-control-sm" name="equipment"
+                            <label class="form-label" for="filter_equipment">Equipment</label>
+                            <input type="text" class="form-control form-control-sm" id="filter_equipment" name="equipment"
                                    placeholder="Search equipment..." value="{{ current_filters.equipment }}">
                         </div>
                         <div class="col-md-3">
-                            <label class="form-label">&nbsp;</label>
+                            <div class="form-label" aria-hidden="true">&nbsp;</div>
                             <div>
                                 <button type="submit" class="btn btn-primary btn-sm">
                                     <i class="fas fa-search"></i> Filter

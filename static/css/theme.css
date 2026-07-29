@@ -228,6 +228,26 @@ body { background-color: var(--bg-primary); color: var(--text-primary); }
 .form-text  { color: var(--text-muted); font-size: .76rem; }
 .form-select option { background: var(--bg-card); color: var(--text-primary); }
 
+/* Inline validation — the one standard treatment for every form: a red
+   border on the field plus a message directly under it, using Bootstrap's
+   existing .is-invalid/.invalid-feedback classes (already used in
+   Calibrition/standards_parameters_list.html) so no new markup convention
+   is needed, just themed to match the app instead of Bootstrap's
+   unthemed default red, which doesn't adapt between light/dark. */
+.form-control.is-invalid, .form-select.is-invalid {
+  border-color: var(--danger-color);
+  background-image: none; /* drop Bootstrap's baked-in light-mode icon */
+}
+.form-control.is-invalid:focus, .form-select.is-invalid:focus {
+  border-color: var(--danger-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger-color) 20%, transparent);
+}
+.invalid-feedback {
+  color: var(--danger-color);
+  font-size: .78rem;
+  margin-top: .3rem;
+}
+
 /* ============================================================
    BADGES
    ============================================================ */
@@ -256,7 +276,7 @@ body { background-color: var(--bg-primary); color: var(--text-primary); }
 }
 .alert * { color: inherit; }
 .alert-success {
-  background: #bbf7d0;
+  background: var(--border-mid);
   border-left: 4px solid var(--primary-color);
   color: var(--primary-dark);
 }
@@ -264,7 +284,7 @@ body { background-color: var(--bg-primary); color: var(--text-primary); }
 
 .alert-danger  { background: linear-gradient(135deg, var(--danger-color), #dc2626); color: #fff; }
 .alert-warning { background: linear-gradient(135deg, var(--warning-color), #b45309); color: #fff; }
-.alert-info    { background: #bbf7d0; border-left: 4px solid var(--primary-color); color: var(--primary-dark); }
+.alert-info    { background: var(--border-mid); border-left: 4px solid var(--primary-color); color: var(--primary-dark); }
 .alert-info strong, .alert-info * { color: var(--primary-dark); }
 
 [data-theme="dark"] .alert-success {
@@ -413,4 +433,23 @@ body { background-color: var(--bg-primary); color: var(--text-primary); }
 .form-control:focus, .form-select:focus {
   border-color: var(--input-focus-border) !important;
   box-shadow:   var(--input-focus-shadow) !important;
+}
+
+/* ============================================================
+   RESPONSIVE — this file previously had zero @media coverage,
+   so modals/cards/buttons never scaled their padding down for
+   phones even though the sidebar (sidebar.css) already does.
+   ============================================================ */
+@media (max-width: 480px) {
+  .card-header, .card-footer { padding: .7rem .9rem; }
+  .card-body { padding: .9rem; }
+
+  .modal-header, .modal-footer { padding: .8rem 1rem; }
+  .modal-body { padding: 1rem; }
+
+  .btn { padding: .48rem .9rem; font-size: .85rem; }
+  .btn-lg { padding: .6rem 1.1rem; }
+
+  .dropdown-menu { padding: .25rem; }
+  .dropdown-item { padding: .4rem .65rem; font-size: .82rem; }
 }

@@ -29,7 +29,8 @@ from .dependency_manager import DependencyManager
 from .smart_delete import SmartDeleteMixin
 
 
-class SyncAgent(SmartDeleteMixin):
+class SchemaAndChangeDetectionMixin(SmartDeleteMixin):
+    """DB pool/schema introspection, download checkpoint, and timestamp-based change detection (the legacy poller)."""
     def perform_mirror_sync_now(self, direction: str = "bidirectional") -> Dict:
         """Perform immediate mirror sync"""
         if not self.mirror:
@@ -226,27 +227,34 @@ class SyncAgent(SmartDeleteMixin):
             conn = self.pool.getconn()
             with conn.cursor() as cur:
                 valid_tables = []
+                missing_created_at = []
                 for table in self.tables:
                     if "." in table:
                         schema, tbl = table.split(".", 1)
                     else:
                         schema, tbl = "public", table
 
+                    # Check updated_at (required for the poller) AND created_at
+                    # (required by the mirror recovery path) in one query.
                     cur.execute(
                         """
-                            SELECT EXISTS (
-                                SELECT FROM information_schema.columns
-                                WHERE table_schema = %s
-                                AND table_name = %s
-                                AND column_name = 'updated_at'
-                            )
+                            SELECT
+                                bool_or(column_name = 'updated_at') AS has_updated,
+                                bool_or(column_name = 'created_at') AS has_created
+                            FROM information_schema.columns
+                            WHERE table_schema = %s AND table_name = %s
                         """,
                         (schema, tbl),
                     )
+                    row = cur.fetchone()
+                    has_updated = bool(row and row[0])
+                    has_created = bool(row and row[1])
 
-                    if cur.fetchone()[0]:
+                    if has_updated:
                         valid_tables.append(table)
                         LOG.debug("✓ Table has updated_at: %s", table)
+                        if not has_created:
+                            missing_created_at.append(table)
                     else:
                         LOG.warning("✗ Table missing updated_at, skipping: %s", table)
 
@@ -256,6 +264,17 @@ class SyncAgent(SmartDeleteMixin):
                     len(valid_tables),
                     len(self.config["tables"]),
                 )
+
+                # created_at is a hard requirement of the mirror (it SELECTs
+                # created_at when reconciling). Surface this loudly so a table
+                # that syncs fine via the poller doesn't silently break recovery.
+                if missing_created_at:
+                    LOG.warning(
+                        "⚠️  %d synced table(s) lack a created_at column — the mirror "
+                        "recovery path REQUIRES it and will error for these: %s",
+                        len(missing_created_at),
+                        ", ".join(missing_created_at),
+                    )
 
         except Exception as e:
             LOG.error("Failed to verify tables: %s", e)
@@ -602,13 +621,20 @@ class SyncAgent(SmartDeleteMixin):
                         LIMIT %s
                     """
 
-                # Execute with explain for optimization insights (debug mode)
-                if LOG.isEnabledFor(logging.DEBUG):
-                    cur.execute(f"EXPLAIN ANALYZE {query}", (since_dt, limit))
-                    explain_result = cur.fetchall()
-                    LOG.debug(
-                        f"📊 Query plan for {table}:\n{explain_result[0] if explain_result else 'N/A'}"
-                    )
+                # Optional query-plan capture. Gated behind an EXPLICIT opt-in
+                # (sync.explain_queries / SYNC_EXPLAIN=1), NOT the DEBUG log level:
+                # the sync logger defaults to DEBUG, and EXPLAIN ANALYZE *executes*
+                # the query an extra time — doubling DB work on every poll of every
+                # table. Also use plain EXPLAIN (no ANALYZE) so it never executes.
+                if os.getenv("SYNC_EXPLAIN", "0") == "1" or self.sync_cfg.get("explain_queries"):
+                    try:
+                        cur.execute(f"EXPLAIN {query}", (since_dt, limit))
+                        explain_result = cur.fetchall()
+                        LOG.debug(
+                            f"📊 Query plan for {table}:\n{explain_result[0] if explain_result else 'N/A'}"
+                        )
+                    except Exception:
+                        pass
 
                 cur.execute(query, (since_dt, limit))
                 rows = cur.fetchall()

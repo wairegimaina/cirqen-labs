@@ -135,13 +135,13 @@
 /* Typography Utilities */
 .text-primary { color: var(--primary-color) !important; }
 .font-monospace {
-  font-family: 'SF Mono', 'Courier New', monospace;
+  font-family: var(--font-mono);
   letter-spacing: 0.5px;
   font-size: 0.85rem;
 }
 /* Specific text colors */
 .text-primary { color: var(--primary-color) !important; }
-.font-monospace { font-family: 'Courier New', monospace; letter-spacing: 0.5px; }
+.font-monospace { font-family: var(--font-mono); letter-spacing: 0.5px; }
 
 /* Loading Overlay */
 .loading-overlay {

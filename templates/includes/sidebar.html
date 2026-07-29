@@ -5,7 +5,9 @@
 <link rel="stylesheet" href="{% static 'css/flatpickr.min.css' %}" />
 {% endblock %}
 
-<aside class="equiper-sidebar" id="equiperSidebar" aria-label="Main navigation">
+<aside class="equiper-sidebar{% if request.user.userprofile.sidebar_collapsed %} sidebar-collapsed{% endif %}"
+  id="equiperSidebar" aria-label="Main navigation"
+  data-sidebar-collapsed="{% if request.user.userprofile.sidebar_collapsed %}true{% else %}false{% endif %}">
 
   <!-- ═══════════════════════════════════════════════════════════════ -->
   <!-- BRAND                                                           -->
@@ -17,6 +19,11 @@
       <!-- White logo: shown on dark theme -->
       <img src="{% static 'images/white.png' %}" alt="Cirqen" class="sidebar-logo sidebar-logo--white">
     </div>
+    <button type="button" class="sidebar-collapse-toggle" id="sidebarCollapseToggle"
+      aria-label="Collapse sidebar" aria-pressed="{% if request.user.userprofile.sidebar_collapsed %}true{% else %}false{% endif %}"
+      title="Collapse sidebar">
+      <i class="fas fa-angles-left" aria-hidden="true"></i>
+    </button>
   </div>
 
   <!-- ═══════════════════════════════════════════════════════════════ -->
@@ -41,7 +48,7 @@
              5. fallback       → dashboard-main
       -->
       <li class="menu-entry" role="none">
-        {% if user.userprofile.role == 'HOD' %}
+        {% if nav.is_hod %}
         <a href="{% url 'dashboard:hod_dashboard' %}"
           class="menu-link {% if request.resolver_match.url_name == 'hod_dashboard' %}active-link{% endif %}"
           role="menuitem">
@@ -51,11 +58,11 @@
           <a href="{% url 'calibration:cal-dashboard' %}"
             class="menu-link {% if request.resolver_match.url_name == 'cal-dashboard' %}active-link{% endif %}"
             role="menuitem">
-            {% elif user.userprofile.role == 'Tech' and not ws %}
+            {% elif nav.is_tech and not ws %}
             <a href="{% url 'workshop_dashboard' %}"
               class="menu-link {% if request.resolver_match.url_name == 'workshop_dashboard' %}active-link{% endif %}"
               role="menuitem">
-              {% elif user.userprofile.role == 'NIC' and not ws %}
+              {% elif nav.is_nic and not ws %}
               <a href="{% url 'dashboard:nic_dashboard' %}"
                 class="menu-link {% if request.resolver_match.url_name == 'nurse_dashboard' %}active-link{% endif %}"
                 role="menuitem">
@@ -88,7 +95,7 @@
       <!-- ║  HOD BLOCK                                            ║ -->
       <!-- ║  Visible to: HOD only                                 ║ -->
       <!-- ╚═══════════════════════════════════════════════════════╝ -->
-      {% if user.userprofile.role == 'HOD' %}
+      {% if nav.is_hod %}
 
       <li class="menu-section-header" role="none">
         <span class="section-label">Administration</span>
@@ -117,6 +124,17 @@
         </a>
       </li>
 
+      <!-- Audit Log -->
+      <li class="menu-entry" role="none">
+        <a href="{% url 'audit_log:list' %}"
+          class="menu-link {% if 'audit-log' in request.path %}active-link{% endif %}" role="menuitem">
+          <div class="link-icon" aria-hidden="true">
+            <i class="fas fa-history"></i>
+          </div>
+          <span class="link-label">Audit Log</span>
+        </a>
+      </li>
+
       <!-- Workshop Management (dropdown) -->
       <li class="menu-entry" role="none">
         <a href="{% url 'workshop:create_workshop' %}"
@@ -129,21 +147,6 @@
         </a>
       </li>
 
-    </ul>
-    </li>
-
-    <!-- Parts & Tools -->
-    <li class="menu-entry" role="none">
-      <a href="{% url 'partstools:accessories_dashboard' %}"
-        class="menu-link {% if 'parts' in request.path or 'accessories' in request.path %}active-link{% endif %}"
-        role="menuitem">
-        <div class="link-icon" aria-hidden="true">
-          <i class="fas fa-wrench"></i>
-        </div>
-        <span class="link-label">Parts &amp; Tools</span>
-      </a>
-    </li>
-
     {% endif %}
     {# ── END HOD BLOCK ── #}
 
@@ -151,7 +154,7 @@
     <!-- ║  MAINTENANCE BLOCK                                    ║ -->
     <!-- ║  Visible to: Tech in maintenance workshop only        ║ -->
     <!-- ╚═══════════════════════════════════════════════════════╝ -->
-    {% if user.userprofile.role == 'Tech' %}
+    {% if nav.is_tech %}
     {% with ws=selected_workshop|default:user.userprofile.workshop %}
     {% if ws.category == 'maintenance' or not ws %}
 
@@ -177,14 +180,14 @@
     <!-- ║  OPERATIONS BLOCK                                     ║ -->
     <!-- ║  Visible to: Tech & NIC                               ║ -->
     <!-- ╚═══════════════════════════════════════════════════════╝ -->
-    {% if user.userprofile.role in 'Tech,NIC' %}
+    {% if nav.is_tech or nav.is_nic %}
 
     <li class="menu-section-header" role="none">
       <span class="section-label">Operations</span>
     </li>
 
     {% with ws=selected_workshop|default:user.userprofile.workshop %}
-    {% if user.userprofile.role == 'NIC' or ws.category == 'maintenance' %}
+    {% if nav.is_nic or ws.category == 'maintenance' %}
     <li class="menu-entry" role="none">
       <a href="{% url 'ppm_dashboard' %}"
         class="menu-link {% if request.resolver_match.url_name == 'ppm_dashboard' %}active-dropdown{% endif %}"
@@ -225,6 +228,9 @@
             role="menuitem">
             <i class="fas fa-hourglass-half" aria-hidden="true"></i>
             <span class="link-label">Waiting Job Cards</span>
+            {% if nav.job_cards_waiting_count %}
+            <span class="queue-badge">{{ nav.job_cards_waiting_count }}</span>
+            {% endif %}
           </a>
         </li>
 
@@ -249,7 +255,7 @@
       </ul>
     </li>
 
-    {% if user.userprofile.role == 'Tech' %}
+    {% if nav.is_tech %}
     <li class="menu-entry" role="none">
       <a href="{% url 'report_hub:report_hub' %}"
         class="menu-link {% if 'report_hub' in request.path %}active-link{% endif %}" role="menuitem">
@@ -268,7 +274,7 @@
     <!-- ║  CALIBRATION BLOCK                                    ║ -->
     <!-- ║  Visible to: Tech in calibration_center only          ║ -->
     <!-- ╚═══════════════════════════════════════════════════════╝ -->
-    {% if user.userprofile.role == 'Tech' %}
+    {% if nav.is_tech %}
     {% with ws=selected_workshop|default:user.userprofile.workshop %}
     {% if ws.category == 'calibration_center' %}
 
@@ -350,6 +356,9 @@
             role="menuitem">
             <i class="fas fa-tasks" aria-hidden="true"></i>
             <span class="link-label">Pending Approval</span>
+            {% if nav.pending_approval_count %}
+            <span class="queue-badge">{{ nav.pending_approval_count }}</span>
+            {% endif %}
           </a>
         </li>
 
@@ -393,9 +402,9 @@
 
     <!-- ╔═══════════════════════════════════════════════════════╗ -->
     <!-- ║  RESOURCES BLOCK                                      ║ -->
-    <!-- ║  Visible to: Tech only                                ║ -->
+    <!-- ║  Visible to: HOD or Tech                              ║ -->
     <!-- ╚═══════════════════════════════════════════════════════╝ -->
-    {% if user.userprofile.role == 'Tech' %}
+    {% if nav.is_hod or nav.is_tech %}
 
     <li class="menu-section-header" role="none">
       <span class="section-label">Resources</span>

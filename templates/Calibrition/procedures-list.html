@@ -78,12 +78,12 @@
                         value="{{ search_form.date_to.value|default:'' }}">
                 </div>
                 <div class="col-md-1">
-                    <label class="form-label">&nbsp;</label>
+                    <div class="form-label" aria-hidden="true">&nbsp;</div>
                     <div class="d-grid gap-2">
-                        <button type="submit" class="btn btn-primary">
+                        <button type="submit" class="btn btn-primary" aria-label="Apply filter">
                             <i class="fas fa-filter"></i>
                         </button>
-                        <a href="{% url 'calibration:procedure_list' %}" class="btn btn-outline-secondary">
+                        <a href="{% url 'calibration:procedure_list' %}" class="btn btn-outline-secondary" aria-label="Clear filter">
                             <i class="fas fa-times"></i>
                         </a>
                     </div>
@@ -138,7 +138,6 @@
     </div>
 
     <!-- Bootstrap JS -->
-    <script src="{% static 'js/bootstrap.bundle.min.js' %}"></script>
 
     <script>
         // AJAX-based procedure loading

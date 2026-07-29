@@ -1,0 +1,23 @@
+{% comment %}
+Generic "Saved filters" widget — drop into any GET-filtered list page.
+Works unchanged everywhere since it operates on the page's own query
+string, not named per-page fields.
+
+Usage:
+  {% include 'includes/saved_filters.html' with view_name="inventory" %}
+{% endcomment %}
+<div class="saved-filters" data-view-name="{{ view_name }}">
+  <button type="button" class="btn btn-sm btn-outline-secondary saved-filters-toggle">
+    <i class="fas fa-bookmark" aria-hidden="true"></i> My Filters
+  </button>
+  <div class="saved-filters-dropdown" hidden>
+    <div class="saved-filters-list">
+      <div class="notif-loading">Loading…</div>
+    </div>
+    <div class="saved-filters-save-row">
+      <input type="text" class="form-control form-control-sm saved-filters-name-input"
+             placeholder="Name this filter…" maxlength="100">
+      <button type="button" class="btn btn-sm btn-primary saved-filters-save-btn">Save current</button>
+    </div>
+  </div>
+</div>

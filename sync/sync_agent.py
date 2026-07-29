@@ -5,18 +5,38 @@ import time
 from pathlib import Path
 
 from .agent_prelude import LOG, setup_logging
-from .sync_agent_1 import SyncAgent as _A1
-from .sync_agent_2 import SyncAgent as _A2
-from .sync_agent_3 import SyncAgent as _A3
-from .sync_agent_4 import SyncAgent as _A4
-from .sync_agent_5 import SyncAgent as _A5
-from .sync_agent_6 import SyncAgent as _A6
-from .sync_agent_7 import SyncAgent as _A7
-from .sync_agent_8 import SyncAgent as _A8
-from .sync_agent_9 import SyncAgent as _A9
+
+# ── Legacy engine, split across sync_agent_1..9 by responsibility ────────────
+# (Same code as before; the 9 files previously all declared an identically named
+#  `class SyncAgent`, which made the MRO impossible to read. Each now has a
+#  descriptive role name. Order below is preserved 1→9 so the MRO is identical.)
+from .sync_agent_1 import AgentInitMixin
+from .sync_agent_2 import SchemaAndChangeDetectionMixin
+from .sync_agent_3 import UploadMixin
+from .sync_agent_4 import NetworkLoopsMixin
+from .sync_agent_5 import ParentRecoveryMixin
+from .sync_agent_6 import ApplyRemoteUpdateMixin
+from .sync_agent_7 import DownloadCertHeartbeatMixin
+from .sync_agent_8 import LifecycleMixin
+from .sync_agent_9 import StatusReportingMixin
+
+# ── Phase 1–2 capability mixins (highest precedence) ─────────────────────────
+from .conflict_quarantine import ConflictQuarantineMixin
+from .conflict_resolver import ConflictResolverMixin
+from .schema_guard import SchemaGuardMixin
+from .outbox import OutboxMixin
+from .cert_conflict_guard import CertConflictGuardMixin
 
 
-class SyncAgent(_A1, _A2, _A3, _A4, _A5, _A6, _A7, _A8, _A9):
+class SyncAgent(
+    # New capabilities first (override legacy where names overlap).
+    OutboxMixin, ConflictQuarantineMixin, ConflictResolverMixin, SchemaGuardMixin,
+    CertConflictGuardMixin,
+    # Legacy engine, in dependency order (unchanged MRO).
+    AgentInitMixin, SchemaAndChangeDetectionMixin, UploadMixin, NetworkLoopsMixin,
+    ParentRecoveryMixin, ApplyRemoteUpdateMixin, DownloadCertHeartbeatMixin,
+    LifecycleMixin, StatusReportingMixin,
+):
     pass
 
 

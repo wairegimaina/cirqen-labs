@@ -20,6 +20,10 @@
             <div class="stat-number text-success" id="todayCount">0</div>
             <div class="stat-label">Approved Today</div>
         </div>
+        <div class="stat-item card">
+            <div class="stat-number text-info">{{ approved_this_week_count }}</div>
+            <div class="stat-label">Approved This Week</div>
+        </div>
     </div>
 
     <div class="content">
@@ -57,15 +61,15 @@
                 <div class="card-body">
                     <div class="row g-3">
                         <div class="col-6">
-                            <label class="text-muted small d-block">Equipment</label>
+                            <div class="text-muted small">Equipment</div>
                             <span class="text-primary fw-bold">{{ job_card.equipment.description }}</span>
                         </div>
                         <div class="col-6">
-                            <label class="text-muted small d-block">Serial No.</label>
+                            <div class="text-muted small">Serial No.</div>
                             <span class="text-primary">{{ job_card.equipment.serial_number }}</span>
                         </div>
                         <div class="col-12 border-top pt-2">
-                            <label class="text-muted small d-block">Approval Details</label>
+                            <div class="text-muted small">Approval Details</div>
                             <p class="mb-0 small">By: {{ job_card.verified_by_nurse }} on {{ job_card.nurse_signed_date|date:"d M Y" }}</p>
                         </div>
                     </div>
@@ -78,9 +82,8 @@
                 </div>
             </div>
             {% empty %}
-            <div class="text-center py-5 w-100">
-                <i class="fas fa-folder-open fa-3x text-muted mb-3"></i>
-                <p class="text-secondary">No approved job cards found matching your criteria.</p>
+            <div class="w-100">
+                {% include 'includes/empty_state.html' with icon="📋" title="No approved job cards" message="No approved job cards found matching your criteria." %}
             </div>
             {% endfor %}
         </div>
@@ -105,5 +108,6 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{% static 'js/list-search.js' %}"></script>
 <script src="{% static 'jobcards/jobcard-approved.js' %}"></script>
 {% endblock %}

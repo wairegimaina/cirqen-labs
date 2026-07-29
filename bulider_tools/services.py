@@ -88,6 +88,7 @@ class ServiceManager(QObject):
         For immediate shutdown scenarios
         """
         logger.info("Fast shutdown initiated...")
+        self.stop_event.set()
 
         for name, process, log_file in reversed(self.processes):
             try:
@@ -155,7 +156,10 @@ class ServiceManager(QObject):
                 raise Exception("PostgreSQL Local startup failed")
 
             logger.info("✅ PostgreSQL Local started successfully")
-            time.sleep(3)
+            # start_postgresql() already polls a real psycopg2 connection until
+            # ready (see _ensure_pg_user_and_db_safe), so no extra wait is needed
+            # here beyond a brief settle margin.
+            time.sleep(0.5)
 
             # ============================================================
             # SERVICE 2: PostgreSQL HQ (OPTIONAL)
@@ -171,7 +175,9 @@ class ServiceManager(QObject):
             else:
                 logger.info("✅ PostgreSQL HQ started successfully")
 
-            time.sleep(2)
+            # No wait here: HQ is the remote Supabase DB in normal operation,
+            # so this step is a fast no-op skip (missing local data dir) on
+            # every startup — there's nothing to let "settle".
 
             # ============================================================
             # SERVICE 3: Redis (REQUIRED)
@@ -184,7 +190,7 @@ class ServiceManager(QObject):
                 raise Exception("Redis startup failed")
 
             logger.info("✅ Redis started successfully")
-            time.sleep(2)
+            time.sleep(1)
 
             # ============================================================
             # APPLY CELERY ENVIRONMENT VARIABLES BEFORE DJANGO & CELERY
@@ -212,7 +218,9 @@ class ServiceManager(QObject):
                 raise Exception("Django startup failed")
 
             logger.info("✅ Django web server started successfully")
-            time.sleep(3)
+            # start_django() already polls the real HTTP health check until
+            # ready (see the DJANGO HEALTH CHECK loop below), so no extra
+            # wait is needed here.
 
             # ============================================================
             # SERVICE 5: Celery Worker (OPTIONAL)
@@ -228,7 +236,7 @@ class ServiceManager(QObject):
             else:
                 logger.info("✅ Celery worker started successfully")
 
-            time.sleep(2)
+            time.sleep(1)
 
             # ============================================================
             # SERVICE 6: Celery Beat (OPTIONAL)
@@ -251,7 +259,7 @@ class ServiceManager(QObject):
                 logger.info("   • 🧹 Database maintenance")
                 logger.info("   • 🔔 Calibration reminders")
 
-            time.sleep(2)
+            time.sleep(1)
 
             # ============================================================
             # SERVICE 7: Sync Agent (OPTIONAL)
@@ -281,7 +289,21 @@ class ServiceManager(QObject):
                 logger.info("   • 🔄 Smart delete with cascade support")
                 logger.info("   • 🌐 Automatic offline/online handling")
 
-            time.sleep(2)
+                # Start the health monitor now that there's a live sync
+                # agent thread to watch. Previously defined but never
+                # started — a crashed sync thread had no automatic recovery
+                # as long as the main app process stayed up. Bounded to 3
+                # restart attempts; see monitor_sync_agent_health() docstring.
+                import threading as _threading
+                self._sync_health_monitor_thread = _threading.Thread(
+                    target=self.monitor_sync_agent_health,
+                    name='SyncAgentHealthMonitor',
+                    daemon=True,
+                )
+                self._sync_health_monitor_thread.start()
+                logger.info("🔍 Sync agent health monitor thread started")
+
+            time.sleep(1)
 
             # ============================================================
             # SERVICE 8: Update Manager (OPTIONAL — non-blocking)
@@ -420,8 +442,19 @@ class ServiceManager(QObject):
 
     def monitor_sync_agent_health(self):
         """
-        Monitor sync agent health and restart if needed
-        Runs as background thread
+        Monitor sync agent health and restart if needed.
+        Runs as a background thread — started from start_services() right
+        after start_sync_agent() succeeds.
+
+        HISTORY / BUGFIX: this function previously called `sync_process.poll()`
+        to detect death, which is a subprocess.Popen API. start_sync_agent()
+        actually runs the sync agent as a threading.Thread (see
+        self.processes.append(('sync_agent', sync_thread, None)) below) —
+        Thread has no .poll(), so this would have raised AttributeError the
+        first time it ran. On top of that, nothing ever called this method at
+        all, so the whole thing was dead code start to finish: a sync-thread
+        crash while the app kept running had zero automatic recovery. Fixed
+        to use Thread.is_alive() and to actually be started.
         """
         import time
 
@@ -435,25 +468,28 @@ class ServiceManager(QObject):
 
         while not self.stop_event.is_set():
             try:
-                # Find sync agent process
-                sync_process = None
+                # Find sync agent thread
+                sync_thread = None
                 sync_log_file = None
 
                 for name, process, log_file in self.processes:
                     if name == 'sync_agent':
-                        sync_process = process
+                        sync_thread = process
                         sync_log_file = log_file
                         break
 
-                if sync_process:
-                    # Check if process is still running
-                    if sync_process.poll() is not None:
-                        # Process died!
-                        exit_code = sync_process.poll()
-
+                if sync_thread:
+                    # Check if the thread is still running. Note this only
+                    # detects TOTAL death of the sync subsystem (the outer
+                    # SyncAgentThread wrapper) — sync_agent_8.py's own start()
+                    # loop keeps that wrapper alive as long as ANY of its 9
+                    # inner sync threads (upload/download/cert/heartbeat/...)
+                    # is alive, so a single inner loop dying silently is not
+                    # visible here. See the sync_agent_8.py per-thread
+                    # supervision fix for that layer.
+                    if not sync_thread.is_alive():
                         logger.error("=" * 70)
-                        logger.error("❌ SYNC AGENT PROCESS DIED!")
-                        logger.error(f"   Exit code: {exit_code}")
+                        logger.error("❌ SYNC AGENT THREAD DIED!")
                         logger.error(f"   Restart attempts: {restart_attempts}/{max_restart_attempts}")
                         logger.error("=" * 70)
 
@@ -463,14 +499,15 @@ class ServiceManager(QObject):
 
                             logger.info(f"🔄 Attempting to restart sync agent (attempt {restart_attempts})...")
 
-                            # Close old log file
+                            # Close old log file (normally None for the thread
+                            # path — run_sync_agent() owns its own file handler)
                             if sync_log_file:
                                 try:
                                     sync_log_file.close()
                                 except:
                                     pass
 
-                            # Remove from processes list
+                            # Remove the dead entry from the processes list
                             self.processes = [(n, p, l) for n, p, l in self.processes if n != 'sync_agent']
 
                             # Wait a moment
@@ -486,14 +523,20 @@ class ServiceManager(QObject):
                             logger.error("❌ Max restart attempts reached")
                             logger.error("   Manual intervention required")
                             logger.error("   Run cleanup_cirqen.py and restart application")
+                            self._report_critical_failure_standalone(
+                                "sync_subsystem_permanently_down",
+                                f"Sync agent thread died and could not be restarted after "
+                                f"{max_restart_attempts} attempts — the entire sync subsystem "
+                                f"is down on this machine until someone manually intervenes.",
+                            )
                             break
                     else:
-                        # Process is healthy
+                        # Thread is healthy
                         if restart_attempts > 0:
                             logger.info("✅ Sync agent health restored")
                             restart_attempts = 0
 
-                        logger.debug(f"✅ Sync agent healthy (PID: {sync_process.pid})")
+                        logger.debug(f"✅ Sync agent healthy (thread ID: {sync_thread.ident})")
 
             except Exception as e:
                 logger.error(f"Error in sync agent monitor: {e}")
@@ -505,6 +548,65 @@ class ServiceManager(QObject):
                 time.sleep(1)
 
         logger.info("🔍 Sync agent health monitor stopped")
+
+    def _report_critical_failure_standalone(self, failure_type: str, message: str):
+        """
+        Report a critical failure to HQ WITHOUT going through the SyncAgent
+        object — deliberately self-contained, because the whole point of
+        calling this is that the sync subsystem (which owns SyncAgent) has
+        just been declared permanently dead. Depending on its (possibly
+        broken) internals to report its own death would defeat the purpose.
+
+        Reads SYNC_API_URL / SYNC_AUTH_TOKEN directly from the environment
+        (same names sync_agent's own config loading uses) and generates a
+        stable device id via sync.device_id_generator — the same identity
+        the sync agent itself would have used, so HQ can correlate this
+        report with whatever it last heard from this machine's heartbeat.
+        Fully best-effort: any failure here (HQ unreachable, missing env
+        vars, import failure) is logged at debug level and swallowed.
+        """
+        try:
+            import os
+            import sys
+            import requests
+
+            api_url = os.getenv("SYNC_API_URL", "").rstrip("/")
+            auth_token = os.getenv("SYNC_AUTH_TOKEN", "")
+            if not api_url:
+                logger.debug("Cannot report critical failure — SYNC_API_URL not set")
+                return
+
+            device_id = "unknown"
+            try:
+                sys.path.insert(0, str(APPLICATION_PATH))
+                try:
+                    from sync.device_id_generator import get_or_create_client_id
+                except ImportError:
+                    sys.path.insert(0, str(APPLICATION_PATH / '_internal'))
+                    from sync.device_id_generator import get_or_create_client_id
+                device_id = get_or_create_client_id()
+            except Exception as id_err:
+                logger.debug(f"Could not resolve device id for failure report: {id_err}")
+
+            headers = {"Content-Type": "application/json"}
+            if auth_token:
+                headers["X-API-Key"] = auth_token
+
+            requests.post(
+                f"{api_url}/report_device_failure",
+                json={
+                    "client_id": device_id,
+                    "machine_id": device_id,
+                    "client_name": os.getenv("CLIENT_NAME", ""),
+                    "failure_type": failure_type,
+                    "message": message,
+                },
+                headers=headers,
+                timeout=10,
+            )
+            logger.error(f"🚨 Reported critical failure to HQ: {failure_type} — {message}")
+        except Exception as e:
+            logger.debug(f"Could not report critical failure to HQ ({failure_type}): {e}")
 
     def start_postgresql(self):
         """
@@ -592,8 +694,7 @@ class ServiceManager(QObject):
             ld = env.get('LD_LIBRARY_PATH', '')
             env['LD_LIBRARY_PATH'] = f"{pg_lib}:{ld}" if ld else str(pg_lib)
 
-        # Log rotation handled automatically by RotatingFileHandler
-
+        rotate_log_if_large(pg_log)
         log_fh = open(pg_log, 'a')
         process = subprocess.Popen(
             [str(pg_bin), '-D', str(pg_data)],
@@ -811,6 +912,7 @@ class ServiceManager(QObject):
                     return False
             else:
                 # Port is free — start the bundled binary
+                rotate_log_if_large(pg_log)
                 log_file = open(pg_log, 'a')
                 process = subprocess.Popen(
                     [str(pg_bin), '-D', str(pg_data_hq), '-p', str(port)],
@@ -914,6 +1016,7 @@ daemonize no
 
             logger.info(f"Starting Redis on port {port}")
 
+            rotate_log_if_large(redis_log)
             log_file = open(redis_log, 'a')
             process = subprocess.Popen(
                 [str(redis_bin), str(redis_conf)],
@@ -1286,6 +1389,7 @@ daemonize no
             logger.info(f"✅ Environment variables set")
 
             # Open log file
+            rotate_log_if_large(celery_log)
             log_file = open(celery_log, 'a')
             log_file.write(f"\n{'='*70}\n")
             log_file.write(f"Celery worker startup at {datetime.now().isoformat()}\n")
@@ -1404,6 +1508,7 @@ daemonize no
             logger.info(f"✅ Environment variables set")
 
             # Open log file
+            rotate_log_if_large(celery_beat_log)
             log_file = open(celery_beat_log, 'a')
             log_file.write(f"\n{'='*70}\n")
             log_file.write(f"Celery Beat scheduler startup at {datetime.now().isoformat()}\n")
@@ -1712,6 +1817,15 @@ daemonize no
     def stop_services(self):
         """Stop all services - UPDATED for thread-based Celery and sync agent"""
         logger.info("Shutting down services...")
+
+        # BUGFIX: self.stop_event was created in __init__ but nothing ever
+        # called .set() on it anywhere in this class. monitor_sync_agent_health
+        # (and stop_services_fast's cleanup ordering) both check
+        # self.stop_event.is_set() to know when to stop looping — without this,
+        # the health monitor thread only ever stops because it's a daemon
+        # thread getting hard-killed at interpreter exit, not because it was
+        # told to. Setting it here lets it exit its sleep loop within ~1s.
+        self.stop_event.set()
 
         for name, process, log_file in reversed(self.processes):
             try:

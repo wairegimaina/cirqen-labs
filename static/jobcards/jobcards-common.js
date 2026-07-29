@@ -25,16 +25,7 @@ class JobCardListManager {
 
   handleSearch() {
     const term = this.searchInput?.value.toLowerCase().trim() || "";
-    let visibleCount = 0;
-
-    this.cardItems.forEach(card => {
-      const searchData = card.dataset.search || "";
-      const isMatch = searchData.includes(term);
-
-      card.style.display = isMatch ? 'block' : 'none';
-      if (isMatch) visibleCount++;
-    });
-
+    const visibleCount = filterElementsBySearch(this.cardItems, term, 'block');
     this.updateUI(visibleCount, term);
   }
 

@@ -28,7 +28,7 @@ class CirqenConfig:
             "enabled": True,
             "debug": True,
             "poll_interval": 1,
-            "download_interval": 1,
+            "download_interval": 5,
             "upload_batch_size": 50,
             "max_retries": 3,
             "retry_backoff": 3.0,
@@ -46,13 +46,14 @@ class CirqenConfig:
             "user": "cirqen1",
             "password": "Btwelvetech@2024",
         },
-        # ===== HQ DATABASE (Render PostgreSQL) =====
+        # ===== HQ DATABASE (Supabase pooler) =====
         "hq_db": {
-            "host": "dpg-d8fj2c59j78s738al2vg-a.ohio-postgres.render.com",
+            "host": "aws-0-eu-north-1.pooler.supabase.com",
             "port": 5432,
-            "database": "cirqen_hq_db1",
-            "user": "cirqen_hq_db1_user",
-            "password": "cTAU3kJL3NNlUYA9rR07kh87FKHA6c24",
+            "database": "postgres",
+            "user": "postgres.nwlwaeeyduxroykrgksi",
+            "password": "M0707337206m",
+            "sslmode": "require",
             "enabled": True,
         },
         # ===== REDIS (Custom Port 7788) =====
@@ -241,6 +242,14 @@ class CirqenConfig:
             "debug": True,
             "log_level": "INFO",
         },
+        # ===== EMAIL (SMTP) =====
+        "email": {
+            "host": "smtp.gmail.com",
+            "port": 587,
+            "use_tls": True,
+            "host_user": "",
+            "host_password": "",
+        },
     }
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -327,6 +336,7 @@ class CirqenConfig:
             cfg["hq_db"]["database"] = os.getenv("POSTGRES_HQ_DB", cfg["hq_db"]["database"])
             cfg["hq_db"]["user"] = os.getenv("POSTGRES_HQ_USER", cfg["hq_db"]["user"])
             cfg["hq_db"]["password"] = os.getenv("POSTGRES_HQ_PASSWORD", cfg["hq_db"]["password"])
+            cfg["hq_db"]["sslmode"] = os.getenv("POSTGRES_SSLMODE", cfg["hq_db"]["sslmode"])
 
             # redis
             cfg["redis"]["host"] = os.getenv("REDIS_HOST", cfg["redis"]["host"])
@@ -432,6 +442,15 @@ class CirqenConfig:
             )
             cfg["system"]["stats_print_interval"] = int(
                 os.getenv("STATS_PRINT_INTERVAL", cfg["system"]["stats_print_interval"])
+            )
+
+            # email
+            cfg["email"]["host"] = os.getenv("EMAIL_HOST", cfg["email"]["host"])
+            cfg["email"]["port"] = int(os.getenv("EMAIL_PORT", cfg["email"]["port"]))
+            cfg["email"]["use_tls"] = os.getenv("EMAIL_USE_TLS", "true").lower() == "true"
+            cfg["email"]["host_user"] = os.getenv("EMAIL_HOST_USER", cfg["email"]["host_user"])
+            cfg["email"]["host_password"] = os.getenv(
+                "EMAIL_HOST_PASSWORD", cfg["email"]["host_password"]
             )
 
             print("✓ Configuration loaded from .env file")
@@ -559,18 +578,20 @@ class CirqenConfig:
         os.environ["POSTGRES_LOCAL_USER"] = self.get("local_db.user")
         os.environ["POSTGRES_LOCAL_PASSWORD"] = self.get("local_db.password")
 
-        # hq_db  (port 5432 on Render)
+        # hq_db  (Supabase pooler, port 5432)
         os.environ["POSTGRES_HQ_HOST"] = self.get("hq_db.host")
         os.environ["POSTGRES_HQ_PORT"] = str(self.get("hq_db.port"))
         os.environ["POSTGRES_HQ_DB"] = self.get("hq_db.database")
         os.environ["POSTGRES_HQ_USER"] = self.get("hq_db.user")
         os.environ["POSTGRES_HQ_PASSWORD"] = self.get("hq_db.password")
+        os.environ["POSTGRES_SSLMODE"] = self.get("hq_db.sslmode", "require")
         # aliases used by Django settings
         os.environ["HQ_DB_HOST"] = self.get("hq_db.host")
         os.environ["HQ_DB_PORT"] = str(self.get("hq_db.port"))
         os.environ["HQ_DB_NAME"] = self.get("hq_db.database")
         os.environ["HQ_DB_USER"] = self.get("hq_db.user")
         os.environ["HQ_DB_PASSWORD"] = self.get("hq_db.password")
+        os.environ["HQ_DB_SSLMODE"] = self.get("hq_db.sslmode", "require")
 
         # redis  (port 7788)
         os.environ["REDIS_HOST"] = self.get("redis.host")
@@ -644,6 +665,13 @@ class CirqenConfig:
         os.environ["EXTERNAL_SERVICE_TIMEOUT"] = str(self.get("system.external_service_timeout"))
         os.environ["STATS_PRINT_INTERVAL"] = str(self.get("system.stats_print_interval"))
 
+        # email
+        os.environ["EMAIL_HOST"] = self.get("email.host", "smtp.gmail.com")
+        os.environ["EMAIL_PORT"] = str(self.get("email.port", 587))
+        os.environ["EMAIL_USE_TLS"] = "true" if self.get("email.use_tls", True) else "false"
+        os.environ["EMAIL_HOST_USER"] = self.get("email.host_user", "")
+        os.environ["EMAIL_HOST_PASSWORD"] = self.get("email.host_password", "")
+
         # sync state dir
         sync_state_dir = self.data_path / "sync_state"
         sync_state_dir.mkdir(exist_ok=True, parents=True)
@@ -683,8 +711,10 @@ class CirqenConfig:
             errors.append("local_db.user is required")
         if self.get("local_db.port") != 2215:
             errors.append("⚠ local_db.port should be 2215")
-        if self.get("hq_db.port") not in (3315, 5432):
-            errors.append("⚠ hq_db.port should be 5432 (Render) or 3315 (custom)")
+        if self.get("hq_db.port") not in (3315, 5432, 6543):
+            errors.append(
+                "⚠ hq_db.port should be 5432/6543 (Supabase pooler) or 3315 (custom)"
+            )
         if self.get("redis.port") != 7788:
             errors.append("⚠ redis.port should be 7788")
         if self.get("hq_db.enabled") and not self.get("hq_db.host"):
@@ -707,6 +737,8 @@ class CirqenConfig:
             errors.append("sync_tables must have at least one entry")
         if self.get("system.database_pool_size") < 1:
             errors.append("system.database_pool_size must be ≥ 1")
+        if self.get("email.host_user") and not self.get("email.host_password"):
+            errors.append("email.host_password is required when email.host_user is set")
 
         return (len(errors) == 0, errors)
 
@@ -750,6 +782,7 @@ class CirqenConfig:
                     database=self.get("hq_db.database"),
                     user=self.get("hq_db.user"),
                     password=self.get("hq_db.password"),
+                    sslmode=self.get("hq_db.sslmode", "require"),
                     connect_timeout=5,
                 )
                 c.close()
@@ -835,9 +868,9 @@ DataDir: {self.data_path}
 │  {self.get('local_db.host')}:{self.get('local_db.port')}  db={self.get('local_db.database')}  user={self.get('local_db.user')}
 └─────────────────────────────────────────────────────────────┘
 
-┌─ HQ DB (Render PostgreSQL) ─────────────────────────────────┐
+┌─ HQ DB (Supabase pooler) ───────────────────────────────────┐
 │  enabled={self.get('hq_db.enabled')}
-│  {self.get('hq_db.host')}:{self.get('hq_db.port')}  db={self.get('hq_db.database')}
+│  {self.get('hq_db.host')}:{self.get('hq_db.port')}  db={self.get('hq_db.database')}  sslmode={self.get('hq_db.sslmode')}
 └─────────────────────────────────────────────────────────────┘
 
 ┌─ REDIS (port 7788) ─────────────────────────────────────────┐
@@ -887,12 +920,13 @@ DataDir: {self.data_path}
             f"POSTGRES_LOCAL_USER={self.get('local_db.user')}",
             f"POSTGRES_LOCAL_PASSWORD={self.get('local_db.password')}",
             "",
-            "# HQ DB",
+            "# HQ DB (Supabase pooler)",
             f"POSTGRES_HQ_HOST={self.get('hq_db.host')}",
             f"POSTGRES_HQ_PORT={self.get('hq_db.port')}",
             f"POSTGRES_HQ_DB={self.get('hq_db.database')}",
             f"POSTGRES_HQ_USER={self.get('hq_db.user')}",
             f"POSTGRES_HQ_PASSWORD={self.get('hq_db.password')}",
+            f"POSTGRES_SSLMODE={self.get('hq_db.sslmode')}",
             "",
             "# Redis (port 7788)",
             f"REDIS_HOST={self.get('redis.host')}",
@@ -944,6 +978,13 @@ DataDir: {self.data_path}
             f"DATABASE_POOL_SIZE={self.get('system.database_pool_size')}",
             f"EXTERNAL_SERVICE_TIMEOUT={self.get('system.external_service_timeout')}",
             f"STATS_PRINT_INTERVAL={self.get('system.stats_print_interval')}",
+            "",
+            "# Email (SMTP)",
+            f"EMAIL_HOST={self.get('email.host')}",
+            f"EMAIL_PORT={self.get('email.port')}",
+            f"EMAIL_USE_TLS={'true' if self.get('email.use_tls') else 'false'}",
+            f"EMAIL_HOST_USER={self.get('email.host_user')}",
+            f"EMAIL_HOST_PASSWORD={self.get('email.host_password')}",
             "",
             "# Timing",
             f"SYNC_POLL_INTERVAL={self.get('sync.poll_interval')}",

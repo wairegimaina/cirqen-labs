@@ -25,7 +25,8 @@ from .dependency_manager import DependencyManager
 from .smart_delete import SmartDeleteMixin
 
 
-class SyncAgent(SmartDeleteMixin):
+class StatusReportingMixin(SmartDeleteMixin):
+    """Status file writing and status summary for the UI."""
     def write_status_file(self, hq_online: bool, pending_changes: int = 0, last_sync: str = None):
         """
         Write sync agent status to file for UI monitoring
@@ -41,16 +42,31 @@ class SyncAgent(SmartDeleteMixin):
         Status file location: {state_dir}/agent_status.json
         """
         try:
-            # Ensure directory exists
-            status_dir = self.state.state_dir / "sync_state"
+            # self.state.state_dir IS the sync_state directory already
+            # (StateManager is constructed with it directly) — do not
+            # append another "sync_state" segment here, or this file lands
+            # in sync_state/sync_state/ where the UI never looks for it.
+            status_dir = self.state.state_dir
             status_dir.mkdir(parents=True, exist_ok=True)
 
             status_file = status_dir / "agent_status.json"
+
+            # Best-effort counts for the UI (never let these break status writing).
+            try:
+                unreviewed_conflicts = self.get_conflict_count(unreviewed_only=True)
+            except Exception:
+                unreviewed_conflicts = 0
+            try:
+                schema_drift = self.get_schema_drift_count(unresolved_only=True)
+            except Exception:
+                schema_drift = 0
 
             # Prepare status data
             status_data = {
                 "hq_online": hq_online,
                 "pending_changes": pending_changes,
+                "unreviewed_conflicts": unreviewed_conflicts,
+                "schema_drift": schema_drift,
                 "last_sync": last_sync or self.state.get("last_upload_time"),
                 "last_update": now_iso(),
                 "client_id": self.client_id,
@@ -107,7 +123,7 @@ class SyncAgent(SmartDeleteMixin):
                 - uptime: float (seconds)
         """
         try:
-            status_file = self.state.state_dir / "sync_state" / "agent_status.json"
+            status_file = self.state.state_dir / "agent_status.json"
 
             if status_file.exists():
                 with open(status_file, "r") as f:
@@ -122,3 +138,39 @@ class SyncAgent(SmartDeleteMixin):
                 }
         except Exception as e:
             return {"hq_online": False, "pending_changes": 0, "last_sync": None, "error": str(e)}
+
+    def report_critical_failure(self, failure_type: str, message: str):
+            """
+            Push an immediate "device failure" report to HQ — the "overall
+            downtime, not just sync" channel. Unlike the heartbeat/status-file
+            path, this is meant to be called at the exact moment a critical
+            local failure is detected (e.g. a sync thread permanently
+            exhausted its restart budget), not on a timer, so HQ can alert
+            (email/webhook) immediately instead of waiting for the ~10 min
+            stale-client check cycle to eventually notice the device went
+            quiet.
+
+            Best-effort and non-blocking in spirit: any failure here (HQ
+            unreachable, timeout, etc.) is logged and swallowed — a broken
+            alert channel must never crash whatever code path detected the
+            original failure. If HQ can't be reached, the stale-client
+            watchdog on the HQ side is the fallback net (slower, but it
+            doesn't depend on this call succeeding).
+            """
+            try:
+                payload = {
+                    "client_id": getattr(self, "client_id", "unknown"),
+                    "machine_id": getattr(self, "machine_id", "unknown"),
+                    "client_name": getattr(self, "client_name", ""),
+                    "failure_type": failure_type,
+                    "message": message,
+                }
+                requests.post(
+                    f"{self.api_url}/report_device_failure",
+                    json=payload,
+                    headers=self._http_headers(),
+                    timeout=10,
+                )
+                LOG.error("🚨 Reported critical failure to HQ: %s — %s", failure_type, message)
+            except Exception as e:
+                LOG.debug("Could not report critical failure to HQ (%s): %s", failure_type, e)

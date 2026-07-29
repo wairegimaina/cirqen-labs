@@ -5,7 +5,7 @@
 :root {
   --transition-speed: 0.25s;
   --radius-sm: 6px;
-  --radius-md: 10px;
+  /* --radius-md now comes from the shared base.css token (10px) */
   --radius-lg: 14px;
 }
 

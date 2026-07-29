@@ -363,11 +363,19 @@ class StartupStateManager:
 
         for file_path in sensitive_files:
             if file_path.exists():
-                # On Unix systems, check if file is readable by others
-                if hasattr(os, 'stat'):
+                # On Unix systems, check if file is readable by others/group and
+                # tighten it — these files hold DB/API credentials in plaintext.
+                if hasattr(os, 'stat') and hasattr(os, 'chmod'):
                     mode = file_path.stat().st_mode
-                    if mode & 0o004:  # World readable
-                        self.logger.warning(f"  ⚠️  {file_path.name} is world-readable")
+                    if mode & 0o077:  # group- or world-accessible
+                        try:
+                            file_path.chmod(0o600)
+                            self.logger.info(
+                                f"  🔒 Tightened permissions on {file_path.name} (was group/world-readable)"
+                            )
+                        except OSError as e:
+                            self.logger.warning(f"  ⚠️  {file_path.name} is group/world-readable "
+                                                 f"and could not be fixed: {e}")
 
     def _check_dependencies(self):
         """Verify critical dependencies are available"""
@@ -375,7 +383,7 @@ class StartupStateManager:
             'django',
             'psycopg2',
             'redis',
-            'PyQt6',
+            'PySide6',
         ]
 
         missing = []
