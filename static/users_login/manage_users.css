@@ -40,8 +40,9 @@ body {
 .main-container {
   margin: 0;
   background: var(--bg-card);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--card-shadow);
   overflow: hidden;
 }
 
@@ -97,44 +98,47 @@ body {
    Tabs
 ================================= */
 .nav-tabs-custom {
-  background: var(--bg-secondary);
-  border-bottom: 2px solid var(--border-color);
   display: flex;
-  justify-content: center;
-  padding: 0.5rem;
-  gap: 10px;
+  justify-content: flex-start;
+  gap: .25rem;
+  padding: 0 1.25rem;
+  background: transparent;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .nav-tabs-custom .nav-link {
-  border: none;
-  border-radius: var(--radius-md);
-  padding: 10px 20px;
-  font-weight: 600;
+  margin-bottom: -1px;
+  padding: .75rem .875rem;
+  font-weight: 500;
   color: var(--text-secondary);
-  transition: var(--transition);
   background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
 }
 
 .nav-tabs-custom .nav-link.active {
-  background: var(--primary-gradient);
-  color: var(--text-white);
-  box-shadow: var(--shadow-md);
+  color: var(--text-primary);
+  background: transparent;
+  border-bottom-color: var(--primary-color);
+  box-shadow: none;
 }
 
 .nav-tabs-custom .nav-link:hover:not(.active) {
-  background: var(--bg-hover);
   color: var(--text-primary);
+  background: transparent;
+  border-bottom-color: var(--border-mid);
 }
 
 /* ===============================
    Controls (Search + Filter)
 ================================= */
 .controls {
-  padding: 20px;
   display: flex;
   flex-wrap: wrap;
-  gap: 15px;
+  gap: .75rem 1.5rem;
   align-items: center;
+  padding: 1rem 1.25rem;
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -142,27 +146,28 @@ body {
 .filter-box {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex: 1;
-  max-width: 450px;
+  gap: .5rem;
+  flex: 1 1 320px;
 }
+.filter-box { flex: 0 1 300px; }
 
 .filter-label {
   color: var(--text-secondary);
-  font-weight: 600;
+  font-size: var(--fs-sm);
+  font-weight: 500;
   white-space: nowrap;
 }
 
 .search-box input,
 .filter-box select {
   flex: 1;
-  padding: 10px 16px;
-  border: 2px solid var(--input-border);
-  border-radius: var(--radius-lg);
-  font-size: 0.95rem;
-  transition: var(--transition);
-  background: var(--input-bg);
+  min-width: 0;
+  padding: .5rem .75rem;
+  font-size: var(--fs-base);
   color: var(--text-primary);
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-md);
 }
 
 .search-box input:focus,
@@ -176,11 +181,13 @@ body {
    Users List (Compact, Clean)
 ================================= */
 .users-grid {
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 1rem;
+  padding: 1.25rem;
 }
+.users-grid > .loading,
+.users-grid > :only-child { grid-column: 1 / -1; }
 
 /* User Card */
 .user-card {
@@ -191,7 +198,6 @@ body {
   border: 1px solid var(--border-color);
   transition: var(--transition);
   width: 100%;
-  min-height: 160px;
   display: flex;
   flex-direction: column;
 }
@@ -206,22 +212,23 @@ body {
 }
 
 .user-avatar {
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  background: var(--primary-gradient);
-  color: var(--text-white);
+  width: 40px;
+  height: 40px;
+  margin-right: .75rem;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+  font-size: .875rem;
   font-weight: 600;
-  font-size: 1rem;
-  margin-right: 12px;
-  flex-shrink: 0;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border-radius: 50%;
 }
 
 .user-info h3 {
-  font-size: 1.1rem;
+  font-size: .9375rem;
+  font-weight: 600;
   margin-bottom: 2px;
   color: var(--text-primary);
 }
@@ -248,7 +255,7 @@ body {
 .detail-label {
   font-size: 0.75rem;
   color: var(--text-muted);
-  font-weight: 600;
+  font-weight: 400;
   margin-bottom: 2px;
 }
 
@@ -283,21 +290,25 @@ body {
 
 /* Button styles — scoped to user-actions */
 .user-actions .btn-primary {
-  background: var(--primary-gradient);
-  color: var(--text-white);
+  color: var(--text-primary);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
 }
 
 .user-actions .btn-primary:hover {
-  color: var(--text-white);
+  color: var(--text-primary);
+  background: var(--bg-hover);
 }
 
 .user-actions .btn-danger {
-  background: var(--danger-color);
-  color: var(--text-white);
+  color: var(--danger-color);
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--danger-color) 35%, transparent);
 }
 
 .user-actions .btn-danger:hover {
-  color: var(--text-white);
+  color: var(--danger-color);
+  background: var(--danger-bg);
 }
 
 /* ===============================
@@ -569,10 +580,9 @@ body {
 }
 
 .pagination button.active {
-  background: var(--primary-gradient);
-  color: var(--text-white);
-  border-color: transparent;
-  box-shadow: var(--shadow-md);
+  color: var(--on-accent);
+  background: var(--primary-color);
+  border-color: var(--primary-color);
 }
 
 .pagination span {

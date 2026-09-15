@@ -7,6 +7,8 @@
 /* Chart cards: neutral header like every other card */
 .chart-card {
   height: 100%;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
@@ -25,7 +27,9 @@
   color: var(--text-primary);
 }
 .chart-card .card-header h5 i { color: var(--text-muted); }
-.chart-card .card-body { padding: 1.25rem; background: var(--bg-card); }
+.chart-card .card-body { flex: 1; padding: 1.25rem; background: var(--bg-card); }
+/* An empty chart note fills the card so it lines up with its neighbour */
+.chart-card .card-body > .chart-empty { height: 100%; }
 .chart-card .card-footer {
   padding: .625rem 1.25rem;
   font-size: var(--fs-xs);

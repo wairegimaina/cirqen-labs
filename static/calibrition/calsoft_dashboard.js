@@ -141,6 +141,7 @@
   // SCHEDULE SNAPSHOT
   // ============================================================
   function renderSchedulePanel(counts, month) {
+    const hasData = counts.pending + counts.overdue + counts.completed > 0;
     const total = counts.pending + counts.overdue + counts.completed || 1;
     const donePct = pct(counts.completed, total);
     const pendingPct = pct(counts.pending, total);
@@ -160,7 +161,7 @@
           <span class="badge">${escapeHTML(month)}</span>
         </div>
         <div class="section-card-body">
-          <div class="cs-schedule-grid">
+          <div class="cs-schedule-grid${hasData ? "" : " no-chart"}">
             <div class="cs-stat-list">
               ${stats
                 .map(
@@ -174,9 +175,9 @@
                 .join("")}
             </div>
 
-            <div class="cs-chart">
+            ${hasData ? `<div class="cs-chart">
               <canvas id="cs-status-chart" role="img" aria-label="Schedule status distribution: ${donePct}% completed, ${pendingPct}% pending, ${overduePct}% overdue"></canvas>
-            </div>
+            </div>` : ""}
 
             <div class="cs-summary">
               <div>

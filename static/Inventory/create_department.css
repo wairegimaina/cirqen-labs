@@ -5,9 +5,7 @@
 
 /* Main Wrapper */
 .main-container {
-    background-color: var(--bg-primary);
     color: var(--text-primary);
-    min-height: 100vh;
     transition: background-color 0.3s ease;
 }
 

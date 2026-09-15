@@ -247,7 +247,7 @@ document.addEventListener("DOMContentLoaded", () => {
         <input type="hidden" name="${p}-id" value="">
         <input type="hidden" name="${p}-DELETE" id="id_${p}-DELETE">
         <div class="row">
-          <div class="col-md-4 form-group">
+          <div class="col-md form-group">
             <label for="id_${p}-value" class="form-label">Set Value</label>
             <input type="number" name="${p}-value" id="id_${p}-value"
               class="form-control" step="0.000001" placeholder="Set value" required>
@@ -263,7 +263,7 @@ document.addEventListener("DOMContentLoaded", () => {
               <option value="">Select sub-parameter...</option>
             </select>
           </div>
-          <div class="col-md-2 form-group d-flex align-items-end">
+          <div class="col-md-auto form-group d-flex align-items-end">
             <button type="button"
               class="btn btn-outline-danger btn-sm delete-set-value delete-formset">
               <i class="fas fa-trash-alt"></i> Delete

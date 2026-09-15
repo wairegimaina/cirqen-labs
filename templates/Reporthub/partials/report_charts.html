@@ -10,9 +10,14 @@
           </h5>
         </div>
         <div class="card-body">
+          {% if total_waiting_approval or total_approved or total_declined %}
           <div class="chart-wrapper" style="position: relative; height: 300px;">
             <canvas id="statusChart"></canvas>
           </div>
+          {% else %}
+          <div class="chart-empty">No job cards in this period</div>
+          <canvas id="statusChart" hidden></canvas>
+          {% endif %}
         </div>
         <div class="card-footer text-muted small">
           <i class="fas fa-info-circle me-1"></i>Current period breakdown

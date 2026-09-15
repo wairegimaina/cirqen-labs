@@ -121,27 +121,10 @@
                         </select>
                     </div>
 
-                    <!-- Auto-Schedule Button -->
-                    <div class="col-lg-2">
-                        <label class="form-label small fw-bold text-muted d-block">&nbsp;</label>
-                        <div class="d-flex gap-2">
-                            <button class="btn btn-primary flex-fill" data-bs-toggle="modal" data-bs-target="#planningModal">
-                                <i class="fas fa-magic me-1"></i> Auto-Schedule
-                            </button>
-                            {% if access_context.can_schedule %}
-                            <button class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#smartReorganizePpmModal" title="Smart Reorganize" aria-label="Smart Reorganize">
-                                <i class="fas fa-random"></i>
-                            </button>
-                            <button class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#normalizePpmModal" title="Normalize Schedules" aria-label="Normalize Schedules">
-                                <i class="fas fa-layer-group"></i>
-                            </button>
-                            {% endif %}
-                        </div>
-                    </div>
                 </div>
 
                 <!-- Action Buttons Row -->
-                <div class="d-flex justify-content-between align-items-center mt-3">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3">
                     <div class="d-flex gap-2">
                         {% if selected_department %}
                         <a href="{% url 'clear_department_filter' %}" class="btn btn-sm btn-outline-secondary">
@@ -159,8 +142,19 @@
                             </span>
                         </div>
                     </div>
-                    <div class="d-flex gap-2">
-                        <button type="button" class="btn btn-sm btn-primary" id="bulkMarkCompleted" disabled>
+                    <div class="d-flex flex-wrap gap-2">
+                        <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#planningModal">
+                            <i class="fas fa-magic me-1"></i> Auto-Schedule
+                        </button>
+                        {% if access_context.can_schedule %}
+                        <button type="button" class="btn btn-sm btn-secondary" data-bs-toggle="modal" data-bs-target="#smartReorganizePpmModal" title="Smart Reorganize" aria-label="Smart Reorganize">
+                            <i class="fas fa-random"></i>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-secondary" data-bs-toggle="modal" data-bs-target="#normalizePpmModal" title="Normalize Schedules" aria-label="Normalize Schedules">
+                            <i class="fas fa-layer-group"></i>
+                        </button>
+                        {% endif %}
+                        <button type="button" class="btn btn-sm btn-secondary" id="bulkMarkCompleted" disabled>
                             <i class="fas fa-check me-1"></i>Mark Completed
                         </button>
                         <button type="button" class="btn btn-sm btn-secondary" id="bulkPushSchedules" disabled>

@@ -151,13 +151,13 @@
         <!-- Filters Card -->
         <div class="card mb-4">
             <div class="card-header">
-                <h5 class="mb-0"><i class="fas fa-filter me-2 text-primary"></i>Filter Data</h5>
+                <h5 class="mb-0"><i class="fas fa-filter me-2 text-muted"></i>Filter data</h5>
             </div>
             <div class="card-body">
                 <form id="dashboard-filter-form" class="row g-3">
                     {% if is_hod %}
-                    <div class="col-md-3">
-                        <label class="form-label small fw-bold">Workshop</label>
+                    <div class="col-md">
+                        <label class="form-label small">Workshop</label>
                         <select class="form-select" id="workshop-filter" name="workshop">
                             <option value="">All Workshops</option>
                             {% for w in workshops %}
@@ -166,8 +166,8 @@
                         </select>
                     </div>
                     {% endif %}
-                    <div class="col-md-3">
-                        <label class="form-label small fw-bold">Category</label>
+                    <div class="col-md">
+                        <label class="form-label small">Category</label>
                         <select class="form-select" id="category-filter" name="category">
                             <option value="">All Categories</option>
                             {% for c in categories %}
@@ -175,8 +175,8 @@
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="col-md-3">
-                        <label class="form-label small fw-bold">Year</label>
+                    <div class="col-md">
+                        <label class="form-label small">Year</label>
                         <select class="form-select" id="year-filter" name="year">
                             <option value="">All Years</option>
                             {% for y in years %}
@@ -184,8 +184,8 @@
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="col-md-3 d-flex align-items-end gap-2">
-                        <button type="submit" class="btn btn-primary flex-grow-1">
+                    <div class="col-md-auto d-flex align-items-end gap-2">
+                        <button type="submit" class="btn btn-primary">
                             <i class="fas fa-check me-1"></i> Apply
                         </button>
                         <button type="button" class="btn btn-outline-secondary" onclick="clearFilters()" aria-label="Clear filters">

@@ -26,45 +26,45 @@
             id="hod-filter-form"
           >
             <div class="row g-3">
-              <div class="col-md-3">
+              <div class="col-md">
                 <div class="form-group">
                   <label class="form-label" for="{{ form.report_type.id_for_label }}">Report type</label>
                   {{ form.report_type }}
                 </div>
               </div>
-              <div class="col-md-3">
+              <div class="col-md">
                 <div class="form-group">
                   <label class="form-label" for="{{ form.year.id_for_label }}">Year <span class="req">*</span></label>
                   {{ form.year }}
                 </div>
               </div>
-              <div class="col-md-3 monthly-fields">
+              <div class="col-md monthly-fields">
                 <div class="form-group">
                   <label class="form-label" for="{{ form.month.id_for_label }}">Month</label>
                   {{ form.month }}
                 </div>
               </div>
-              <div class="col-md-3 quarterly-fields">
+              <div class="col-md quarterly-fields">
                 <div class="form-group">
                   <label class="form-label" for="{{ form.quarter.id_for_label }}">Quarter</label>
                   {{ form.quarter }}
                 </div>
               </div>
-              <div class="col-md-3 weekly-fields">
+              <div class="col-md weekly-fields">
                 <div class="form-group">
                   <label class="form-label" for="{{ form.week.id_for_label }}">Week</label>
                   {{ form.week }}
                 </div>
               </div>
-            </div>
 
-            <div class="d-flex flex-wrap gap-2 mt-3">
+              <div class="col-md-auto d-flex align-items-end gap-2">
               <button type="submit" class="btn btn-primary">
                 <i class="fas fa-filter"></i> Apply filter
               </button>
               <button type="button" class="btn btn-secondary" id="currentPeriodBtn">
                 <i class="fas fa-sync-alt"></i> Current period
               </button>
+              </div>
             </div>
           </form>
         </div>

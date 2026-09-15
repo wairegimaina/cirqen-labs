@@ -123,6 +123,16 @@
       function renderDoughnut(canvasId, dataObj) {
         var canvas = document.getElementById(canvasId);
         if (!canvas || typeof Chart === 'undefined') return;
+        var total = Object.values(dataObj).reduce(function (a, b) { return a + (+b || 0); }, 0);
+        if (!total) {
+          // Nothing to plot: a short note instead of a blank panel
+          canvas.hidden = true;
+          var note = document.createElement('div');
+          note.className = 'chart-empty';
+          note.textContent = 'Nothing to show yet';
+          canvas.parentNode.insertBefore(note, canvas.nextSibling);
+          return;
+        }
         new Chart(canvas, {
           type: 'doughnut',
           data: {

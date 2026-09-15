@@ -6,8 +6,7 @@
    ============================================================ */
 
 .cmms-dash {
-  max-width: 1400px;
-  margin: 0 auto;
+  width: 100%;
   color: var(--text-primary);
 }
 
@@ -72,12 +71,14 @@
 }
 
 /* ---------- Module links ---------- */
+/* Flex-wrap: the last row stretches to the full width instead of leaving empty tiles */
 .quick-links {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: .75rem;
   margin-bottom: 1.5rem;
 }
+.quick-links > .ql-card { flex: 1 1 240px; min-width: 0; }
 .ql-card {
   display: flex;
   align-items: center;
@@ -211,9 +212,9 @@
 
 @media (max-width: 768px) {
   .mid-row, .bottom-row { grid-template-columns: 1fr; }
-  .quick-links { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .quick-links > .ql-card { flex-basis: calc(50% - .375rem); }
   .ws-stat { border-right: 0; border-bottom: 1px solid var(--border-color); }
 }
 @media (max-width: 480px) {
-  .quick-links { grid-template-columns: 1fr; }
+  .quick-links > .ql-card { flex-basis: 100%; }
 }

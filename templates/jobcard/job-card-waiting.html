@@ -10,7 +10,7 @@
 {% block content %}
 <div class="main-container">
     <div class="row g-3 mb-4">
-        <div class="col-md-4">
+        <div class="col-md-6">
             <div class="card p-3 h-100 border-0 shadow-sm">
                 <div class="d-flex align-items-center">
                     <div class="rounded-circle bg-warning bg-opacity-10 p-3 me-3 text-warning">
@@ -23,7 +23,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-6">
             <div class="card p-3 h-100 border-0 shadow-sm">
                 <div class="d-flex align-items-center">
                     <div class="rounded-circle bg-primary bg-opacity-10 p-3 me-3 text-primary">
@@ -41,17 +41,17 @@
     <div class="card border-0 shadow-sm mb-4">
         <div class="card-body">
             <div class="row g-3 align-items-end">
-                <div class="col-lg-6">
+                <div class="col-lg">
                     <label for="searchInput" class="form-label small text-muted">Search pending</label>
                     <input type="text" id="searchInput" class="form-control" placeholder="Search ID, Equipment...">
                 </div>
-                <div class="col-lg-6">
-                    <form method="get" action="{% url 'jobcard:bulk_download_waiting_jobcards' %}" class="d-flex gap-2 justify-content-lg-end">
+                <div class="col-lg-auto">
+                    <form method="get" action="{% url 'jobcard:bulk_download_waiting_jobcards' %}" class="d-flex gap-2">
                         <label for="waiting_start_date" class="visually-hidden">Start date</label>
-                        <input type="date" id="waiting_start_date" name="start_date" class="form-control form-control-sm w-auto" required>
+                        <input type="date" id="waiting_start_date" name="start_date" class="form-control w-auto" required>
                         <label for="waiting_end_date" class="visually-hidden">End date</label>
-                        <input type="date" id="waiting_end_date" name="end_date" class="form-control form-control-sm w-auto" required>
-                        <button class="btn btn-sm btn-outline-warning text-dark" aria-label="Download job card"><i class="fas fa-download"></i></button>
+                        <input type="date" id="waiting_end_date" name="end_date" class="form-control w-auto" required>
+                        <button class="btn btn-secondary" aria-label="Download job cards"><i class="fas fa-download"></i></button>
                     </form>
                 </div>
             </div>

@@ -13,67 +13,35 @@
 <div class="main-container">
 
 
-    <nav class="mb-4">
-        <div class="nav nav-pills gap-2 p-1 rounded" style="background: var(--bg-tertiary);">
-            {% for status in status_choices %}
-            <a href="?status_filter={{ status }}"
-               class="nav-link {% if current_status_filter == status %}active shadow-sm{% endif %}"
-               style="{% if current_status_filter != status %}color: var(--text-secondary);{% endif %}">
-                {{ status }}
-            </a>
-            {% endfor %}
-        </div>
+    <nav class="nav nav-tabs mb-3">
+        {% for status in status_choices %}
+        <a href="?status_filter={{ status }}" class="nav-link {% if current_status_filter == status %}active{% endif %}">{{ status }}</a>
+        {% endfor %}
     </nav>
 
-    <div class="row g-3 mb-4">
-        <div class="col-md-4 col-sm-6">
-            <div class="card h-100 border-0 shadow-sm">
-                <div class="card-body d-flex align-items-center">
-                    <div class="rounded-circle p-3 me-3 bg-primary bg-opacity-10 text-primary">
-                        <i class="fas fa-database fa-lg"></i>
-                    </div>
-                    <div>
-                        <h6 class="text-muted small mb-1">Total {{ current_status_filter }}</h6>
-                        <h2 class="mb-0 fw-bold" style="color: var(--text-primary);">{{ total_count|default:paginator.count }}</h2>
-                    </div>
-                </div>
-            </div>
+    <div class="kpi-strip">
+        <div class="kpi-card kpi-primary">
+            <span class="kpi-icon"><i class="fas fa-database" aria-hidden="true"></i></span>
+            <div class="kpi-num">{{ total_count|default:paginator.count }}</div>
+            <div class="kpi-label">Total {{ current_status_filter|lower }}</div>
         </div>
-
-        <div class="col-md-4 col-sm-6">
-            <div class="card h-100 border-0 shadow-sm">
-                <div class="card-body d-flex align-items-center">
-                    <div class="rounded-circle p-3 me-3 bg-info bg-opacity-10 text-info">
-                        <i class="fas fa-eye fa-lg"></i>
-                    </div>
-                    <div>
-                        <h6 class="text-muted small mb-1">Visible on Page</h6>
-                        <h2 class="mb-0 fw-bold" id="displayedCount" style="color: var(--text-primary);">0</h2>
-                    </div>
-                </div>
-            </div>
+        <div class="kpi-card kpi-info">
+            <span class="kpi-icon"><i class="fas fa-eye" aria-hidden="true"></i></span>
+            <div class="kpi-num" id="displayedCount">0</div>
+            <div class="kpi-label">Visible on page</div>
         </div>
-
-        <div class="col-md-4 col-sm-12">
-            <div class="card h-100 border-0 shadow-sm">
-                <div class="card-body d-flex align-items-center">
-                    <div class="rounded-circle p-3 me-3 bg-danger bg-opacity-10 text-danger">
-                        <i class="fas fa-exclamation-triangle fa-lg"></i>
-                    </div>
-                    <div>
-                        <h6 class="text-muted small mb-1">High Priority</h6>
-                        <h2 class="mb-0 fw-bold text-danger">{{ high_priority_count|default:"0" }}</h2>
-                    </div>
-                </div>
-            </div>
+        <div class="kpi-card kpi-overdue">
+            <span class="kpi-icon"><i class="fas fa-exclamation-triangle" aria-hidden="true"></i></span>
+            <div class="kpi-num">{{ high_priority_count|default:"0" }}</div>
+            <div class="kpi-label">High priority</div>
         </div>
     </div>
 
-    <div class="card border-0 shadow-sm">
-        <div class="card-body p-4">
+    <div class="section-card">
+        <div class="section-card-body">
 
-            <div class="row g-3 mb-4 align-items-end">
-                <div class="col-lg-5">
+            <div class="row g-3 mb-3 align-items-end">
+                <div class="col-lg">
                     <label for="searchInput" class="form-label small text-muted">Quick search</label>
                     <div class="input-group">
                         <span class="input-group-text bg-transparent border-end-0">
@@ -85,19 +53,19 @@
                     </div>
                 </div>
 
-                <div class="col-lg-7 text-lg-end">
-                    <form method="get" action="{% url 'jobcard:bulk_download_waiting_jobcards' %}" class="d-inline-flex flex-wrap gap-2 align-items-end justify-content-lg-end w-100">
+                <div class="col-lg-auto">
+                    <form method="get" action="{% url 'jobcard:bulk_download_waiting_jobcards' %}" class="d-flex flex-wrap gap-2 align-items-end">
                         <div class="d-flex gap-2">
                             <div>
                                 <label for="bulk_dl_start_date" class="form-label small text-muted d-block text-start">From</label>
-                                <input type="date" id="bulk_dl_start_date" name="start_date" class="form-control form-control-sm" required>
+                                <input type="date" id="bulk_dl_start_date" name="start_date" class="form-control" required>
                             </div>
                             <div>
                                 <label for="bulk_dl_end_date" class="form-label small text-muted d-block text-start">To</label>
-                                <input type="date" id="bulk_dl_end_date" name="end_date" class="form-control form-control-sm" required>
+                                <input type="date" id="bulk_dl_end_date" name="end_date" class="form-control" required>
                             </div>
                         </div>
-                        <button type="submit" class="btn btn-success btn-sm h-100 px-3 py-2">
+                        <button type="submit" class="btn btn-secondary">
                             <i class="fas fa-file-export me-1"></i> Export Data
                         </button>
                     </form>

@@ -100,7 +100,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // Find the clear button container and add filter button
   const clearButtonContainer = filterForm.querySelector('.mt-3');
-  if (clearButtonContainer && !document.querySelector('#filter-btn')) {
+  if (clearButtonContainer && !filterForm.querySelector('button[type="submit"]') && !document.querySelector('#filter-btn')) {
     const filterButton = document.createElement('button');
     filterButton.type = 'submit';
     filterButton.id = 'filter-btn';

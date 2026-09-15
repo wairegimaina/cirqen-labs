@@ -36,12 +36,9 @@
       </button>
     </div>
     {% endif %}
-  </div>
-
-
-  <div class="row mb-4">
-    <div class="col-md-5">
-      <label class="form-label fw-semibold" for="workshopFilter">Filter by Workshop</label>
+  <div class="row mt-2">
+    <div class="col-md-4">
+      <label class="form-label" for="workshopFilter">Filter by workshop</label>
       <select class="form-select" id="workshopFilter">
         <option value="">All Workshops</option>
         {% for ws in workshops %}
@@ -52,6 +49,7 @@
         {% endfor %}
       </select>
     </div>
+  </div>
   </div>
   {% endif %}
 

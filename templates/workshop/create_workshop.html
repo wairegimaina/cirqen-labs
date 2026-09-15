@@ -43,16 +43,23 @@
 
       <!-- Create Workshop Section -->
       {% if user.is_authenticated and user.userprofile.role == 'HOD' %}
-      <button class="toggle-btn" id="toggleCreateForm">
-        <i class="fas fa-plus-circle"></i>
-        <span>Add New Workshop</span>
-        <i class="fas fa-chevron-down" id="chevron"></i>
-      </button>
-
-      <button type="button" class="toggle-btn" data-bs-toggle="modal" data-bs-target="#uploadWorkshopsModal">
-        <i class="fas fa-file-excel"></i>
-        <span>Upload Workshops from Excel</span>
-      </button>
+      <div class="page-head">
+        <div>
+          <h1 class="page-heading">Workshops</h1>
+          <p class="page-subtitle">Add workshops and manage the existing ones.</p>
+        </div>
+        <div class="page-actions">
+          <button type="button" class="btn btn-primary" id="toggleCreateForm">
+            <i class="fas fa-plus"></i>
+            <span>Add workshop</span>
+            <i class="fas fa-chevron-down" id="chevron"></i>
+          </button>
+          <button type="button" class="btn btn-secondary" data-bs-toggle="modal" data-bs-target="#uploadWorkshopsModal">
+            <i class="fas fa-file-excel"></i>
+            <span>Upload from Excel</span>
+          </button>
+        </div>
+      </div>
 
       <div class="create-form-container" id="createFormContainer">
         <div class="form-header">
@@ -102,32 +109,31 @@
       </div>
       {% endif %}
 
-      <div class="section-divider"></div>
-
-      <h2>
-        <i class="fas fa-list-ul"></i>
-        Existing Workshops
-      </h2>
+      <div class="section-card">
+      <div class="section-card-head">
+        <h2 class="section-card-title"><i class="fas fa-list-ul"></i> Existing workshops</h2>
+      </div>
       {% if workshops %}
-      <table class="workshop-table">
+      <div class="table-responsive">
+      <table class="table table-hover mb-0 workshop-table">
         <thead>
           <tr>
             <th>Name</th>
             <th>Category</th>
             <th>Created</th>
-            <th>Actions</th>
+            <th class="text-end">Actions</th>
           </tr>
         </thead>
         <tbody>
           {% for workshop in workshops %}
           <tr>
-            <td>{{ workshop.name }}</td>
+            <td class="cell-title">{{ workshop.name }}</td>
             <td>{{ workshop.get_category_display }}</td>
             <td>{{ workshop.created_at|date:"F d, Y" }}</td>
-            <td class="actions-cell">
+            <td class="actions-cell text-end">
               <button
                 type="button"
-                class="btn btn-small btn-edit edit-workshop-btn"
+                class="btn btn-secondary btn-sm edit-workshop-btn"
                 data-workshop-id="{{ workshop.id }}"
                 data-workshop-name="{{ workshop.name|escapejs }}"
                 data-workshop-category="{{ workshop.category }}"
@@ -137,7 +143,7 @@
               </button>
               <button
                 type="button"
-                class="btn btn-small btn-delete delete-workshop-btn"
+                class="btn btn-outline-danger btn-sm delete-workshop-btn"
                 data-workshop-id="{{ workshop.id }}"
                 data-workshop-name="{{ workshop.name|escapejs }}"
                 data-workshop-category="{{ workshop.get_category_display|escapejs }}"
@@ -150,9 +156,12 @@
           {% endfor %}
         </tbody>
       </table>
+      </div>
       {% else %}
       {% include 'includes/empty_state.html' with icon="fa-industry" title="No Workshops Yet" message="No workshops have been created yet. Use the form above to add the first one." %}
-      {% endif %} {% else %}
+      {% endif %}
+      </div>
+      {% else %}
       <p class="error">Access Denied: Only Heads of Department can manage workshops.</p>
       {% endif %}
     </div>

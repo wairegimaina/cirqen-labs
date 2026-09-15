@@ -56,6 +56,7 @@
 .section-card-title i { color: var(--text-muted); font-size: .875rem; }
 .section-card-sub  { font-size: var(--fs-sm); color: var(--text-muted); margin: .125rem 0 0; }
 .section-card-body { padding: 1.25rem; }
+.section-card-head:last-child { border-bottom: 0; }
 .section-card-foot {
   display: flex;
   align-items: center;
@@ -168,7 +169,7 @@
 }
 
 /* ---------- Page container ---------- */
-.page-wrap { max-width: 1400px; margin: 0 auto; }
+.page-wrap { width: 100%; }
 
 /* ---------- Key / value grid ---------- */
 .info-grid {
@@ -342,14 +343,18 @@
 .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
 
 /* ---------- KPI card ---------- */
+/* Flex, so a short last row stretches instead of leaving empty slots */
 .kpi-strip,
 .kpi-grid,
 .annual-summary-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 1rem;
   margin-bottom: 1.25rem;
 }
+.kpi-strip > *,
+.kpi-grid > *,
+.annual-summary-grid > * { flex: 1 1 180px; min-width: 0; }
 
 .kpi-card {
   background: var(--bg-card);
@@ -376,6 +381,17 @@ a.kpi-card:hover { border-color: var(--border-mid); }
 .kpi-card.kpi-pushed   { --kpi-accent: var(--text-secondary); }
 .kpi-card.kpi-overdue  { --kpi-accent: var(--danger-color); }
 .kpi-card.kpi-approved { --kpi-accent: var(--success-color); }
+
+/* Icon cards: icon beside the figures instead of stacked above them */
+.kpi-card:has(> .kpi-icon) {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: .875rem;
+  align-items: center;
+  align-content: center;
+}
+.kpi-card:has(> .kpi-icon) > .kpi-icon { grid-row: 1 / span 4; margin-bottom: 0; }
+.kpi-card:has(> .kpi-icon) > :not(.kpi-icon) { grid-column: 2; }
 
 .kpi-icon {
   width: 32px;
@@ -449,7 +465,7 @@ a.kpi-card:hover { border-color: var(--border-mid); }
 /* ---------- Empty state ---------- */
 .empty-state {
   text-align: center;
-  padding: 3rem 1.5rem;
+  padding: 2rem 1.5rem;
   color: var(--text-muted);
 }
 .empty-state-icon {
@@ -478,6 +494,17 @@ a.kpi-card:hover { border-color: var(--border-mid); }
   margin: 0 auto;
 }
 .empty-state .empty-state-action { margin-top: 1rem; }
+
+/* Chart with nothing to plot: a short note instead of a tall blank canvas */
+.chart-empty {
+  display: grid;
+  place-items: center;
+  min-height: 7rem;
+  padding: 1rem;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  text-align: center;
+}
 
 @media (max-width: 680px) {
   .kpi-card { padding: .875rem 1rem; }

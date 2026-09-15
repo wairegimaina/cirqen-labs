@@ -7,51 +7,51 @@
         <form method="GET" id="filter-form" action="{% url 'report_hub:report_hub' %}">
             <div class="row g-3">
                 <!-- Report type -->
-                <div class="col-md-3">
+                <div class="col-md">
                     <label for="id_report_type" class="form-label">Report type</label>
                     {{ form.report_type }}
                 </div>
 
                 <!-- Year -->
-                <div class="col-md-3">
+                <div class="col-md">
                     <label for="id_year" class="form-label">Year</label>
                     {{ form.year }}
                 </div>
 
                 <!-- Week (weekly reports) -->
-                <div class="col-md-3 weekly-fields" style="display: none;">
+                <div class="col-md weekly-fields" style="display: none;">
                     <label for="id_week" class="form-label">Week</label>
                     {{ form.week }}
                 </div>
 
                 <!-- Month (monthly reports) -->
-                <div class="col-md-3 monthly-fields" style="display: none;">
+                <div class="col-md monthly-fields" style="display: none;">
                     <label for="id_month" class="form-label">Month</label>
                     {{ form.month }}
                 </div>
 
                 <!-- Quarter (quarterly reports) -->
-                <div class="col-md-3 quarterly-fields" style="display: none;">
+                <div class="col-md quarterly-fields" style="display: none;">
                     <label for="id_quarter" class="form-label">Quarter</label>
                     {{ form.quarter }}
                 </div>
 
                 <!-- Workshop (HOD only) -->
                 {% if is_hod and form.workshop %}
-                <div class="col-md-3">
+                <div class="col-md">
                     <label for="id_workshop" class="form-label">Workshop</label>
                     {{ form.workshop }}
                 </div>
                 {% endif %}
-            </div>
 
-            <div class="d-flex flex-wrap gap-2 mt-3">
+                <div class="col-md-auto d-flex align-items-end gap-2">
                 <button type="submit" class="btn btn-primary">
                     <i class="fas fa-search"></i> Generate report
                 </button>
                 <button type="button" class="btn btn-secondary" onclick="window.location.href='{% url 'report_hub:report_hub' %}'">
                     <i class="fas fa-redo"></i> Reset
                 </button>
+                </div>
             </div>
         </form>
     </div>

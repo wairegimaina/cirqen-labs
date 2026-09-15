@@ -215,14 +215,18 @@ async function loadEquipmentAnalytics() {
 function fallbackCategoryChart() {
   const ctx = $("chart-equipment-cat");
   if (!ctx) return;
-  chartCat = new Chart(ctx, {
-    type: "bar",
-    data: {
-      labels: ["No data"],
-      datasets: [{ data: [0], backgroundColor: C_EMPTY }],
-    },
-    options: { responsive: true, plugins: { legend: { display: false } } },
-  });
+  showChartEmpty(ctx, "No equipment categories yet");
+}
+
+// Swap an unused canvas for a short note so the panel doesn't hold blank space
+function showChartEmpty(canvas, text) {
+  const next = canvas.nextElementSibling;
+  if (next && next.classList.contains("chart-empty")) return;
+  canvas.hidden = true;
+  const note = document.createElement("div");
+  note.className = "chart-empty";
+  note.textContent = text;
+  canvas.after(note);
 }
 
 function renderActivityTable(top) {
@@ -462,7 +466,7 @@ function loadInventorySummaryFromData(d) {
   ].filter((s) => s.count > 0);
 
   if (!segments.length) {
-    segments.push({ label: "No equipment", count: 1, color: C_EMPTY });
+    segments.push({ label: "No equipment", count: 1, color: C_EMPTY, empty: true });
   }
 
 chartDonut = new Chart($("chart-inventory-donut"), {
@@ -497,7 +501,7 @@ chartDonut = new Chart($("chart-inventory-donut"), {
         <div class="legend-item">
           <span class="legend-dot" style="background:${s.color}"></span>
           <span>${s.label}</span>
-          <span class="legend-count">${s.count}</span>
+          <span class="legend-count">${s.empty ? 0 : s.count}</span>
         </div>
       `,
       )
@@ -544,7 +548,7 @@ async function loadInventorySummary() {
     ].filter((s) => s.count > 0);
 
     if (!segments.length) {
-      segments.push({ label: "No equipment", count: 1, color: C_EMPTY });
+      segments.push({ label: "No equipment", count: 1, color: C_EMPTY, empty: true });
     }
 
     chartDonut = new Chart($("chart-inventory-donut"), {
@@ -581,7 +585,7 @@ async function loadInventorySummary() {
           <div class="legend-item">
             <span class="legend-dot" style="background:${s.color}"></span>
             <span>${s.label}</span>
-            <span class="legend-count">${s.count}</span>
+            <span class="legend-count">${s.empty ? 0 : s.count}</span>
           </div>
         `,
         )

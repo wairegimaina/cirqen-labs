@@ -7,7 +7,6 @@
    ================================================================ */
 
 .dash-wrap {
-  max-width: 1400px;
   margin: 0 auto;
 }
 
@@ -61,6 +60,8 @@
 .dot.is-warning   { color: var(--text-muted); }
 
 .cs-chart { position: relative; height: 200px; }
+/* No schedules yet: stats and summary share the row, no blank chart column */
+.cs-schedule-grid.no-chart { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 
 .cs-summary { display: flex; flex-direction: column; gap: .75rem; }
 .cs-progress-labels {

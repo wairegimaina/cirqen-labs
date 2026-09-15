@@ -4,8 +4,7 @@
 .inventory-layout {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
-  padding: 10px 0;
+  gap: 1rem;
 }
 
 .fade-in {
@@ -21,11 +20,14 @@
 
 /* --- Filter Grid --- */
 .filter-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 1rem;
-  align-items: end;
+  align-items: flex-end;
 }
+.filter-grid > * { flex: 1 1 200px; min-width: 0; }
+.filter-grid > .search-item { flex-grow: 2; }
+.filter-grid > .filter-grid-actions { flex: 0 0 auto; }
 
 .search-item {
   flex-grow: 2; /* Search bar takes more space */

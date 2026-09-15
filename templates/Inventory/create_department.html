@@ -37,8 +37,8 @@
     </div>
 </div>
 
-<div class="main-container container-fluid p-4">
-    <div class="department-messages mb-4">
+<div class="main-container">
+    <div class="department-messages">
         {% if messages %}
             {% for message in messages %}
                 <div class="alert {% if 'success' in message.tags %}alert-success{% elif 'error' in message.tags %}alert-danger{% else %}alert-warning{% endif %} alert-dismissible fade show shadow-sm" role="alert">
@@ -50,22 +50,9 @@
         {% endif %}
     </div>
 
-    <div class="d-flex justify-content-center flex-wrap gap-2 mb-4">
-        <button type="button" id="toggleFormBtn" class="btn btn-primary btn-lg shadow-md" onclick="toggleAddForm()">
-            <i class="fas fa-plus me-2"></i>
-            <span>Add New Department</span>
-        </button>
-        {% if selected_workshop %}
-        <button type="button" class="btn btn-outline-primary btn-lg shadow-md" data-bs-toggle="modal" data-bs-target="#uploadDepartmentsModal">
-            <i class="fas fa-file-excel me-2"></i>
-            <span>Upload Excel</span>
-        </button>
-        {% endif %}
-    </div>
-
-    <div id="addDepartmentForm" class="card shadow-md mb-5" style="display: none;">
+    <div id="addDepartmentForm" class="card mb-3" style="display: none;">
         <div class="card-header d-flex justify-content-between align-items-center">
-            <h5 class="mb-0 text-primary"><i class="fas fa-building me-2"></i> Create New Department</h5>
+            <h5 class="mb-0"><i class="fas fa-building me-2 text-muted"></i> Create new department</h5>
             <button type="button" class="btn-close" onclick="closeAddForm()"></button>
         </div>
         <div class="card-body">
@@ -96,9 +83,21 @@
         </div>
     </div>
 
-    <div class="card shadow-md">
-        <div class="card-header">
-            <h5 class="mb-0 text-primary"><i class="fas fa-list me-2"></i> Existing Departments</h5>
+    <div class="card">
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <h5 class="mb-0"><i class="fas fa-list me-2 text-muted"></i> Existing departments</h5>
+            <div class="d-flex flex-wrap gap-2">
+                <button type="button" id="toggleFormBtn" class="btn btn-primary btn-sm" onclick="toggleAddForm()">
+                    <i class="fas fa-plus me-1"></i>
+                    <span>Add department</span>
+                </button>
+                {% if selected_workshop %}
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#uploadDepartmentsModal">
+                    <i class="fas fa-file-excel me-1"></i>
+                    <span>Upload Excel</span>
+                </button>
+                {% endif %}
+            </div>
         </div>
         {% if departments_in_workshop %}
         <div class="table-responsive">
@@ -114,7 +113,7 @@
                     {% for dept in departments_in_workshop %}
                     <tr>
                         <td>
-                            <span class="fw-bold text-primary">{{ dept.name }}</span>
+                            <span class="cell-title">{{ dept.name }}</span>
                         </td>
                         <td>
                             <span class="badge {% if dept.equipment_set.count > 0 %}badge-info{% else %}badge-secondary{% endif %}">
@@ -122,11 +121,11 @@
                             </span>
                         </td>
                         <td class="text-end">
-                            <button class="btn btn-sm btn-outline-primary me-1" onclick="editDepartment('{{ dept.id }}', '{{ dept.name }}')" aria-label="Edit department">
+                            <button class="btn btn-sm btn-secondary me-1" onclick="editDepartment('{{ dept.id }}', '{{ dept.name }}')" aria-label="Edit department">
                                 <i class="fas fa-edit"></i>
                             </button>
                             {% if all_workshops|length > 1 %}
-                            <button class="btn btn-sm btn-outline-info me-1" onclick="transferDepartment('{{ dept.id }}', '{{ dept.name }}', {{ dept.equipment_set.count }})" aria-label="Transfer department">
+                            <button class="btn btn-sm btn-secondary me-1" onclick="transferDepartment('{{ dept.id }}', '{{ dept.name }}', {{ dept.equipment_set.count }})" aria-label="Transfer department">
                                 <i class="fas fa-exchange-alt"></i>
                             </button>
                             {% endif %}

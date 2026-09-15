@@ -5,7 +5,7 @@
    and the machine list.
    ============================================================ */
 
-.bc-wrap { max-width: 1100px; margin: 0 auto; }
+.bc-wrap { width: 100%; }
 
 /* Deployment progress */
 .deploy-bar-label {

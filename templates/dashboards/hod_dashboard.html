@@ -288,8 +288,22 @@
         '#4d7c0f',
       ];
 
+      // Charts with nothing to plot become a short note instead of a blank panel
+      function showChartEmpty(canvas, text) {
+        canvas.hidden = true;
+        var note = document.createElement('div');
+        note.className = 'chart-empty';
+        note.textContent = text;
+        canvas.parentNode.insertBefore(note, canvas.nextSibling);
+      }
+      function sum(values) {
+        return values.reduce(function (a, b) { return a + (+b || 0); }, 0);
+      }
+
       var jobcardCanvas = document.getElementById('chart-jobcard-status');
-      if (jobcardCanvas && typeof Chart !== 'undefined') {
+      if (jobcardCanvas && sum(Object.values(jobcardStatus)) === 0) {
+        showChartEmpty(jobcardCanvas, 'No job cards yet');
+      } else if (jobcardCanvas && typeof Chart !== 'undefined') {
         new Chart(jobcardCanvas, {
           type: 'doughnut',
           data: {
@@ -317,7 +331,12 @@
       }
 
       var ppmCanvas = document.getElementById('chart-ppm-monthly');
-      if (ppmCanvas && typeof Chart !== 'undefined') {
+      var ppmTotal = Object.keys(ppmMonthlyByWorkshop).reduce(function (t, k) {
+        return t + sum(ppmMonthlyByWorkshop[k] || []);
+      }, 0);
+      if (ppmCanvas && ppmTotal === 0) {
+        showChartEmpty(ppmCanvas, 'No PPM completions yet');
+      } else if (ppmCanvas && typeof Chart !== 'undefined') {
         var workshopNames = Object.keys(ppmMonthlyByWorkshop);
         new Chart(ppmCanvas, {
           type: 'bar',

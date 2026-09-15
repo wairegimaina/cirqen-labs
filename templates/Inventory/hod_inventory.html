@@ -51,11 +51,13 @@
   <div id="inventorySection" class="content-section active">
 
     <!-- Filter Section -->
-    <div class="filter-section mb-4">
-      <h3><i class="fas fa-filter"></i> Filter Equipment</h3>
-
+    <div class="section-card">
+      <div class="section-card-head">
+        <h3 class="section-card-title"><i class="fas fa-filter"></i> Filter equipment</h3>
+      </div>
+      <div class="section-card-body">
       <!-- Filter Controls -->
-      <div class="filter-grid mb-3">
+      <div class="filter-grid">
         <div>
           <label for="departmentFilter" class="form-label">Department</label>
           <select name="department" id="departmentFilter" class="form-select">
@@ -90,11 +92,12 @@
           </div>
         </div>
 
-        <div class="d-flex align-items-end">
-          <button type="button" class="btn btn-outline-secondary w-100" id="clearFiltersBtn" title="Clear all filters">
+        <div class="filter-grid-actions">
+          <button type="button" class="btn btn-secondary" id="clearFiltersBtn" title="Clear all filters">
             <i class="fas fa-times me-1"></i> Clear
           </button>
         </div>
+      </div>
       </div>
     </div>
 
