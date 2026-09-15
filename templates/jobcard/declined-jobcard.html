@@ -18,7 +18,7 @@
                         <i class="fas fa-times-circle fa-lg"></i>
                     </div>
                     <div>
-                        <div class="small text-muted text-uppercase">Total Declined</div>
+                        <div class="small text-muted">Total Declined</div>
                         <div class="h3 mb-0 fw-bold" style="color: var(--text-primary);">{{ paginator.count }}</div>
                     </div>
                 </div>
@@ -31,7 +31,7 @@
                         <i class="fas fa-filter fa-lg"></i>
                     </div>
                     <div>
-                        <div class="small text-muted text-uppercase">Visible</div>
+                        <div class="small text-muted">Visible</div>
                         <div class="h3 mb-0 fw-bold" id="displayedCount" style="color: var(--text-primary);">{{ job_cards|length }}</div>
                     </div>
                 </div>
@@ -43,7 +43,7 @@
         <div class="card-body">
             <div class="row g-3 align-items-end">
                 <div class="col-lg-6">
-                    <label for="searchInput" class="form-label small fw-bold text-muted">SEARCH RECORDS</label>
+                    <label for="searchInput" class="form-label small text-muted">Search records</label>
                     <input type="text" id="searchInput" class="form-control" placeholder="Search ID, Equipment...">
                 </div>
                 <div class="col-lg-6">
@@ -86,7 +86,7 @@
                 </div>
 
                 <div class="card-footer bg-transparent border-0 text-end">
-                    <a href="{% url 'jobcard:download_jobcard_pdf' card.id %}" class="btn btn-sm btn-light border" aria-label="Download job card">
+                    <a href="{% url 'jobcard:download_jobcard_pdf' card.id %}" class="btn btn-sm btn-secondary" aria-label="Download job card">
                         <i class="fas fa-download text-muted"></i>
                     </a>
                 </div>

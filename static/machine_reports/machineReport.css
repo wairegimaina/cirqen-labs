@@ -68,104 +68,58 @@ body {
 }
 
 .page-header p {
-  color: rgba(0,0,0,.0);
+  color: var(--text-muted);
   font-size: 0.95rem;
 }
 
-/* SPA Navigation Tabs */
-.spa-nav {
-  display: flex;
-  gap: 0.75rem;
-  margin-bottom: 2rem;
-  background: var(--bg-card);
-  padding: 0.5rem;
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  border: 1px solid var(--border-color);
-}
+/* SPA navigation: shared underline tabs (components.css) */
 
-.nav-item {
-  flex: 1;
-  padding: 0.875rem 1.25rem;
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  font-weight: 600;
-  font-size: 0.9375rem;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-}
-
-.nav-item:hover {
-  background: var(--primary-light);
-  color: var(--primary-color);
-}
-
-.nav-item.active {
-  background: var(--primary-gradient);
-  color: var(--text-white);
-  box-shadow: var(--shadow-md);
-}
-
-/* Dark mode: active tab uses silver gradient — needs dark text for contrast */
-[data-theme="dark"] .nav-item.active {
-  color: var(--bg-card);
-}
-
-.nav-item i {
-  font-size: 1rem;
-}
-
-/* Summary Stats Cards */
+/* Summary stats: neutral cards, the variant only colours the marker dot */
 .stat-card {
-  padding: 0.75rem;
-  border-radius: var(--radius-lg);
-  color: var(--text-white);
-  text-align: center;
   height: 100%;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  box-shadow: var(--shadow-md);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  gap: .25rem;
+  padding: 1rem 1.25rem;
+  text-align: left;
+  color: var(--text-primary);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--card-shadow);
 }
+.stat-card[class*="bg-gradient-"] { background: var(--bg-card); }
+.stat-card.bg-gradient-primary { --stat-accent: var(--primary-color); }
+.stat-card.bg-gradient-success { --stat-accent: var(--success-color); }
+.stat-card.bg-gradient-warning { --stat-accent: var(--warning-color); }
+.stat-card.bg-gradient-danger  { --stat-accent: var(--danger-color); }
 
-.stat-card:hover {
+.stat-card .stat-label {
+  order: 1;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  margin: 0;
+  font-size: var(--fs-sm);
+  font-weight: 400;
+  color: var(--text-muted);
 }
-
-.bg-gradient-primary {
-  background: var(--primary-gradient);
+.stat-card .stat-label::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--stat-accent);
 }
-
-.bg-gradient-success {
-  background: var(--success-color);
-}
-
-.bg-gradient-warning {
-  background: var(--warning-color);
-}
-
-.bg-gradient-danger {
-  background: var(--danger-color);
-}
-
-.stat-val {
-  font-size: 2.5rem;
+.stat-card .stat-val {
+  order: 2;
+  font-size: var(--fs-xl);
   font-weight: 600;
-  line-height: 1;
-  margin-bottom: 0.5rem;
-  text-shadow: 0 2px 4px rgba(0,0,0,.0);
-}
-
-.stat-label {
-  font-size: 0.875rem;
-  opacity: 0.95;
-  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
 }
 
 /* Themed Tables - Using theme.css variables */
@@ -373,15 +327,6 @@ body {
     padding: 0.75rem;
   }
 
-  .spa-nav {
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .nav-item {
-    padding: 4px 8px;
-  }
-
   .stat-card {
     padding: 0.6rem;
   }
@@ -537,7 +482,6 @@ body {
 /* Smooth transitions for theme changes */
 .theme-card,
 .theme-table,
-.nav-item,
 .btn-icon {
   transition: background-color 0.3s ease,
     border-color 0.3s ease,
@@ -583,5 +527,5 @@ body {
 /* Ensure bg-danger badges keep white text in both modes */
 [data-theme="dark"] .badge.bg-danger,
 [data-theme="dark"] .assignment-badge.bg-danger {
-  color: var(--bg-card)fff !important;
+  color: var(--bg-card) !important;
 }

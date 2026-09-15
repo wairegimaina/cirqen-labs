@@ -25,7 +25,6 @@
   --space-xl: 2rem;
   --space-2xl: 3rem;
   /* --radius-md now comes from the shared base.css token (10px) */
-  --radius-lg: 0.75rem;
   --radius-xl: 1rem;
   --radius-2xl: 1.5rem;
 
@@ -36,25 +35,12 @@
 /* ============================================================
    BODY
    ============================================================ */
-body {
-  font-family: var(--font-base);
-  background-color: var(--bg-primary);
-  color: var(--text-primary);
-  line-height: 1.6;
-  min-height: 100vh;
-  margin: 0;
-  padding: 0;
-}
 
 /* ============================================================
    MAIN CONTAINER
    ============================================================ */
 .main-container {
-  background-color: var(--bg-card);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-xl);
-  overflow: hidden;
-  min-height: calc(100vh - 40px);
+  background: transparent;
 }
 
 /* ============================================================
@@ -135,24 +121,16 @@ body {
 /* ============================================================
    FILTER FORM
    ============================================================ */
-.filter-form-container {
-  background-color: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  padding: 8px;
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
-  margin-bottom: 30px;
-}
+.filter-form-container { background: none; }
 
-.filter-form-container .form-group {
-  margin-bottom: 15px;
-}
+.filter-form-container .form-group { margin: 0; }
 
 .filter-form-container label {
-  font-weight: 600;
-  margin-bottom: 5px;
   display: block;
-  color: var(--text-primary);
+  margin-bottom: .375rem;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--text-secondary);
 }
 
 .filter-form-container .form-control {

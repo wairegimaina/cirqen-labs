@@ -1,16 +1,18 @@
 <div class="table-container" id="table-container">
-    <h3>Technician Job Card Status</h3>
+    <div class="section-card-head">
+        <h3 class="section-card-title">Technician job card status</h3>
+    </div>
     <div class="table-responsive">
-        <table class="table table-striped table-bordered hod-table">
+        <table class="table table-bordered hod-table">
             <thead>
                 <tr>
                     <th rowspan="2">Technician</th>
-                    <th colspan="5">Waiting Approval</th>
+                    <th colspan="5">Waiting approval</th>
                     <th colspan="5">Approved</th>
                     <th colspan="5">Declined</th>
                 </tr>
                 <tr>
-                    <!-- Waiting Approval -->
+                    <!-- Waiting approval -->
                     <th>PPM</th>
                     <th>Cal</th>
                     <th>Repair</th>
@@ -34,30 +36,30 @@
                 {% if users %}
                 {% for username, data in users.items %}
                 <tr>
-                    <td><strong>{{ username }}</strong></td>
-                    <!-- Waiting Approval -->
+                    <td class="cell-title">{{ username }}</td>
+                    <!-- Waiting approval -->
                     <td>{{ data.Waiting_Approval.PPM|default:0 }}</td>
                     <td>{{ data.Waiting_Approval.Calibration|default:0 }}</td>
                     <td>{{ data.Waiting_Approval.Repair|default:0 }}</td>
                     <td>{{ data.Waiting_Approval.Others|default:0 }}</td>
-                    <td><strong>{{ data.Waiting_Approval.total|default:0 }}</strong></td>
+                    <td class="fw-semibold">{{ data.Waiting_Approval.total|default:0 }}</td>
                     <!-- Approved -->
                     <td>{{ data.Approved.PPM|default:0 }}</td>
                     <td>{{ data.Approved.Calibration|default:0 }}</td>
                     <td>{{ data.Approved.Repair|default:0 }}</td>
                     <td>{{ data.Approved.Others|default:0 }}</td>
-                    <td><strong>{{ data.Approved.total|default:0 }}</strong></td>
+                    <td class="fw-semibold">{{ data.Approved.total|default:0 }}</td>
                     <!-- Declined -->
                     <td class="text-danger">{{ data.Declined.PPM|default:0 }}</td>
                     <td class="text-danger">{{ data.Declined.Calibration|default:0 }}</td>
                     <td class="text-danger">{{ data.Declined.Repair|default:0 }}</td>
                     <td class="text-danger">{{ data.Declined.Others|default:0 }}</td>
-                    <td class="text-danger"><strong>{{ data.Declined.total|default:0 }}</strong></td>
+                    <td class="text-danger fw-semibold">{{ data.Declined.total|default:0 }}</td>
                 </tr>
                 {% endfor %}
                 {% else %}
                 <tr>
-                    <td colspan="16" class="text-center">No data available for the selected period.</td>
+                    <td colspan="16" class="text-center text-muted py-4">No data available for the selected period.</td>
                 </tr>
                 {% endif %}
             </tbody>

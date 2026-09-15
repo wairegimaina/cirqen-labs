@@ -118,8 +118,8 @@ document.addEventListener('DOMContentLoaded', function () {
     const resetCurrentBtn = document.createElement('button');
     resetCurrentBtn.type = 'button';
     resetCurrentBtn.id = 'reset-current-btn';
-    resetCurrentBtn.className = 'btn btn-info me-2';
-    resetCurrentBtn.innerHTML = '<i class="bx bx-refresh"></i> Current Period';
+    resetCurrentBtn.className = 'btn btn-secondary me-2';
+    resetCurrentBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Current period';
 
     resetCurrentBtn.addEventListener('click', function () {
       // Reset to current period

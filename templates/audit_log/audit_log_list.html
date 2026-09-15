@@ -9,12 +9,12 @@
   <div class="card-body">
     <form method="get" class="row g-3 align-items-end">
       <div class="col-md-4">
-        <label for="filter_table_name" class="form-label small fw-bold text-muted">TABLE</label>
+        <label for="filter_table_name" class="form-label small text-muted">Table</label>
         <input type="text" id="filter_table_name" name="table_name" class="form-control"
                value="{{ selected_table_name }}" placeholder="e.g. Inventory_equipment">
       </div>
       <div class="col-md-4">
-        <label for="filter_operation" class="form-label small fw-bold text-muted">OPERATION</label>
+        <label for="filter_operation" class="form-label small text-muted">Operation</label>
         <select id="filter_operation" name="operation" class="form-control">
           <option value="">All operations</option>
           {% for value, label in operation_choices %}

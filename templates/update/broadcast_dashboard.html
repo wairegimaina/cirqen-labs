@@ -10,66 +10,75 @@
 {% block content %}
 <div class="bc-wrap">
 
-  <!-- ─── header ─────────────────────────────────────────── -->
-  <div class="bc-head">
+  <!-- Header -->
+  <div class="page-head">
     <div>
-      <div class="bc-title">Deployment Broadcast</div>
-      <div class="bc-sub" id="bc-subtitle">Loading machine data…</div>
+      <h1 class="page-heading">Deployment broadcast</h1>
+      <p class="page-subtitle" id="bc-subtitle">Loading machine data…</p>
     </div>
-    <div class="bc-actions">
-      <button class="btn btn-outline" onclick="loadData()">↺ Refresh</button>
-    </div>
-  </div>
-
-  <!-- ─── stat strip ─────────────────────────────────────── -->
-  <div class="stat-strip" id="stat-strip">
-    <div class="stat-box pulsing"><div class="stat-val">—</div><div class="stat-lbl">Total Machines</div></div>
-    <div class="stat-box pulsing"><div class="stat-val">—</div><div class="stat-lbl">Updated</div></div>
-    <div class="stat-box pulsing"><div class="stat-val">—</div><div class="stat-lbl">Need Update</div></div>
-    <div class="stat-box pulsing"><div class="stat-val">—</div><div class="stat-lbl">Online Now</div></div>
-  </div>
-
-  <!-- ─── deployment progress ────────────────────────────── -->
-  <div class="deploy-bar">
-    <div class="deploy-bar-label">
-      <span>Deployment Progress <span id="dp-version" style="color:var(--muted);"></span></span>
-      <span id="dp-pct" style="font-weight:700;">0%</span>
-    </div>
-    <div class="deploy-track">
-      <div class="deploy-fill" id="dp-fill" style="width:0%"></div>
+    <div class="page-actions">
+      <button type="button" class="btn btn-secondary btn-sm" onclick="loadData()">
+        <i class="fas fa-sync-alt" aria-hidden="true"></i> Refresh
+      </button>
     </div>
   </div>
 
-  <!-- ─── staged rollout controls ────────────────────────── -->
-  <div class="rollout-panel" id="rollout-panel">
-    <h3>⚡ Staged Rollout</h3>
-    <div class="rollout-row">
-      <span style="font-family:var(--mono);font-size:.82rem;color:var(--muted);">
-        Release to:
-      </span>
-      <div class="rollout-pct">
-        <button class="pct-btn" onclick="setRollout(10)">10%</button>
-        <button class="pct-btn" onclick="setRollout(25)">25%</button>
-        <button class="pct-btn" onclick="setRollout(50)">50%</button>
-        <button class="pct-btn" onclick="setRollout(75)">75%</button>
-        <button class="pct-btn" onclick="setRollout(100)">100% Everyone</button>
+  <!-- Stats -->
+  <div class="kpi-grid" id="stat-strip">
+    <div class="kpi-card pulsing"><div class="kpi-label"><i class="fas fa-desktop" aria-hidden="true"></i> Total machines</div><div class="kpi-value">—</div></div>
+    <div class="kpi-card kpi-success pulsing"><div class="kpi-label"><i class="fas fa-check-circle" aria-hidden="true"></i> Updated</div><div class="kpi-value">—</div></div>
+    <div class="kpi-card kpi-warning pulsing"><div class="kpi-label"><i class="fas fa-sync-alt" aria-hidden="true"></i> Need update</div><div class="kpi-value">—</div></div>
+    <div class="kpi-card kpi-info pulsing"><div class="kpi-label"><i class="fas fa-signal" aria-hidden="true"></i> Online now</div><div class="kpi-value">—</div></div>
+  </div>
+
+  <!-- Deployment progress -->
+  <div class="section-card">
+    <div class="section-card-body">
+      <div class="deploy-bar-label">
+        <span>Deployment progress <span id="dp-version" class="text-muted"></span></span>
+        <strong id="dp-pct">0%</strong>
       </div>
-      <span id="rollout-status" style="font-family:var(--mono);font-size:.75rem;color:var(--muted);"></span>
+      <div class="progress" style="height: 6px;">
+        <div class="progress-bar" id="dp-fill" role="progressbar" style="width:0%"></div>
+      </div>
     </div>
-    <p style="font-size:.78rem;color:var(--muted);margin:.75rem 0 0;font-family:var(--mono);">
-      Machines are assigned deterministically — the same machine always ends up in the same group.
-      Increase percentage gradually after confirming no issues.
-    </p>
   </div>
 
-  <!-- ─── machine list ─────────────────────────────────────  -->
-  <div class="bc-controls">
-    <input class="bc-search" type="text" id="search-box" placeholder="Search hostname or ID…"
-           oninput="renderMachines()">
-    <button class="bc-filter active" id="f-all"      onclick="setFilter('all', this)">All</button>
-    <button class="bc-filter"        id="f-updated"  onclick="setFilter('updated', this)">Updated</button>
-    <button class="bc-filter"        id="f-outdated" onclick="setFilter('outdated', this)">Need Update</button>
-    <button class="bc-filter"        id="f-online"   onclick="setFilter('online', this)">Online Now</button>
+  <!-- Staged rollout -->
+  <div class="section-card" id="rollout-panel">
+    <div class="section-card-head">
+      <h2 class="section-card-title"><i class="fas fa-layer-group" aria-hidden="true"></i> Staged rollout</h2>
+    </div>
+    <div class="section-card-body">
+      <div class="rollout-row">
+        <span class="rollout-label">Release to</span>
+        <div class="rollout-pct">
+          <button type="button" class="btn btn-secondary btn-sm pct-btn" onclick="setRollout(10)">10%</button>
+          <button type="button" class="btn btn-secondary btn-sm pct-btn" onclick="setRollout(25)">25%</button>
+          <button type="button" class="btn btn-secondary btn-sm pct-btn" onclick="setRollout(50)">50%</button>
+          <button type="button" class="btn btn-secondary btn-sm pct-btn" onclick="setRollout(75)">75%</button>
+          <button type="button" class="btn btn-secondary btn-sm pct-btn" onclick="setRollout(100)">100% (everyone)</button>
+        </div>
+        <span id="rollout-status" class="rollout-status"></span>
+      </div>
+      <p class="rollout-note">
+        Machines are assigned deterministically, so the same machine always ends up in the same group.
+        Increase the percentage gradually after confirming there are no issues.
+      </p>
+    </div>
+  </div>
+
+  <!-- Machine list -->
+  <div class="toolbar bc-controls">
+    <label class="search-field">
+      <i class="fas fa-search" aria-hidden="true"></i>
+      <input class="form-control" type="text" id="search-box" placeholder="Search hostname or ID…"
+             oninput="renderMachines()">
+    </label>
+    <button type="button" class="btn btn-secondary btn-sm bc-filter active" id="f-all"      onclick="setFilter('all', this)">All</button>
+    <button type="button" class="btn btn-secondary btn-sm bc-filter"        id="f-updated"  onclick="setFilter('updated', this)">Updated</button>
+    <button type="button" class="btn btn-secondary btn-sm bc-filter"        id="f-outdated" onclick="setFilter('outdated', this)">Need update</button>
+    <button type="button" class="btn btn-secondary btn-sm bc-filter"        id="f-online"   onclick="setFilter('online', this)">Online now</button>
   </div>
 
   <div id="machine-grid" class="machine-grid">
@@ -107,17 +116,17 @@ async function loadData() {
     loadRollout();
 
   } catch (e) {
-    document.getElementById('bc-subtitle').textContent = '⚠ Cannot reach HQ server: ' + e.message;
+    document.getElementById('bc-subtitle').textContent = 'Cannot reach HQ server: ' + e.message;
   }
 }
 
 function updateStats(s) {
   if (!s) return;
   document.getElementById('stat-strip').innerHTML = `
-    <div class="stat-box"><div class="stat-val">${s.total}</div><div class="stat-lbl">Total Machines</div></div>
-    <div class="stat-box accent"><div class="stat-val">${s.updated}</div><div class="stat-lbl">Updated</div></div>
-    <div class="stat-box"><div class="stat-val">${s.needs_update}</div><div class="stat-lbl">Need Update</div></div>
-    <div class="stat-box"><div class="stat-val">${s.online_now}</div><div class="stat-lbl">Online Now</div></div>
+    <div class="kpi-card"><div class="kpi-label"><i class="fas fa-desktop" aria-hidden="true"></i> Total machines</div><div class="kpi-value">${s.total}</div></div>
+    <div class="kpi-card kpi-success"><div class="kpi-label"><i class="fas fa-check-circle" aria-hidden="true"></i> Updated</div><div class="kpi-value">${s.updated}</div></div>
+    <div class="kpi-card kpi-warning"><div class="kpi-label"><i class="fas fa-sync-alt" aria-hidden="true"></i> Need update</div><div class="kpi-value">${s.needs_update}</div></div>
+    <div class="kpi-card kpi-info"><div class="kpi-label"><i class="fas fa-signal" aria-hidden="true"></i> Online now</div><div class="kpi-value">${s.online_now}</div></div>
   `;
 }
 
@@ -126,7 +135,7 @@ function updateProgress(s) {
   const pct = s.percent_updated || 0;
   document.getElementById('dp-fill').style.width = pct + '%';
   document.getElementById('dp-pct').textContent = pct + '%';
-  document.getElementById('dp-version').textContent = s.target_version ? `→ v${s.target_version}` : '';
+  document.getElementById('dp-version').textContent = s.target_version ? `· v${s.target_version}` : '';
 }
 
 function updateSubtitle(s) {
@@ -162,8 +171,9 @@ function renderMachines() {
 
   if (!filtered.length) {
     grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">
-      <span class="icon">🖥</span>
-      <div>No machines match the current filter.</div>
+      <div class="empty-state-icon" aria-hidden="true"><i class="fas fa-desktop"></i></div>
+      <h3>No machines found</h3>
+      <p>No machines match the current search or filter.</p>
     </div>`;
     return;
   }
@@ -174,13 +184,13 @@ function renderMachines() {
     const dotCls = m.is_online ? 'dot-green' : 'dot-grey';
 
     let statusChip = '';
-    if (m.is_updated)          statusChip = '<span class="chip chip-ok">✓ Updated</span>';
-    else if (m.needs_update)   statusChip = '<span class="chip chip-warn">⟳ Needs update</span>';
-    else                       statusChip = '<span class="chip chip-grey">—</span>';
+    if (m.is_updated)          statusChip = '<span class="badge bg-success">Updated</span>';
+    else if (m.needs_update)   statusChip = '<span class="badge bg-warning">Needs update</span>';
+    else                       statusChip = '<span class="badge bg-secondary">Unknown</span>';
 
     const onlineChip = m.is_online
-      ? '<span class="chip chip-blue">● Online</span>'
-      : `<span class="chip chip-grey">Offline · ${m.minutes_since_seen != null ? m.minutes_since_seen + 'm ago' : 'unknown'}</span>`;
+      ? '<span class="badge bg-info">Online</span>'
+      : `<span class="badge bg-secondary">Offline · ${m.minutes_since_seen != null ? m.minutes_since_seen + 'm ago' : 'unknown'}</span>`;
 
     const seen = m.last_seen ? new Date(m.last_seen).toLocaleString() : '?';
     const updated = m.last_updated ? new Date(m.last_updated).toLocaleDateString() : '—';
@@ -192,12 +202,12 @@ function renderMachines() {
           <div class="mc-host"><span class="dot ${dotCls}"></span>${m.hostname || 'Unknown host'}</div>
           <div class="mc-id">${m.client_id || '—'}</div>
         </div>
-        <span class="chip chip-grey" style="white-space:nowrap;">v${m.current_version || '?'}</span>
+        <span class="mono-chip">v${m.current_version || '?'}</span>
       </div>
       <div class="mc-chips">
         ${statusChip}
         ${onlineChip}
-        ${m.update_status === 'failed' ? '<span class="chip chip-err">✗ Failed</span>' : ''}
+        ${m.update_status === 'failed' ? '<span class="badge bg-danger">Failed</span>' : ''}
       </div>
       <div class="mc-meta">
         <span>IP: ${m.ip || '?'}</span>
@@ -240,7 +250,7 @@ async function setRollout(pct) {
     });
     if (!resp.ok) throw new Error(await resp.text());
     document.getElementById('rollout-status').textContent =
-      `✓ Set to ${pct}% for v${latestVersion}`;
+      `Set to ${pct}% for v${latestVersion}`;
     document.querySelectorAll('.pct-btn').forEach(btn => {
       btn.classList.toggle('active', parseInt(btn.textContent) === pct);
     });

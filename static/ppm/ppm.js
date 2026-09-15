@@ -294,11 +294,11 @@ $(document).ready(function () {
 
     if (checkedCount > 0) {
       $btn.prop('disabled', false)
-        .removeClass('btn-light').addClass('btn-primary')
+        .removeClass('btn-secondary').addClass('btn-primary')
         .html('<i class="fas fa-calendar-plus me-1"></i>Schedule Selected (' + checkedCount + ')');
     } else {
       $btn.prop('disabled', true)
-        .removeClass('btn-primary').addClass('btn-light')
+        .removeClass('btn-primary').addClass('btn-secondary')
         .html('<i class="fas fa-calendar-plus me-1"></i>Schedule Selected');
     }
   }
@@ -379,7 +379,7 @@ $(document).ready(function () {
 
     $('#bulkDeleteSchedules').on('click', function () {
       var count = $('.schedule-checkbox:checked').length;
-      if (count > 0 && confirm('⚠️ Delete ' + count + ' schedule(s)? This cannot be undone!')) {
+      if (count > 0 && confirm('Delete ' + count + ' schedule(s)? This cannot be undone.')) {
         $('#bulkAction').val('delete');
         $('#bulkActionForm').submit();
       }

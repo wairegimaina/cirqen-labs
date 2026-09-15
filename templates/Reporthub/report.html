@@ -18,22 +18,20 @@
     </div>
 
     <div class="hod-header">
-        <h2>
-            {{ report_type|title }} Report
-            <span class="text-muted fs-6 fw-normal ms-2">
-                | {{ workshop.name|default:"All Workshops" }}
-            </span>
-        </h2>
+        <div>
+            <h2>{{ report_type|title }} report</h2>
+            <p>{{ workshop.name|default:"All Workshops" }}</p>
+        </div>
 
         <div class="header-actions">
             <a id="download-pdf"
                href="{% url 'report_hub:download_pdf_report' %}"
-               class="btn btn-danger btn-sm">
+               class="btn btn-secondary btn-sm">
                <i class="fas fa-file-pdf me-1"></i> PDF
             </a>
             <a id="export-csv"
                href="{% url 'report_hub:export_report' %}"
-               class="btn btn-success btn-sm">
+               class="btn btn-secondary btn-sm">
                <i class="fas fa-file-csv me-1"></i> CSV
             </a>
         </div>
@@ -43,23 +41,23 @@
 
         <div class="annual-summary-grid mb-4">
             <div class="kpi-card kpi-primary">
+                <div class="kpi-label">Total jobs</div>
                 <div class="kpi-value">{{ annual_data.total_approved|add:annual_data.total_waiting|floatformat:0 }}</div>
-                <div class="kpi-label">Total Jobs</div>
             </div>
 
             <div class="kpi-card kpi-success">
-                <div class="kpi-value">{{ annual_data.total_approved|floatformat:0 }}</div>
                 <div class="kpi-label">Completed</div>
+                <div class="kpi-value">{{ annual_data.total_approved|floatformat:0 }}</div>
             </div>
 
             <div class="kpi-card kpi-info">
-                <div class="kpi-value">{% widthratio annual_data.total_approved annual_data.total_approved|add:annual_data.total_waiting 100 %}%</div>
                 <div class="kpi-label">Efficiency</div>
+                <div class="kpi-value">{% widthratio annual_data.total_approved annual_data.total_approved|add:annual_data.total_waiting 100 %}%</div>
             </div>
 
             <div class="kpi-card kpi-warning">
-                <div class="kpi-value">{{ annual_data.active_technicians|floatformat:0 }}</div>
                 <div class="kpi-label">Technicians</div>
+                <div class="kpi-value">{{ annual_data.active_technicians|floatformat:0 }}</div>
             </div>
         </div>
 
@@ -67,14 +65,14 @@
         <div class="alert alert-info d-flex align-items-center mb-4" role="alert">
             <i class="fas fa-trophy text-warning me-2"></i>
             <div>
-                <strong>Peak Performance Month:</strong> {{ annual_data.peak_month }}
+                <strong>Peak performance month:</strong> {{ annual_data.peak_month }}
             </div>
         </div>
         {% endif %}
 
         {% if annual_data.insights or annual_data.recommendations %}
         <div class="insights-strip mb-4">
-            <h5><i class="fas fa-lightbulb text-warning"></i> Key Insights</h5>
+            <h5><i class="fas fa-lightbulb text-warning"></i> Key insights</h5>
             <div class="insights-content">
                 {% if annual_data.insights %}
                     <p class="mb-2"><strong>Analysis:</strong> {{ annual_data.insights }}</p>
@@ -89,7 +87,7 @@
         {% if annual_data.monthly_breakdown %}
         <div class="chart-card mb-4">
             <div class="chart-header">
-                <h4>Monthly Performance Trends</h4>
+                <h4>Monthly performance trends</h4>
                 <i class="fas fa-chart-area text-muted"></i>
             </div>
             <div class="chart-container" style="position: relative; height: 350px;">
@@ -103,13 +101,13 @@
         {% include 'Reporthub/partials/report_charts.html' %}
     </div>
 
-    <div id="table-container" class="report-table-container mb-4">
+    <div id="table-container" class="report-table-container section-card mb-4">
         {% include 'Reporthub/partials/report_table.html' %}
     </div>
 
     <div class="card mb-4">
-        <div class="card-header bg-transparent border-0 pt-3 pb-0">
-            <h5 class="card-title mb-0"><i class="fas fa-comment-alt me-2 text-primary"></i>Remarks</h5>
+        <div class="card-header">
+            <h5 class="card-title mb-0"><i class="fas fa-comment-alt me-2 text-muted"></i>Remarks</h5>
         </div>
         <div class="card-body">
             <form method="POST" action="{% url 'report_hub:report_hub' %}">
@@ -128,7 +126,7 @@
 
                 <div class="d-flex justify-content-end align-items-center">
                     {% if report.submitted_at %}
-                        <div class="text-success fw-bold">
+                        <div class="text-success small">
                             <i class="fas fa-check-circle me-1"></i> Submitted on {{ report.submitted_at|date:"F d, Y H:i" }} EAT
                         </div>
                     {% else %}
@@ -136,7 +134,7 @@
                             <span class="text-muted small me-3">Only Engineer In-Charge can submit remarks.</span>
                         {% endif %}
                         <button type="submit" class="btn btn-primary" {% if not is_engineer_incharge %}disabled{% endif %}>
-                            <i class="fas fa-paper-plane me-2"></i> Submit Remarks
+                            <i class="fas fa-paper-plane me-1"></i> Submit remarks
                         </button>
                     {% endif %}
                 </div>
@@ -160,7 +158,8 @@
     };
 </script>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{# Local copy — the desktop build runs offline #}
+<script src="{% static 'js/chart.umd.min.js' %}"></script>
 <script src="{% static 'reporthub/Report.js' %}"></script>
 {% endblock %}
 

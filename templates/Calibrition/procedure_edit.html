@@ -4,57 +4,24 @@
 {% block title %}Edit Procedure - {{ procedure.name }} - Equiper National Hospital{% endblock %}
 
 {% block extra_css %}
-<!-- Page-specific CSS -->
+<link rel="stylesheet" href="{% static 'calibrition/procedure-form.css' %}" />
 {% endblock %}
 
 {% block page_title %}Edit Procedure - {{ procedure.name }}{% endblock %}
 
 {% block content %}
-<!-- Navigation Bar -->
-    <nav class="navbar navbar-expand-lg navbar-dark">
-        <div class="container">
-            <a class="navbar-brand" href="/calibration/calsoft_dashboard/">Calibration Procedure System</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav ms-auto">
-                    <li class="nav-item">
-                        <a class="nav-link" href="/calibration/procedure_create/">Create Procedure</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/calibration/procedure_list/">Manage Procedures</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link active" href="/calibration/procedure_list/">Edit Procedures</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/calibration/calsoft_dashboard/">Dashboard</a>
-                    </li>
-                </ul>
-            </div>
-        </div>
-    </nav>
 
-    <div class="container-fluid mt-4">
-        <!-- Header Section -->
-        <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="page-wrap">
+        <div class="page-head">
             <div>
-                <h1 class="h3 text-gray-800 mb-0">
-                    <i class="fas fa-edit mr-2"></i> Edit Procedure: {{ procedure.name }}
-                </h1>
                 <nav aria-label="breadcrumb">
-                    <ol class="breadcrumb">
+                    <ol class="breadcrumb mb-1">
                         <li class="breadcrumb-item"><a href="{% url 'calibration:procedure_list' %}">Procedures</a></li>
                         <li class="breadcrumb-item"><a href="{% url 'calibration:procedure_detail' pk=procedure.pk %}">{{ procedure.name }}</a></li>
                         <li class="breadcrumb-item active" aria-current="page">Edit</li>
                     </ol>
                 </nav>
-            </div>
-            <div>
-                <a href="{% url 'calibration:procedure_detail' pk=procedure.pk %}" class="btn btn-secondary">
-                    <i class="fas fa-times mr-2"></i> Cancel
-                </a>
+                <h2 class="page-heading">Edit procedure</h2>
             </div>
         </div>
 
@@ -62,7 +29,7 @@
         {% if form.errors or parameter_formset.errors %}
         <div class="alert alert-danger">
             <h5 class="alert-heading">
-                <i class="fas fa-exclamation-triangle mr-2"></i>Please correct the errors below
+                Please correct the errors below
             </h5>
             <ul class="mb-0">
                 {% for field in form %}
@@ -86,8 +53,8 @@
 
             <!-- Main Procedure Form -->
             <div class="card mb-4">
-                <div class="card-header bg-primary text-white">
-                    <h5 class="mb-0"><i class="fas fa-info-circle mr-2"></i>Basic Information</h5>
+                <div class="card-header">
+                    <h5 class="mb-0">Basic information</h5>
                 </div>
                 <div class="card-body">
                     <div class="row">
@@ -140,10 +107,10 @@
 
             <!-- Parameters Section -->
             <div class="card mb-4">
-                <div class="card-header d-flex justify-content-between align-items-center bg-primary text-white">
-                    <h5 class="mb-0"><i class="fas fa-sliders-h mr-2"></i>Parameters</h5>
-                    <button type="button" class="btn btn-sm btn-primary" id="addParameter">
-                        <i class="fas fa-plus mr-2"></i>Add Parameter
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Parameters</h5>
+                    <button type="button" class="btn btn-sm btn-secondary" id="addParameter">
+                        <i class="fas fa-plus"></i>Add Parameter
                     </button>
                 </div>
                 <div class="card-body">
@@ -162,7 +129,7 @@
                                     {% endif %}
                                 </h6>
                                 <div>
-                                    <button type="button" class="btn btn-sm btn-danger delete-parameter" data-index="{{ forloop.counter0 }}">
+                                    <button type="button" class="btn btn-sm btn-outline-danger delete-parameter" data-index="{{ forloop.counter0 }}">
                                         <i class="fas fa-trash"></i> Remove
                                     </button>
                                 </div>
@@ -249,9 +216,9 @@
                                  id="sub-parameter-container-{{ forloop.counter0 }}">
                                 <div class="d-flex justify-content-between align-items-center mb-3">
                                     <h6 class="mb-0">Sub Parameters</h6>
-                                    <button type="button" class="btn btn-sm btn-primary add-sub-parameter"
+                                    <button type="button" class="btn btn-sm btn-secondary add-sub-parameter"
                                             data-parent-index="{{ forloop.counter0 }}">
-                                        <i class="fas fa-plus mr-2"></i>Add Sub Parameter
+                                        <i class="fas fa-plus"></i>Add Sub Parameter
                                     </button>
                                 </div>
 
@@ -269,7 +236,7 @@
 
                                             <div class="d-flex justify-content-between align-items-center mb-3">
                                                 <h6 class="mb-0">{{ sub_param.name }}</h6>
-                                                <button type="button" class="btn btn-sm btn-danger delete-sub-parameter">
+                                                <button type="button" class="btn btn-sm btn-outline-danger delete-sub-parameter">
                                                     <i class="fas fa-trash"></i> Remove
                                                 </button>
                                             </div>
@@ -314,9 +281,9 @@
                                  id="set-value-forms-{{ forloop.counter0 }}">
                                 <div class="d-flex justify-content-between align-items-center mb-3">
                                     <h6 class="mb-0">Set Values</h6>
-                                    <button type="button" class="btn btn-sm btn-primary add-set-value"
+                                    <button type="button" class="btn btn-sm btn-secondary add-set-value"
                                             data-parent-index="{{ forloop.counter0 }}">
-                                        <i class="fas fa-plus mr-2"></i>Add Set Value
+                                        <i class="fas fa-plus"></i>Add Set Value
                                     </button>
                                 </div>
 
@@ -348,7 +315,7 @@
                                                                value="{{ sv.order }}">
                                                     </div>
                                                     <div class="col-md-2">
-                                                        <button type="button" class="btn btn-sm btn-danger delete-set-value" aria-label="Remove set value">
+                                                        <button type="button" class="btn btn-sm btn-outline-danger delete-set-value" aria-label="Remove set value">
                                                             <i class="fas fa-trash"></i>
                                                         </button>
                                                     </div>
@@ -374,7 +341,7 @@
                                                            name="parameters-{{ forloop.counter0 }}-set_values-0-order" value="0">
                                                 </div>
                                                 <div class="col-md-2">
-                                                    <button type="button" class="btn btn-sm btn-danger delete-set-value" aria-label="Remove set value">
+                                                    <button type="button" class="btn btn-sm btn-outline-danger delete-set-value" aria-label="Remove set value">
                                                         <i class="fas fa-trash"></i>
                                                     </button>
                                                 </div>
@@ -390,29 +357,16 @@
             </div>
 
             <!-- Form Actions -->
-            <div class="card">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between">
-                        <button type="submit" class="btn btn-primary btn-lg">
-                            <i class="fas fa-save mr-2"></i> Save Changes
-                        </button>
-                        <div>
-                            <button type="button" class="btn btn-secondary btn-lg me-2" id="clearForm">
-                                <i class="fas fa-undo mr-2"></i> Reset Form
-                            </button>
-                            <a href="{% url 'calibration:procedure_detail' pk=procedure.pk %}" class="btn btn-outline-secondary btn-lg">
-                                <i class="fas fa-times mr-2"></i> Cancel
-                            </a>
-                        </div>
-                    </div>
-                </div>
+            <div class="form-actions">
+                <a href="{% url 'calibration:procedure_detail' pk=procedure.pk %}" class="btn btn-link me-auto">Cancel</a>
+                <button type="button" class="btn btn-secondary" id="clearForm">Reset form</button>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save" aria-hidden="true"></i> Save changes
+                </button>
             </div>
         </form>
     </div>
 
-    <!-- Bootstrap Bundle with Popper -->
-    <!-- jQuery -->
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
     <script>
         // Enhanced JavaScript for Edit Procedure
@@ -729,7 +683,7 @@
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <h6 class="mb-0">New Parameter</h6>
                         <div>
-                            <button type="button" class="btn btn-sm btn-danger delete-parameter" data-index="${newIndex}">
+                            <button type="button" class="btn btn-sm btn-outline-danger delete-parameter" data-index="${newIndex}">
                                 <i class="fas fa-trash"></i> Remove
                             </button>
                         </div>
@@ -808,9 +762,9 @@
                     <div class="sub-formset-container hidden" id="sub-parameter-container-${newIndex}">
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <h6 class="mb-0">Sub Parameters</h6>
-                            <button type="button" class="btn btn-sm btn-primary add-sub-parameter"
+                            <button type="button" class="btn btn-sm btn-secondary add-sub-parameter"
                                     data-parent-index="${newIndex}">
-                                <i class="fas fa-plus mr-2"></i>Add Sub Parameter
+                                <i class="fas fa-plus"></i>Add Sub Parameter
                             </button>
                         </div>
 
@@ -826,9 +780,9 @@
                     <div class="set-value-formset sub-formset-container" id="set-value-forms-${newIndex}">
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <h6 class="mb-0">Set Values</h6>
-                            <button type="button" class="btn btn-sm btn-primary add-set-value"
+                            <button type="button" class="btn btn-sm btn-secondary add-set-value"
                                     data-parent-index="${newIndex}">
-                                <i class="fas fa-plus mr-2"></i>Add Set Value
+                                <i class="fas fa-plus"></i>Add Set Value
                             </button>
                         </div>
 
@@ -854,7 +808,7 @@
                                                name="parameters-${newIndex}-set_values-0-order" value="0">
                                     </div>
                                     <div class="col-md-2">
-                                        <button type="button" class="btn btn-sm btn-danger delete-set-value" aria-label="Remove set value">
+                                        <button type="button" class="btn btn-sm btn-outline-danger delete-set-value" aria-label="Remove set value">
                                             <i class="fas fa-trash"></i>
                                         </button>
                                     </div>
@@ -890,7 +844,7 @@
 
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <h6 class="mb-0">New Sub Parameter</h6>
-                        <button type="button" class="btn btn-sm btn-danger delete-sub-parameter">
+                        <button type="button" class="btn btn-sm btn-outline-danger delete-sub-parameter">
                             <i class="fas fa-trash"></i> Remove
                         </button>
                     </div>
@@ -957,7 +911,7 @@
                                    name="parameters-${parameterIndex}-set_values-${setValueCount}-order" value="${setValueCount}">
                         </div>
                         <div class="col-md-2">
-                            <button type="button" class="btn btn-sm btn-danger delete-set-value" aria-label="Remove set value">
+                            <button type="button" class="btn btn-sm btn-outline-danger delete-set-value" aria-label="Remove set value">
                                 <i class="fas fa-trash"></i>
                             </button>
                         </div>

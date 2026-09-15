@@ -141,7 +141,6 @@
   inset: 0;
   background-image: radial-gradient(circle, var(--hero-dot) 1px, transparent 1px);
   background-size: 32px 32px;
-  animation: heroDrift 28s linear infinite;
   pointer-events: none;
 }
 
@@ -192,7 +191,6 @@
 /* Logo badge */
 .hero-logo {
   margin-bottom: var(--sp-2xl);
-  animation: heroFloat 4s ease-in-out infinite;
 }
 
 @keyframes heroFloat {
@@ -395,7 +393,6 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: iconPulse 2.5s ease-in-out infinite;
 }
 
 @keyframes iconPulse {
@@ -417,11 +414,11 @@
 
 .login-header h2,
 .header-section h2 {
-  font-size: 1.875rem;
+  font-size: 1.5rem;
   font-weight: 600;
   color: var(--text-primary);
   margin-bottom: var(--sp-sm);
-  letter-spacing: -0.5px;
+  letter-spacing: -.01em;
   text-align: center;
 }
 
@@ -440,10 +437,12 @@
 
 /* Input groups (login page icon + field layout) */
 .input-group {
-  margin-bottom: 1.4rem;
+  display: block;
+  margin-bottom: 1rem;
 }
 
 .input-group>div {
+  width: 100%;
   position: relative;
   display: flex;
   align-items: center;
@@ -453,7 +452,7 @@
   position: absolute;
   left: var(--sp-lg);
   color: var(--text-muted);
-  font-size: 1rem;
+  font-size: .875rem;
   z-index: 1;
   pointer-events: none;
 }
@@ -475,7 +474,7 @@ input[type="email"],
 input[type="text"],
 input[type="password"] {
   width: 100%;
-  padding: 0.9rem var(--sp-lg) 0.9rem 3.25rem;
+  padding: .6875rem var(--sp-lg) .6875rem 2.75rem;
   font-size: 0.9375rem;
   color: var(--text-primary);
   background: var(--input-bg);
@@ -674,18 +673,17 @@ input::placeholder {
 .login-btn,
 .btn.btn-primary {
   width: 100%;
-  padding: 0.9rem var(--sp-xl);
-  font-size: 1rem;
+  padding: .6875rem var(--sp-xl);
+  font-size: .9375rem;
   font-weight: 600;
-  background: var(--primary-gradient);
+  background: var(--primary-color);
   border: none;
   border-radius: var(--r-lg);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: var(--sp-md);
-  box-shadow: var(--shadow-md);
+  gap: var(--sp-sm, .5rem);
   position: relative;
   overflow: hidden;
   letter-spacing: 0.01em;
@@ -703,26 +701,10 @@ input::placeholder {
   color: #000000;
 }
 
-/* Shimmer sweep */
-.login-btn::before,
-.btn.btn-primary::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: transparent;
-  transition: left 0.5s;
-}
-
-.login-btn:hover::before,
-.btn.btn-primary:hover::before {
-  left: 100%;
-}
-
+/* Hover: slightly deeper fill */
 .login-btn:hover,
 .btn.btn-primary:hover {
+  background: color-mix(in srgb, var(--primary-color) 88%, #000);
 }
 
 .login-btn:active,
@@ -731,7 +713,7 @@ input::placeholder {
 }
 
 .login-btn i {
-  font-size: 1.125rem;
+  font-size: .875rem;
 }
 
 .login-btn:hover i {
@@ -1663,4 +1645,9 @@ input::placeholder {
     box-shadow: none;
     border: 1px solid #ccc;
   }
+}
+
+/* Respect reduced-motion: show everything in its final state */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
 }

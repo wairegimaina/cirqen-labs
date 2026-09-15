@@ -4,7 +4,7 @@
     <!-- Status Distribution Chart -->
     <div class="col-md-6 mb-4">
       <div class="chart-card">
-        <div class="card-header bg-primary text-white">
+        <div class="card-header">
           <h5 class="mb-0">
             <i class="fas fa-chart-bar me-2"></i>Job Card Status Distribution
           </h5>
@@ -23,7 +23,7 @@
     <!-- Annual Trend Chart (shown only for annual reports) -->
     <div class="col-md-6 mb-4" id="annual-chart-column" style="{% if report_type != 'annual' %}display: none;{% endif %}">
       <div class="chart-card">
-        <div class="card-header bg-info text-white">
+        <div class="card-header">
           <h5 class="mb-0">
             <i class="fas fa-chart-line me-2"></i>Annual Performance Trends
           </h5>
@@ -42,7 +42,7 @@
     <!-- Performance Metrics (shown for non-annual reports) -->
     <div class="col-md-6 mb-4" id="metrics-column" style="{% if report_type == 'annual' %}display: none;{% endif %}">
       <div class="chart-card">
-        <div class="card-header bg-success text-white">
+        <div class="card-header">
           <h5 class="mb-0">
             <i class="fas fa-tachometer-alt me-2"></i>Performance Metrics
           </h5>
@@ -51,33 +51,33 @@
           <!-- Key Metrics Grid -->
           <div class="row g-3 mb-3">
             <div class="col-6">
-              <div class="metric-box mb-success text-center p-3 border rounded">
-                <small class="text-muted d-block mb-1">APPROVAL RATE</small>
-                <h3 class="mb-0" style="color: var(--success-color);">
+              <div class="metric-box mb-success">
+                <small class="metric-label">Approval rate</small>
+                <h3 class="metric-value">
                   {% widthratio total_approved|default:0 total_waiting_approval|default:0|add:total_approved|default:0|add:total_declined|default:0 100 %}%
                 </h3>
               </div>
             </div>
             <div class="col-6">
-              <div class="metric-box mb-warning text-center p-3 border rounded">
-                <small class="text-muted d-block mb-1">PENDING RATE</small>
-                <h3 class="mb-0" style="color: var(--warning-color);">
+              <div class="metric-box mb-warning">
+                <small class="metric-label">Pending rate</small>
+                <h3 class="metric-value">
                   {% widthratio total_waiting_approval|default:0 total_waiting_approval|default:0|add:total_approved|default:0|add:total_declined|default:0 100 %}%
                 </h3>
               </div>
             </div>
             <div class="col-6">
-              <div class="metric-box mb-danger text-center p-3 border rounded">
-                <small class="text-muted d-block mb-1">DECLINE RATE</small>
-                <h3 class="mb-0" style="color: var(--danger-color);">
+              <div class="metric-box mb-danger">
+                <small class="metric-label">Decline rate</small>
+                <h3 class="metric-value">
                   {% widthratio total_declined|default:0 total_waiting_approval|default:0|add:total_approved|default:0|add:total_declined|default:0 100 %}%
                 </h3>
               </div>
             </div>
             <div class="col-6">
-              <div class="metric-box mb-primary text-center p-3 border rounded">
-                <small class="text-muted d-block mb-1">TOTAL CARDS</small>
-                <h3 class="mb-0" style="color: var(--primary-color);">
+              <div class="metric-box mb-primary">
+                <small class="metric-label">Total cards</small>
+                <h3 class="metric-value">
                   {{ total_waiting_approval|default:0|add:total_approved|default:0|add:total_declined|default:0 }}
                 </h3>
               </div>
@@ -86,7 +86,7 @@
 
           <!-- Status Progress Bars -->
           <div class="mt-3">
-            <h6 class="text-muted small mb-3">STATUS BREAKDOWN</h6>
+            <h6 class="subsection-title">Status breakdown</h6>
 
             <!-- Waiting Approval -->
             <div class="mb-3">
@@ -94,7 +94,7 @@
                 <span class="small"><i class="fas fa-clock text-warning me-1"></i>Waiting Approval</span>
                 <strong class="small">{{ total_waiting_approval|default:0 }}</strong>
               </div>
-              <div class="progress" style="height: 10px;">
+              <div class="progress" style="height: 6px;">
                 <div class="progress-bar" role="progressbar" style="background: var(--warning-color); width: {% widthratio total_waiting_approval|default:0 total_waiting_approval|default:0|add:total_approved|default:0|add:total_declined|default:0 100 %}%"
                      aria-valuenow="{{ total_waiting_approval|default:0 }}"
                      aria-valuemin="0"
@@ -109,7 +109,7 @@
                 <span class="small"><i class="fas fa-check-circle text-success me-1"></i>Approved</span>
                 <strong class="small">{{ total_approved|default:0 }}</strong>
               </div>
-              <div class="progress" style="height: 10px;">
+              <div class="progress" style="height: 6px;">
                 <div class="progress-bar" role="progressbar" style="background: var(--success-color); width: {% widthratio total_approved|default:0 total_waiting_approval|default:0|add:total_approved|default:0|add:total_declined|default:0 100 %}%"
                      aria-valuenow="{{ total_approved|default:0 }}"
                      aria-valuemin="0"
@@ -124,7 +124,7 @@
                 <span class="small"><i class="fas fa-times-circle text-danger me-1"></i>Declined</span>
                 <strong class="small">{{ total_declined|default:0 }}</strong>
               </div>
-              <div class="progress" style="height: 10px;">
+              <div class="progress" style="height: 6px;">
                 <div class="progress-bar" role="progressbar" style="background: var(--danger-color); width: {% widthratio total_declined|default:0 total_waiting_approval|default:0|add:total_approved|default:0|add:total_declined|default:0 100 %}%"
                      aria-valuenow="{{ total_declined|default:0 }}"
                      aria-valuemin="0"

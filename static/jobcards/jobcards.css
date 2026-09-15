@@ -49,7 +49,7 @@
   align-items: center;
   margin-bottom: 1.1rem;
   padding-bottom: 0.75rem;
-  border-bottom: 2px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .section-header h2 {
@@ -402,7 +402,7 @@ input[type="number"].form-control::-webkit-outer-spin-button {
 
 /* ── Card Panels ──────────────────────────── */
 .card-panel {
-  background: var(--bg-tertiary);
+  background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   padding: 1rem 1.25rem;
@@ -417,7 +417,7 @@ input[type="number"].form-control::-webkit-outer-spin-button {
 }
 
 .panel-header h5 {
-  color: var(--primary-color);
+  color: var(--text-primary);
   font-weight: 600;
   font-size: 0.95rem;
   margin: 0;
@@ -428,7 +428,7 @@ input[type="number"].form-control::-webkit-outer-spin-button {
 
 /* ── Equipment Info Box ───────────────────── */
 .info-box {
-  background: var(--bg-tertiary);
+  background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   padding: 0.85rem 1rem;
@@ -436,7 +436,7 @@ input[type="number"].form-control::-webkit-outer-spin-button {
 }
 
 .info-box h5 {
-  color: var(--primary-color);
+  color: var(--text-primary);
   font-weight: 600;
   font-size: 0.9rem;
   margin: 0 0 0.75rem 0;
@@ -523,28 +523,26 @@ input[type="number"].form-control::-webkit-outer-spin-button {
 .cost-display {
   font-size: 1rem;
   font-weight: 600;
-  color: var(--primary-color);
-}
-
-.grand-total-box {
-  background: var(--bg-secondary);
-  border: 1px dashed var(--border-color);
-  border-radius: var(--radius-sm);
-  padding: 1rem 1.25rem;
-  margin-top: 1rem;
-  display: flex;
-  justify-content: flex-end;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.4rem;
-  font-size: 0.95rem;
   color: var(--text-primary);
 }
 
+.grand-total-box {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: .25rem;
+  margin-top: 1rem;
+  padding-top: .75rem;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  border-top: 1px solid var(--border-color);
+}
+
 .grand-total-box>div:last-child {
-  font-size: 1.2rem;
+  font-size: 1.125rem;
   font-weight: 600;
-  color: var(--success-color);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
 }
 
 /* ── Signature Section ────────────────────── */
@@ -553,13 +551,19 @@ input[type="number"].form-control::-webkit-outer-spin-button {
 }
 
 .signature-section h5 {
-  color: var(--primary-color);
+  color: var(--text-primary);
   font-weight: 600;
   font-size: 0.95rem;
   margin-bottom: 0.75rem;
   display: flex;
   align-items: center;
   gap: 0.4rem;
+}
+
+.panel-header h5 i,
+.info-box h5 i,
+.signature-section h5 i {
+  color: var(--text-muted);
 }
 
 .signature-toggle {
@@ -684,11 +688,7 @@ input[type="number"].form-control::-webkit-outer-spin-button {
 
 /* ── Buttons ──────────────────────────────── */
 .full-width-btn {
-  width: 100%;
-  padding: 0.8rem;
-  font-size: 1rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  min-width: 160px;
 }
 
 .form-actions {
@@ -696,9 +696,10 @@ input[type="number"].form-control::-webkit-outer-spin-button {
 }
 
 .dual-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: .5rem;
 }
 
 @media (max-width: 480px) {

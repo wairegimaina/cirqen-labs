@@ -1,75 +1,105 @@
 /* =================================================
-   REPORTHUB — Theme-aware shared styles
+   REPORTHUB — shared styles
+   Cards, KPI tiles and tables come from components.css;
+   this file covers the chart cards, metric tiles and summary.
    ================================================= */
 
-/* Card header overrides for report charts */
-.card-header.bg-primary { background: var(--primary-gradient) !important; color: var(--bg-card) !important; }
-.card-header.bg-info    { background: var(--info-color) !important; color: var(--bg-card) !important; }
-.card-header.bg-success { background: var(--success-color) !important; color: var(--bg-card) !important; }
-.card-header.bg-warning { background: var(--warning-color) !important; color: var(--bg-card) !important; }
-.card-header.bg-danger  { background: var(--danger-color) !important; color: var(--bg-card) !important; }
-
-/* Metric boxes — replace bg-success/bg-warning/bg-danger/bg-primary bg-opacity-10 */
-.metric-box {
-  border-radius: var(--radius-lg);
-  transition: transform 0.2s ease;
-}
-.metric-box:hover {
-}
-
-.metric-box.mb-success {
-  background: color-mix(in srgb, var(--success-color) 10%, var(--bg-card));
-  border: 1px solid color-mix(in srgb, var(--success-color) 25%, transparent);
-}
-.metric-box.mb-warning {
-  background: color-mix(in srgb, var(--warning-color) 10%, var(--bg-card));
-  border: 1px solid color-mix(in srgb, var(--warning-color) 25%, transparent);
-}
-.metric-box.mb-danger {
-  background: color-mix(in srgb, var(--danger-color) 10%, var(--bg-card));
-  border: 1px solid color-mix(in srgb, var(--danger-color) 25%, transparent);
-}
-.metric-box.mb-primary {
-  background: color-mix(in srgb, var(--primary-color) 10%, var(--bg-card));
-  border: 1px solid color-mix(in srgb, var(--primary-color) 25%, transparent);
-}
-
-/* Progress bar track */
-.progress {
-  border-radius: var(--radius-sm);
-  background-color: var(--border-light);
-}
-
-.progress-bar {
-  transition: width 0.6s ease;
-}
-
-/* Chart card shared */
+/* Chart cards: neutral header like every other card */
 .chart-card {
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
-  overflow: hidden;
-  box-shadow: var(--shadow-sm);
-  transition: box-shadow 0.2s ease, transform 0.2s ease;
-}
-.chart-card:hover {
+  box-shadow: var(--card-shadow);
 }
 .chart-card .card-header {
-  font-weight: 600;
-  font-size: 0.95rem;
+  padding: .875rem 1.25rem;
+  background: var(--bg-card);
   border-bottom: 1px solid var(--border-color);
 }
-.chart-card .card-body {
-  background: var(--bg-card);
+.chart-card .card-header h5 {
+  margin: 0;
+  font-size: .9375rem;
+  font-weight: 600;
+  color: var(--text-primary);
 }
+.chart-card .card-header h5 i { color: var(--text-muted); }
+.chart-card .card-body { padding: 1.25rem; background: var(--bg-card); }
 .chart-card .card-footer {
-  background: var(--bg-secondary);
-  border-top: 1px solid var(--border-color);
-  font-size: 0.78rem;
+  padding: .625rem 1.25rem;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
+  background: var(--bg-card);
+  border-top: 1px solid var(--border-color);
 }
 
 .chart-wrapper {
   position: relative;
   width: 100%;
+}
+
+/* Metric tiles: neutral, the variant only colours the marker dot */
+.metric-box {
+  --metric-accent: var(--text-muted);
+  height: 100%;
+  padding: .875rem 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+.metric-box.mb-success { --metric-accent: var(--success-color); }
+.metric-box.mb-warning { --metric-accent: var(--warning-color); }
+.metric-box.mb-danger  { --metric-accent: var(--danger-color); }
+.metric-box.mb-primary { --metric-accent: var(--primary-color); }
+
+.metric-label {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  margin-bottom: .25rem;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+.metric-label::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--metric-accent);
+}
+.metric-value {
+  margin: 0;
+  font-size: var(--fs-xl);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+/* Progress bar track */
+.progress {
+  border-radius: var(--radius-pill);
+  background-color: var(--bg-tertiary);
+}
+.progress-bar { transition: width .6s ease; }
+
+/* Summary partial: secondary figures under the KPI tiles */
+.summary-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem 2rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  border-top: 1px solid var(--border-color);
+}
+.summary-meta strong {
+  margin-left: .375rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
 }

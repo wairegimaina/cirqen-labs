@@ -28,7 +28,8 @@
   padding: .875rem 1rem;
   margin: 0 0 1rem;
 }
-.sub-formset-container h4 {
+.sub-formset-container h4,
+.sub-formset-container h6 {
   font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--text-secondary);

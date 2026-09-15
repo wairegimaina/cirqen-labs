@@ -8,20 +8,20 @@
 {% endblock %}
 
 {% block page_title %}
-  <i class="fas fa-user-tie"></i> Head of Department Dashboard
+  Head of Department Dashboard
 {% endblock %}
 
 {% block content %}
 
 {% if user.userprofile.role != 'HOD' %}
   <div class="alert alert-danger">
-    <h4><i class="fas fa-ban"></i> Access Denied</h4>
+    <h4 class="alert-heading">Access denied</h4>
     <p>
       This dashboard is restricted to Head of Department accounts.
       Your current role is <strong>{{ user.userprofile.role }}</strong>.
     </p>
     <a href="{% url 'dashboard:dashboard-main' %}" class="btn btn-secondary mt-2">
-      <i class="fas fa-arrow-left"></i> Back to Dashboard
+      <i class="fas fa-arrow-left" aria-hidden="true"></i> Back to dashboard
     </a>
   </div>
 {% else %}
@@ -31,9 +31,9 @@
   <!-- Header -->
   <div class="dash-header">
     <div class="dash-header__left">
-      <div class="dash-greeting">{{ greeting }}</div>
+      <h2 class="dash-greeting">{{ greeting }}</h2>
       <div class="dash-sub">
-        HOD Dashboard · <span id="live-time"></span>
+        HOD dashboard · <span id="live-time"></span>
       </div>
     </div>
     <div class="dash-header__right">
@@ -43,314 +43,217 @@
 
   <!-- Alert banner (hidden by default) -->
   <div class="alert-banner" id="alert-banner" style="display:none">
-    <i class="fas fa-exclamation-triangle"></i>
+    <i class="fas fa-exclamation-triangle" aria-hidden="true"></i>
     <span id="alert-text"></span>
   </div>
 
-  <!-- ═══════════════════════════════════════════════
-       MODULES SECTION — AT TOP (with full-width cards)
-       ═══════════════════════════════════════════════ -->
-  <div class="modules-section-title">
-    <i class="fas fa-th-large"></i> &nbsp;All Modules
-  </div>
+  <!-- Modules -->
+  <h3 class="dash-section-title">All modules</h3>
   <div class="quick-links">
-
-<a href="{% url 'manage_users' %}" class="ql-card" style="--ql-accent: #6366f1;">
-       <div class="ql-icon" style="background:rgba(99,102,241,.15);color:#6366f1">
-         <i class="fas fa-users-cog"></i>
-       </div>
-       <div class="ql-text">
-         <strong>Manage Users</strong>
-         <span>User accounts &amp; roles</span>
-       </div>
-       <button class="ql-get-started">Get Started</button>
-     </a>
-
-<a href="{% url 'workshop:create_workshop' %}" class="ql-card" style="--ql-accent: #f59e0b;">
-       <div class="ql-icon" style="background:rgba(245,158,11,.15);color:#f59e0b">
-         <i class="fas fa-cogs"></i>
-       </div>
-       <div class="ql-text">
-         <strong>Workshop Management</strong>
-         <span>Workshops &amp; departments</span>
-       </div>
-       <button class="ql-get-started">Get Started</button>
-     </a>
-
-<a href="{% url 'partstools:accessories_dashboard' %}" class="ql-card" style="--ql-accent: #14b8a6;">
-       <div class="ql-icon" style="background:rgba(20,184,166,.15);color:#14b8a6">
-         <i class="fas fa-box-open"></i>
-       </div>
-       <div class="ql-text">
-         <strong>Accessories &amp; Parts</strong>
-         <span>Spare parts tracking</span>
-       </div>
-       <button class="ql-get-started">Get Started</button>
-     </a>
-
-<a href="{% url 'ppm_dashboard' %}" class="ql-card" style="--ql-accent: #a78bfa;">
-       <div class="ql-icon" style="background:rgba(167,139,250,.15);color:#a78bfa">
-         <i class="fas fa-calendar-check"></i>
-       </div>
-       <div class="ql-text">
-         <strong>PPM Schedules</strong>
-         <span>Plan &amp; track maintenance</span>
-       </div>
-       <button class="ql-get-started">Get Started</button>
-     </a>
-
-<a href="{% url 'report_hub:report_hub' %}" class="ql-card" style="--ql-accent: #0ea5e9;">
-       <div class="ql-icon" style="background:rgba(14,165,233,.15);color:#0ea5e9">
-         <i class="fas fa-chart-bar"></i>
-       </div>
-       <div class="ql-text">
-         <strong>Report Hub</strong>
-         <span>Performance reports</span>
-       </div>
-       <button class="ql-get-started">Get Started</button>
-     </a>
-
-<a href="{% url 'jobcard:create_job_card' %}" class="ql-card" style="--ql-accent: #1db954;">
-       <div class="ql-icon" style="background:rgba(29,185,84,.15);color:#1db954">
-         <i class="fas fa-clipboard-list"></i>
-       </div>
-       <div class="ql-text">
-         <strong>Job Cards</strong>
-         <span>Create &amp; track tasks</span>
-       </div>
-       <button class="ql-get-started">Get Started</button>
-     </a>
-
-<a href="{% url 'equipment_dashboard' %}" class="ql-card" style="--ql-accent: #fb923c;">
-       <div class="ql-icon" style="background:rgba(251,146,60,.15);color:#fb923c">
-         <i class="fas fa-cogs"></i>
-       </div>
-       <div class="ql-text">
-         <strong>Machine Reports</strong>
-         <span>Equipment analytics</span>
-       </div>
-       <button class="ql-get-started">Get Started</button>
-     </a>
-
-<a href="{% url 'inventory' %}" class="ql-card" style="--ql-accent: #0ea5e9;">
-       <div class="ql-icon" style="background:rgba(14,165,233,.15);color:#0ea5e9">
-         <i class="fas fa-warehouse"></i>
-       </div>
-       <div class="ql-text">
-         <strong>Inventory</strong>
-         <span>Equipment &amp; parts</span>
-       </div>
-       <button class="ql-get-started">Get Started</button>
-     </a>
-
-<a href="{% url 'calibration:certificate_list' %}" class="ql-card" style="--ql-accent: #ef4444;">
-       <div class="ql-icon" style="background:rgba(239,68,68,.15);color:#ef4444">
-         <i class="fas fa-balance-scale"></i>
-       </div>
-       <div class="ql-text">
-         <strong>Calibration</strong>
-         <span>Certificates &amp; compliance</span>
-       </div>
-       <button class="ql-get-started">Get Started</button>
-     </a>
-
+    <a href="{% url 'manage_users' %}" class="ql-card">
+      <span class="ql-icon"><i class="fas fa-users-cog" aria-hidden="true"></i></span>
+      <span class="ql-text"><strong>Manage users</strong><span>User accounts &amp; roles</span></span>
+      <i class="fas fa-chevron-right ql-arrow" aria-hidden="true"></i>
+    </a>
+    <a href="{% url 'workshop:create_workshop' %}" class="ql-card">
+      <span class="ql-icon"><i class="fas fa-cogs" aria-hidden="true"></i></span>
+      <span class="ql-text"><strong>Workshop management</strong><span>Workshops &amp; departments</span></span>
+      <i class="fas fa-chevron-right ql-arrow" aria-hidden="true"></i>
+    </a>
+    <a href="{% url 'partstools:accessories_dashboard' %}" class="ql-card">
+      <span class="ql-icon"><i class="fas fa-box-open" aria-hidden="true"></i></span>
+      <span class="ql-text"><strong>Accessories &amp; parts</strong><span>Spare parts tracking</span></span>
+      <i class="fas fa-chevron-right ql-arrow" aria-hidden="true"></i>
+    </a>
+    <a href="{% url 'ppm_dashboard' %}" class="ql-card">
+      <span class="ql-icon"><i class="fas fa-calendar-check" aria-hidden="true"></i></span>
+      <span class="ql-text"><strong>PPM schedules</strong><span>Plan &amp; track maintenance</span></span>
+      <i class="fas fa-chevron-right ql-arrow" aria-hidden="true"></i>
+    </a>
+    <a href="{% url 'report_hub:report_hub' %}" class="ql-card">
+      <span class="ql-icon"><i class="fas fa-chart-bar" aria-hidden="true"></i></span>
+      <span class="ql-text"><strong>Report hub</strong><span>Performance reports</span></span>
+      <i class="fas fa-chevron-right ql-arrow" aria-hidden="true"></i>
+    </a>
+    <a href="{% url 'jobcard:create_job_card' %}" class="ql-card">
+      <span class="ql-icon"><i class="fas fa-clipboard-list" aria-hidden="true"></i></span>
+      <span class="ql-text"><strong>Job cards</strong><span>Create &amp; track tasks</span></span>
+      <i class="fas fa-chevron-right ql-arrow" aria-hidden="true"></i>
+    </a>
+    <a href="{% url 'equipment_dashboard' %}" class="ql-card">
+      <span class="ql-icon"><i class="fas fa-cogs" aria-hidden="true"></i></span>
+      <span class="ql-text"><strong>Machine reports</strong><span>Equipment analytics</span></span>
+      <i class="fas fa-chevron-right ql-arrow" aria-hidden="true"></i>
+    </a>
+    <a href="{% url 'inventory' %}" class="ql-card">
+      <span class="ql-icon"><i class="fas fa-warehouse" aria-hidden="true"></i></span>
+      <span class="ql-text"><strong>Inventory</strong><span>Equipment &amp; parts</span></span>
+      <i class="fas fa-chevron-right ql-arrow" aria-hidden="true"></i>
+    </a>
+    <a href="{% url 'calibration:certificate_list' %}" class="ql-card">
+      <span class="ql-icon"><i class="fas fa-balance-scale" aria-hidden="true"></i></span>
+      <span class="ql-text"><strong>Calibration</strong><span>Certificates &amp; compliance</span></span>
+      <i class="fas fa-chevron-right ql-arrow" aria-hidden="true"></i>
+    </a>
   </div>
 
-  <!-- ═══════════════════════════════════════════════
-       KPI STRIP — System-wide Analytics
-       ═══════════════════════════════════════════════ -->
-  <div class="modules-section-title" style="margin-top: 12px;">
-    <i class="fas fa-chart-pie"></i> &nbsp;System Overview — All Workshops
-  </div>
-  <div class="kpi-strip" style="margin-bottom: 32px;">
-
-    <div class="kpi-card" style="--kpi-color: #0ea5e9;">
-      <div class="kpi-label"><i class="fas fa-laptop-medical"></i> &nbsp;Total Equipment</div>
-      <div class="count" style="font-size: 2rem; font-weight: 700; color: var(--text-primary);">{{ totals.total_equipment }}</div>
-      <div class="kpi-meta">Registered Devices</div>
+  <!-- System-wide KPIs -->
+  <h3 class="dash-section-title">System overview — all workshops</h3>
+  <div class="kpi-strip">
+    <div class="kpi-card">
+      <div class="kpi-label"><i class="fas fa-laptop-medical" aria-hidden="true"></i> Total equipment</div>
+      <div class="kpi-value">{{ totals.total_equipment }}</div>
+      <div class="kpi-meta">Registered devices</div>
     </div>
-
-    <div class="kpi-card" style="--kpi-color: #1db954;">
-      <div class="kpi-label"><i class="fas fa-sitemap"></i> &nbsp;Total Departments</div>
-      <div class="count" style="font-size: 2rem; font-weight: 700; color: var(--text-primary);">{{ totals.total_departments }}</div>
-      <div class="kpi-meta">Active Units</div>
+    <div class="kpi-card">
+      <div class="kpi-label"><i class="fas fa-sitemap" aria-hidden="true"></i> Departments</div>
+      <div class="kpi-value">{{ totals.total_departments }}</div>
+      <div class="kpi-meta">Active units</div>
     </div>
-
-    <div class="kpi-card" style="--kpi-color: #a78bfa;">
-      <div class="kpi-label"><i class="fas fa-clipboard-list"></i> &nbsp;Total Job Cards</div>
-      <div class="count" style="font-size: 2rem; font-weight: 700; color: var(--text-primary);">{{ totals.total_job_cards }}</div>
-      <div class="kpi-meta">Work Orders</div>
+    <div class="kpi-card">
+      <div class="kpi-label"><i class="fas fa-clipboard-list" aria-hidden="true"></i> Job cards</div>
+      <div class="kpi-value">{{ totals.total_job_cards }}</div>
+      <div class="kpi-meta">Work orders</div>
     </div>
-
-    <div class="kpi-card" style="--kpi-color: #f59e0b;">
-      <div class="kpi-label"><i class="fas fa-file-alt"></i> &nbsp;Total Reports</div>
-      <div class="count" style="font-size: 2rem; font-weight: 700; color: var(--text-primary);">{{ totals.total_reports }}</div>
-      <div class="kpi-meta">Generated Reports</div>
+    <div class="kpi-card">
+      <div class="kpi-label"><i class="fas fa-file-alt" aria-hidden="true"></i> Reports</div>
+      <div class="kpi-value">{{ totals.total_reports }}</div>
+      <div class="kpi-meta">Generated reports</div>
     </div>
-
-    <div class="kpi-card" style="--kpi-color: #14b8a6;">
-      <div class="kpi-label"><i class="fas fa-calendar-alt"></i> &nbsp;Total PPMs</div>
-      <div class="count" style="font-size: 2rem; font-weight: 700; color: var(--text-primary);">{{ totals.total_ppms }}</div>
+    <div class="kpi-card">
+      <div class="kpi-label"><i class="fas fa-calendar-alt" aria-hidden="true"></i> PPMs</div>
+      <div class="kpi-value">{{ totals.total_ppms }}</div>
       <div class="kpi-meta">Scheduled</div>
     </div>
-
-    <div class="kpi-card" style="--kpi-color: #6366f1;">
-      <div class="kpi-label"><i class="fas fa-box-open"></i> &nbsp;Accessories</div>
-      <div class="count" style="font-size: 2rem; font-weight: 700; color: var(--text-primary);">{{ totals.total_accessories }}</div>
-      <div class="kpi-meta">In Stock</div>
+    <div class="kpi-card">
+      <div class="kpi-label"><i class="fas fa-box-open" aria-hidden="true"></i> Accessories</div>
+      <div class="kpi-value">{{ totals.total_accessories }}</div>
+      <div class="kpi-meta">In stock</div>
     </div>
-
-    <div class="kpi-card" style="--kpi-color: #fb923c;">
-      <div class="kpi-label"><i class="fas fa-wrench"></i> &nbsp;Tools</div>
-      <div class="count" style="font-size: 2rem; font-weight: 700; color: var(--text-primary);">{{ totals.total_tools }}</div>
+    <div class="kpi-card">
+      <div class="kpi-label"><i class="fas fa-wrench" aria-hidden="true"></i> Tools</div>
+      <div class="kpi-value">{{ totals.total_tools }}</div>
       <div class="kpi-meta">Available</div>
     </div>
-
   </div>
 
-  <!-- ═══════════════════════════════════════════════
-       CHARTS ROW — System-wide Analytics
-       ═══════════════════════════════════════════════ -->
-  <div class="mid-row" style="margin-bottom: 32px;">
-
+  <!-- Charts -->
+  <div class="mid-row">
     <div class="panel">
       <div class="panel-title">
-        <span><i class="fas fa-clipboard-check"></i> &nbsp;Job Card Status</span>
-        <span style="font-size:.65rem;color:var(--text-muted)">All Workshops</span>
+        <span>Job card status</span>
+        <span class="panel-sub">All workshops</span>
       </div>
       <canvas id="chart-jobcard-status"></canvas>
     </div>
 
     <div class="panel">
       <div class="panel-title">
-        <span><i class="fas fa-calendar-check"></i> &nbsp;PPM Completions</span>
-        <span style="font-size:.65rem;color:var(--text-muted)">By Workshop &amp; Month</span>
+        <span>PPM completions</span>
+        <span class="panel-sub">By workshop &amp; month</span>
       </div>
       <canvas id="chart-ppm-monthly"></canvas>
     </div>
-
   </div>
 
-  <!-- ═══════════════════════════════════════════════
-       WORKSHOP DETAILS CARDS
-       ═══════════════════════════════════════════════ -->
+  <!-- Workshops -->
   <div class="workshops-section">
-    <h2 class="mb-4"><i class="fas fa-industry"></i> Workshop Details</h2>
+    <h3 class="dash-section-title">Workshop details</h3>
 
     {% for workshop in workshops %}
-    <div class="panel" style="margin-bottom: 20px;">
+    <section class="section-card ws-card">
+      <div class="section-card-head">
+        <h2 class="section-card-title">
+          {{ workshop.name }}
+          {% if workshop.category == 'calibration_center' %}
+            <span class="badge">Calibration centre</span>
+          {% elif workshop.category == 'maintenance' %}
+            <span class="badge">Maintenance</span>
+          {% else %}
+            <span class="badge">{{ workshop.category|capfirst }}</span>
+          {% endif %}
+        </h2>
+        <span class="badge bg-success">Active</span>
+      </div>
 
-<div class="workshop-header" style="background: var(--bg-secondary); padding: 18px 22px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; border-bottom: 1px solid var(--border-color); border-left: 4px solid var(--primary-color); border-radius: 14px 14px 0 0;">
-         <div>
-           <h3 style="font-size: 1.15rem; font-weight: 600; color: var(--text-primary); margin: 0; display: flex; align-items: center; gap: 10px;">
-             <i class="fas fa-wrench" style="color: var(--primary-color);"></i>
-             {{ workshop.name }}
-             {% if workshop.category == 'calibration_center' %}
-               <span class="badge badge-purple ms-2">
-                 <i class="fas fa-drafting-compass"></i> Calibration Centre
-               </span>
-             {% elif workshop.category == 'maintenance' %}
-               <span class="badge badge-amber ms-2">
-                 <i class="fas fa-tools"></i> Maintenance
-               </span>
-             {% else %}
-               <span class="badge badge-teal ms-2">
-                 <i class="fas fa-layer-group"></i> {{ workshop.category|capfirst }}
-               </span>
-             {% endif %}
-           </h3>
-         </div>
-         <div class="status-indicators" style="display: flex; align-items: center; gap: 8px; background: var(--bg-card); padding: 4px 12px; border-radius: 20px; border: 1px solid var(--border-color);">
-           <span class="status-dot" style="width: 8px; height: 8px; background: var(--success-color); border-radius: 50%; box-shadow: 0 0 8px var(--success-color);"></span>
-           <span style="font-size: .75rem; font-weight: 600; color: var(--success-color); text-transform: uppercase; letter-spacing: .04em;">Active</span>
-         </div>
-       </div>
-
-      <div class="kpi-strip" style="margin: 0; border-radius: 0 0 14px 14px; overflow: hidden;">
-
-        <div class="kpi-card" style="--kpi-color: #0ea5e9; border-radius: 0; border: none; border-right: 1px solid var(--border-color);">
-          <div class="kpi-label"><i class="fas fa-laptop-medical"></i> Equipment</div>
-          <div class="count" style="font-size: 1.6rem;">
+      <div class="ws-stats">
+        <div class="ws-stat">
+          <span class="ws-stat-label">Equipment</span>
+          <span class="ws-stat-value">
             {% for ws_id, data in workshop_data.items %}
               {% if ws_id == workshop.id %}
-                <a href="{% url 'inventory_for_hod' workshop.id %}" style="color: #0ea5e9; text-decoration: none;">{{ data.equipment_count }}</a>
+                <a href="{% url 'inventory_for_hod' workshop.id %}">{{ data.equipment_count }}</a>
               {% endif %}
             {% endfor %}
-          </div>
-          <div class="kpi-meta">Total Equipment</div>
+          </span>
         </div>
 
-        <div class="kpi-card" style="--kpi-color: #6366f1; border-radius: 0; border: none; border-right: 1px solid var(--border-color);">
-          <div class="kpi-label"><i class="fas fa-sitemap"></i> Departments</div>
-          <div class="count" style="font-size: 1.6rem;">
+        <div class="ws-stat">
+          <span class="ws-stat-label">Departments</span>
+          <span class="ws-stat-value">
             {% for ws_id, data in workshop_data.items %}
               {% if ws_id == workshop.id %}
-                <a href="{% url 'create_department_for_hod' workshop.id %}" style="color: #6366f1; text-decoration: none;">{{ data.departments_count }}</a>
+                <a href="{% url 'create_department_for_hod' workshop.id %}">{{ data.departments_count }}</a>
               {% endif %}
             {% endfor %}
-          </div>
-          <div class="kpi-meta">Active Units</div>
+          </span>
         </div>
 
-        <div class="kpi-card" style="--kpi-color: #1db954; border-radius: 0; border: none; border-right: 1px solid var(--border-color);">
-          <div class="kpi-label"><i class="fas fa-clipboard-list"></i> Job Cards</div>
-          <div class="count" style="font-size: 1.6rem;">
+        <div class="ws-stat">
+          <span class="ws-stat-label">Job cards</span>
+          <span class="ws-stat-value">
             {% for ws_id, data in workshop_data.items %}
               {% if ws_id == workshop.id %}
-                <a href="{% url 'jobcard:hod_workshop_jobcards' workshop.id %}" style="color: #1db954; text-decoration: none;">{{ data.job_cards_count }}</a>
+                <a href="{% url 'jobcard:hod_workshop_jobcards' workshop.id %}">{{ data.job_cards_count }}</a>
               {% endif %}
             {% endfor %}
-          </div>
-          <div class="kpi-meta">Work Orders</div>
+          </span>
         </div>
 
-        <div class="kpi-card" style="--kpi-color: #f59e0b; border-radius: 0; border: none; border-right: 1px solid var(--border-color);">
-          <div class="kpi-label"><i class="fas fa-calendar-alt"></i> PPMs</div>
-          <div class="count" style="font-size: 1.6rem; color: var(--text-primary);">
+        <div class="ws-stat">
+          <span class="ws-stat-label">PPMs</span>
+          <span class="ws-stat-value">
             {% for ws_id, data in workshop_data.items %}
               {% if ws_id == workshop.id %}
-                <a href="{% url 'ppm_dashboard' %}" style="color: #f59e0b; text-decoration: none;">{{ data.ppms_count }}</a>
+                <a href="{% url 'ppm_dashboard' %}">{{ data.ppms_count }}</a>
               {% endif %}
             {% endfor %}
-          </div>
-          <div class="kpi-meta">Scheduled</div>
+          </span>
         </div>
 
-        <div class="kpi-card" style="--kpi-color: #a78bfa; border-radius: 0; border: none; border-right: 1px solid var(--border-color);">
-          <div class="kpi-label"><i class="fas fa-file-alt"></i> Reports</div>
-          <div class="count" style="font-size: 1.6rem;">
+        <div class="ws-stat">
+          <span class="ws-stat-label">Reports</span>
+          <span class="ws-stat-value">
             {% for ws_id, data in workshop_data.items %}
               {% if ws_id == workshop.id %}
-                <a href="{% url 'report_hub:hod_reports_view' workshop.id %}" style="color: #a78bfa; text-decoration: none;">{{ data.reports_count }}</a>
+                <a href="{% url 'report_hub:hod_reports_view' workshop.id %}">{{ data.reports_count }}</a>
               {% endif %}
             {% endfor %}
-          </div>
-          <div class="kpi-meta">Submitted</div>
+          </span>
         </div>
 
         {% if workshop.category == 'calibration_center' %}
-        <div class="kpi-card" style="--kpi-color: #ef4444; border-radius: 0; border: none;">
-          <div class="kpi-label"><i class="fas fa-drafting-compass"></i> Calibration</div>
-          <div class="count" style="font-size: 1.6rem;">
+        <div class="ws-stat">
+          <span class="ws-stat-label">Calibration sessions</span>
+          <span class="ws-stat-value">
             {% for ws_id, data in workshop_data.items %}
               {% if ws_id == workshop.id %}
-                <a href="{% url 'calibration:cal-dashboard' %}" style="color: #ef4444; text-decoration: none;">{{ data.calibrations_count|default:"—" }}</a>
+                <a href="{% url 'calibration:cal-dashboard' %}">{{ data.calibrations_count|default:"—" }}</a>
               {% endif %}
             {% endfor %}
-          </div>
-          <div class="kpi-meta">Sessions</div>
+          </span>
         </div>
         {% endif %}
-
       </div>
-    </div>
+    </section>
     {% empty %}
-    <div class="alert alert-info">
-      <h4><i class="fas fa-info-circle"></i> No Workshops Found</h4>
-      <p>No workshops are currently configured in the system.</p>
-    </div>
+    <section class="section-card">
+      {% include 'includes/empty_state.html' with icon="fa-industry" title="No workshops found" message="No workshops are configured in the system yet." %}
+    </section>
     {% endfor %}
   </div>
+
+</div>
 
 {% endif %}
 {# ── END ROLE GUARD ─ #}
@@ -370,20 +273,19 @@
       var jobcardStatus = {{ jobcard_status_json|safe }};
       var ppmMonthlyLabels = {{ ppm_monthly_labels_json|safe }};
       var ppmMonthlyByWorkshop = {{ ppm_monthly_by_workshop_json|safe }};
+      var fontFamily = getComputedStyle(document.body).fontFamily;
 
       // One distinct colour per workshop, cycling if there are more
       // workshops than swatches.
       var WORKSHOP_PALETTE = [
-        cssVar('--primary-color', '#16a34a'),
-        cssVar('--info-color', '#0284c7'),
-        cssVar('--warning-color', '#d97706'),
-        cssVar('--danger-color', '#ef4444'),
-        '#8b5cf6',
-        '#0ea5e9',
-        '#f97316',
-        '#14b8a6',
-        '#ec4899',
-        '#84cc16',
+        cssVar('--primary-color', '#15803d'),
+        cssVar('--info-color', '#0369a1'),
+        cssVar('--warning-color', '#b45309'),
+        cssVar('--danger-color', '#dc2626'),
+        '#6d28d9',
+        '#0f766e',
+        '#c2410c',
+        '#4d7c0f',
       ];
 
       var jobcardCanvas = document.getElementById('chart-jobcard-status');
@@ -395,9 +297,9 @@
             datasets: [{
               data: Object.values(jobcardStatus),
               backgroundColor: [
-                cssVar('--success-color', '#059669'),
-                cssVar('--warning-color', '#d97706'),
-                cssVar('--danger-color', '#ef4444'),
+                cssVar('--success-color', '#047857'),
+                cssVar('--warning-color', '#b45309'),
+                cssVar('--danger-color', '#dc2626'),
               ],
               borderColor: cssVar('--bg-card', '#ffffff'),
               borderWidth: 2,
@@ -406,9 +308,9 @@
           options: {
             responsive: true,
             maintainAspectRatio: false,
-            cutout: '65%',
+            cutout: '70%',
             plugins: {
-              legend: { position: 'bottom', labels: { color: cssVar('--text-secondary', '#4b5563'), boxWidth: 10, font: { size: 11 } } },
+              legend: { position: 'bottom', labels: { color: cssVar('--text-secondary', '#4b5563'), boxWidth: 8, boxHeight: 8, usePointStyle: true, font: { size: 12, family: fontFamily } } },
             },
           },
         });
@@ -427,7 +329,7 @@
                 label: name,
                 data: ppmMonthlyByWorkshop[name],
                 backgroundColor: color,
-                borderRadius: 4,
+                borderRadius: 3,
               };
             }),
           },
@@ -435,12 +337,12 @@
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-              legend: { position: 'bottom', labels: { color: cssVar('--text-secondary', '#4b5563'), boxWidth: 10, font: { size: 11 } } },
+              legend: { position: 'bottom', labels: { color: cssVar('--text-secondary', '#4b5563'), boxWidth: 8, boxHeight: 8, usePointStyle: true, font: { size: 12, family: fontFamily } } },
               tooltip: { mode: 'index', intersect: false },
             },
             scales: {
-              x: { stacked: true, ticks: { color: cssVar('--text-secondary', '#4b5563') } },
-              y: { stacked: true, beginAtZero: true, ticks: { precision: 0, color: cssVar('--text-secondary', '#4b5563') } },
+              x: { stacked: true, grid: { display: false }, ticks: { color: cssVar('--text-muted', '#6b7280') } },
+              y: { stacked: true, beginAtZero: true, grid: { color: cssVar('--border-color', '#e5e7eb') }, ticks: { precision: 0, color: cssVar('--text-muted', '#6b7280') } },
             },
           },
         });

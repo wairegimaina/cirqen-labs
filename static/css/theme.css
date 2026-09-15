@@ -658,3 +658,11 @@ hr { border-color: var(--border-color); opacity: 1; }
 
   .dropdown-item { padding: .4rem .65rem; }
 }
+
+/* ============================================================
+   TYPE WEIGHT CEILING
+   The type scale tops out at 600; Bootstrap's bold utilities
+   (700/800) read heavy next to the system UI font.
+   ============================================================ */
+.fw-bold,
+.fw-bolder { font-weight: 600 !important; }

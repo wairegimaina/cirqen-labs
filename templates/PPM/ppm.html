@@ -42,7 +42,7 @@
                 <div class="row g-3 align-items-end">
                     <!-- Department Dropdown (Modern Custom) -->
                     <div class="col-lg-3">
-                        <label class="form-label small fw-bold text-muted">DEPARTMENT</label>
+                        <label class="form-label small text-muted">Department</label>
                         <div class="ppm-dept-dropdown" id="deptDropdown">
                             <button class="ppm-dept-btn" type="button" id="deptDropdownBtn" onclick="toggleDeptDropdown(event)">
                                 <span class="ppm-dept-icon">
@@ -78,7 +78,7 @@
 
                     <!-- Search -->
                     <div class="col-lg-4">
-                        <label class="form-label small fw-bold text-muted">SEARCH</label>
+                        <label class="form-label small text-muted">Search</label>
                         <div class="input-group">
                             <span class="input-group-text bg-transparent border-end-0"><i class="fas fa-search text-muted"></i></span>
                             <input type="text" id="searchInput" class="form-control border-start-0 ps-0" placeholder="Equipment, Serial, Model...">
@@ -87,7 +87,7 @@
 
                     <!-- Month -->
                     <div class="col-lg-2">
-                        <label class="form-label small fw-bold text-muted">MONTH</label>
+                        <label class="form-label small text-muted">Month</label>
                         <select class="form-select" id="monthFilter">
                             <option value="1" {% if selected_month == '1' %}selected{% endif %}>January</option>
                             <option value="2" {% if selected_month == '2' %}selected{% endif %}>February</option>
@@ -106,13 +106,13 @@
 
                     <!-- Year -->
                     <div class="col-lg-1">
-                        <label class="form-label small fw-bold text-muted">YEAR</label>
+                        <label class="form-label small text-muted">Year</label>
                         <select class="form-select" id="yearFilter"></select>
                     </div>
 
                     <!-- Week filter (within the selected month) -->
                     <div class="col-lg-2">
-                        <label class="form-label small fw-bold text-muted">WEEK</label>
+                        <label class="form-label small text-muted">Week</label>
                         <select class="form-select" id="weekFilter">
                             <option value="">All Weeks</option>
                             {% for wk in weeks_in_month %}
@@ -148,11 +148,11 @@
                             <i class="fas fa-times me-1"></i>Clear Filter
                         </a>
                         {% endif %}
-                        <button type="button" class="btn btn-sm btn-info" onclick="goToCurrentMonth()">
+                        <button type="button" class="btn btn-sm btn-secondary" onclick="goToCurrentMonth()">
                             <i class="fas fa-calendar-day me-1"></i>Current Month
                         </button>
                         <div class="theme-card px-3 py-2 mb-0 shadow-sm">
-                            <i class="fas fa-calendar-alt text-primary me-2"></i>
+                            <i class="fas fa-calendar-alt text-muted me-2"></i>
                             <span class="fw-bold">
                                 {% if selected_month == '1' %}January{% elif selected_month == '2' %}February{% elif selected_month == '3' %}March{% elif selected_month == '4' %}April{% elif selected_month == '5' %}May{% elif selected_month == '6' %}June{% elif selected_month == '7' %}July{% elif selected_month == '8' %}August{% elif selected_month == '9' %}September{% elif selected_month == '10' %}October{% elif selected_month == '11' %}November{% elif selected_month == '12' %}December{% endif %}
                                 {{ selected_year }}
@@ -160,10 +160,10 @@
                         </div>
                     </div>
                     <div class="d-flex gap-2">
-                        <button type="button" class="btn btn-sm btn-success" id="bulkMarkCompleted" disabled>
+                        <button type="button" class="btn btn-sm btn-primary" id="bulkMarkCompleted" disabled>
                             <i class="fas fa-check me-1"></i>Mark Completed
                         </button>
-                        <button type="button" class="btn btn-sm btn-warning" id="bulkPushSchedules" disabled>
+                        <button type="button" class="btn btn-sm btn-secondary" id="bulkPushSchedules" disabled>
                             <i class="fas fa-arrow-right me-1"></i>Push
                         </button>
                     </div>
@@ -228,7 +228,7 @@
                 {% else %}
                 <div class="text-center py-5">
                     <i class="fas fa-calendar-times fa-3x text-muted mb-3 opacity-50"></i>
-                    <h4 class="text-muted">No Scheduled Equipment</h4>
+                    <h4 class="h6 mb-1">No scheduled equipment</h4>
                     <p class="text-muted">
                         {% if selected_department %}No equipment scheduled in {{ selected_department.name|default:"Unknown" }} for this period.
                         {% else %}No equipment currently scheduled for maintenance for this period.{% endif %}
@@ -246,12 +246,12 @@
             <!-- Unscheduled Equipment Table -->
             {% if unscheduled_equipment %}
             <div class="theme-card mt-4">
-                <div class="theme-card-header bg-danger text-white">
+                <div class="theme-card-header">
                     <h5 class="mb-0 fw-bold">
-                        <i class="fas fa-exclamation-circle me-2"></i>Unscheduled Equipment
-                        <span class="badge bg-light text-danger ms-2">{{ unscheduled_equipment|length }}</span>
+                        <i class="fas fa-exclamation-circle text-danger me-2"></i>Unscheduled equipment
+                        <span class="badge bg-danger ms-2">{{ unscheduled_equipment|length }}</span>
                     </h5>
-                    <button type="button" class="btn btn-light btn-sm" id="scheduleSelectedBtn" disabled>
+                    <button type="button" class="btn btn-secondary btn-sm" id="scheduleSelectedBtn" disabled>
                         <i class="fas fa-calendar-plus me-1"></i>Schedule Selected
                     </button>
                 </div>

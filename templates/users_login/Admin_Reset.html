@@ -7,196 +7,47 @@
 
 {% block extra_css %}
 <style>
-  /* Admin Reset page — uses base.css + theme.css variables automatically */
-  .admin-reset-wrapper {
-    max-width: 640px;
-    margin: 2rem auto;
-    padding: 0 1rem;
-  }
-
-  .admin-reset-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: 1rem;
-    overflow: hidden;
-    box-shadow: var(--shadow-lg);
-  }
-
-  .admin-reset-card-header {
-    background: var(--danger-color);
-    padding: 1.25rem 1.5rem;
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-  }
-
-  .admin-reset-card-header h4 {
-    color: #fff;
-    font-size: 1.125rem;
-    font-weight: 700;
-    margin: 0;
-  }
-
-  .admin-reset-card-header i {
-    color: #fff;
-    font-size: 1.25rem;
-  }
-
-  .admin-reset-card-body {
-    padding: 1.75rem;
-  }
-
-  /* Warning banner */
-  .admin-warn-banner {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.75rem;
-    background: color-mix(in srgb, var(--warning-color, #f59e0b) 10%, var(--bg-card));
-    border: 1px solid color-mix(in srgb, var(--warning-color, #f59e0b) 30%, transparent);
-    border-left: 4px solid var(--warning-color, #f59e0b);
-    border-radius: 0.75rem;
-    padding: 1rem 1.25rem;
-    margin-bottom: 1.5rem;
-    color: var(--text-primary);
-    font-size: 0.9rem;
-  }
-
-  .admin-warn-banner i { color: var(--warning-color, #f59e0b); flex-shrink: 0; margin-top: 2px; }
-
-  /* User details list */
-  .user-details-heading {
-    font-size: 0.875rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--text-muted);
-    margin-bottom: 0.75rem;
-  }
-
-  .user-details-list {
-    list-style: none;
-    padding: 0;
-    margin: 0 0 1.75rem;
-    border: 1px solid var(--border-color);
-    border-radius: 0.75rem;
-    overflow: hidden;
-  }
-
-  .user-details-list li {
-    display: flex;
-    align-items: center;
-    padding: 0.85rem 1.25rem;
-    font-size: 0.9rem;
-    color: var(--text-secondary);
-    border-bottom: 1px solid var(--border-color);
-    background: var(--bg-secondary);
-    transition: background 0.2s;
-  }
-
-  .user-details-list li:last-child { border-bottom: none; }
-  .user-details-list li:hover { background: var(--bg-tertiary); }
-
-  .user-details-list li strong {
-    color: var(--text-primary);
-    min-width: 110px;
-    margin-right: 0.5rem;
-    font-weight: 600;
-  }
-
-  /* Buttons */
-  .admin-btn-grid {
-    display: grid;
-    gap: 0.75rem;
-  }
-
-  .btn-admin-danger {
-    width: 100%;
-    padding: 0.85rem 1.5rem;
-    font-size: 1rem;
-    font-weight: 600;
-    color: #fff;
-    background: var(--danger-color);
-    border: none;
-    border-radius: 0.625rem;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.6rem;
-    transition: filter 0.2s, transform 0.15s, box-shadow 0.2s;
-    box-shadow: var(--shadow-md);
-    text-decoration: none;
-  }
-
-  .btn-admin-danger:hover {
-    filter: brightness(1.1);
-    transform: translateY(-1px);
-    box-shadow: var(--shadow-lg);
-  }
-
-  .btn-admin-cancel {
-    width: 100%;
-    padding: 0.85rem 1.5rem;
-    font-size: 1rem;
-    font-weight: 600;
-    color: var(--text-secondary);
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border-color);
-    border-radius: 0.625rem;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.6rem;
-    transition: background 0.2s, color 0.2s, transform 0.15s;
-    text-decoration: none;
-  }
-
-  .btn-admin-cancel:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
-    transform: translateY(-1px);
-  }
+  /* Admin reset: shared section-card, alert and kv-list components */
+  .admin-reset-wrapper { max-width: 560px; margin: 0 auto; }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="admin-reset-wrapper">
-  <div class="admin-reset-card">
+  <div class="section-card">
 
-    <div class="admin-reset-card-header">
-      <i class="fas fa-user-shield"></i>
-      <h4>{{ title }}</h4>
+    <div class="section-card-head">
+      <h2 class="section-card-title"><i class="fas fa-user-shield" aria-hidden="true"></i> {{ title }}</h2>
     </div>
 
-    <div class="admin-reset-card-body">
+    <div class="section-card-body">
 
-      <div class="admin-warn-banner">
-        <i class="fas fa-exclamation-triangle"></i>
+      <div class="alert alert-warning d-flex align-items-start gap-2">
+        <i class="fas fa-exclamation-triangle mt-1" aria-hidden="true"></i>
         <div>
           <strong>Warning:</strong> This will generate a new temporary password and send it to the user's email.
         </div>
       </div>
 
-      <p class="user-details-heading">User Details</p>
-      <ul class="user-details-list">
-        <li><strong>Username:</strong> {{ target_user.username }}</li>
-        <li><strong>Full Name:</strong> {{ target_user.get_full_name|default:"N/A" }}</li>
-        <li><strong>Email:</strong> {{ target_user.email }}</li>
+      <h3 class="subsection-title">User details</h3>
+      <dl class="kv-list table-bordered-wrap mb-4">
+        <div><dt>Username</dt><dd>{{ target_user.username }}</dd></div>
+        <div><dt>Full name</dt><dd>{{ target_user.get_full_name|default:"N/A" }}</dd></div>
+        <div><dt>Email</dt><dd>{{ target_user.email }}</dd></div>
         {% if target_user.userprofile %}
-          <li><strong>Role:</strong> {{ target_user.userprofile.get_role_display }}</li>
+        <div><dt>Role</dt><dd>{{ target_user.userprofile.get_role_display }}</dd></div>
         {% endif %}
-      </ul>
+      </dl>
 
       <form method="post">
         {% csrf_token %}
-        <div class="admin-btn-grid">
-          <button type="submit" class="btn-admin-danger">
-            <i class="fas fa-key"></i> Reset Password
-          </button>
-          <a href="{% url 'manage_users' %}" class="btn-admin-cancel">
-            <i class="fas fa-arrow-left"></i> Cancel
+        <div class="d-flex flex-wrap justify-content-end gap-2">
+          <a href="{% url 'manage_users' %}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left" aria-hidden="true"></i> Cancel
           </a>
+          <button type="submit" class="btn btn-danger">
+            <i class="fas fa-key" aria-hidden="true"></i> Reset password
+          </button>
         </div>
       </form>
 

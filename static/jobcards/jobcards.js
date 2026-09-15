@@ -35,14 +35,12 @@ $(document).ready(function () {
   // Inject a small live indicator badge next to time_completed label
   var $completedLabel = $('label[for="time_completed"]');
   $completedLabel.append(
-    ' <span id="live-clock-badge" title="Click to return to live mode" style="' +
-    'display:inline-block;font-size:0.7rem;font-weight:600;padding:1px 7px;border-radius:20px;' +
-    'cursor:pointer;margin-left:4px;background:#22c55e;color:#fff;letter-spacing:0.04em;">● LIVE</span>'
+    ' <span id="live-clock-badge" class="badge bg-success ms-1" role="button" title="Click to return to live mode">Live</span>'
   );
 
   $('#live-clock-badge').on('click', function () {
     completedIsLive = true;
-    $(this).css({ background: '#22c55e' }).text('● LIVE');
+    $(this).removeClass('bg-secondary').addClass('bg-success').text('Live');
     tickLiveClock();
   });
 
@@ -64,7 +62,7 @@ $(document).ready(function () {
   // Only stop the live clock when the user actually types into the field
   $('#time_completed').on('keydown', function () {
     completedIsLive = false;
-    $('#live-clock-badge').css({ background: '#94a3b8' }).text('✎ Manual');
+    $('#live-clock-badge').removeClass('bg-success').addClass('bg-secondary').text('Manual');
   });
 
   // Time Started flatpickr — plain HH:MM

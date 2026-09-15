@@ -1,10 +1,29 @@
 // CMMS Dashboard JavaScript
 // All logic extracted from inline script
 
-/* ── Chart defaults ── */
-Chart.defaults.color = "#8b949e";
-Chart.defaults.borderColor = "#30363d";
-Chart.defaults.font.family = "'Inter', system-ui, sans-serif";
+/* ── Chart defaults — read from the active theme ── */
+const cssVar = (name, fallback) =>
+  getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+
+Chart.defaults.color = cssVar("--text-muted", "#6b7280");
+Chart.defaults.borderColor = cssVar("--border-color", "#e5e7eb");
+Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+
+const C_SUCCESS = cssVar("--success-color", "#047857");
+const C_WARNING = cssVar("--warning-color", "#b45309");
+const C_DANGER = cssVar("--danger-color", "#dc2626");
+const C_INFO = cssVar("--info-color", "#0369a1");
+const C_EMPTY = cssVar("--border-mid", "#d1d5db");
+const C_GRID = cssVar("--border-color", "#e5e7eb");
+const CATEGORY_PALETTE = [
+  cssVar("--primary-color", "#15803d"),
+  C_INFO,
+  C_WARNING,
+  "#6d28d9",
+  "#0f766e",
+  C_DANGER,
+  "#c2410c",
+];
 
 /* ── Utility ── */
 const $ = (id) => document.getElementById(id);
@@ -90,15 +109,7 @@ function loadEquipmentAnalyticsFromData(d) {
   const labels = Object.keys(d.by_category);
   const values = Object.values(d.by_category);
   if (labels.length) {
-    const palette = [
-      "#0ea5e9",
-      "#1db954",
-      "#f59e0b",
-      "#a78bfa",
-      "#fb923c",
-      "#ef4444",
-      "#14b8a6",
-    ];
+    const palette = CATEGORY_PALETTE;
     chartCat = new Chart($("chart-equipment-cat"), {
       type: "bar",
       data: {
@@ -108,11 +119,11 @@ function loadEquipmentAnalyticsFromData(d) {
             label: "Equipment",
             data: values,
             backgroundColor: labels.map(
-              (_, i) => palette[i % palette.length] + "33",
+              (_, i) => palette[i % palette.length],
             ),
             borderColor: labels.map((_, i) => palette[i % palette.length]),
-            borderWidth: 2,
-            borderRadius: 6,
+            borderWidth: 0,
+            borderRadius: 4,
           },
         ],
       },
@@ -124,7 +135,7 @@ function loadEquipmentAnalyticsFromData(d) {
             grid: { display: false },
             ticks: { maxRotation: 30, font: { size: 10 } },
           },
-          y: { grid: { color: "#30363d" }, ticks: { precision: 0 } },
+          y: { grid: { color: C_GRID }, ticks: { precision: 0 } },
         },
       },
     });
@@ -157,15 +168,7 @@ async function loadEquipmentAnalytics() {
     const labels = Object.keys(d.by_category);
     const values = Object.values(d.by_category);
     if (labels.length) {
-      const palette = [
-        "#0ea5e9",
-        "#1db954",
-        "#f59e0b",
-        "#a78bfa",
-        "#fb923c",
-        "#ef4444",
-        "#14b8a6",
-      ];
+      const palette = CATEGORY_PALETTE;
       chartCat = new Chart($("chart-equipment-cat"), {
         type: "bar",
         data: {
@@ -175,11 +178,11 @@ async function loadEquipmentAnalytics() {
               label: "Equipment",
               data: values,
               backgroundColor: labels.map(
-                (_, i) => palette[i % palette.length] + "33",
+                (_, i) => palette[i % palette.length],
               ),
               borderColor: labels.map((_, i) => palette[i % palette.length]),
-              borderWidth: 2,
-              borderRadius: 6,
+              borderWidth: 0,
+              borderRadius: 4,
             },
           ],
         },
@@ -191,7 +194,7 @@ async function loadEquipmentAnalytics() {
               grid: { display: false },
               ticks: { maxRotation: 30, font: { size: 10 } },
             },
-            y: { grid: { color: "#30363d" }, ticks: { precision: 0 } },
+            y: { grid: { color: C_GRID }, ticks: { precision: 0 } },
           },
         },
       });
@@ -216,7 +219,7 @@ function fallbackCategoryChart() {
     type: "bar",
     data: {
       labels: ["No data"],
-      datasets: [{ data: [0], backgroundColor: "#30363d" }],
+      datasets: [{ data: [0], backgroundColor: C_EMPTY }],
     },
     options: { responsive: true, plugins: { legend: { display: false } } },
   });
@@ -226,7 +229,7 @@ function renderActivityTable(top) {
   const tbody = $("activity-table");
   if (!tbody) return;
   if (!top || !top.length) {
-    tbody.innerHTML = `<tr><td colspan="4" style="color:var(--text-muted);font-size:.78rem;text-align:center;padding:20px 0">No data available</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" class="dash-empty">No data available</td></tr>`;
     return;
   }
   tbody.innerHTML = top
@@ -235,12 +238,12 @@ function renderActivityTable(top) {
       const jc = eq.job_cards || eq.jobcard_count || eq.count || 0;
       const status = eq.active_status ?? true;
       const badge = status
-        ? '<span class="badge badge-green">Active</span>'
-        : '<span class="badge badge-red">Inactive</span>';
+        ? '<span class="badge bg-success">Active</span>'
+        : '<span class="badge bg-danger">Inactive</span>';
       return `<tr>
       <td>${eq.name || eq.description || eq.equipment_name || "—"}</td>
-      <td style="color:var(--text-muted)">${eq.department || eq.department_name || "—"}</td>
-      <td style="font-family:var(--mono);font-weight:600">${jc}</td>
+      <td class="text-muted">${eq.department || eq.department_name || "—"}</td>
+      <td class="tabular">${jc}</td>
       <td>${badge}</td>
     </tr>`;
     })
@@ -267,10 +270,10 @@ function loadPPMSummaryFromData(d) {
   }
 
   const statuses = [
-    { label: "Completed", count: completed, color: "#1db954" },
-    { label: "Pending", count: pending, color: "#f59e0b" },
-    { label: "Overdue", count: overdue, color: "#ef4444" },
-    { label: "Upcoming", count: upcoming, color: "#0ea5e9" },
+    { label: "Completed", count: completed, color: C_SUCCESS },
+    { label: "Pending", count: pending, color: C_WARNING },
+    { label: "Overdue", count: overdue, color: C_DANGER },
+    { label: "Upcoming", count: upcoming, color: C_INFO },
   ];
 
   const rows = document.getElementById("ppm-status-rows");
@@ -329,10 +332,10 @@ async function loadPPMSummary() {
     }
 
     const statuses = [
-      { label: "Completed", count: completed, color: "#1db954" },
-      { label: "Pending", count: pending, color: "#f59e0b" },
-      { label: "Overdue", count: overdue, color: "#ef4444" },
-      { label: "Upcoming", count: upcoming, color: "#0ea5e9" },
+      { label: "Completed", count: completed, color: C_SUCCESS },
+      { label: "Pending", count: pending, color: C_WARNING },
+      { label: "Overdue", count: overdue, color: C_DANGER },
+      { label: "Upcoming", count: upcoming, color: C_INFO },
     ];
 
     const rows = document.getElementById("ppm-status-rows");
@@ -368,7 +371,7 @@ async function loadPPMSummary() {
     renderTrendChart(null, null);
     const rows = $("ppm-status-rows");
     if (rows)
-      rows.innerHTML = `<p style="color:var(--text-muted);font-size:.78rem;text-align:center;padding:20px 0">Unable to load PPM data</p>`;
+      rows.innerHTML = `<p class="dash-empty">Unable to load PPM data</p>`;
   }
 }
 
@@ -402,10 +405,10 @@ function renderTrendChart(labels, vals) {
         {
           label: "Completed PPMs",
           data: vals ?? defVals,
-          borderColor: "#1db954",
-          backgroundColor: "rgba(29,185,84,.08)",
+          borderColor: C_SUCCESS,
+          backgroundColor: "transparent",
           borderWidth: 2,
-          pointBackgroundColor: "#1db954",
+          pointBackgroundColor: C_SUCCESS,
           pointRadius: 4,
           tension: 0.4,
           fill: true,
@@ -418,7 +421,7 @@ function renderTrendChart(labels, vals) {
       scales: {
         x: { grid: { display: false } },
         y: {
-          grid: { color: "#30363d" },
+          grid: { color: C_GRID },
           ticks: { precision: 0 },
           beginAtZero: true,
         },
@@ -453,13 +456,13 @@ function loadInventorySummaryFromData(d) {
   $("donut-total").textContent = equipment || "—";
 
   const segments = [
-    { label: "Working", count: working, color: "#1db954" },
-    { label: "Not Working", count: notWorking, color: "#ef4444" },
-    { label: "Under Repair", count: underRepair, color: "#f59e0b" },
+    { label: "Working", count: working, color: C_SUCCESS },
+    { label: "Not Working", count: notWorking, color: C_DANGER },
+    { label: "Under Repair", count: underRepair, color: C_WARNING },
   ].filter((s) => s.count > 0);
 
   if (!segments.length) {
-    segments.push({ label: "No equipment", count: 1, color: "#30363d" });
+    segments.push({ label: "No equipment", count: 1, color: C_EMPTY });
   }
 
 chartDonut = new Chart($("chart-inventory-donut"), {
@@ -472,7 +475,7 @@ chartDonut = new Chart($("chart-inventory-donut"), {
            backgroundColor: segments.map((s) => s.color),
            borderColor: segments.map((s) => s.color),
            borderWidth: 2,
-           hoverOffset: 8,
+           hoverOffset: 4,
          },
        ],
      },
@@ -494,7 +497,7 @@ chartDonut = new Chart($("chart-inventory-donut"), {
         <div class="legend-item">
           <span class="legend-dot" style="background:${s.color}"></span>
           <span>${s.label}</span>
-          <span style="margin-left:auto;font-family:var(--mono);font-weight:600">${s.count}</span>
+          <span class="legend-count">${s.count}</span>
         </div>
       `,
       )
@@ -535,13 +538,13 @@ async function loadInventorySummary() {
     $("donut-total").textContent = equipment || "—";
 
     const segments = [
-      { label: "Working", count: working, color: "#1db954" },
-      { label: "Not Working", count: notWorking, color: "#ef4444" },
-      { label: "Under Repair", count: underRepair, color: "#f59e0b" },
+      { label: "Working", count: working, color: C_SUCCESS },
+      { label: "Not Working", count: notWorking, color: C_DANGER },
+      { label: "Under Repair", count: underRepair, color: C_WARNING },
     ].filter((s) => s.count > 0);
 
     if (!segments.length) {
-      segments.push({ label: "No equipment", count: 1, color: "#30363d" });
+      segments.push({ label: "No equipment", count: 1, color: C_EMPTY });
     }
 
     chartDonut = new Chart($("chart-inventory-donut"), {
@@ -554,7 +557,7 @@ async function loadInventorySummary() {
             backgroundColor: segments.map((s) => s.color),
             borderColor: segments.map((s) => s.color),
             borderWidth: 2,
-            hoverOffset: 8,
+            hoverOffset: 4,
           },
         ],
       },
@@ -578,7 +581,7 @@ async function loadInventorySummary() {
           <div class="legend-item">
             <span class="legend-dot" style="background:${s.color}"></span>
             <span>${s.label}</span>
-            <span style="margin-left:auto;font-family:var(--mono);font-weight:600">${s.count}</span>
+            <span class="legend-count">${s.count}</span>
           </div>
         `,
         )
@@ -595,8 +598,8 @@ async function loadInventorySummary() {
         datasets: [
           {
             data: [1],
-            backgroundColor: ["#30363d"],
-            borderColor: ["#30363d"],
+            backgroundColor: [C_EMPTY],
+            borderColor: [C_EMPTY],
             borderWidth: 1,
           },
         ],

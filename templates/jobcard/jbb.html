@@ -40,10 +40,10 @@
                     <label for="priority_level"><i class='fas fa-flag'></i> Priority Level</label>
                     <select name="priority_level" id="priority_level" class="form-control select2-single" required>
                         <option value="">Select Priority</option>
-                        <option value="Low" {% if form_data.priority_level == "Low" %}selected{% endif %}>🟢 Low</option>
-                        <option value="Medium" {% if form_data.priority_level == "Medium" %}selected{% endif %}>🟡 Medium</option>
-                        <option value="High" {% if form_data.priority_level == "High" %}selected{% endif %}>🟠 High</option>
-                        <option value="Urgent" {% if form_data.priority_level == "Urgent" %}selected{% endif %}>🔴 Urgent</option>
+                        <option value="Low" {% if form_data.priority_level == "Low" %}selected{% endif %}>Low</option>
+                        <option value="Medium" {% if form_data.priority_level == "Medium" %}selected{% endif %}>Medium</option>
+                        <option value="High" {% if form_data.priority_level == "High" %}selected{% endif %}>High</option>
+                        <option value="Urgent" {% if form_data.priority_level == "Urgent" %}selected{% endif %}>Urgent</option>
                     </select>
                 </div>
 
@@ -93,17 +93,17 @@
                     <select name="action_taken" id="action_taken" class="form-control select2-single" required>
                         <option value="">Select Action</option>
                         {% if workshop.category == 'maintenance' %}
-                            <option value="PPM" {% if form_data.action_taken == "PPM" %}selected{% endif %}>🔧 PPM</option>
-                            <option value="Repair" {% if form_data.action_taken == "Repair" %}selected{% endif %}>🔨 Repair</option>
-                            <option value="Others" {% if form_data.action_taken == "Others" %}selected{% endif %}>📋 Others</option>
+                            <option value="PPM" {% if form_data.action_taken == "PPM" %}selected{% endif %}>PPM</option>
+                            <option value="Repair" {% if form_data.action_taken == "Repair" %}selected{% endif %}>Repair</option>
+                            <option value="Others" {% if form_data.action_taken == "Others" %}selected{% endif %}>Others</option>
                         {% elif workshop.category == 'calibration_center' %}
-                            <option value="Calibration" {% if form_data.action_taken == "Calibration" %}selected{% endif %}>⚖️ Calibration</option>
-                            <option value="Others" {% if form_data.action_taken == "Others" %}selected{% endif %}>📋 Others</option>
+                            <option value="Calibration" {% if form_data.action_taken == "Calibration" %}selected{% endif %}>Calibration</option>
+                            <option value="Others" {% if form_data.action_taken == "Others" %}selected{% endif %}>Others</option>
                         {% else %}
-                            <option value="PPM" {% if form_data.action_taken == "PPM" %}selected{% endif %}>🔧 PPM</option>
-                            <option value="Calibration" {% if form_data.action_taken == "Calibration" %}selected{% endif %}>⚖️ Calibration</option>
-                            <option value="Repair" {% if form_data.action_taken == "Repair" %}selected{% endif %}>🔨 Repair</option>
-                            <option value="Others" {% if form_data.action_taken == "Others" %}selected{% endif %}>📋 Others</option>
+                            <option value="PPM" {% if form_data.action_taken == "PPM" %}selected{% endif %}>PPM</option>
+                            <option value="Calibration" {% if form_data.action_taken == "Calibration" %}selected{% endif %}>Calibration</option>
+                            <option value="Repair" {% if form_data.action_taken == "Repair" %}selected{% endif %}>Repair</option>
+                            <option value="Others" {% if form_data.action_taken == "Others" %}selected{% endif %}>Others</option>
                         {% endif %}
                     </select>
                 </div>
@@ -181,7 +181,7 @@
                 <!-- Cost Summary -->
                 <div class="grand-total-box">
                     <div>Parts: <span class="cost-display" id="total_parts_cost_display">0.00</span> KSh</div>
-                    <div style="margin-top: 0.5rem;">Grand Total: <span id="grand_total_display">0.00</span> KSh</div>
+                    <div>Grand total: <span id="grand_total_display">0.00</span> KSh</div>
                 </div>
             </div>
 
@@ -201,7 +201,7 @@
                     <div class="signature-pad-wrapper">
                         <canvas id="signature-pad-tech" width="500" height="200"></canvas>
                     </div>
-                    <button type="button" onclick="clearSignatureTech()" class="btn btn-danger btn-sm mt-2">
+                    <button type="button" onclick="clearSignatureTech()" class="btn btn-outline-danger btn-sm mt-2">
                         <i class='fas fa-trash'></i> Clear
                     </button>
                 </div>
@@ -378,7 +378,7 @@
                     <div class="signature-pad-wrapper">
                         <canvas id="signature-pad-nurse" width="400" height="180"></canvas>
                     </div>
-                    <button type="button" onclick="clearSignatureNurse()" class="btn btn-danger btn-sm mt-2">
+                    <button type="button" onclick="clearSignatureNurse()" class="btn btn-outline-danger btn-sm mt-2">
                         <i class='fas fa-trash'></i> Clear
                     </button>
                 </div>

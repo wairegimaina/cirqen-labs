@@ -80,7 +80,7 @@
                 <div class="alert alert-info d-flex align-items-center mb-4">
                     <i class="fas fa-industry me-3 fs-4"></i>
                     <div>
-                        <small class="text-uppercase fw-bold">Workshop</small>
+                        <small class="d-block text-muted">Workshop</small>
                         <div class="fw-bold">{{ selected_workshop.name }}</div>
                     </div>
                 </div>
@@ -175,7 +175,7 @@
         </div>
         <div class="card-footer bg-tertiary d-flex justify-content-end gap-2">
             <button type="button" class="btn btn-secondary" onclick="closeDeleteModal()">Cancel</button>
-            <button type="button" class="btn btn-info text-white" id="transferEquipmentBtn" style="display: none;" onclick="handleEquipmentTransfer()">
+            <button type="button" class="btn btn-primary" id="transferEquipmentBtn" style="display: none;" onclick="handleEquipmentTransfer()">
                 <i class="fas fa-exchange-alt me-2"></i> Transfer
             </button>
             <button type="button" class="btn btn-danger" id="confirmDeleteBtn" onclick="handleDepartmentDelete()">
@@ -228,7 +228,7 @@
         </div>
         <div class="card-footer bg-tertiary d-flex justify-content-end gap-2">
             <button type="button" class="btn btn-secondary" onclick="closeTransferModal()">Cancel</button>
-            <button type="button" class="btn btn-info text-white" onclick="submitTransfer()">Move Department</button>
+            <button type="button" class="btn btn-primary" onclick="submitTransfer()">Move Department</button>
         </div>
     </div>
 </div>

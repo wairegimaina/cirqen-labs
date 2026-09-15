@@ -34,35 +34,23 @@ def generate_greeting(user_first_name):
 
     if 5 <= hour < 12:
         messages_list = [
-            f"Good morning, {user_first_name}! Wishing you a bright and productive start 🌞",
-            f"Rise and shine, {user_first_name}! Let’s make today count 🚀",
-            f"Morning {user_first_name}! A new day brings new opportunities ✨",
-            f"Good morning, {user_first_name}! Don’t forget your coffee ☕",
-            f"Hello {user_first_name}, may your morning be filled with energy and focus 💡",
+            f"Good morning, {user_first_name}",
+            f"Morning, {user_first_name}. Here's where things stand",
         ]
     elif 12 <= hour < 15:
         messages_list = [
-            f"Good afternoon, {user_first_name}! I hope your day is going smoothly 🌼",
-            f"Hello {user_first_name}, wishing you a productive and positive afternoon ☀️",
-            f"Good afternoon, {user_first_name}! Keep up the great work, you’re doing amazing 💪",
-            f"Hi {user_first_name}, hope your afternoon is filled with focus and good energy ✨",
-            f"Good afternoon, {user_first_name}! Remember to take a short break and recharge ☕",
+            f"Good afternoon, {user_first_name}",
+            f"Afternoon, {user_first_name}. Here's where things stand",
         ]
     elif 15 <= hour < 22:
         messages_list = [
-            f"Good evening, {user_first_name}! Hope you had a successful day 🌆",
-            f"Evening vibes, {user_first_name}! Time to wrap things up strong 💼",
-            f"Good evening, {user_first_name}! You’ve done great today 👏",
-            f"Relax and recharge, {user_first_name}. You’ve earned it ✨",
-            f"Hello {user_first_name}, may your evening be peaceful and fulfilling 🌙",
+            f"Good evening, {user_first_name}",
+            f"Evening, {user_first_name}. Here's where things stand",
         ]
     else:
         messages_list = [
-            f"Burning the midnight oil, {user_first_name}? Keep pushing 🔥",
-            f"Late shift hero, {user_first_name}! Stay strong 🌙",
-            f"Still going strong, {user_first_name}? Much respect 🙌",
-            f"Midnight hustle mode: ON, {user_first_name} ⚡",
-            f"Working under the stars, {user_first_name}. Don’t forget to rest ✨",
+            f"Working late, {user_first_name}",
+            f"Hello, {user_first_name}. Here's where things stand",
         ]
 
     return random.choice(messages_list)

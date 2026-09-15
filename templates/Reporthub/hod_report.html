@@ -13,109 +13,106 @@
 
 {% block content %}
 <div class="main-container">
-      <!-- Header Section -->
-      
 
-      <!-- Filter Form -->
-      <div class="card mb-4">
-        <div class="card-body filter-form-container">
-          <h5 class="card-title">Filter Submitted Reports</h5>
+      <!-- Filter form -->
+      <div class="section-card">
+        <div class="section-card-head">
+          <h2 class="section-card-title"><i class="fas fa-filter"></i> Filter submitted reports</h2>
+        </div>
+        <div class="section-card-body filter-form-container">
           <form
             method="GET"
             action="{% url 'report_hub:hod_reports_landing' %}"
             id="hod-filter-form"
           >
-            <div class="row">
-              <div class="col-md-3"></div>
+            <div class="row g-3">
               <div class="col-md-3">
                 <div class="form-group">
-                  <label for="{{ form.report_type.id_for_label }}">Report Type</label>
+                  <label class="form-label" for="{{ form.report_type.id_for_label }}">Report type</label>
                   {{ form.report_type }}
                 </div>
               </div>
               <div class="col-md-3">
                 <div class="form-group">
-                  <label for="{{ form.year.id_for_label }}"
-                    >Year <span class="text-danger">*</span></label
-                  >
+                  <label class="form-label" for="{{ form.year.id_for_label }}">Year <span class="req">*</span></label>
                   {{ form.year }}
                 </div>
               </div>
               <div class="col-md-3 monthly-fields">
                 <div class="form-group">
-                  <label for="{{ form.month.id_for_label }}">Month</label>
+                  <label class="form-label" for="{{ form.month.id_for_label }}">Month</label>
                   {{ form.month }}
                 </div>
               </div>
               <div class="col-md-3 quarterly-fields">
                 <div class="form-group">
-                  <label for="{{ form.quarter.id_for_label }}">Quarter</label>
+                  <label class="form-label" for="{{ form.quarter.id_for_label }}">Quarter</label>
                   {{ form.quarter }}
                 </div>
               </div>
               <div class="col-md-3 weekly-fields">
                 <div class="form-group">
-                  <label for="{{ form.week.id_for_label }}">Week</label>
+                  <label class="form-label" for="{{ form.week.id_for_label }}">Week</label>
                   {{ form.week }}
                 </div>
               </div>
             </div>
 
-            <button type="submit" class="btn btn-primary">
-              <i class="fas fa-filter"></i> Apply Filter
-            </button>
-
-            <button type="button" class="btn btn-info">
-              <i class="fas fa-sync-alt"></i> Current Period
-            </button>
+            <div class="d-flex flex-wrap gap-2 mt-3">
+              <button type="submit" class="btn btn-primary">
+                <i class="fas fa-filter"></i> Apply filter
+              </button>
+              <button type="button" class="btn btn-secondary" id="currentPeriodBtn">
+                <i class="fas fa-sync-alt"></i> Current period
+              </button>
+            </div>
           </form>
         </div>
       </div>
 
-      <h3>Submitted Reports</h3>
-      <div class="table-responsive">
+      <!-- Submitted reports -->
+      <div class="section-card">
+        <div class="section-card-head">
+          <h2 class="section-card-title"><i class="fas fa-file-alt"></i> Submitted reports</h2>
+        </div>
         {% if reports %}
-        <table class="table table-striped table-bordered" id="reportsTable">
-          <thead>
-            <tr>
-              <th>Workshop</th>
-              <th>Report Type</th>
-              <th>Period Start</th>
-              <th>Submitted By</th>
-              <th>Submitted At</th>
-              <th>Remarks</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for report in reports %}
-            <tr>
-              <td>{{ report.workshop.name }}</td>
-              <td>{{ report.get_period_type_display }}</td>
-              <td>{{ report.period_start|date:"M d, Y" }}</td>
-              <td>{{ report.submitted_by.get_full_name|default:report.submitted_by.username }}</td>
-              <td>{{ report.submitted_at|date:"M d, Y H:i" }}</td>
-              <td>{{ report.remarks|truncatechars:100 }}</td>
-              <td>
-                <div class="btn-group" role="group" aria-label="Download options">
+        <div class="table-responsive">
+          <table class="table table-hover mb-0" id="reportsTable">
+            <thead>
+              <tr>
+                <th>Workshop</th>
+                <th>Report type</th>
+                <th>Period start</th>
+                <th>Submitted by</th>
+                <th>Submitted at</th>
+                <th>Remarks</th>
+                <th class="text-end">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for report in reports %}
+              <tr>
+                <td class="cell-title">{{ report.workshop.name }}</td>
+                <td>{{ report.get_period_type_display }}</td>
+                <td>{{ report.period_start|date:"M d, Y" }}</td>
+                <td>{{ report.submitted_by.get_full_name|default:report.submitted_by.username }}</td>
+                <td class="text-muted">{{ report.submitted_at|date:"M d, Y H:i" }}</td>
+                <td>{{ report.remarks|truncatechars:100 }}</td>
+                <td class="text-end">
                   <a
                     href="{% url 'report_hub:download_pdf_report' %}?report_type={{ report.period_type }}&year={{ report.period_start.year }}&month={{ report.period_start.month }}&quarter={{ report.period_start.quarter }}&workshop={{ report.workshop.id }}&period_start_day={{ report.period_start.day }}"
-                    class="btn btn-sm btn-danger"
+                    class="btn btn-secondary btn-sm"
                   >
                     <i class="fas fa-download"></i> PDF
                   </a>
-                </div>
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-        {% else %}
-        <div class="no-data-message">
-          <i class="fas fa-info-circle" style="font-size: 48px; color: var(--text-muted);"></i>
-          <h5>No reports found</h5>
-          <p>No reports match the selected filters. Try adjusting your filter criteria.</p>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
         </div>
+        {% else %}
+          {% include 'includes/empty_state.html' with icon="fa-file-alt" title="No reports found" message="No reports match the selected filters. Try adjusting your filter criteria." %}
         {% endif %}
       </div>
     </div>

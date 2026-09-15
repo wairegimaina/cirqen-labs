@@ -33,7 +33,7 @@
                         <i class="fas fa-database fa-lg"></i>
                     </div>
                     <div>
-                        <h6 class="text-muted text-uppercase small mb-1">Total {{ current_status_filter }}</h6>
+                        <h6 class="text-muted small mb-1">Total {{ current_status_filter }}</h6>
                         <h2 class="mb-0 fw-bold" style="color: var(--text-primary);">{{ total_count|default:paginator.count }}</h2>
                     </div>
                 </div>
@@ -47,7 +47,7 @@
                         <i class="fas fa-eye fa-lg"></i>
                     </div>
                     <div>
-                        <h6 class="text-muted text-uppercase small mb-1">Visible on Page</h6>
+                        <h6 class="text-muted small mb-1">Visible on Page</h6>
                         <h2 class="mb-0 fw-bold" id="displayedCount" style="color: var(--text-primary);">0</h2>
                     </div>
                 </div>
@@ -61,7 +61,7 @@
                         <i class="fas fa-exclamation-triangle fa-lg"></i>
                     </div>
                     <div>
-                        <h6 class="text-muted text-uppercase small mb-1">High Priority</h6>
+                        <h6 class="text-muted small mb-1">High Priority</h6>
                         <h2 class="mb-0 fw-bold text-danger">{{ high_priority_count|default:"0" }}</h2>
                     </div>
                 </div>
@@ -74,7 +74,7 @@
 
             <div class="row g-3 mb-4 align-items-end">
                 <div class="col-lg-5">
-                    <label for="searchInput" class="form-label small fw-bold text-muted">QUICK SEARCH</label>
+                    <label for="searchInput" class="form-label small text-muted">Quick search</label>
                     <div class="input-group">
                         <span class="input-group-text bg-transparent border-end-0">
                             <i class="fas fa-search text-muted"></i>
@@ -89,11 +89,11 @@
                     <form method="get" action="{% url 'jobcard:bulk_download_waiting_jobcards' %}" class="d-inline-flex flex-wrap gap-2 align-items-end justify-content-lg-end w-100">
                         <div class="d-flex gap-2">
                             <div>
-                                <label for="bulk_dl_start_date" class="form-label small fw-bold text-muted d-block text-start">FROM</label>
+                                <label for="bulk_dl_start_date" class="form-label small text-muted d-block text-start">From</label>
                                 <input type="date" id="bulk_dl_start_date" name="start_date" class="form-control form-control-sm" required>
                             </div>
                             <div>
-                                <label for="bulk_dl_end_date" class="form-label small fw-bold text-muted d-block text-start">TO</label>
+                                <label for="bulk_dl_end_date" class="form-label small text-muted d-block text-start">To</label>
                                 <input type="date" id="bulk_dl_end_date" name="end_date" class="form-control form-control-sm" required>
                             </div>
                         </div>
