@@ -3,8 +3,6 @@
    Inherits global tokens from theme.css
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Syne:wght@400;600;800&display=swap');
-
 :root {
   --mono: 'IBM Plex Mono', monospace;
   --sans: 'Syne', sans-serif;
@@ -37,7 +35,7 @@
 
 .bc-head { display: flex; align-items: flex-start; justify-content: space-between;
            margin-bottom: 2rem; gap: 1rem; flex-wrap: wrap; }
-.bc-title { font-size: 2rem; font-weight: 800; letter-spacing: -.02em; line-height: 1;
+.bc-title { font-size: 2rem; font-weight: 600; letter-spacing: -.02em; line-height: 1;
             color: var(--bc-ink); }
 .bc-sub   { color: var(--bc-muted); font-family: var(--mono); font-size: .75rem;
             margin-top: .35rem; }
@@ -47,10 +45,9 @@
               gap: 1rem; margin-bottom: 2rem; }
 .stat-box   { background: var(--bc-card); border: 1px solid var(--bc-border);
               border-radius: var(--radius); padding: 1.1rem 1.25rem; }
-.stat-val   { font-size: 2.2rem; font-weight: 800; line-height: 1;
+.stat-val   { font-size: 2.2rem; font-weight: 600; line-height: 1;
               color: var(--bc-ink); }
-.stat-lbl   { font-family: var(--mono); font-size: .7rem; color: var(--bc-muted);
-              text-transform: uppercase; letter-spacing: .08em; margin-top: .3rem; }
+.stat-lbl   { font-family: var(--mono); font-size: .7rem; color: var(--bc-muted); margin-top: .3rem; }
 .stat-box.accent { background: var(--bc-accent); color: var(--bg-card); border-color: var(--bc-accent); }
 .stat-box.accent .stat-lbl { color: rgba(0,0,0,.0); }
 
@@ -59,9 +56,9 @@
 .deploy-bar-label { display: flex; justify-content: space-between;
                     font-family: var(--mono); font-size: .78rem; margin-bottom: .6rem;
                     color: var(--bc-ink); }
-.deploy-track { height: 14px; background: var(--bc-border); border-radius: 7px; overflow: hidden; }
-.deploy-fill  { height: 100%; border-radius: 7px; transition: width .6s cubic-bezier(.4,0,.2,1);
-                background: linear-gradient(90deg, var(--bc-accent), var(--bc-accent)); }
+.deploy-track { height: 14px; background: var(--bc-border); border-radius: var(--radius-sm); overflow: hidden; }
+.deploy-fill  { height: 100%; border-radius: var(--radius-sm); transition: width .6s cubic-bezier(.4,0,.2,1);
+                background: var(--bc-accent); }
 
 .bc-controls { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap;
                margin-bottom: 1.25rem; }
@@ -80,17 +77,17 @@
 .machine-card { background: var(--bc-card); border: 1px solid var(--bc-border);
                 border-radius: var(--radius); padding: 1.1rem 1.25rem;
                 transition: box-shadow .15s; }
-.machine-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.0); }
+.machine-card:hover { }
 .machine-card.updated  { border-left: 3px solid var(--bc-accent); }
 .machine-card.outdated { border-left: 3px solid var(--bc-warn); }
 .machine-card.offline  { opacity: .65; }
 
 .mc-top  { display: flex; justify-content: space-between; align-items: flex-start; gap:.5rem; }
-.mc-host { font-weight: 700; font-size: .95rem; color: var(--bc-ink); word-break: break-all; }
+.mc-host { font-weight: 600; font-size: .95rem; color: var(--bc-ink); word-break: break-all; }
 .mc-id   { font-family: var(--mono); font-size: .68rem; color: var(--bc-muted); margin-top: .1rem; }
 
 .mc-chips { display: flex; gap: .4rem; flex-wrap: wrap; margin-top: .65rem; }
-.chip     { display: inline-block; border-radius: 4px; padding: .18rem .55rem;
+.chip     { display: inline-block; border-radius: var(--radius-sm); padding: .18rem .55rem;
             font-family: var(--mono); font-size: .68rem; font-weight: 600; }
 .chip-ok   { background: color-mix(in srgb, var(--bc-accent) 15%, var(--bc-card)); color: var(--bc-accent); }
 .chip-warn { background: color-mix(in srgb, var(--bc-warn) 15%, var(--bc-card)); color: var(--bc-warn); }
@@ -103,7 +100,7 @@
 
 .rollout-panel { background: var(--bc-card); border: 1px solid var(--bc-border);
                  border-radius: var(--radius); padding: 1.25rem 1.5rem; margin-bottom: 2rem; }
-.rollout-panel h3 { font-size: 1rem; font-weight: 700; margin: 0 0 1rem; color: var(--bc-ink); }
+.rollout-panel h3 { font-size: 1rem; font-weight: 600; margin: 0 0 1rem; color: var(--bc-ink); }
 .rollout-row  { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
 .rollout-pct  { display: flex; gap: .5rem; }
 .pct-btn      { border: 1px solid var(--bc-border); border-radius: var(--radius);
@@ -112,11 +109,6 @@
                 transition: all .12s; }
 .pct-btn:hover, .pct-btn.active { background: var(--bc-accent); color: var(--bg-card); border-color: var(--bc-accent); }
 
-.btn { border: none; border-radius: var(--radius); padding: .55rem 1.1rem; cursor: pointer;
-       font-family: var(--sans); font-weight: 600; font-size: .85rem; transition: opacity .12s;
-       color: var(--bc-ink); }
-.btn:hover { opacity: .85; }
-.btn-primary { background: var(--bc-accent); color: var(--bg-card); }
 .btn-outline { background: transparent; border: 1px solid var(--bc-border); color: var(--bc-ink); }
 
 .empty-state { text-align: center; padding: 4rem 2rem; color: var(--bc-muted); }

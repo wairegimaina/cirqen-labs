@@ -1410,6 +1410,31 @@ class DatabaseMirror:
 
                 json_columns = {row[0] for row in cur.fetchall()}
 
+                # Columns this LOCAL table actually has. HQ can be ahead of the
+                # client: the LWW migration added `source_updated_at` to every HQ
+                # table, and mirroring those rows back raised
+                #   column "source_updated_at" of relation "..." does not exist
+                # for every affected row. HQ already tolerates the reverse
+                # direction (upload_processing._table_columns drops unknown
+                # columns); this is the same tolerance on the way down, so a
+                # future HQ migration cannot break local sync again.
+                cur.execute("""
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_schema = %s AND table_name = %s
+                """, (schema, tbl))
+                local_columns = {row[0] for row in cur.fetchall()}
+
+                if local_columns:
+                    unknown = [k for k in data if k not in local_columns]
+                    if unknown:
+                        LOG.warning(
+                            "   \u26a0\ufe0f %s: dropping %d column(s) HQ has but this "
+                            "client does not: %s",
+                            table, len(unknown), ", ".join(sorted(unknown)),
+                        )
+                        data = {k: v for k, v in data.items() if k in local_columns}
+
                 # Prepare data with JSON wrapping
                 prepared_data = {}
                 for key, value in data.items():

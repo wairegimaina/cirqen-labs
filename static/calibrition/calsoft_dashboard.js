@@ -50,15 +50,6 @@
     return value || fallback;
   }
 
-  function clamp(value, min, max) {
-    return Math.min(Math.max(Number(value) || 0, min), max);
-  }
-
-  function formatPercent(value) {
-    const number = Number(value) || 0;
-    return `${Number.isInteger(number) ? number.toFixed(0) : number.toFixed(1)}%`;
-  }
-
   function pluralize(count, singular, plural = `${singular}s`) {
     return count === 1 ? singular : plural;
   }
@@ -84,63 +75,55 @@
   }
 
   // ============================================================
-  // KPI CARDS (small, below hero)
+  // KPI CARDS — shared .kpi-card component (components.css)
   // ============================================================
   function renderKpiCards(data) {
-    const totalSessions = data.total_sessions || 0;
-    const monthTotal = data.month_total || 0;
-    const pendingApproval = data.pending_approval_count || 0;
-    const awaitingCerts = data.awaiting_certificates || 0;
-
     const cards = [
       {
-        variant: "pending",
+        variant: "kpi-pending",
         icon: "clipboard",
-        value: pendingApproval,
-        label: "Pending Approval",
+        value: data.pending_approval_count || 0,
+        label: "Pending approval",
         sub: "Sessions awaiting review",
       },
       {
-        variant: "approved",
+        variant: "kpi-approved",
         icon: "check",
-        value: monthTotal,
-        label: "Approved This Month",
+        value: data.month_total || 0,
+        label: "Approved this month",
         sub: data.current_month || "This month",
       },
       {
-        variant: "total",
+        variant: "kpi-primary",
         icon: "chart",
-        value: totalSessions,
-        label: "Total Approved",
-        sub: "All time sessions",
+        value: data.total_sessions || 0,
+        label: "Total approved",
+        sub: "All time",
       },
       {
-        variant: "certs",
+        variant: "kpi-info",
         icon: "badge",
-        value: awaitingCerts,
-        label: "Awaiting Certificates",
+        value: data.awaiting_certificates || 0,
+        label: "Awaiting certificates",
         sub: "Ready for certification",
       },
     ];
 
     return `
-      <section class="cs-kpi-grid">
+      <section class="kpi-grid">
         ${cards
           .map(
             (card) => `
-          <article class="cs-kpi-card cs-kpi-${card.variant}">
-            <div class="cs-kpi-top">
-              <span class="cs-icon">${icon(card.icon)}</span>
-              <strong>${escapeHTML(card.value)}</strong>
-            </div>
-            <div class="cs-kpi-label">${escapeHTML(card.label)}</div>
-            <div class="cs-kpi-sub">${escapeHTML(card.sub)}</div>
+          <article class="kpi-card ${card.variant}">
+            <div class="kpi-icon">${icon(card.icon)}</div>
+            <div class="kpi-num">${escapeHTML(card.value)}</div>
+            <div class="kpi-label">${escapeHTML(card.label)}</div>
+            <div class="kpi-sub">${escapeHTML(card.sub)}</div>
           </article>`,
           )
           .join("")}
       </section>`;
   }
-
 
   // ============================================================
   // APPROVAL BANNER
@@ -148,17 +131,14 @@
   function renderBanner(pendingApproval, urls) {
     if (!pendingApproval) return "";
     return `
-      <section class="cs-approval-banner">
-        <div>
-          <strong>${pendingApproval}</strong>
-          ${pluralize(pendingApproval, "session")} pending your review
-        </div>
-        <a class="cs-approve-btn" href="${escapeHTML(urls.sessionsPendingApproval)}">Review &amp; Approve</a>
-      </section>`;
+      <div class="alert alert-warning cs-banner" role="status">
+        <span><strong>${pendingApproval}</strong> ${pluralize(pendingApproval, "session")} waiting for your review</span>
+        <a class="btn btn-secondary btn-sm" href="${escapeHTML(urls.sessionsPendingApproval)}">Review sessions</a>
+      </div>`;
   }
 
   // ============================================================
-  // SCHEDULE SNAPSHOT (without donut)
+  // SCHEDULE SNAPSHOT
   // ============================================================
   function renderSchedulePanel(counts, month) {
     const total = counts.pending + counts.overdue + counts.completed || 1;
@@ -166,56 +146,51 @@
     const pendingPct = pct(counts.pending, total);
     const overduePct = pct(counts.overdue, total);
 
+    const stats = [
+      { key: "completed", value: counts.completed, label: "Completed", sub: `${donePct}% of total` },
+      { key: "pending", value: counts.pending, label: "Pending", sub: `${pendingPct}% of total` },
+      { key: "overdue", value: counts.overdue, label: "Overdue", sub: `${overduePct}% of total` },
+      { key: "warning", value: counts.warnings, label: "Warnings", sub: "Logic-change flags" },
+    ];
+
     return `
-      <section class="cs-panel cs-schedule-panel">
-        <div class="cs-panel-heading">
-          <div>
-            <span class="cs-eyebrow">calSchedules</span>
-            <h2>Schedule Snapshot</h2>
-          </div>
-          <span class="cs-panel-period">${escapeHTML(month)}</span>
+      <section class="section-card">
+        <div class="section-card-head">
+          <h2 class="section-card-title">Schedule snapshot</h2>
+          <span class="badge">${escapeHTML(month)}</span>
         </div>
-
-        <div class="cs-schedule-grid">
-          <div class="cs-schedule-kpis">
-            <article>
-              <strong>${counts.completed}</strong>
-              <span>Completed</span>
-              <small>${donePct}% of tracked total</small>
-            </article>
-            <article>
-              <strong>${counts.pending}</strong>
-              <span>Pending</span>
-              <small>${pendingPct}% of tracked total</small>
-            </article>
-            <article>
-              <strong>${counts.overdue}</strong>
-              <span>Overdue</span>
-              <small>${overduePct}% of tracked total</small>
-            </article>
-            <article>
-              <strong>${counts.warnings}</strong>
-              <span>Warnings</span>
-              <small>Logic-change flags</small>
-            </article>
-          </div>
-
-          <div class="cs-schedule-chart">
-            <canvas id="cs-status-chart" role="img" aria-label="Schedule status distribution: ${donePct}% completed, ${pendingPct}% pending, ${overduePct}% overdue"></canvas>
-          </div>
-
-          <div class="cs-schedule-summary">
-            <div class="cs-progress-block">
-              <div class="cs-progress-labels">
-                <span>Completion progress</span>
-                <strong>${donePct}%</strong>
-              </div>
-              <div class="cs-progress-track">
-                <div class="cs-progress-fill" style="width: ${donePct}%"></div>
-              </div>
+        <div class="section-card-body">
+          <div class="cs-schedule-grid">
+            <div class="cs-stat-list">
+              ${stats
+                .map(
+                  (stat) => `
+                <div class="cs-stat">
+                  <strong>${stat.value}</strong>
+                  <span><i class="dot is-${stat.key}"></i>${stat.label}</span>
+                  <small>${stat.sub}</small>
+                </div>`,
+                )
+                .join("")}
             </div>
-            <p>Completed, pending, and overdue counts are read from the calSchedules statistics endpoint.</p>
-            <a class="cs-link" href="${escapeHTML(window.DashboardURLs.scheduleList || "#")}">View all schedules</a>
+
+            <div class="cs-chart">
+              <canvas id="cs-status-chart" role="img" aria-label="Schedule status distribution: ${donePct}% completed, ${pendingPct}% pending, ${overduePct}% overdue"></canvas>
+            </div>
+
+            <div class="cs-summary">
+              <div>
+                <div class="cs-progress-labels">
+                  <span>Completion</span>
+                  <strong>${donePct}%</strong>
+                </div>
+                <div class="progress" role="progressbar" aria-valuenow="${donePct}" aria-valuemin="0" aria-valuemax="100">
+                  <div class="progress-bar" style="width: ${donePct}%"></div>
+                </div>
+              </div>
+              <p>Counts come from the calibration schedule statistics.</p>
+              <a href="${escapeHTML(window.DashboardURLs.scheduleList || "#")}">View all schedules</a>
+            </div>
           </div>
         </div>
       </section>`;
@@ -230,8 +205,8 @@
         <tr>
           <td colspan="5">
             <div class="cs-empty">
-              <span>No approved sessions yet.</span>
-              <a href="${escapeHTML(urls.performCalibration)}">Start a calibration</a>
+              No approved sessions yet.<br>
+              <a href="${escapeHTML(urls.performCalibration || urls.pendingCalibrations || "#")}">Start a calibration</a>
             </div>
           </td>
         </tr>`;
@@ -241,51 +216,40 @@
       .map(
         (session) => `
       <tr>
-        <td>${escapeHTML(session.device_model || "—")}</td>
-        <td><small>${escapeHTML(session.device_serial || "—")}</small></td>
+        <td class="cell-title">${escapeHTML(session.device_model || "—")}</td>
+        <td><span class="mono-chip">${escapeHTML(session.device_serial || "—")}</span></td>
         <td>${escapeHTML(session.procedure_name || "—")}</td>
-        <td>${escapeHTML(shortDate(session.timestamp))}</td>
-        <td><span class="cs-result ${session.overall_pass ? "pass" : "fail"}">${session.overall_pass ? "Pass" : "Fail"}</span></td>
+        <td class="text-nowrap">${escapeHTML(shortDate(session.timestamp))}</td>
+        <td><span class="badge ${session.overall_pass ? "bg-success" : "bg-danger"}">${session.overall_pass ? "Pass" : "Fail"}</span></td>
       </tr>`,
       )
       .join("");
   }
 
   // ============================================================
-  // QUICK ACTIONS (with all requested URLs)
+  // QUICK ACTIONS
   // ============================================================
   function renderQuickActions(urls) {
     const actions = [
-      {
-        href: urls.pendingCalibrations || "#",
-        icon: "flask",
-        label: "Perform Calibration",
-      },
-      {
-        href: urls.scheduleDashboard || "#",
-        icon: "clipboard",
-        label: "Schedules",
-      },
-      {
-        href: urls.sessionsPendingApproval || "#",
-        icon: "note",
-        label: "Pending Approval",
-      },
+      { href: urls.pendingCalibrations || "#", icon: "flask", label: "Perform calibration" },
+      { href: urls.scheduleDashboard || "#", icon: "clipboard", label: "Schedules" },
+      { href: urls.sessionsPendingApproval || "#", icon: "note", label: "Pending approval" },
       { href: urls.certificates || "#", icon: "badge", label: "Certificates" },
     ];
 
     return `
-      <div class="cs-qa-list">
+      <nav class="cs-qa-list">
         ${actions
           .map(
             (action) => `
           <a class="cs-qa-item" href="${escapeHTML(action.href)}">
-            <span class="cs-qa-code">${icon(action.icon)}</span>
+            <span class="cs-qa-icon">${icon(action.icon)}</span>
             <span>${escapeHTML(action.label)}</span>
+            <i class="fas fa-chevron-right" aria-hidden="true"></i>
           </a>`,
           )
           .join("")}
-      </div>`;
+      </nav>`;
   }
 
   // ============================================================
@@ -294,539 +258,33 @@
   function renderBottomRow(data, urls) {
     return `
       <section class="cs-bottom-grid">
-        <article class="cs-panel">
-          <div class="cs-panel-heading compact">
-            <div>
-              <span class="cs-eyebrow">Recent</span>
-              <h2>Approved Sessions</h2>
-            </div>
+        <article class="section-card">
+          <div class="section-card-head">
+            <h2 class="section-card-title">Recently approved sessions</h2>
           </div>
-          <table class="cs-sessions-table">
-            <thead>
-              <tr>
-                <th>Device</th>
-                <th>Serial</th>
-                <th>Procedure</th>
-                <th>Date</th>
-                <th>Result</th>
-              </tr>
-            </thead>
-            <tbody>${renderRecentSessions(data.recent_sessions || [], urls)}</tbody>
-          </table>
+          <div class="table-wrapper">
+            <table class="table cs-sessions-table">
+              <thead>
+                <tr>
+                  <th>Device</th>
+                  <th>Serial</th>
+                  <th>Procedure</th>
+                  <th>Date</th>
+                  <th>Result</th>
+                </tr>
+              </thead>
+              <tbody>${renderRecentSessions(data.recent_sessions || [], urls)}</tbody>
+            </table>
+          </div>
         </article>
 
-        <article class="cs-panel">
-          <div class="cs-panel-heading compact">
-            <div>
-              <span class="cs-eyebrow">Quick</span>
-              <h2>Actions</h2>
-            </div>
+        <article class="section-card">
+          <div class="section-card-head">
+            <h2 class="section-card-title">Quick actions</h2>
           </div>
           ${renderQuickActions(urls)}
         </article>
       </section>`;
-  }
-
-  // ============================================================
-  // STYLES (no donut styles, hero below KPI)
-  // ============================================================
-  function injectStyles() {
-    if (document.getElementById("calsoft-dashboard-redesign")) return;
-
-    const style = document.createElement("style");
-    style.id = "calsoft-dashboard-redesign";
-    style.textContent = `
-      /* Hero - now below KPI */
-      .cs-hero {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) 200px;
-        gap: 1.25rem;
-        align-items: center;
-        padding: 1.35rem;
-        border-radius: 24px;
-        background: var(--bg-card);
-        border: 1px solid var(--border-color);
-        box-shadow: var(--shadow-sm);
-        margin-bottom: 0.75rem;
-      }
-
-      .cs-hero-copy { min-width: 0; }
-
-      .cs-eyebrow {
-        display: inline-block;
-        margin-bottom: 0.4rem;
-        color: var(--primary-color);
-        font-size: 0.72rem;
-        font-weight: 800;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-      }
-
-      .cs-hero h1 {
-        font-size: clamp(2.5rem, 7vw, 4.5rem);
-        letter-spacing: -0.07em;
-        margin: 0;
-        color: var(--text-primary);
-        line-height: 1.05;
-      }
-
-      .cs-hero p {
-        margin: 0.55rem 0 0;
-        color: var(--text-secondary);
-        font-size: 1rem;
-      }
-
-      .cs-hero-meta {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.65rem;
-        margin-top: 1rem;
-      }
-
-      .cs-hero-meta span {
-        padding: 0.45rem 0.7rem;
-        border-radius: 999px;
-        background: var(--bg-tertiary);
-        color: var(--text-secondary);
-        font-size: 0.8rem;
-      }
-
-      .cs-pass-orb {
-        width: 170px;
-        height: 170px;
-        margin: 0 auto;
-        border-radius: 50%;
-        display: grid;
-        place-items: center;
-        background:
-          conic-gradient(var(--success-color) calc(var(--pass-rate) * 1%), var(--bg-tertiary) 0);
-        position: relative;
-        box-shadow: inset 0 0 0 1px var(--border-color);
-      }
-
-      .cs-pass-orb::before {
-        content: "";
-        position: absolute;
-        inset: 16px;
-        border-radius: 50%;
-        background: var(--bg-card);
-        box-shadow: inset 0 0 0 1px var(--border-color);
-      }
-
-      .cs-pass-orb span,
-      .cs-pass-orb small {
-        position: relative;
-        z-index: 1;
-        display: block;
-        text-align: center;
-      }
-
-      .cs-pass-orb span {
-        font-size: 2rem;
-        font-weight: 900;
-        color: var(--text-primary);
-        letter-spacing: -0.05em;
-      }
-
-      .cs-pass-orb small {
-        margin-top: 0.25rem;
-        color: var(--text-secondary);
-        font-size: 0.68rem;
-        font-weight: 700;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-      }
-
-      /* KPI Cards - small */
-      .cs-kpi-grid {
-        display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 0.75rem;
-        margin-bottom: 0.75rem;
-      }
-
-      .cs-kpi-card {
-        min-height: 85px;
-        padding: 0.7rem 0.85rem;
-        border-radius: 14px;
-        border: 1px solid var(--border-color);
-        background: var(--bg-card);
-        box-shadow: var(--shadow-sm);
-        position: relative;
-        overflow: hidden;
-      }
-
-      .cs-kpi-card::before {
-        content: "";
-        position: absolute;
-        inset: 0 auto 0 0;
-        width: 3px;
-        background: var(--kpi-accent);
-      }
-
-      .cs-kpi-pending { --kpi-accent: var(--warning-color); }
-      .cs-kpi-approved { --kpi-accent: var(--success-color); }
-      .cs-kpi-total { --kpi-accent: var(--primary-color); }
-      .cs-kpi-certs { --kpi-accent: #8b5cf6; }
-
-      .cs-kpi-top {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 0.75rem;
-      }
-
-      .cs-kpi-top span.cs-icon {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 26px;
-        height: 26px;
-        padding: 0;
-        border-radius: 999px;
-        background: color-mix(in srgb, var(--kpi-accent) 14%, var(--bg-card));
-        color: var(--kpi-accent);
-      }
-
-      .cs-kpi-top span.cs-icon svg {
-        width: 15px;
-        height: 15px;
-      }
-
-      .cs-kpi-top strong {
-        font-size: 1.4rem;
-        line-height: 1;
-        color: var(--kpi-accent);
-      }
-
-      .cs-kpi-label {
-        margin-top: 0.3rem;
-        color: var(--text-primary);
-        font-weight: 700;
-        font-size: 0.82rem;
-      }
-
-      .cs-kpi-sub {
-        margin-top: 0.1rem;
-        color: var(--text-secondary);
-        font-size: 0.68rem;
-      }
-
-      /* Approval Banner */
-      .cs-approval-banner {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 1rem;
-        padding: 0.75rem 1rem;
-        border-radius: 16px;
-        margin-bottom: 0.75rem;
-        background: color-mix(in srgb, var(--warning-color) 12%, var(--bg-card));
-        border: 1px solid color-mix(in srgb, var(--warning-color) 38%, var(--border-color));
-        color: var(--text-primary);
-      }
-
-      .cs-approve-btn {
-        flex: 0 0 auto;
-        padding: 0.45rem 0.8rem;
-        border-radius: 999px;
-        background: var(--warning-color);
-        color: var(--text-white);
-        font-size: 0.78rem;
-        font-weight: 800;
-        text-decoration: none;
-      }
-
-      /* Panels */
-      .cs-panel,
-      .cs-schedule-panel {
-        border-radius: 20px;
-        border: 1px solid var(--border-color);
-        background: var(--bg-card);
-        box-shadow: var(--shadow-sm);
-        padding: 1rem;
-      }
-
-      .cs-panel-heading {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 1rem;
-        margin-bottom: 0.85rem;
-      }
-
-      .cs-panel-heading.compact { margin-bottom: 0.65rem; }
-
-      .cs-panel-heading h2 {
-        font-size: 0.95rem;
-        margin: 0;
-        color: var(--text-primary);
-        line-height: 1.05;
-      }
-
-      .cs-panel-period {
-        padding: 0.3rem 0.6rem;
-        border-radius: 999px;
-        background: var(--bg-tertiary);
-        color: var(--text-secondary);
-        font-size: 0.7rem;
-        font-weight: 700;
-        white-space: nowrap;
-      }
-
-      .cs-schedule-grid {
-        display: grid;
-        grid-template-columns: 1fr 200px 1fr;
-        gap: 0.85rem;
-        align-items: stretch;
-      }
-
-      .cs-schedule-chart {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 0.85rem;
-        border-radius: 18px;
-        background: var(--bg-tertiary);
-        border: 1px solid var(--border-color);
-        min-height: 180px;
-      }
-
-      .cs-schedule-chart canvas {
-        max-width: 100%;
-        max-height: 200px;
-      }
-
-      .cs-schedule-kpis {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 0.5rem;
-      }
-
-      .cs-schedule-kpis article {
-        padding: 0.7rem;
-        border-radius: 14px;
-        background: var(--bg-tertiary);
-        border: 1px solid var(--border-color);
-      }
-
-      .cs-schedule-kpis strong {
-        display: block;
-        font-size: 1.4rem;
-        line-height: 1;
-        color: var(--text-primary);
-      }
-
-      .cs-schedule-kpis span {
-        display: block;
-        margin-top: 0.3rem;
-        color: var(--text-secondary);
-        font-weight: 700;
-        font-size: 0.68rem;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-      }
-
-      .cs-schedule-kpis small {
-        display: block;
-        margin-top: 0.15rem;
-        color: var(--text-muted);
-        font-size: 0.65rem;
-      }
-
-      .cs-schedule-summary {
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        gap: 0.85rem;
-        padding: 0.85rem;
-        border-radius: 18px;
-        background: var(--bg-tertiary);
-        border: 1px solid var(--border-color);
-      }
-
-      .cs-progress-labels {
-        display: flex;
-        justify-content: space-between;
-        gap: 1rem;
-        color: var(--text-secondary);
-        font-size: 0.78rem;
-        font-weight: 700;
-      }
-
-      .cs-progress-track {
-        height: 8px;
-        margin-top: 0.4rem;
-        border-radius: 999px;
-        overflow: hidden;
-        background: var(--bg-primary);
-      }
-
-      .cs-progress-fill {
-        height: 100%;
-        border-radius: inherit;
-        background: var(--success-color);
-        transition: width 0.9s cubic-bezier(0.4, 0, 0.2, 1);
-      }
-
-      .cs-schedule-summary p {
-        margin: 0;
-        color: var(--text-secondary);
-        font-size: 0.78rem;
-        line-height: 1.5;
-      }
-
-      .cs-link {
-        color: var(--primary-color);
-        font-weight: 800;
-        text-decoration: none;
-        font-size: 0.82rem;
-      }
-
-      .cs-link:hover { text-decoration: underline; }
-
-      /* Bottom Grid */
-      .cs-bottom-grid {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) 240px;
-        gap: 0.85rem;
-        margin-top: 0.85rem;
-      }
-
-      .cs-sessions-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 0.8rem;
-      }
-
-      .cs-sessions-table th {
-        padding: 0.5rem 0.65rem;
-        color: var(--text-muted);
-        font-size: 0.65rem;
-        font-weight: 900;
-        letter-spacing: 0.08em;
-        text-align: left;
-        text-transform: uppercase;
-        border-bottom: 1px solid var(--border-color);
-      }
-
-      .cs-sessions-table td {
-        padding: 0.55rem 0.65rem;
-        color: var(--text-secondary);
-        border-bottom: 1px solid var(--border-color);
-      }
-
-      .cs-sessions-table tr:last-child td { border-bottom: 0; }
-
-      .cs-sessions-table small { color: var(--text-muted); }
-
-      .cs-result {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-width: 50px;
-        padding: 0.15rem 0.45rem;
-        border-radius: 999px;
-        font-size: 0.68rem;
-        font-weight: 900;
-      }
-
-      .cs-result.pass {
-        background: color-mix(in srgb, var(--success-color) 16%, var(--bg-card));
-        color: var(--success-color);
-      }
-
-      .cs-result.fail {
-        background: color-mix(in srgb, var(--danger-color) 16%, var(--bg-card));
-        color: var(--danger-color);
-      }
-
-      .cs-empty {
-        padding: 1.5rem 0.5rem;
-        text-align: center;
-        color: var(--text-secondary);
-      }
-
-      .cs-empty span {
-        display: block;
-        margin-bottom: 0.4rem;
-      }
-
-      .cs-empty a { color: var(--primary-color); }
-
-      /* Quick Actions */
-      .cs-qa-list {
-        display: grid;
-        gap: 0.5rem;
-      }
-
-      .cs-qa-item {
-        display: flex;
-        align-items: center;
-        gap: 0.65rem;
-        padding: 0.6rem 0.75rem;
-        border-radius: 14px;
-        background: var(--bg-tertiary);
-        border: 1px solid var(--border-color);
-        color: var(--text-primary);
-        text-decoration: none;
-        transition: transform 0.15s ease, border-color 0.15s ease;
-      }
-
-      .cs-qa-item:hover {
-        transform: translateY(-2px);
-        border-color: var(--primary-color);
-      }
-
-      .cs-qa-code {
-        display: inline-grid;
-        place-items: center;
-        width: 36px;
-        height: 36px;
-        flex: 0 0 auto;
-        border-radius: 10px;
-        background: var(--primary-gradient);
-        color: var(--bg-card);
-        font-size: 0.75rem;
-        font-weight: 700;
-      }
-
-      .cs-qa-code svg {
-        width: 18px;
-        height: 18px;
-      }
-
-      /* Responsive */
-      @media (max-width: 1100px) {
-        .cs-hero,
-        .cs-schedule-grid,
-        .cs-bottom-grid {
-          grid-template-columns: 1fr;
-        }
-
-        .cs-pass-orb {
-          width: 150px;
-          height: 150px;
-        }
-      }
-
-      @media (max-width: 760px) {
-        .cs-kpi-grid,
-        .cs-schedule-kpis {
-          grid-template-columns: 1fr;
-        }
-
-        .cs-hero {
-          padding: 1rem;
-        }
-
-        .cs-approval-banner {
-          align-items: flex-start;
-          flex-direction: column;
-        }
-      }
-    `;
-    document.head.appendChild(style);
   }
 
   // ============================================================
@@ -851,11 +309,11 @@
           {
             data: [counts.completed, counts.pending, counts.overdue],
             backgroundColor: [
-              cssVar("--success-color", "#059669"),
-              cssVar("--warning-color", "#d97706"),
-              cssVar("--danger-color", "#ef4444"),
+              cssVar("--success-color", "#047857"),
+              cssVar("--warning-color", "#b45309"),
+              cssVar("--danger-color", "#dc2626"),
             ],
-            borderColor: cssVar("--bg-tertiary", "#f0fdf4"),
+            borderColor: cssVar("--bg-card", "#ffffff"),
             borderWidth: 2,
           },
         ],
@@ -863,15 +321,17 @@
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        cutout: "68%",
+        cutout: "72%",
         plugins: {
           legend: {
             position: "bottom",
             labels: {
               color: cssVar("--text-secondary", "#4b5563"),
-              boxWidth: 10,
-              padding: 10,
-              font: { size: 11 },
+              boxWidth: 8,
+              boxHeight: 8,
+              usePointStyle: true,
+              padding: 12,
+              font: { size: 12, family: getComputedStyle(document.body).fontFamily },
             },
           },
           tooltip: { enabled: true },
@@ -920,7 +380,6 @@
 
       content.innerHTML = `
         ${renderKpiCards(data)}
-
         ${renderBanner(pendingApproval, urls)}
         ${renderSchedulePanel(counts, month)}
         ${renderBottomRow(data, urls)}`;
@@ -951,7 +410,6 @@
   // BOOT
   // ============================================================
   function boot() {
-    injectStyles();
     window.CalSoftDashboard = {
       load: loadDashboard,
       refresh: loadDashboard,

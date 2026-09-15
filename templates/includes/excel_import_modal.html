@@ -1,0 +1,123 @@
+{% comment %}
+Excel bulk-import modal. Needs static/js/excel_import.js on the page (once).
+
+  modal_id              element id; open it with data-bs-target="#<modal_id>"
+  title                 modal heading
+  noun                  singular name of what is imported, e.g. "standard"
+  template_url          link to download the blank template
+  upload_url            endpoint built on core.excel_import.run_import
+  help_text             which columns are required
+  create_missing_label  optional; adds a checkbox posted as create_missing
+{% endcomment %}
+<style>
+    /* Some pages style every .modal-content as a small custom dialog; keep this one a normal Bootstrap modal. */
+    .excel-import-modal .modal-content { max-width: none; width: 100%; transform: none; animation: none; }
+</style>
+<div class="modal fade excel-import-modal" id="{{ modal_id }}" tabindex="-1" aria-labelledby="{{ modal_id }}Title" aria-hidden="true"
+     data-excel-import data-upload-url="{{ upload_url }}" data-noun="{{ noun }}">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="{{ modal_id }}Title"><i class="fas fa-file-excel me-2"></i>{{ title }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body">
+                {% csrf_token %}
+
+                <!-- Step 1: pick a file -->
+                <div data-step="select">
+                    <div class="alert alert-info d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div>
+                            <strong>New to this?</strong>
+                            Download the template for the exact columns and a list of what already exists.
+                        </div>
+                        <a href="{{ template_url }}" class="btn btn-primary btn-sm text-nowrap">
+                            <i class="fas fa-download"></i> Download Template
+                        </a>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label" for="{{ modal_id }}File">Excel file (.xlsx)</label>
+                        <input type="file" id="{{ modal_id }}File" class="form-control" accept=".xlsx,.xlsm" data-role="file">
+                        <div class="form-text">{{ help_text }} Maximum 5,000 rows.</div>
+                    </div>
+
+                    {% if create_missing_label %}
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="{{ modal_id }}CreateMissing" data-role="create-missing" checked>
+                        <label class="form-check-label" for="{{ modal_id }}CreateMissing">{{ create_missing_label }}</label>
+                    </div>
+                    {% endif %}
+
+                    <div class="alert alert-danger" data-role="error" hidden></div>
+
+                    <button type="button" class="btn btn-primary w-100 justify-content-center" data-action="preview">
+                        <i class="fas fa-eye"></i> Validate &amp; Preview
+                    </button>
+                </div>
+
+                <!-- Step 2 / 3: preview and result -->
+                <div data-step="review" hidden>
+                    <div class="alert" data-role="banner"></div>
+
+                    <div class="row g-2 mb-3 text-center">
+                        <div class="col-6 col-md-3">
+                            <div class="border rounded p-2">
+                                <div class="fs-4 fw-bold" data-role="stat-total">0</div>
+                                <div class="small text-muted">Rows checked</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="border rounded p-2">
+                                <div class="fs-4 fw-bold text-success" data-role="stat-create">0</div>
+                                <div class="small text-muted">New</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="border rounded p-2">
+                                <div class="fs-4 fw-bold text-secondary" data-role="stat-skip">0</div>
+                                <div class="small text-muted">Already exist</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="border rounded p-2">
+                                <div class="fs-4 fw-bold text-danger" data-role="stat-error">0</div>
+                                <div class="small text-muted">With errors</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-secondary py-2 small" data-role="created" hidden></div>
+                    <div class="alert alert-warning py-2 small" data-role="warnings" hidden></div>
+
+                    <div class="table-responsive" style="max-height: 340px;">
+                        <table class="table table-sm table-hover align-middle mb-0">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th style="width:180px;">Row</th>
+                                    <th style="width:90px;">Outcome</th>
+                                    <th>{{ noun|capfirst }}</th>
+                                    <th>Details</th>
+                                </tr>
+                            </thead>
+                            <tbody data-role="rows"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer" data-role="footer" hidden>
+                <button type="button" class="btn btn-secondary" data-action="back">
+                    <i class="fas fa-arrow-left"></i> Choose another file
+                </button>
+                <button type="button" class="btn btn-success" data-action="confirm">
+                    <i class="fas fa-check"></i> Import
+                </button>
+                <button type="button" class="btn btn-primary" data-action="done" hidden>
+                    Done
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

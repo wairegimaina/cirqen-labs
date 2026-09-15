@@ -129,6 +129,54 @@ def test_download_delete_removes_local_row(net_agent, jobcard_table, monkeypatch
     assert _row(net_agent.pool, 9) is None
 
 
+def test_download_empty_page_advances_to_hq_cursor(net_agent, jobcard_table, monkeypatch):
+    net_agent.set_last_download_time("2026-07-21T09:00:00+00:00")
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        return FakeResponse(200, {"updates": [], "next_since": "2026-07-21T12:00:00+00:00"})
+
+    monkeypatch.setattr(m4, "requests", type("R", (), {"get": staticmethod(fake_get)})())
+    net_agent.download_updates()
+    assert net_agent.get_last_download_time() == "2026-07-21T12:00:00+00:00"
+
+
+def test_download_cursor_never_moves_backwards(net_agent, jobcard_table, monkeypatch):
+    net_agent.set_last_download_time("2026-07-21T12:00:00+00:00")
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        return FakeResponse(200, {"updates": [], "next_since": "2026-07-21T09:00:00+00:00"})
+
+    monkeypatch.setattr(m4, "requests", type("R", (), {"get": staticmethod(fake_get)})())
+    net_agent.download_updates()
+    assert net_agent.get_last_download_time() == "2026-07-21T12:00:00+00:00"
+
+
+def test_download_cursor_holds_before_earliest_failure(net_agent, jobcard_table, monkeypatch):
+    net_agent.set_last_download_time("2026-07-21T09:00:00+00:00")
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        return FakeResponse(200, {"next_since": "2026-07-21T10:10:00+00:00", "updates": [
+            {"table": "public.jobcard_jobcard", "row_id": "1", "operation": "u",
+             "data": {"id": 1, "status": "ok", "updated_at": "2026-07-21T10:00:00+00:00"},
+             "last_modified": "2026-07-21T10:00:00+00:00", "cursor": "2026-07-21T10:00:00+00:00"},
+            {"table": "public.jobcard_jobcard", "row_id": "2", "operation": "u",
+             "data": {"id": 2, "status": "bad", "updated_at": "2026-07-21T10:05:00+00:00"},
+             "last_modified": "2026-07-21T10:05:00+00:00", "cursor": "2026-07-21T10:05:00+00:00"},
+        ]})
+
+    real_apply = net_agent.apply_remote_update_locally
+
+    def apply(table, payload):
+        return False if payload["row_id"] == "2" else real_apply(table, payload)
+
+    monkeypatch.setattr(net_agent, "apply_remote_update_locally", apply)
+    monkeypatch.setattr(m4, "requests", type("R", (), {"get": staticmethod(fake_get)})())
+    net_agent.download_updates()
+
+    assert _row(net_agent.pool, 1)["status"] == "ok"
+    assert net_agent.get_last_download_time() == "2026-07-21T10:04:59.999999+00:00"
+
+
 def test_download_empty_is_noop(net_agent, jobcard_table, monkeypatch):
     def fake_get(url, params=None, headers=None, timeout=None):
         return FakeResponse(200, {"updates": []})

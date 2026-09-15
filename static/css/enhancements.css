@@ -1,136 +1,128 @@
 /* ============================================================
-   EQUIPER — GLOBAL ENHANCEMENTS
+   EQUIPER — SHARED TABLES, LOADERS, SMALL UTILITIES
    Uses tokens from base.css / theme.css.
+   Alerts, badges, modals and pagination are defined once in
+   theme.css — they used to be declared again here with different
+   values, so the two files fought each other.
    ============================================================ */
 
-/* Tables — shared modern table treatment */
-.table-responsive, .table-wrapper {
-  border-radius: 14px;
-  overflow: hidden;
+/* ============================================================
+   TABLE CONTAINERS
+   ============================================================ */
+.table-responsive, .table-wrapper, .table-container, .table-card {
+  background: var(--bg-card);
   border: 1px solid var(--border-color);
-  box-shadow: var(--shadow-sm);
+  border-radius: var(--radius-lg);
+  overflow-x: auto;
 }
-[data-theme="dark"] .table-responsive,
-[data-theme="dark"] .table-wrapper {
-  box-shadow: 0 1px 6px rgba(0,0,0,.5);
+/* Inside a card or modal the card already draws the border */
+.card .table-responsive, .card .table-wrapper, .card .table-container,
+.section-card .table-responsive, .section-card .table-wrapper, .section-card .table-container,
+.modal .table-responsive, .modal .table-wrapper {
+  border: 0;
+  border-radius: 0;
 }
+.table-responsive > table, .table-wrapper > table,
+.table-container > table, .table-card > table { margin-bottom: 0; }
 
-/* Light table backgrounds are inherited from theme variables */
-[data-theme="light"] table,
-[data-theme="light"] .table,
-[data-theme="light"] .data-table {
-  --bs-table-bg: var(--bg-card);
+/* ============================================================
+   TABLES — one header style, one row style
+   ============================================================ */
+.table,
+.table-dark, .table-light,
+thead.table-dark, thead.table-light, tr.table-dark, tr.table-light {
+  --bs-table-bg: transparent;
   --bs-table-color: var(--text-primary);
-}
-[data-theme="dark"] table,
-[data-theme="dark"] .table,
-[data-theme="dark"] .data-table {
-  --bs-table-bg: var(--bg-card);
-  --bs-table-color: var(--text-primary);
-  --bs-table-striped-bg: var(--bg-tertiary);
+  --bs-table-border-color: var(--border-color);
+  --bs-table-striped-bg: var(--bg-secondary);
+  --bs-table-striped-color: var(--text-primary);
   --bs-table-hover-bg: var(--bg-hover);
-}
-[data-theme="light"] table thead,
-[data-theme="light"] .table thead,
-[data-theme="light"] .data-table thead {
-  background: var(--bg-tertiary);
-  border-bottom: 1px solid var(--border-color);
+  --bs-table-hover-color: var(--text-primary);
+  --bs-table-active-bg: var(--bg-tertiary);
+  --bs-table-active-color: var(--text-primary);
   color: var(--text-primary);
+  border-color: var(--border-color);
 }
-[data-theme="dark"] table thead,
-[data-theme="dark"] .table thead,
-[data-theme="dark"] .data-table thead {
-  background: var(--bg-tertiary);
-  border-bottom: 1px solid var(--border-color);
-  color: var(--text-primary);
-}
-table thead th, .table thead th, .data-table thead th {
-  font-weight: 700;
-  font-size: .72rem;
-  text-transform: uppercase;
-  letter-spacing: .06em;
-}
-[data-theme="light"] table tbody td,
-[data-theme="light"] .table tbody td,
-[data-theme="light"] .data-table tbody td {
-  color: var(--text-primary);
-}
-[data-theme="dark"] table tbody td,
-[data-theme="dark"] .table tbody td,
-[data-theme="dark"] .data-table tbody td {
-  color: var(--text-primary);
-}
+.table { font-size: var(--fs-sm); }
 
-/* Badges + status */
-.badge, .tag, .status-badge {
-  display: inline-block;
-  padding: .28rem .72rem;
-  border-radius: 20px;
+.table > :not(caption) > * > * {
+  padding: .625rem .875rem;
+  vertical-align: middle;
+  border-bottom-color: var(--border-color);
+}
+.table-sm > :not(caption) > * > * { padding: .375rem .625rem; }
+
+/* Header cells */
+.table > thead > tr > th,
+.data-table thead th, .schedule-table thead th, .theme-table thead th,
+.hod-table thead th, .cs-table thead th, .cs-sessions-table thead th,
+.sessions-table thead th, .workshop-table thead th, .upd-table thead th,
+.assignment-table thead th {
+  background-color: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-family: var(--font-base);
+  font-size: var(--fs-xs);
   font-weight: 600;
-  font-size: .68rem;
-  letter-spacing: .04em;
-  text-transform: uppercase;
-}
-.badge-primary   { background: var(--primary-gradient); color: #fff; }
-.badge-success   { background: linear-gradient(135deg, var(--success-color), #059669); color: #fff; }
-.badge-danger    { background: linear-gradient(135deg, var(--danger-color), #dc2626); color: #fff; }
-.badge-warning   { background: linear-gradient(135deg, var(--warning-color), #b45309); color: #fff; }
-.badge-info      { background: linear-gradient(135deg, var(--info-color), #0369a1); color: #fff; }
-.badge-secondary { background: linear-gradient(135deg, var(--secondary-color), #475569); color: #fff; }
-.badge.bg-success,
-.badge.bg-danger,
-.badge.bg-warning,
-.badge.bg-info,
-.badge.bg-primary {
-  color: #fff;
+  text-transform: none;
+  letter-spacing: 0;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border-color);
+  padding: .625rem .875rem;
 }
 
-/* Alerts */
-.alert,.notification,.message-box {
-  padding:1rem 1.25rem; border-radius:12px; border:none;
-  font-weight:500; box-shadow:0 4px 12px rgba(0,0,0,.08); margin:.75rem 0;
+/* Body cells on the app's own (non-Bootstrap) table classes */
+.data-table, .schedule-table, .cs-table, .cs-sessions-table,
+.sessions-table, .workshop-table, .upd-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+  color: var(--text-primary);
+  background: transparent;
 }
-.alert-success,.notification.success { background:linear-gradient(135deg,var(--success-color),#059669); color:#fff; }
-.alert-danger,.alert-error,.notification.error { background:linear-gradient(135deg,var(--danger-color),#dc2626); color:#fff; }
-.alert-warning,.notification.warning { background:linear-gradient(135deg,var(--warning-color),#d97706); color:#fff; }
-.alert-info,.notification.info { background:linear-gradient(135deg,var(--info-color),#0369a1); color:#fff; }
-.alert *,.notification * { color:#fff !important; }
-
-/* Modals */
-[data-theme="light"] .modal-content { background:var(--bg-card); border-color:var(--border-color); }
-[data-theme="dark"]  .modal-content { background:var(--bg-card); border-color:var(--border-color); }
-.modal-header { background:var(--bg-secondary); border-bottom:1px solid var(--border-color); padding:1.1rem 1.4rem; }
-.modal-body   { background:var(--bg-card); padding:1.4rem; }
-.modal-footer { background:var(--bg-secondary); border-top:1px solid var(--border-color); padding:.9rem 1.4rem; }
-
-/* Pagination */
-.pagination { display:flex; gap:.35rem; align-items:center; margin:1.5rem 0; }
-.page-link,.pagination a,.pagination button {
-  padding:.42rem .9rem; border-radius:8px;
-  border:1.5px solid var(--border-color);
-  background-color:var(--bg-card);
-  color:var(--text-primary);
-  font-weight:600; font-size:.84rem;
-  transition:all .18s ease; text-decoration:none;
+.data-table tbody td, .schedule-table tbody td, .cs-table tbody td,
+.cs-sessions-table tbody td, .sessions-table tbody td,
+.workshop-table tbody td, .upd-table tbody td {
+  padding: .625rem .875rem;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-primary);
+  vertical-align: middle;
 }
-.page-link:hover { background:var(--bg-hover); border-color:var(--primary-color); color:var(--primary-color); }
-.page-item.active .page-link { background:var(--primary-gradient); border-color:transparent; color:#fff; }
-[data-theme="dark"] .page-link:hover { background:var(--bg-tertiary); color:var(--primary-color); }
-
-/* Loading */
-.spinner,.loader,.loading {
-  border:3px solid var(--border-color);
-  border-top-color:var(--primary-color);
-  border-radius:50%; width:36px; height:36px;
-  animation:spin .7s linear infinite;
+.data-table tbody tr:hover > td, .schedule-table tbody tr:hover > td,
+.cs-table tbody tr:hover > td, .cs-sessions-table tbody tr:hover > td,
+.sessions-table tbody tr:hover > td, .workshop-table tbody tr:hover > td,
+.upd-table tbody tr:hover > td {
+  background: var(--bg-hover);
 }
-@keyframes spin { to { transform:rotate(360deg); } }
 
-/* Animations */
-@keyframes fadeIn { from{opacity:0;transform:translateY(16px);} to{opacity:1;transform:translateY(0);} }
-.fade-in { animation:fadeIn .45s ease; }
+/* No double line against the container's bottom border */
+.table-responsive tbody > tr:last-child > *,
+.table-wrapper tbody > tr:last-child > *,
+.table-container tbody > tr:last-child > *,
+.table-card tbody > tr:last-child > *,
+.card tbody > tr:last-child > * { border-bottom-width: 0; }
 
-/* Responsive */
-@media (max-width:768px) {
-  .card,.panel { border-radius:12px; }
+/* Numbers line up */
+.table td.num, .table th.num, td.text-end, .tabular { font-variant-numeric: tabular-nums; }
+
+/* ============================================================
+   LOADERS
+   ============================================================ */
+.spinner, .loader {
+  border: 2px solid var(--border-color);
+  border-top-color: var(--primary-color);
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ============================================================
+   ANIMATIONS
+   ============================================================ */
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.fade-in { animation: fadeIn .25s ease; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }

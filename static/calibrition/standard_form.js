@@ -46,30 +46,30 @@
     const index = parseInt(totalFormsInput.value, 10);
 
     const newParameter = document.createElement("div");
-    newParameter.className = "parameter-row p-3";
+    newParameter.className = "parameter-row";
     newParameter.setAttribute("data-parameter-index", index);
 
     newParameter.innerHTML = `
             <div class="row g-3 align-items-end">
                 <div class="col-md-5">
-                    <label class="form-label fw-bold">Parameter</label>
+                    <label class="form-label">Parameter</label>
                     <select class="form-select parameter-select" name="parameters-${index}-parameter" required>
                         <option value="">Select Parameter</option>
                         ${buildParameterOptionsHtml()}
                     </select>
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label fw-bold">Uncertainty (k=2)</label>
+                    <label class="form-label">Uncertainty (k=2)</label>
                     <div class="input-group">
                         <input type="number" class="form-control" name="parameters-${index}-uncertainty"
                                step="0.000001" placeholder="0.001" required>
                         <span class="input-group-text">±</span>
                     </div>
                 </div>
-                <div class="col-md-2">
-                    <button type="button" class="delete-parameter" onclick="removeParameter(this)"
-                            title="Remove Parameter">
-                        <i class="fas fa-trash"></i>
+                <div class="col-md-3 text-end">
+                    <button type="button" class="btn btn-outline-danger btn-sm delete-parameter" onclick="removeParameter(this)"
+                            title="Remove parameter" aria-label="Remove parameter">
+                        <i class="fas fa-trash"></i> Remove
                     </button>
                 </div>
             </div>

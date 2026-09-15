@@ -8,8 +8,6 @@
 :root {
   /* Color Palette - Preserved */
   --primary: var(--info-color);
-  --primary-dark: var(--info-color);
-  --primary-light: var(--primary-light);
   --secondary: var(--secondary-color);
   --secondary-dark: #334155;
   --accent: var(--secondary-color);
@@ -20,13 +18,6 @@
 
   /* Background colors - Preserved */
   --bg-light: var(--bg-tertiary);
-  --bg-white: var(--bg-card);
-  --bg-gradient-blue: linear-gradient(135deg, var(--info-color) 0%, var(--info-color) 100%);
-  --bg-gradient-dark: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
-  --bg-gradient-success: linear-gradient(135deg, #28a745 0%, #20c997 100%);
-  --bg-gradient-info: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
-  --bg-gradient-instructions: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
-  --bg-info-item: linear-gradient(135deg, #d8dadb 0%, #edf4f8 90%);
   --header: rgb(55, 132, 204);
   --btn: rgba(0,0,0,.0);
 
@@ -60,9 +51,6 @@
 
   /* Shadows */
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
   --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
   --shadow-glow: 0 0 20px rgba(0,0,0,.0);
 
@@ -74,7 +62,7 @@
 /* Body Styles */
 body {
   font-family: var(--font-base);
-  background: linear-gradient(135deg, var(--gray-50) 0%, var(--primary-light) 100%);
+  background: var(--gray-50);
   color: var(--gray-700);
   line-height: 1.6;
 
@@ -86,7 +74,7 @@ body {
 .main-container {
   margin: 0;
   background: var(--bg-white);
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-2xl);
   overflow: hidden;
   min-height: calc(100vh - 40px);
@@ -100,7 +88,7 @@ body {
   left: 0;
   right: 0;
   height: 4px;
-  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+  background: #667eea;
   z-index: 1;
 }
 
@@ -129,17 +117,12 @@ body {
   left: 0;
   right: 0;
   height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(0,0,0,.0) 50%,
-    transparent 100%
-  );
+  background: transparent;
 }
 
 .header h1 {
   font-size: 2.5em;
-  font-weight: 700;
+  font-weight: 600;
   margin-bottom: 15px;
   display: flex;
   align-items: center;
@@ -169,7 +152,7 @@ body {
   padding: 12px 20px;
   font-size: 0.9em;
   font-weight: 500;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   text-decoration: none;
   display: inline-flex;
   align-items: center;
@@ -183,9 +166,7 @@ body {
 
 .back-btn:hover {
   background: var(--bg-gradient-blue);
-  transform: translateY(-2px);
   color: white;
-  box-shadow: 0 6px 25px rgba(0,0,0,.0);
 }
 
 .back-btn:active {
@@ -195,18 +176,10 @@ body {
 /* Card Styling */
 .card-info {
   margin: 30px;
-  border-radius: 15px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
   box-shadow: var(--shadow-lg);
   border: 1px solid var(--gray-200);
-}
-
-.card-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 20px 25px;
-  border-bottom: none;
-  position: relative;
 }
 
 .card-header::after {
@@ -216,12 +189,7 @@ body {
   left: 0;
   right: 0;
   height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(0,0,0,.0) 50%,
-    transparent 100%
-  );
+  background: transparent;
 }
 
 .card-header h4 {
@@ -232,19 +200,7 @@ body {
   text-shadow: 0 1px 2px rgba(0,0,0,.0);
 }
 
-.card-body {
-  padding: 30px;
-  background: var(--bg-white);
-}
-
 /* Section Headers */
-.text-primary {
-  color: var(--primary) !important;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  margin-bottom: var(--space-md) !important;
-}
 
 .border-bottom {
   border-bottom: 2px solid var(--gray-200) !important;
@@ -252,23 +208,6 @@ body {
 }
 
 /* Form Controls */
-.form-control,
-.form-select {
-  border: 2px solid var(--gray-300);
-  border-radius: var(--radius-md);
-  padding: 12px 15px;
-  font-size: 14px;
-  transition: var(--transition);
-  background-color: var(--gray-50);
-}
-
-.form-control:focus,
-.form-select:focus {
-  border-color: #667eea;
-  box-shadow: 0 0 0 0.25rem rgba(0,0,0,.0);
-  background-color: var(--white);
-  transform: translateY(-1px);
-}
 
 .form-control:hover,
 .form-select:hover {
@@ -277,39 +216,14 @@ body {
 }
 
 /* Form Labels */
-.form-label {
-  font-weight: 600;
-  color: var(--gray-700);
-  margin-bottom: var(--space-sm);
-  font-size: 14px;
-}
 
 .required-field::after {
   content: ' *';
   color: var(--danger);
-  font-weight: bold;
-}
-
-.form-text {
-  font-size: 0.8rem;
-  color: var(--gray-500);
-  margin-top: var(--space-xs);
-  font-style: italic;
+  font-weight: 600;
 }
 
 /* Button Styling */
-.btn-primary {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border: none;
-  border-radius: var(--radius-md);
-  padding: 15px 30px;
-  font-weight: 600;
-  font-size: 16px;
-  transition: var(--transition);
-  box-shadow: 0 4px 15px rgba(0,0,0,.0);
-  position: relative;
-  overflow: hidden;
-}
 
 .btn-primary::before {
   content: '';
@@ -318,22 +232,12 @@ body {
   left: -100%;
   width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(0,0,0,.0), transparent);
+  background: transparent;
   transition: left 0.5s;
-}
-
-.btn-primary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(0,0,0,.0);
-  background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
 }
 
 .btn-primary:hover::before {
   left: 100%;
-}
-
-.btn-primary:active {
-  transform: translateY(0);
 }
 
 /* Role Information Guide */
@@ -397,28 +301,6 @@ body {
 }
 
 /* Alert Styling */
-.alert {
-  border-radius: var(--radius-md);
-  border: none;
-  padding: 15px 20px;
-  margin-bottom: 20px;
-  box-shadow: var(--shadow-sm);
-}
-
-.alert-success {
-  background: var(--bg-gradient-success);
-  color: white;
-}
-
-.alert-danger {
-  background: linear-gradient(135deg, var(--danger) 0%, var(--danger-color) 100%);
-  color: white;
-}
-
-.alert-info {
-  background: var(--bg-gradient-info);
-  color: white;
-}
 
 /* Information Box */
 .bg-info-subtle {
@@ -429,49 +311,13 @@ body {
   box-shadow: var(--shadow-sm);
 }
 
-.text-info {
-  color: var(--info) !important;
-  font-weight: 600;
-}
-
 /* Table Styling */
-.table {
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  box-shadow: var(--shadow-sm);
-  background: var(--white);
-}
-
-.table thead th {
-  background: var(--gray-100);
-  color: var(--gray-700);
-  font-weight: 600;
-  border: none;
-  padding: 15px 12px;
-}
 
 .table tbody tr {
   transition: var(--transition-fast);
 }
 
-.table tbody tr:hover {
-  background-color: var(--gray-50);
-  transform: translateX(2px);
-}
-
-.table tbody td {
-  padding: 12px;
-  border-color: var(--gray-200);
-  vertical-align: middle;
-}
-
 /* Error Messages */
-.text-danger {
-  color: var(--danger) !important;
-  font-size: 0.8rem;
-  margin-top: var(--space-xs);
-  font-weight: 500;
-}
 
 /* Responsive Design */
 @media (max-width: 768px) {
@@ -480,7 +326,7 @@ body {
   }
 
   .main-container {
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     min-height: calc(100vh - 20px);
   }
 
@@ -496,10 +342,7 @@ body {
     margin: 15px;
   }
 
-  .card-body {
-    padding: 20px;
-  }
-
+  
   .back-btn {
     padding: 10px 15px;
     font-size: 0.8em;
@@ -513,22 +356,13 @@ body {
     gap: 10px;
   }
 
-  .btn-primary {
-    width: 100%;
-    padding: 12px;
-  }
-
+  
   .role-info {
     padding: 15px;
   }
 }
 
 /* Loading States */
-.form-control:disabled {
-  background-color: var(--gray-100);
-  opacity: 0.6;
-  cursor: not-allowed;
-}
 
 /* Focus Ring for Accessibility */
 *:focus {
@@ -553,20 +387,4 @@ body {
 }
 
 /* Custom Scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
-}
 
-::-webkit-scrollbar-track {
-  background: var(--gray-100);
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--gray-400);
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--gray-500);
-}

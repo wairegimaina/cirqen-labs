@@ -49,6 +49,11 @@
         <i class="fas fa-chevron-down" id="chevron"></i>
       </button>
 
+      <button type="button" class="toggle-btn" data-bs-toggle="modal" data-bs-target="#uploadWorkshopsModal">
+        <i class="fas fa-file-excel"></i>
+        <span>Upload Workshops from Excel</span>
+      </button>
+
       <div class="create-form-container" id="createFormContainer">
         <div class="form-header">
           <i class="fas fa-wrench"></i>
@@ -146,7 +151,7 @@
         </tbody>
       </table>
       {% else %}
-      {% include 'includes/empty_state.html' with icon="🏭" title="No Workshops Yet" message="No workshops have been created yet. Use the form above to add the first one." %}
+      {% include 'includes/empty_state.html' with icon="fa-industry" title="No Workshops Yet" message="No workshops have been created yet. Use the form above to add the first one." %}
       {% endif %} {% else %}
       <p class="error">Access Denied: Only Heads of Department can manage workshops.</p>
       {% endif %}
@@ -754,5 +759,10 @@
 {% endblock %}
 
 {% block extra_js %}
-<!-- Page-specific JavaScript -->
+{% if user.userprofile.role == 'HOD' %}
+{% url 'workshop:workshop_import_template' as workshops_template_url %}
+{% url 'workshop:upload_workshops_excel' as workshops_upload_url %}
+{% include 'includes/excel_import_modal.html' with modal_id='uploadWorkshopsModal' title='Bulk Upload Workshops' noun='workshop' template_url=workshops_template_url upload_url=workshops_upload_url help_text='Required columns: Workshop Name, Category (Calibration Center or Maintenance).' %}
+<script src="{% static 'js/excel_import.js' %}"></script>
+{% endif %}
 {% endblock %}

@@ -82,6 +82,19 @@ urlpatterns = [
     path("parameters/create/", views.parameter_create, name="parameter_create"),
     path("parameters/<uuid:pk>/edit/", views.parameter_edit, name="parameter_edit"),  # ✅ ADDED
     path("parameters/<uuid:pk>/delete/", views.parameter_delete, name="parameter_delete"),
+    # 📥 Bulk Excel import (procedures are deliberately not importable)
+    path(
+        "standards/import/template/",
+        views.download_standards_import_template,
+        name="standards_import_template",
+    ),
+    path("standards/import/", views.upload_standards_excel, name="upload_standards_excel"),
+    path(
+        "parameters/import/template/",
+        views.download_parameters_import_template,
+        name="parameters_import_template",
+    ),
+    path("parameters/import/", views.upload_parameters_excel, name="upload_parameters_excel"),
     # Combined lists
     path(
         "StandardsParameters_lists/",

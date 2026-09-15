@@ -10,150 +10,112 @@
 {% block page_title %}Calibration Certificates{% endblock %}
 
 {% block content %}
-<div class="main-container">
-    <!-- Header Section -->
+<div class="page-wrap">
 
-    <!-- Active Filters Summary -->
+    <!-- Active filters -->
     {% if current_filters.department or current_filters.date_from or current_filters.date_to or current_filters.equipment or current_filters.status %}
     <div class="filter-summary">
-        <strong><i class="bi bi-funnel-fill"></i> Active Filters:</strong>
+        <span class="text-muted">Filtered by</span>
         {% if current_filters.department %}
-            <span class="badge bg-secondary me-1">Department: {{ current_filters.department }}</span>
+            <span class="badge">Department: {{ current_filters.department }}</span>
         {% endif %}
         {% if current_filters.date_from %}
-            <span class="badge bg-secondary me-1">From: {{ current_filters.date_from }}</span>
+            <span class="badge">From: {{ current_filters.date_from }}</span>
         {% endif %}
         {% if current_filters.date_to %}
-            <span class="badge bg-secondary me-1">To: {{ current_filters.date_to }}</span>
+            <span class="badge">To: {{ current_filters.date_to }}</span>
         {% endif %}
         {% if current_filters.equipment %}
-            <span class="badge bg-secondary me-1">Equipment: {{ current_filters.equipment }}</span>
+            <span class="badge">Equipment: {{ current_filters.equipment }}</span>
         {% endif %}
         {% if current_filters.status %}
-            <span class="badge bg-secondary me-1">Status: {{ current_filters.status|title }}</span>
+            <span class="badge">Status: {{ current_filters.status|title }}</span>
         {% endif %}
-        <a href="{% url 'calibration:certificate_list' %}" class="clear-filter">
-            <i class="bi bi-x-circle"></i> Clear all filters
-        </a>
+        <a href="{% url 'calibration:certificate_list' %}" class="btn btn-link btn-sm">Clear all</a>
     </div>
     {% endif %}
 
-    <!-- Filter Section -->
-    <div class="filter-section">
-        <form method="GET" action="{% url 'calibration:certificate_list' %}">
-            <div class="row">
-                <div class="col-md-4 mb-3">
-                    <label for="department" class="form-label"><i class="bi bi-building"></i> Department</label>
-                    <select class="form-select" id="department" name="department">
-                        <option value="">All Departments</option>
-                        {% for dept in departments %}
-                        <option value="{{ dept }}" {% if current_filters.department == dept %}selected{% endif %}>{{ dept }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-4 mb-3">
-                    <label for="date_from" class="form-label"><i class="bi bi-calendar-event"></i> From Date</label>
-                    <input type="date"
-                        class="form-control"
-                        id="date_from"
-                        name="date_from"
-                        value="{% if current_filters.date_from %}{{ current_filters.date_from|date:'Y-m-d' }}{% endif %}">
-                </div>
-                <div class="col-md-4 mb-3">
-                    <label for="date_to" class="form-label"><i class="bi bi-calendar-check"></i> To Date</label>
-                    <input type="date"
-                        class="form-control"
-                        id="date_to"
-                        name="date_to"
-                        value="{% if current_filters.date_to %}{{ current_filters.date_to|date:'Y-m-d' }}{% endif %}">
-                </div>
+    <!-- Filters -->
+    <div class="section-card toolbar-card filter-section">
+        <form method="GET" action="{% url 'calibration:certificate_list' %}" class="toolbar">
+            <div class="search-field">
+                <i class="fas fa-search" aria-hidden="true"></i>
+                <input type="text" class="form-control" id="equipment" name="equipment"
+                       placeholder="Search equipment, serial, model or certificate number"
+                       aria-label="Equipment or certificate"
+                       value="{{ current_filters.equipment }}">
             </div>
-            <div class="row">
-                <div class="col-md-6 mb-3">
-                    <label for="equipment" class="form-label"><i class="bi bi-search"></i> Equipment/Certificate</label>
-                    <input type="text" class="form-control" id="equipment" name="equipment"
-                           placeholder="Search by equipment name, serial, model or certificate number"
-                           value="{{ current_filters.equipment }}">
-                </div>
-                <div class="col-md-6 mb-3">
-                    <label for="status" class="form-label"><i class="bi bi-check-circle"></i> Status</label>
-                    <select class="form-select" id="status" name="status">
-                        <option value="">All Statuses</option>
-                        <option value="pass" {% if current_filters.status == 'pass' %}selected{% endif %}>Pass</option>
-                        <option value="fail" {% if current_filters.status == 'fail' %}selected{% endif %}>Fail</option>
-                    </select>
-                </div>
+            <select class="form-select" id="department" name="department" aria-label="Department">
+                <option value="">All departments</option>
+                {% for dept in departments %}
+                <option value="{{ dept }}" {% if current_filters.department == dept %}selected{% endif %}>{{ dept }}</option>
+                {% endfor %}
+            </select>
+            <select class="form-select" id="status" name="status" aria-label="Status">
+                <option value="">All results</option>
+                <option value="pass" {% if current_filters.status == 'pass' %}selected{% endif %}>Pass</option>
+                <option value="fail" {% if current_filters.status == 'fail' %}selected{% endif %}>Fail</option>
+            </select>
+            <div class="toolbar-field">
+                <label for="date_from">From</label>
+                <input type="date" class="form-control" id="date_from" name="date_from"
+                    value="{% if current_filters.date_from %}{{ current_filters.date_from|date:'Y-m-d' }}{% endif %}">
             </div>
-            <div class="text-end">
-                <button type="submit" class="btn btn-primary me-2">
-                    <i class="bi bi-funnel"></i> Apply Filters
-                </button>
+            <div class="toolbar-field">
+                <label for="date_to">To</label>
+                <input type="date" class="form-control" id="date_to" name="date_to"
+                    value="{% if current_filters.date_to %}{{ current_filters.date_to|date:'Y-m-d' }}{% endif %}">
             </div>
+            <button type="submit" class="btn btn-secondary">Apply</button>
         </form>
+    </div>
 
-        <!-- Bulk Download Section -->
-        <form id="bulk-download-form" class="row g-3 mb-4 mt-4">
-            <div class="mb-4">
-                <h4 class="fw-bold text-primary">
-                    <i class="bi bi-calendar-check"></i> Bulk Certificate Download
-                </h4>
-                <p class="text-muted mb-2">
-                    Select a start and end date below to download all approved calibration certificates for that period.
-                    You will receive the certificates in a single file (ZIP/PDF).
-                </p>
+    <!-- Bulk download -->
+    <section class="section-card">
+        <div class="section-card-head">
+            <div>
+                <h2 class="section-card-title">Bulk download</h2>
+                <p class="section-card-sub">Download every approved certificate in a date range as one ZIP file.</p>
             </div>
-
-            <div class="col-md-4">
-                <label for="bulk_date_from" class="form-label">Start Date</label>
-                <input type="date"
-                    id="bulk_date_from"
-                    name="date_from"
-                    class="form-control"
-                    placeholder="Select start date"
-                    value="{% if week_start %}{{ week_start|date:'Y-m-d' }}{% endif %}"
-                    required>
-            </div>
-
-            <div class="col-md-4">
-                <label for="bulk_date_to" class="form-label">End Date</label>
-                <input type="date"
-                    id="bulk_date_to"
-                    name="date_to"
-                    class="form-control"
-                    placeholder="Select end date"
-                    value="{% if week_end %}{{ week_end|date:'Y-m-d' }}{% endif %}"
-                    required>
-            </div>
-
-            <div class="col-md-4 d-flex align-items-end">
-                <button type="submit" class="btn btn-primary w-100">
-                    <i class="bi bi-file-earmark-pdf"></i> Download Certificates for Period
+        </div>
+        <div class="section-card-body">
+            <form id="bulk-download-form" class="toolbar">
+                <div class="toolbar-field">
+                    <label for="bulk_date_from">From</label>
+                    <input type="date" id="bulk_date_from" name="date_from" class="form-control"
+                        value="{% if week_start %}{{ week_start|date:'Y-m-d' }}{% endif %}" required>
+                </div>
+                <div class="toolbar-field">
+                    <label for="bulk_date_to">To</label>
+                    <input type="date" id="bulk_date_to" name="date_to" class="form-control"
+                        value="{% if week_end %}{{ week_end|date:'Y-m-d' }}{% endif %}" required>
+                </div>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-download" aria-hidden="true"></i> Download certificates
                 </button>
-            </div>
-        </form>
+            </form>
+        </div>
+    </section>
 
-        <!-- Loading Overlay -->
-        <div id="loading-overlay">
-            <div class="spinner-border text-light" role="status">
-                <span class="visually-hidden">Loading...</span>
-            </div>
-            <p class="mt-3 text-light fs-5">Preparing certificates, please wait...</p>
+    <!-- Loading overlay -->
+    <div id="loading-overlay" class="loading-overlay">
+        <div class="loading-content">
+            <div class="loading-spinner" role="status"><span class="visually-hidden">Loading...</span></div>
+            <p>Preparing certificates, please wait…</p>
         </div>
     </div>
 
-    <!-- Certificates List - Loaded via AJAX -->
+    <!-- Certificates — loaded via AJAX -->
     <div id="certificatesList">
-        <div class="text-center py-5 loading-indicator">
-            <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Loading...</span>
+        <div class="section-card">
+            <div class="empty-state">
+                <div class="loading-spinner" role="status"><span class="visually-hidden">Loading...</span></div>
+                <p>Loading certificates…</p>
             </div>
-            <p class="text-muted mt-2">Loading certificates...</p>
         </div>
     </div>
 
 </div>
-
-<!-- Bootstrap JS -->
 
 <script>
     // AJAX-based certificate loading
@@ -177,7 +139,7 @@
             if (data.html) {
                 listContainer.innerHTML = data.html;
             } else {
-                listContainer.innerHTML = '<div class="no-certificates"><i class="bi bi-file-earmark-excel"></i><h3>No Certificates Found</h3></div>';
+                listContainer.innerHTML = '<div class="section-card"><div class="empty-state"><div class="empty-state-icon"><i class="fas fa-file-lines"></i></div><h3>No certificates found</h3></div></div>';
             }
         } catch (error) {
             listContainer.innerHTML = '<div class="alert alert-danger">Error loading certificates. Please try again.</div>';
@@ -205,7 +167,7 @@
     document.getElementById("bulk-download-form").addEventListener("submit", function (e) {
         e.preventDefault();
         const overlay = document.getElementById("loading-overlay");
-        overlay.style.display = "block";
+        overlay.style.display = "flex";
 
         const dateFrom = document.getElementById("bulk_date_from").value;
         const dateTo   = document.getElementById("bulk_date_to").value;

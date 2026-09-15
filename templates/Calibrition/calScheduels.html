@@ -51,7 +51,7 @@
           <div class="cal-dept-list" id="calDeptList">
             <a class="cal-dept-item {% if not selected_department_id %}cal-dept-item--active{% endif %}"
               href="{% url 'schedule:calibration_dashboard' %}" data-name="all departments" role="option">
-              <span class="cal-dept-item-icon" style="background:linear-gradient(135deg,#0d6efd,#6ea8fe)">
+              <span class="cal-dept-item-icon">
                 <i class="fas fa-layer-group"></i>
               </span>
               <span class="cal-dept-item-text">All Departments</span>
@@ -61,7 +61,7 @@
             <a class="cal-dept-item {% if selected_department_id == dept.id %}cal-dept-item--active{% endif %}"
               href="{% url 'schedule:calibration_by_department' dept.id %}"
               data-name="{{ dept.name|lower|default:'unknown' }}" role="option">
-              <span class="cal-dept-item-icon" style="background:hsl({{ forloop.counter0|add:2 }}20deg 55% 42%)">
+              <span class="cal-dept-item-icon">
                 <i class="fas fa-building"></i>
               </span>
               <span class="cal-dept-item-text">{{ dept.name|default:"Unknown" }}</span>
@@ -276,14 +276,14 @@
                 <td>
                   <span class="cs-equip-name">{{ schedule.equipment.description.name|default:"—" }}</span>
                   {% if schedule_data.is_overdue %}
-                  <span class="cs-badge cs-badge--danger ms-1">OVERDUE</span>
+                  <span class="cs-badge cs-badge--danger ms-1">Overdue</span>
                   {% elif schedule_data.is_warning %}
-                  <span class="cs-badge cs-badge--warning ms-1">DUE</span>
+                  <span class="cs-badge cs-badge--warning ms-1">Due</span>
                   {% endif %}
                   {% if waiting.is_waiting %}
                   <span class="cs-badge cs-badge--info ms-1"
                     data-bs-toggle="modal" data-bs-target="#waitingModal{{ schedule.id }}" style="cursor:pointer;">
-                    WAITING {{ waiting.completed_count }}/{{ waiting.total_count }}
+                    Waiting {{ waiting.completed_count }}/{{ waiting.total_count }}
                   </span>
                   {% endif %}
                 </td>
@@ -594,7 +594,7 @@
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title"><i class="fas fa-edit me-2"></i>Edit Schedule</h5>
+          <h5 class="modal-title">Edit schedule</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <form method="post" action="{% url 'schedule:edit_calibration_schedule' schedule.id %}">
@@ -643,9 +643,9 @@
   <div class="modal fade" id="waitingModal{{ schedule.id }}" tabindex="-1">
     <div class="modal-dialog modal-lg">
       <div class="modal-content">
-        <div class="modal-header bg-info text-white">
-          <h5 class="modal-title"><i class="fas fa-users me-2"></i>Group Completion Status</h5>
-          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        <div class="modal-header">
+          <h5 class="modal-title">Group completion status</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
           <div class="alert alert-info">
@@ -690,9 +690,9 @@
   <div class="modal fade" id="calibrationPlanningModal" tabindex="-1">
     <div class="modal-dialog modal-xl">
       <div class="modal-content">
-        <div class="modal-header bg-primary text-white">
-          <h5 class="modal-title"><i class="fas fa-calculator me-2"></i>Configure Calibration Planning</h5>
-          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        <div class="modal-header">
+          <h5 class="modal-title">Configure calibration planning</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <form method="post" action="{% url 'schedule:trigger_calibration_initialization' %}" id="calibrationInitForm">
           {% csrf_token %}
@@ -709,7 +709,7 @@
                 <div class="col-md-6">
                   <div class="card planning-card selected" data-logic="department">
                     <div class="card-body text-center">
-                      <i class="fas fa-building display-4 text-primary"></i>
+                      <i class="fas fa-building planning-card-icon"></i>
                       <h6 class="mt-2 mb-1">Department-Based</h6>
                       <p class="text-muted small mb-0">Same department → same month</p>
                     </div>
@@ -718,7 +718,7 @@
                 <div class="col-md-6">
                   <div class="card planning-card" data-logic="description">
                     <div class="card-body text-center">
-                      <i class="fas fa-cog display-4 text-info"></i>
+                      <i class="fas fa-cog planning-card-icon"></i>
                       <h6 class="mt-2 mb-1">Description-Based</h6>
                       <p class="text-muted small mb-0">Same description → same month</p>
                     </div>
@@ -729,9 +729,9 @@
             </div>
 
             <div class="mb-4" id="specialClassSection">
-              <h6 class="border-bottom pb-2 mb-3"><i class="fas fa-star me-2 text-warning"></i>Special Class <span class="badge bg-warning text-dark">Optional</span></h6>
+              <h6 class="border-bottom pb-2 mb-3"><i class="fas fa-star me-2 text-warning"></i>Special Class <span class="badge bg-warning">Optional</span></h6>
               <div id="specialDepartmentSection">
-                <div class="form-label fw-bold small">Special Departments</div>
+                <div class="form-label small">Special Departments</div>
                 <div class="row g-2 mb-3">
                   {% for dept in departments %}
                   <div class="col-md-4 col-sm-6">
@@ -745,7 +745,7 @@
                 </div>
               </div>
               <div id="specialDescriptionSection" style="display:none;">
-                <div class="form-label fw-bold small">Special Descriptions</div>
+                <div class="form-label small">Special Descriptions</div>
                 <input type="text" class="form-control form-control-sm mb-2" id="descriptionSearchInput" placeholder="Search...">
                 <div class="row g-2 mb-3" id="descriptionCheckboxList" style="max-height:240px;overflow-y:auto;">
                   {% for desc in equipment_descriptions %}
@@ -763,7 +763,7 @@
 
             <div class="row g-3 mb-4">
               <div class="col-md-3">
-                <div class="form-label fw-bold small">Period</div>
+                <div class="form-label small">Period</div>
                 <div class="d-flex gap-2">
                   <button type="button" class="btn btn-outline-primary period-btn" data-period="6">6 mo</button>
                   <button type="button" class="btn btn-primary period-btn active" data-period="12">12 mo</button>
@@ -771,7 +771,7 @@
                 <input type="hidden" name="calibration_period" id="calibrationPeriod" value="12">
               </div>
               <div class="col-md-3">
-                <label for="base_month" class="form-label fw-bold small">Start Month</label>
+                <label for="base_month" class="form-label small">Start Month</label>
                 <select class="form-select" id="base_month" name="base_month" required>
                   <option value="1"  {% if current_month == 1  %}selected{% endif %}>January</option>
                   <option value="2"  {% if current_month == 2  %}selected{% endif %}>February</option>
@@ -788,14 +788,14 @@
                 </select>
               </div>
               <div class="col-md-3">
-                <label for="base_year" class="form-label fw-bold small">Start Year</label>
+                <label for="base_year" class="form-label small">Start Year</label>
                 <input type="number" class="form-control" id="base_year" name="base_year"
                   value="{{ current_year }}"
                   min="{{ current_year|add:'-2' }}"
                   max="{{ current_year|add:'5' }}" required>
               </div>
               <div class="col-md-3">
-                <label for="max_departments" class="form-label fw-bold small">Max Groups/Month</label>
+                <label for="max_departments" class="form-label small">Max Groups/Month</label>
                 <input type="number" class="form-control" id="max_departments"
                   name="max_departments" value="20" min="1" max="100" required>
                 <input type="hidden" name="max_descriptions" value="20">
@@ -825,10 +825,10 @@
   <div class="modal fade" id="smartReorgModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
       <div class="modal-content">
-        <div class="modal-header bg-warning text-dark">
+        <div class="modal-header">
           <div>
-            <h5 class="modal-title fw-bold"><i class="fas fa-magic me-2"></i>Smart Organiser</h5>
-            <small>Realign all schedules to the selected planning logic</small>
+            <h5 class="modal-title">Smart Organiser</h5>
+            <small class="text-muted">Realign all schedules to the selected planning logic</small>
           </div>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
@@ -900,7 +900,7 @@
                 <h6 class="fw-bold mb-0">
                   <i class="fas fa-exclamation-triangle me-1 text-warning"></i>
                   Equipment needing reorganisation
-                  <span class="badge bg-warning text-dark ms-1">{{ logic_change_warnings_count }}</span>
+                  <span class="badge bg-warning ms-1">{{ logic_change_warnings_count }}</span>
                 </h6>
                 {% if logic_change_warnings_count > 100 %}
                 <small class="text-muted">Showing first 100 of {{ logic_change_warnings_count }}</small>
@@ -1006,7 +1006,7 @@
             <div class="mb-3" id="reorgSpecialClassSection">
               <h6 class="border-bottom pb-2 mb-2">
                 <i class="fas fa-star me-1 text-warning"></i>Special Class
-                <span class="badge bg-warning text-dark">Optional</span>
+                <span class="badge bg-warning">Optional</span>
                 <small class="text-muted d-block fw-normal">
                   Special groups skip the per-month cap and all land on the start month.
                   Only the list matching the selected logic is applied.
@@ -1014,7 +1014,7 @@
               </h6>
 
               <div id="reorgSpecialDepartments">
-                <div class="form-label fw-bold small">Special Departments (for Department-Based)</div>
+                <div class="form-label small">Special Departments (for Department-Based)</div>
                 <div class="row g-2 mb-2">
                   {% for dept in departments %}
                   <div class="col-md-4 col-sm-6">
@@ -1029,7 +1029,7 @@
               </div>
 
               <div id="reorgSpecialDescriptions">
-                <div class="form-label fw-bold small">Special Descriptions (for Description-Based)</div>
+                <div class="form-label small">Special Descriptions (for Description-Based)</div>
                 <div class="row g-2 mb-2" style="max-height:200px;overflow-y:auto;">
                   {% for desc in equipment_descriptions %}
                   <div class="col-md-4 col-sm-6">
@@ -1053,7 +1053,7 @@
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-            <button type="submit" class="btn btn-warning fw-bold" id="smartReorgBtn">
+            <button type="submit" class="btn btn-warning" id="smartReorgBtn">
               <i class="fas fa-magic me-1"></i>Run Smart Organiser
             </button>
           </div>
@@ -1067,13 +1067,13 @@
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title"><i class="fas fa-filter me-2"></i>Custom Report</h5>
+          <h5 class="modal-title">Custom report</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <form method="get" action="{% url 'schedule:export_calibration_pdf' %}">
           <div class="modal-body">
             <div class="mb-3">
-              <div class="form-label fw-bold">Date Range</div>
+              <div class="form-label">Date range</div>
               <div class="row g-2">
                 <div class="col-6">
                   <label class="form-label small text-muted" for="customReportMonthSelect">Month</label>
@@ -1103,7 +1103,7 @@
             </div>
             {% if departments %}
             <div class="mb-3">
-              <label class="form-label fw-bold" for="customReportDepartmentSelect">Department</label>
+              <label class="form-label" for="customReportDepartmentSelect">Department</label>
               <select class="form-select" name="department" id="customReportDepartmentSelect">
                 <option value="">All Departments</option>
                 {% for dept in departments %}

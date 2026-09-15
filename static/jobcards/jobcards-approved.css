@@ -18,7 +18,7 @@
     color: var(--text-secondary);
     text-decoration: none;
     padding: 0.5rem 1rem;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     transition: all 0.2s;
 }
 
@@ -42,14 +42,12 @@
 
 .stat-number {
     font-size: 2rem;
-    font-weight: 800;
+    font-weight: 600;
 }
 
 .stat-label {
     color: var(--text-muted);
     font-size: 0.8rem;
-    text-transform: uppercase;
-    letter-spacing: 1px;
 }
 
 .job-cards-grid {
@@ -64,18 +62,12 @@
 }
 
 .job-card-item:hover {
-    transform: translateY(-5px);
-    box-shadow: var(--shadow-lg);
 }
 
 /* Ensure form labels and text are visible in Dark Mode */
-.form-label, .detail-label {
+.detail-label {
     color: var(--text-primary);
     font-weight: 600;
-}
-
-.text-muted {
-    color: var(--text-muted) !important;
 }
 
 @media (max-width: 768px) {

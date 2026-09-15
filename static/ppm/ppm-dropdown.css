@@ -14,7 +14,7 @@
     padding: 9px 14px;
     background: var(--bg-card);
     border: 1.5px solid var(--border-color);
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     cursor: pointer;
     transition: border-color .2s, box-shadow .2s;
     font-size: .875rem;
@@ -25,7 +25,6 @@
 .ppm-dept-btn:focus {
     outline: none;
     border-color: var(--primary-color);
-    box-shadow: 0 0 0 3px var(--primary-ring);
 }
 .ppm-dept-dropdown.open .ppm-dept-btn {
     border-color: var(--primary-color);
@@ -36,7 +35,7 @@
 .ppm-dept-icon {
     width: 28px;
     height: 28px;
-    border-radius: 7px;
+    border-radius: var(--radius-sm);
     background: var(--primary-gradient);
     color: var(--bg-card);
     display: flex;
@@ -46,7 +45,6 @@
     flex-shrink: 0;
 }
 .ppm-dept-btn:hover .ppm-dept-icon {
-    filter: brightness(1.1);
 }
 .ppm-dept-label {
     flex: 1;
@@ -75,7 +73,7 @@
     background: var(--bg-card);
     border: 1.5px solid var(--primary-color);
     border-top: 1px solid var(--border-light);
-    border-radius: 0 0 12px 12px;
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
     box-shadow: var(--shadow-lg);
     z-index: 9999;
     overflow: visible;
@@ -114,7 +112,7 @@
 .ppm-dept-list::-webkit-scrollbar-track { background: transparent; }
 .ppm-dept-list::-webkit-scrollbar-thumb {
     background: var(--border-mid);
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
 }
 .ppm-dept-list::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
 
@@ -145,7 +143,7 @@
 .ppm-dept-item-icon {
     width: 28px;
     height: 28px;
-    border-radius: 7px;
+    border-radius: var(--radius-sm);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -208,4 +206,4 @@
 .activity-body { flex: 1; }
 .activity-title { font-weight: 600; font-size: .875rem; margin-bottom: 2px; color: var(--text-primary); }
 .activity-meta  { font-size: .78rem; color: var(--text-muted); }
-.activity-badge { font-size: .7rem; padding: 2px 8px; border-radius: 12px; }
+.activity-badge { font-size: .7rem; padding: 2px 8px; border-radius: var(--radius-lg); }

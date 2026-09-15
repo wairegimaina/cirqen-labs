@@ -10,41 +10,53 @@
 {% block page_title %}Perform Calibration{% endblock %}
 
 {% block content %}
-<div class="container">
+<div class="pending-page">
 
+        <!-- Search + filters -->
+        <div class="section-card toolbar-card">
+            <div class="toolbar">
+                <form method="GET" id="searchForm" class="search-field">
+                    <i class="fas fa-search" aria-hidden="true"></i>
+                    <input
+                        type="text"
+                        name="search"
+                        class="form-control search-input"
+                        placeholder="Search by name, model or serial number"
+                        aria-label="Search equipment"
+                        value="{{ request.GET.search }}"
+                        id="searchInput"
+                    >
 
+                    <!-- Preserve other filters -->
+                    {% if request.GET.department %}
+                    <input type="hidden" name="department" value="{{ request.GET.department }}">
+                    {% endif %}
+                    {% if request.GET.month %}
+                    <input type="hidden" name="month" value="{{ request.GET.month }}">
+                    {% endif %}
+                    {% if request.GET.year %}
+                    <input type="hidden" name="year" value="{{ request.GET.year }}">
+                    {% endif %}
+                </form>
 
-        <!-- Instructions Section -->
-        <div class="instructions">
-            <h4>🎯 Equipment Selection Instructions</h4>
-            <p>Use the <span class="highlight">"🎯 Select & Calibrate"</span> button to directly start calibration for the selected equipment.</p>
-        </div>
+                <form method="GET" id="filterForm" class="toolbar-filters">
+                    <!-- Preserve search term -->
+                    {% if request.GET.search %}
+                    <input type="hidden" name="search" value="{{ request.GET.search }}">
+                    {% endif %}
 
-        <!-- Filters -->
-        <div class="filters">
-            <form method="GET" style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap; width: 100%;" id="filterForm">
-                <!-- Preserve search term -->
-                {% if request.GET.search %}
-                <input type="hidden" name="search" value="{{ request.GET.search }}">
-                {% endif %}
-
-                {% if access_context.access_type == 'workshop' %}
-                <div class="filter-group">
-                    <label for="department">Department:</label>
-                    <select name="department" id="department" class="filter-select">
-                        <option value="">All Departments</option>
+                    {% if access_context.access_type == 'workshop' %}
+                    <select name="department" id="department" class="form-select filter-select" aria-label="Department">
+                        <option value="">All departments</option>
                         {% for dept in departments %}
                         <option value="{{ dept.id }}" {% if dept.id|stringformat:"s" == selected_department_id %}selected{% endif %}>
                             {{ dept.name }}
                         </option>
                         {% endfor %}
                     </select>
-                </div>
-                {% endif %}
+                    {% endif %}
 
-                <div class="filter-group">
-                    <label for="month">Month:</label>
-                    <select name="month" id="month" class="filter-select">
+                    <select name="month" id="month" class="form-select filter-select" aria-label="Month">
                         <option value="1" {% if current_month == 1 %}selected{% endif %}>January</option>
                         <option value="2" {% if current_month == 2 %}selected{% endif %}>February</option>
                         <option value="3" {% if current_month == 3 %}selected{% endif %}>March</option>
@@ -58,181 +70,129 @@
                         <option value="11" {% if current_month == 11 %}selected{% endif %}>November</option>
                         <option value="12" {% if current_month == 12 %}selected{% endif %}>December</option>
                     </select>
-                </div>
 
-                <div class="filter-group">
-                    <label for="year">Year:</label>
-                    <select name="year" id="year" class="filter-select">
+                    <select name="year" id="year" class="form-select filter-select" aria-label="Year">
                         {% for y in years %}
                             <option value="{{ y }}" {% if current_year == y %}selected{% endif %}>
                                 {{ y }}
                             </option>
                         {% endfor %}
                     </select>
-                </div>
 
-                <button type="submit" class="filter-btn">Apply Filters</button>
-            </form>
-        </div>
-
-        <!-- Stats -->
-        <div class="stats">
-            <div class="card">
-                <div class="stat-number pending">{{ schedules.paginator.count }}</div>
-                <div class="stat-label">
-                    {% if request.GET.search %}
-                        Search Results
-                    {% else %}
-                        Total Pending
-                    {% endif %}
-                </div>
+                    <noscript><button type="submit" class="btn btn-secondary">Apply</button></noscript>
+                </form>
             </div>
-        </div>
-
-        <!-- Search Section -->
-        <div class="search-section">
-            <form method="GET" id="searchForm">
-                <div class="search-container">
-                    <div class="search-input-group">
-                        <input
-                            type="text"
-                            name="search"
-                            class="search-input"
-                            placeholder="Search equipment by name, model, or serial number..."
-                            value="{{ request.GET.search }}"
-                            id="searchInput"
-                        >
-                        <span class="search-icon">🔍</span>
-                    </div>
-                    {% if request.GET.search %}
-                    <button type="button" class="search-clear" id="clearSearchBtn">
-                        Clear Search
-                    </button>
-                    {% endif %}
-                </div>
-
-                <!-- Hidden fields to preserve other filters -->
-                {% if request.GET.department %}
-                <input type="hidden" name="department" value="{{ request.GET.department }}">
-                {% endif %}
-                {% if request.GET.month %}
-                <input type="hidden" name="month" value="{{ request.GET.month }}">
-                {% endif %}
-                {% if request.GET.year %}
-                <input type="hidden" name="year" value="{{ request.GET.year }}">
-                {% endif %}
-            </form>
 
             {% if request.GET.search %}
             <div class="search-results-info">
-                <strong>Search Results:</strong>
                 {% if schedules %}
-                    Showing {{ schedules.paginator.count }} result{{ schedules.paginator.count|pluralize }} for "<span class="highlight">{{ request.GET.search }}</span>"
+                    {{ schedules.paginator.count }} result{{ schedules.paginator.count|pluralize }} for “<span class="highlight">{{ request.GET.search }}</span>”
                 {% else %}
-                    No results found for "<span class="highlight">{{ request.GET.search }}</span>"
+                    No results for “<span class="highlight">{{ request.GET.search }}</span>”
                 {% endif %}
+                <button type="button" class="btn btn-link" id="clearSearchBtn">Clear search</button>
             </div>
             {% endif %}
         </div>
 
-        <!-- Table -->
-        <div class="table-container">
+        <!-- Schedules -->
+        <div class="section-card">
+            <div class="section-card-head">
+                <h2 class="section-card-title">
+                    {% if request.GET.search %}Search results{% else %}Pending calibrations{% endif %}
+                </h2>
+                <span class="badge">{{ schedules.paginator.count }}</span>
+            </div>
+
             {% if schedules %}
-            <table class="schedule-table">
-                <thead>
-                    <tr>
-                        <th>Equipment</th>
-                        <th>Serial Number</th>
-                        <th>Department</th>
-                        <th>Status</th>
-                        <th>Scheduled Month</th>
-                        <th>Period</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for schedule in schedules %}
-                    <tr data-schedule-id="{{ schedule.id }}" data-equipment-id="{{ schedule.equipment.id }}">
-                        <td>
-                            <div class="equipment-name">
-                                {{ schedule.equipment.description.name|default:"N/A" }}
-                            </div>
-                            <div class="equipment-model">
-                                Model: {{ schedule.equipment.model|default:"N/A" }}
-                            </div>
-                        </td>
-                        <td>
-                            <span class="serial-number">
-                                {{ schedule.equipment.serial_number|default:"N/A" }}
-                            </span>
-                        </td>
-                        <td>
-                            <span class="department-tag">
+            <div class="table-wrapper">
+                <table class="table table-hover schedule-table">
+                    <thead>
+                        <tr>
+                            <th>Equipment</th>
+                            <th>Serial number</th>
+                            <th>Department</th>
+                            <th>Status</th>
+                            <th>Scheduled</th>
+                            <th>Period</th>
+                            <th class="text-end">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for schedule in schedules %}
+                        <tr data-schedule-id="{{ schedule.id }}" data-equipment-id="{{ schedule.equipment.id }}">
+                            <td>
+                                <div class="equipment-name cell-title">
+                                    {{ schedule.equipment.description.name|default:"N/A" }}
+                                </div>
+                                <div class="equipment-model cell-sub">
+                                    Model: {{ schedule.equipment.model|default:"N/A" }}
+                                </div>
+                            </td>
+                            <td>
+                                <span class="serial-number mono-chip">
+                                    {{ schedule.equipment.serial_number|default:"N/A" }}
+                                </span>
+                            </td>
+                            <td>
                                 {{ schedule.equipment.department.name|default:"N/A" }}
-                            </span>
-                        </td>
-                        <td>
-                            <span class="status-badge status-{{ schedule.status }}">
-                                {{ schedule.status|title }}
-                            </span>
-                        </td>
-                        <td class="scheduled-month">
-                            {{ schedule.scheduled_month|date:"F Y" }}
-                        </td>
-                        <td class="period-info">
-                            {{ schedule.calibration_period }} Months
-                        </td>
-                        <td>
-                            <div class="action-buttons">
-                                {% if access_context.can_edit %}
-                                    <button class="quick-select-btn" data-schedule-id="{{ schedule.id }}" data-equipment-id="{{ schedule.equipment.id }}">
-                                        🎯 Select & Calibrate
-                                    </button>
-                                {% else %}
-                                    <span class="btn btn-secondary" style="cursor: default;">
-                                        View Only
-                                    </span>
-                                {% endif %}
-                            </div>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                            </td>
+                            <td>
+                                <span class="status-badge status-{{ schedule.status }}">
+                                    {{ schedule.status|title }}
+                                </span>
+                            </td>
+                            <td class="scheduled-month">
+                                {{ schedule.scheduled_month|date:"F Y" }}
+                            </td>
+                            <td class="period-info">
+                                {{ schedule.calibration_period }} months
+                            </td>
+                            <td>
+                                <div class="action-buttons">
+                                    {% if access_context.can_edit %}
+                                        <button type="button" class="btn btn-primary btn-sm quick-select-btn" data-schedule-id="{{ schedule.id }}" data-equipment-id="{{ schedule.equipment.id }}">
+                                            Calibrate
+                                        </button>
+                                    {% else %}
+                                        <span class="badge">View only</span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
 
-            <!-- Pagination -->
             {% if schedules.has_other_pages %}
-            <div class="pagination">
-                {% if schedules.has_previous %}
-                    <a href="?page=1{% if request.GET.department %}&department={{ request.GET.department }}{% endif %}{% if request.GET.month %}&month={{ request.GET.month }}{% endif %}{% if request.GET.year %}&year={{ request.GET.year }}{% endif %}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">&laquo; First</a>
-                    <a href="?page={{ schedules.previous_page_number }}{% if request.GET.department %}&department={{ request.GET.department }}{% endif %}{% if request.GET.month %}&month={{ request.GET.month }}{% endif %}{% if request.GET.year %}&year={{ request.GET.year }}{% endif %}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">Previous</a>
-                {% endif %}
-
-                <span class="current">
-                    Page {{ schedules.number }} of {{ schedules.paginator.num_pages }}
-                </span>
-
-                {% if schedules.has_next %}
-                    <a href="?page={{ schedules.next_page_number }}{% if request.GET.department %}&department={{ request.GET.department }}{% endif %}{% if request.GET.month %}&month={{ request.GET.month }}{% endif %}{% if request.GET.year %}&year={{ request.GET.year }}{% endif %}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">Next</a>
-                    <a href="?page={{ schedules.paginator.num_pages }}{% if request.GET.department %}&department={{ request.GET.department }}{% endif %}{% if request.GET.month %}&month={{ request.GET.month }}{% endif %}{% if request.GET.year %}&year={{ request.GET.year }}{% endif %}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">Last &raquo;</a>
-                {% endif %}
+            <div class="section-card-foot">
+                <span>Page {{ schedules.number }} of {{ schedules.paginator.num_pages }}</span>
+                <div class="pagination">
+                    {% if schedules.has_previous %}
+                        <a href="?page=1{% if request.GET.department %}&department={{ request.GET.department }}{% endif %}{% if request.GET.month %}&month={{ request.GET.month }}{% endif %}{% if request.GET.year %}&year={{ request.GET.year }}{% endif %}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}" aria-label="First page">&laquo;</a>
+                        <a href="?page={{ schedules.previous_page_number }}{% if request.GET.department %}&department={{ request.GET.department }}{% endif %}{% if request.GET.month %}&month={{ request.GET.month }}{% endif %}{% if request.GET.year %}&year={{ request.GET.year }}{% endif %}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">Previous</a>
+                    {% endif %}
+                    {% if schedules.has_next %}
+                        <a href="?page={{ schedules.next_page_number }}{% if request.GET.department %}&department={{ request.GET.department }}{% endif %}{% if request.GET.month %}&month={{ request.GET.month }}{% endif %}{% if request.GET.year %}&year={{ request.GET.year }}{% endif %}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">Next</a>
+                        <a href="?page={{ schedules.paginator.num_pages }}{% if request.GET.department %}&department={{ request.GET.department }}{% endif %}{% if request.GET.month %}&month={{ request.GET.month }}{% endif %}{% if request.GET.year %}&year={{ request.GET.year }}{% endif %}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}" aria-label="Last page">&raquo;</a>
+                    {% endif %}
+                </div>
             </div>
             {% endif %}
 
             {% else %}
             {% if request.GET.search %}
-                <!-- No search results state -->
-                <div class="no-search-results">
-                    <div class="search-icon-large">🔍</div>
-                    <h3>No Results Found</h3>
-                    <p>No equipment found matching "<strong>{{ request.GET.search }}</strong>". Try adjusting your search terms or clearing the search to see all equipment.</p>
+                <div class="empty-state">
+                    <div class="empty-state-icon"><i class="fas fa-search" aria-hidden="true"></i></div>
+                    <h3>No results found</h3>
+                    <p>No equipment matches “<strong>{{ request.GET.search }}</strong>”. Try different terms or clear the search.</p>
                 </div>
             {% else %}
-                <!-- No pending calibrations state -->
                 <div class="empty-state">
-                    <div class="empty-state-icon">✅</div>
-                    <h3>No Pending Calibrations</h3>
-                    <p>Great! There are no pending calibrations for the selected month. All equipment appears to be up to date.</p>
+                    <div class="empty-state-icon"><i class="fas fa-check" aria-hidden="true"></i></div>
+                    <h3>No pending calibrations</h3>
+                    <p>All equipment is up to date for the selected month.</p>
                 </div>
             {% endif %}
             {% endif %}

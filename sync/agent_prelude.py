@@ -585,3 +585,46 @@ def is_online(url="https://hq-server-dgs6.onrender.com/api/sync/health", timeout
 
 
 # ---------- File-Based State Manager ----------
+
+
+# ── JSON-safe payload conversion ─────────────────────────────────────────────
+# requests(json=...) uses the stdlib encoder, which cannot serialise date,
+# datetime, Decimal, UUID, memoryview or set. A row containing any of them
+# raises TypeError inside requests BEFORE the HTTP call, and upload_batch's
+# broad `except Exception` turns that into a generic failure indistinguishable
+# from "HQ offline".
+#
+# That is not hypothetical: calSchedules_calibrationschedule and
+# ppms_ppmschedule both carry a `scheduled_month` DATE column, and they were the
+# only two tables in the whole schema that never synced — every upload attempt
+# died on "Object of type date is not JSON serializable" and was retried
+# forever. Sanitising here fixes every caller at once.
+from datetime import date as _date, time as _time  # noqa: E402
+from decimal import Decimal as _Decimal  # noqa: E402
+from uuid import UUID as _UUID  # noqa: E402
+
+
+def json_safe(obj):
+    """Recursively convert a payload into something json.dumps can encode."""
+    if obj is None or isinstance(obj, (str, int, float, bool)):
+        return obj
+    if isinstance(obj, (datetime, _date, _time)):
+        return obj.isoformat()
+    if isinstance(obj, _Decimal):
+        # str, not float: float() silently loses precision on money/measurements.
+        return str(obj)
+    if isinstance(obj, _UUID):
+        return str(obj)
+    if isinstance(obj, (bytes, bytearray, memoryview)):
+        try:
+            return bytes(obj).decode("utf-8")
+        except Exception:
+            import base64
+            return base64.b64encode(bytes(obj)).decode("ascii")
+    if isinstance(obj, dict):
+        return {k: json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [json_safe(v) for v in obj]
+    if isinstance(obj, set):
+        return [json_safe(v) for v in obj]
+    return str(obj)

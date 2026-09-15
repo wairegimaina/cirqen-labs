@@ -43,6 +43,14 @@ from .view_modules.parameters import (
     api_standards_parameters_data,
 )
 
+# Bulk Excel import of standards and parameters
+from .view_modules.imports import (
+    download_standards_import_template,
+    upload_standards_excel,
+    download_parameters_import_template,
+    upload_parameters_excel,
+)
+
 # Alias for URL compatibility
 standards_list = StandardsParameters_lists
 

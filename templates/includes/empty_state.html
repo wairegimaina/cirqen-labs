@@ -1,15 +1,17 @@
 {% comment %}
-Shared "nothing here yet" state — mirrors the existing .empty-state /
-.empty-state-icon pattern from Calibrition/Pending-Calibrations.html
-(styled centrally in static/css/components.css, loaded globally).
+Shared "nothing here yet" state, styled centrally in static/css/components.css.
 
 Usage:
-  {% include 'includes/empty_state.html' with icon="✅" title="No Pending Calibrations" message="Great! There are no pending calibrations for the selected month." %}
+  {% include 'includes/empty_state.html' with icon="fa-check" title="No pending calibrations" message="All equipment is up to date for the selected month." %}
 
+icon is a Font Awesome solid icon name (e.g. "fa-box-open"); anything else
+falls back to a neutral inbox icon.
 Optional: pass action_url and action_label to show a primary action button.
 {% endcomment %}
 <div class="empty-state" role="status" aria-live="polite">
-  <div class="empty-state-icon" aria-hidden="true">{{ icon|default:"📭" }}</div>
+  <div class="empty-state-icon" aria-hidden="true">
+    {% if icon and icon|slice:":3" == "fa-" %}<i class="fas {{ icon }}"></i>{% else %}<i class="fas fa-inbox"></i>{% endif %}
+  </div>
   <h3>{{ title|default:"Nothing here yet" }}</h3>
   <p>{{ message|default:"There's nothing to show right now." }}</p>
   {% if action_url %}

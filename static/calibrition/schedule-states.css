@@ -9,10 +9,8 @@
   gap: .35rem;
   padding: .32rem .75rem;
   border-radius: 999px;
-  font-weight: 700;
+  font-weight: 600;
   font-size: .72rem;
-  letter-spacing: .04em;
-  text-transform: uppercase;
   border: 1px solid transparent;
   white-space: nowrap;
 }
@@ -117,17 +115,16 @@
 .cal-banner {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 1.1rem 1.25rem;
   box-shadow: var(--shadow-sm);
   transition: box-shadow .2s, border-color .2s;
 }
 .cal-banner:hover {
-  box-shadow: var(--shadow-md);
   border-color: var(--border-strong);
 }
 .cal-banner .cal-banner-val {
-  font-weight: 800;
+  font-weight: 600;
   font-size: 2.2rem;
   line-height: 1;
   color: var(--text-primary);
@@ -136,8 +133,6 @@
 .cal-banner .cal-banner-lbl {
   color: var(--text-muted);
   font-size: .7rem;
-  text-transform: uppercase;
-  letter-spacing: .08em;
   margin-top: .3rem;
   font-weight: 600;
 }
@@ -156,7 +151,7 @@
 /* Department dropdown icons (theme-aware) */
 .cal-dept-item-icon {
   width: 28px; height: 28px;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -166,7 +161,7 @@
   background: var(--primary-gradient);
 }
 .cal-dept-item-icon.has-hue {
-  background: linear-gradient(135deg, var(--primary-color), var(--primary-light));
+  background: var(--primary-color);
 }
 
 /* Filter pills */
@@ -208,7 +203,7 @@
 /* Smart reorganizer option cards */
 .reorg-option {
   border: 2px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: .85rem;
   cursor: pointer;
   transition: all .18s cubic-bezier(.4,0,.2,1);
@@ -217,7 +212,6 @@
 .reorg-option:hover {
   border-color: var(--primary-color);
   background: var(--bg-hover);
-  transform: translateY(-2px);
 }
 .reorg-option.is-selected {
   border-color: var(--primary-color);
@@ -253,7 +247,7 @@
 }
 .cal-empty h3 {
   color: var(--text-primary);
-  font-weight: 700;
+  font-weight: 600;
   margin-bottom: .35rem;
 }
 

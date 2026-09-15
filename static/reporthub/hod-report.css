@@ -24,8 +24,6 @@
   --space-lg: 1.5rem;
   --space-xl: 2rem;
   --space-2xl: 3rem;
-
-  --radius-sm: 0.25rem;
   /* --radius-md now comes from the shared base.css token (10px) */
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
@@ -53,7 +51,7 @@ body {
    ============================================================ */
 .main-container {
   background-color: var(--bg-card);
-  border-radius: 15px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-xl);
   overflow: hidden;
   min-height: calc(100vh - 40px);
@@ -77,7 +75,7 @@ body {
 
 .header h2 {
   font-size: 1.75rem;
-  font-weight: 700;
+  font-weight: 600;
   margin-bottom: var(--space-sm);
   display: flex;
   align-items: center;
@@ -109,7 +107,7 @@ body {
   padding: 8px 16px;
   font-size: 0.9em;
   font-weight: 500;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   text-decoration: none;
   display: inline-flex;
   align-items: center;
@@ -122,10 +120,8 @@ body {
 
 .back-btn:hover {
   background: rgba(0,0,0,.0);
-  transform: translateY(-2px);
   color: var(--text-white);
   text-decoration: none;
-  box-shadow: var(--shadow-lg);
 }
 
 .back-btn i {
@@ -134,7 +130,6 @@ body {
 }
 
 .back-btn:hover i {
-  transform: translateX(-2px);
 }
 
 /* ============================================================
@@ -144,7 +139,7 @@ body {
   background-color: var(--bg-secondary);
   border: 1px solid var(--border-color);
   padding: 8px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
   margin-bottom: 30px;
 }
@@ -154,14 +149,14 @@ body {
 }
 
 .filter-form-container label {
-  font-weight: 700;
+  font-weight: 600;
   margin-bottom: 5px;
   display: block;
   color: var(--text-primary);
 }
 
 .filter-form-container .form-control {
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   background-color: var(--input-bg);
   border-color: var(--input-border);
   color: var(--text-primary);
@@ -177,42 +172,10 @@ body {
 /* ============================================================
    TABLE — REPORTS
    ============================================================ */
-.table-responsive {
-  margin-top: 20px;
-  background-color: var(--bg-card);
-  border-color: var(--border-color) !important;
-}
-
-.table {
-  color: var(--text-primary);
-  margin-bottom: 0;
-}
-
-.table thead th {
-  background-color: var(--bg-tertiary);
-  color: var(--text-primary);
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  font-weight: 700;
-  border-bottom: 2px solid var(--border-color);
-  white-space: nowrap;
-}
-
-.table tbody td {
-  vertical-align: middle;
-  border-bottom: 1px solid var(--border-color);
-  color: var(--text-primary);
-}
 
 .table-striped>tbody>tr:nth-of-type(odd)>* {
   background-color: var(--bg-secondary);
   color: var(--text-primary);
-}
-
-.table-hover tbody tr:hover {
-  background-color: var(--bg-hover) !important;
-  cursor: pointer;
 }
 
 /* ============================================================
@@ -262,9 +225,8 @@ body {
     padding: 4px 8px;
   }
 
-  .card,
   .section-card,
-  .filter-section {
+.filter-section {
     margin: 10px 5px;
     padding: 18px;
   }
@@ -306,9 +268,8 @@ body {
     padding: 4px 8px;
   }
 
-  .card,
   .section-card,
-  .filter-section {
+.filter-section {
     margin: 10px 5px;
     padding: 18px;
   }
@@ -324,18 +285,13 @@ body {
     gap: 15px;
   }
 
-  .table,
   .schedule-table,
-  .sessions-table,
-  .calibration-table {
+.sessions-table,
+.calibration-table {
     font-size: 14px;
   }
 
-  .table th,
-  .table td {
-    padding: 12px 10px;
   }
-}
 
 /* ============================================================
    RESPONSIVE — TABLET LANDSCAPE (1024–1199px)
@@ -366,9 +322,8 @@ body {
     padding: 4px 8px;
   }
 
-  .card,
   .section-card,
-  .filter-section {
+.filter-section {
     margin: 8px 4px;
     padding: 16px;
   }
@@ -380,11 +335,7 @@ body {
     gap: 12px;
   }
 
-  .table th,
-  .table td {
-    padding: 10px 8px;
   }
-}
 
 /* ============================================================
    RESPONSIVE — TABLET PORTRAIT (768–1023px)
@@ -411,9 +362,8 @@ body {
     gap: 12px;
   }
 
-  .card,
   .section-card,
-  .filter-section {
+.filter-section {
     margin: 8px 4px;
     padding: 15px;
   }
@@ -431,7 +381,7 @@ body {
   .main-container,
   .container {
     margin: 4px;
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     padding: 4px 8px;
   }
 
@@ -474,7 +424,7 @@ body {
   .main-container,
   .container {
     margin: 3px;
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     padding: 4px 8px;
   }
 
@@ -504,23 +454,15 @@ body {
     width: fit-content !important;
   }
 
-  .table-responsive {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-
+  
   /* Stack table rows as cards on mobile */
-  .table,
   .schedule-table {
     display: block;
     overflow-x: visible;
     min-width: 100%;
   }
 
-  .table thead {
-    display: none;
-  }
-
+  
   .table tbody {
     display: block;
   }
@@ -529,29 +471,20 @@ body {
     display: block;
     margin-bottom: 10px;
     border: 1px solid var(--border-color);
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     padding: 10px;
     background-color: var(--bg-card);
     box-shadow: var(--shadow-sm);
   }
 
-  .table tbody td {
-    display: block;
-    text-align: left;
-    padding: 6px 0;
-    border: none;
-    position: relative;
-    padding-left: 45%;
-    color: var(--text-primary);
-  }
-
+  
   .table tbody td::before {
     content: attr(data-label);
     position: absolute;
     left: 0;
     width: 40%;
     padding-right: 10px;
-    font-weight: 700;
+    font-weight: 600;
     text-align: left;
     font-size: 0.8rem;
     color: var(--text-secondary);
@@ -566,22 +499,11 @@ body {
     display: none;
   }
 
-  .btn {
-    padding: 11px 18px;
-    font-size: 14px;
-    min-height: 44px;
-  }
-
-  .btn-sm {
-    padding: 6px 10px;
-    font-size: 12px;
-    min-height: 36px;
-  }
-
-  .form-control,
+  
+  
   input,
-  select,
-  textarea {
+select,
+textarea {
     padding: 10px 12px;
     font-size: 14px;
     min-height: 44px;
@@ -618,10 +540,9 @@ body {
 @media (max-width: 768px) {
 
   button,
-  .btn,
-  a.btn,
-  input[type="button"],
-  input[type="submit"] {
+a.btn,
+input[type="button"],
+input[type="submit"] {
     min-height: 44px;
     min-width: 44px;
   }
@@ -678,12 +599,10 @@ body {
   }
 
   .header,
-  .back-btn,
-  .nav-links,
-  .btn,
-  button,
-  .action-buttons,
-  .modal {
+.back-btn,
+.nav-links,
+button,
+.action-buttons {
     display: none !important;
   }
 
@@ -695,11 +614,7 @@ body {
     padding: 4px 8px;
   }
 
-  .table,
-  .card {
-    page-break-inside: avoid;
   }
-}
 
 /* ============================================================
    REDUCED MOTION

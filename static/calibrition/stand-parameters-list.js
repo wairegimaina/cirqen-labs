@@ -32,14 +32,14 @@
 
   function actionRow(type, id) {
     return (
-      '<button class="btn btn-edit btn-action me-2" data-action="edit-' +
+      '<button class="btn btn-secondary btn-sm me-1" data-action="edit-' +
       type +
       '" data-id="' +
       id +
       '">' +
-      '<i class="fas fa-edit"></i> Update' +
+      '<i class="fas fa-pen"></i> Edit' +
       "</button>" +
-      '<button class="btn btn-delete btn-action" data-action="delete-' +
+      '<button class="btn btn-outline-danger btn-sm" data-action="delete-' +
       type +
       '" data-id="' +
       id +
@@ -50,7 +50,7 @@
   }
 
   function flashRow(row) {
-    row.style.backgroundColor = "#d4edda";
+    row.style.backgroundColor = "var(--success-bg)";
     setTimeout(function () {
       row.style.transition = "background-color 0.5s ease";
       row.style.backgroundColor = "";
@@ -120,7 +120,7 @@
           "<td>" +
           (s.calibration_due_date || "") +
           "</td>" +
-          "<td>" +
+          "<td class=\"text-end\">" +
           actionRow("standard", s.id) +
           "</td>" +
           "</tr>"
@@ -150,7 +150,7 @@
           "<td>" +
           (p.unit || "") +
           "</td>" +
-          "<td>" +
+          "<td class=\"text-end\">" +
           actionRow("parameter", p.id) +
           "</td>" +
           "</tr>"
@@ -217,7 +217,7 @@
 
     loading.style.display = "block";
     loading.innerHTML =
-      '<div class="text-center py-5"><div class="spinner-border text-primary" style="width:3rem;height:3rem;" role="status"><span class="visually-hidden">Loading…</span></div><p class="mt-3 text-muted fw-bold">Loading standard data…</p></div>';
+      '<div class="empty-state"><div class="loading-spinner" role="status"></div><p>Loading standard…</p></div>';
     this.form.style.display = "none";
     alerts.innerHTML = "";
     modalInstance.show();
@@ -472,7 +472,7 @@
       "<td>" +
       (s.calibration_due_date || "") +
       "</td>" +
-      "<td>" +
+      "<td class=\"text-end\">" +
       actionRow("standard", s.id) +
       "</td>";
     flashRow(row);
@@ -484,25 +484,21 @@
 
     var overlay = document.createElement("div");
     overlay.id = "sp-overlay";
-    overlay.style.cssText =
-      "position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;";
+    overlay.className = "loading-overlay active";
 
     var box = document.createElement("div");
-    box.style.cssText =
-      "background:#fff;border-radius:15px;padding:40px 60px;text-align:center;min-width:360px;box-shadow:0 10px 40px rgba(0,0,0,.3);";
+    box.className = "loading-content";
 
     if (state === "saving") {
       box.innerHTML =
-        '<div class="spinner-border text-primary" style="width:4rem;height:4rem;" role="status"></div>' +
-        '<h4 class="mt-4 mb-2 text-primary fw-bold">Updating Standard</h4>' +
-        '<p class="text-muted mb-0">Please wait…</p>';
+        '<div class="loading-spinner" role="status"></div>' +
+        "<h4>Updating standard</h4>" +
+        "<p>Please wait…</p>";
     } else {
       box.innerHTML =
-        '<div style="width:4rem;height:4rem;margin:0 auto;background:#198754;border-radius:50%;display:flex;align-items:center;justify-content:center;">' +
-        '<i class="fas fa-check" style="font-size:2rem;color:#fff;"></i>' +
-        "</div>" +
-        '<h4 class="mt-4 mb-2 text-success fw-bold">Success!</h4>' +
-        '<p class="text-muted mb-0">Standard updated successfully</p>';
+        '<div class="success-mark"><i class="fas fa-check"></i></div>' +
+        "<h4>Standard updated</h4>" +
+        "<p>Your changes have been saved.</p>";
     }
 
     overlay.appendChild(box);
@@ -658,7 +654,7 @@
       "<td>" +
       (p.unit || "") +
       "</td>" +
-      "<td>" +
+      "<td class=\"text-end\">" +
       actionRow("parameter", p.id) +
       "</td>";
     flashRow(row);

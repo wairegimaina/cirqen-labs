@@ -31,6 +31,10 @@ SESSION_ENGINE = "django.contrib.sessions.backends.db"
 
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
+# Never talk to HQ; tests that exercise HQ calls mock them.
+HQ_SYNC_API_URL = ""
+HQ_INSTANT_PUSH = False
+
 # Keep test output quiet and deterministic.
 import logging  # noqa: E402
 logging.disable(logging.CRITICAL)

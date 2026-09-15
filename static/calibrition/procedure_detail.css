@@ -1,45 +1,54 @@
-/* ================================================================
-   PROCEDURE DETAIL — Theme-aware, modern design
-   ================================================================ */
-body { background:var(--bg-primary); color:var(--text-primary); margin:0; padding:0; font-family: var(--font-base); }
-.container,.main-container {
-  margin: 0;
-  padding: 4px 8px; background:var(--bg-secondary); }
+/* ============================================================
+   PROCEDURE DETAIL — templates/Calibrition/procedure_detail.html
+   Cards, tabs, tables and badges are shared components; only the
+   sub-parameter blocks and the history timeline live here.
+   ============================================================ */
 
-.header,.page-header {
-  background:linear-gradient(135deg,var(--secondary-dark, var(--bg-card)),var(--secondary-dark, var(--bg-card))); color:#fff; padding:14px 18px; border-radius:12px;
-  margin:0 0 10px 0; box-shadow:var(--shadow-md); display:flex; align-items:center; justify-content:space-between; gap:1rem;
+.nav-tabs { margin-bottom: 1rem; }
+.nav-tabs .badge { margin-left: .375rem; }
+
+.num { font-family: var(--font-mono); font-size: var(--fs-sm); }
+
+/* Sub-parameters inside a parameter card */
+.sub-param {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: .75rem 1rem;
+  margin-bottom: .75rem;
 }
-.header h1 { font-size:1.4rem; font-weight:700; color:#fff; margin:0; }
-.back-btn { background:rgba(0,0,0,.0); border:1px solid rgba(0,0,0,.0); color:#fff; padding:6px 13px; font-size:.85rem; font-weight:500; border-radius:8px; text-decoration:none; display:inline-flex; align-items:center; gap:6px; transition:all .25s; min-height:34px; }
-.back-btn:hover { background:rgba(0,0,0,.0); transform:translateY(-1px); color:#fff; }
+.sub-param:last-child { margin-bottom: 0; }
+.sub-param-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+  margin-bottom: .5rem;
+}
 
-.card,.section-card,.info-card { background:var(--bg-card); border:1px solid var(--border-color); border-radius:12px; margin-bottom:10px; box-shadow:var(--shadow-sm); transition:all .25s; overflow:hidden; }
-.card-header { background:var(--bg-tertiary); border-bottom:1px solid var(--border-color); padding:11px 15px; font-weight:600; color:var(--text-primary); display:flex; align-items:center; justify-content:space-between; }
-.card-body { padding:13px 15px; color:var(--text-primary); }
-
-.info-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:9px; margin-bottom:10px; }
-.info-item { background:var(--bg-tertiary); padding:9px 11px; border-radius:8px; border:1px solid var(--border-color); }
-.info-label { font-size:.68rem; color:var(--text-muted); text-transform:uppercase; font-weight:600; margin-bottom:3px; letter-spacing:.04em; }
-.info-value { font-size:.9rem; color:var(--text-primary); font-weight:600; }
-
-.parameter-card { background:var(--bg-card); border:1px solid var(--border-color); border-radius:10px; padding:12px; margin-bottom:8px; }
-.parameter-header { background:var(--bg-tertiary); padding:8px 12px; border-radius:8px; margin-bottom:9px; border-left:3px solid var(--primary-color); font-weight:600; font-size:.875rem; color:var(--text-primary); }
-
-.btn { padding:7px 14px; border-radius:8px; font-weight:600; font-size:.875rem; cursor:pointer; transition:all .25s; border:none; display:inline-flex; align-items:center; gap:5px; text-decoration:none; }
-/* .btn-primary now comes from the shared static/css/components.css */
-.btn-primary:hover { filter:brightness(1.08); transform:translateY(-1px); }
-.btn-secondary { background:var(--bg-tertiary); color:var(--text-primary); border:1.5px solid var(--border-color); }
-.btn-secondary:hover { background:var(--bg-hover); }
-.btn-danger { background:linear-gradient(135deg,var(--danger-color),var(--danger-color)); color:#fff; }
-.btn-danger:hover { filter:brightness(1.08); }
-.btn-sm { padding:4px 10px; font-size:.775rem; }
-
-.badge { font-size:.72rem; font-weight:700; padding:3px 7px; border-radius:4px; display:inline-flex; align-items:center; gap:3px; text-transform:uppercase; }
-.badge-primary { background:var(--primary-gradient); color:#fff; }
-.badge-success { background:var(--success-color); color:#fff; }
-.badge-info    { background:var(--info-color);    color:#fff; }
-
-@media (max-width:768px) { .header { flex-direction:column; padding:12px; } .info-grid { grid-template-columns:1fr; } }
-@media (max-width:576px) { .container,.main-container {
-  padding: 4px 8px; } .card-body { padding:11px; } }
+/* Revision history */
+.timeline { list-style: none; margin: 0; padding: 0; }
+.timeline li { position: relative; display: flex; gap: .75rem; padding-bottom: 1rem; }
+.timeline li:last-child { padding-bottom: 0; }
+.timeline li:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 16px;
+  bottom: 0;
+  width: 1px;
+  background: var(--border-color);
+}
+.timeline li > div { flex: 1; min-width: 0; }
+.timeline-dot {
+  width: 9px;
+  height: 9px;
+  margin-top: .45rem;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--border-strong);
+}
+.timeline-dot.is-success { background: var(--success-color); }
+.timeline-dot.is-primary { background: var(--primary-color); }
+.timeline-title { display: flex; justify-content: space-between; gap: 1rem; font-weight: 500; }
+.timeline-title span { font-weight: 400; font-size: var(--fs-sm); }
+.timeline p { margin: .125rem 0 0; font-size: var(--fs-sm); color: var(--text-secondary); }

@@ -1,18 +1,17 @@
 import io
 from datetime import datetime
+from django.contrib.auth import get_user_model
 from django.test import TestCase, Client
 from django.urls import reverse
-from django.contrib.auth.models import User
 from django.http import HttpResponse
 from openpyxl import load_workbook
 
-from schedule.models import (
-    Equipment,
-    Department,
-    Workshop,
-    CalibrationSchedule,
-    EquipmentDescription,
-)
+from calSchedules.models import CalibrationSchedule
+from Inventory.models import Department, Equipment, EquipmentDescription
+from users.models import UserProfile
+from workshop.models import Workshop
+
+User = get_user_model()
 
 
 class CalibrationViewsTest(TestCase):
@@ -25,6 +24,13 @@ class CalibrationViewsTest(TestCase):
         self.workshop = Workshop.objects.create(name="Main Workshop")
         self.department = Department.objects.create(name="Lab A", workshop=self.workshop)
 
+        # calSchedules permissions come from the UserProfile, not is_superuser:
+        # an Engineer Incharge gets workshop-wide edit + schedule access.
+        UserProfile.objects.update_or_create(
+            user=self.admin_user,
+            defaults={"role": "Tech", "level": "Engineer Incharge", "workshop": self.workshop},
+        )
+
         # Equipment + Description
         self.description = EquipmentDescription.objects.create(name="Balance Scale")
         self.equipment = Equipment.objects.create(
@@ -33,6 +39,7 @@ class CalibrationViewsTest(TestCase):
             description=self.description,
             model="M123",
             serial_number="SN001",
+            status="Working",
         )
 
         # Calibration Schedule
@@ -58,16 +65,24 @@ class CalibrationViewsTest(TestCase):
     def test_delete_schedule_admin(self):
         self.login_as_admin()
         response = self.client.post(reverse("schedule:delete_calibration_schedule", args=[self.schedule.id]))
-        self.assertRedirects(response, reverse("schedule:calibration_dashboard"))
-        self.assertFalse(CalibrationSchedule.objects.filter(id=self.schedule.id).exists())
+        self.assertRedirects(
+            response, reverse("schedule:calibration_dashboard"), fetch_redirect_response=False
+        )
+        # Deletes are soft (pending_delete) so the sync agent can propagate them to HQ.
+        self.schedule.refresh_from_db()
+        self.assertTrue(self.schedule.pending_delete)
 
     def test_bulk_delete_schedule_admin(self):
         self.login_as_admin()
         response = self.client.post(reverse("schedule:bulk_delete_calibration_schedules"), {
             "schedule_ids": [self.schedule.id],
         })
-        self.assertRedirects(response, reverse("schedule:calibration_dashboard"))
-        self.assertFalse(CalibrationSchedule.objects.filter(id=self.schedule.id).exists())
+        self.assertRedirects(
+            response, reverse("schedule:calibration_dashboard"), fetch_redirect_response=False
+        )
+        # Deletes are soft (pending_delete) so the sync agent can propagate them to HQ.
+        self.schedule.refresh_from_db()
+        self.assertTrue(self.schedule.pending_delete)
 
     # -----------------------
     # Push / Bulk Push
@@ -78,7 +93,9 @@ class CalibrationViewsTest(TestCase):
         response = self.client.post(reverse("schedule:bulk_push_calibration_schedules"), {
             "schedule_ids": [self.schedule.id],
         })
-        self.assertRedirects(response, reverse("schedule:calibration_dashboard"))
+        self.assertRedirects(
+            response, reverse("schedule:calibration_dashboard"), fetch_redirect_response=False
+        )
         self.schedule.refresh_from_db()
         self.assertNotEqual(self.schedule.scheduled_month, scheduled_before)
         self.assertEqual(self.schedule.status, "pushed")
@@ -97,7 +114,9 @@ class CalibrationViewsTest(TestCase):
                 "calibration_period": 6,
             },
         )
-        self.assertRedirects(response, reverse("schedule:calibration_dashboard"))
+        self.assertRedirects(
+            response, reverse("schedule:calibration_dashboard"), fetch_redirect_response=False
+        )
         self.schedule.refresh_from_db()
         self.assertEqual(self.schedule.calibration_period, 6)
 
@@ -112,9 +131,12 @@ class CalibrationViewsTest(TestCase):
             description=self.description,
             model="M124",
             serial_number="SN002",
+            status="Working",
         )
         response = self.client.post(reverse("schedule:schedule_calibration_equipment", args=[new_eq.id]))
-        self.assertRedirects(response, reverse("schedule:calibration_dashboard"))
+        self.assertRedirects(
+            response, reverse("schedule:calibration_dashboard"), fetch_redirect_response=False
+        )
         self.assertTrue(CalibrationSchedule.objects.filter(equipment=new_eq).exists())
 
     # -----------------------

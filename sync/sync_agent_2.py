@@ -9,6 +9,7 @@ from .agent_prelude import (
 from .agent_prelude import load_config_from_unified_manager, load_config_from_env_fallback
 from .agent_prelude import sleep_with_jitter, is_online, CERT_TABLES, DEFAULT_CONFIG
 from .agent_prelude import SyncDirection, DEVICE_ID_MODULE_AVAILABLE, get_or_create_client_id
+from .event_identity import stable_event_id
 import os
 import time
 import uuid
@@ -398,6 +399,14 @@ class SchemaAndChangeDetectionMixin(SmartDeleteMixin):
         4. Returns restore events for sync to HQ
         """
         conn = None
+        # Same per-table checkpoint resolution as fetch_recent_changes_for_table:
+        # callers pass the shared global value, which would miss restores on any
+        # table whose checkpoint has been rewound by the drift reconciler.
+        if table and hasattr(self, "get_last_upload_time"):
+            try:
+                since_ts = self.get_last_upload_time(table)
+            except Exception:
+                pass
         try:
             conn = self.pool.getconn()
 
@@ -502,13 +511,15 @@ class SchemaAndChangeDetectionMixin(SmartDeleteMixin):
 
                     # Create restore event for sync
                     restore_event = {
-                        "event_id": event_id or f"restore-{table}-{row_id}-{uuid.uuid4().hex[:8]}",
+                        "event_id": event_id or stable_event_id(
+                            table, row_id, current_record["updated_at"], "activate"
+                        ),
                         "table": table,
                         "row_id": row_id,
                         "operation": "activate",
                         "data": current_record["row_data"],
                         "created_at": current_record["updated_at"].isoformat(),
-                        "source": "local",
+                        "source": getattr(self, "client_id", None) or "local",
                         "machine_id": self.machine_id,
                         "active_status": True,
                         "pending_delete": False,
@@ -575,6 +586,24 @@ class SchemaAndChangeDetectionMixin(SmartDeleteMixin):
         """
         conn = None
         start_time = time.time()
+
+        # ── Per-table checkpoint wins over whatever the caller passed ──────────
+        # Five separate loops (sync_agent_3:263, sync_agent_4:159/337,
+        # sync_agent_8:679, smart_delete:540) read ONE global checkpoint and then
+        # scan every table with it. That let a busy table drag the shared value
+        # past other tables' older pending rows, stranding them permanently, and
+        # it also meant the drift reconciler's per-table rewind was ignored — the
+        # rewind fired, and the very next scan still reported "no changes".
+        #
+        # Resolving the checkpoint HERE, where the table is known, fixes every
+        # caller at once and makes any future loop correct by default.
+        # get_last_upload_time(table) seeds from the global value the first time
+        # a table is seen, so nothing is re-uploaded unnecessarily.
+        if table and hasattr(self, "get_last_upload_time"):
+            try:
+                since_ts = self.get_last_upload_time(table)
+            except Exception as _ck_err:
+                LOG.debug("Could not resolve per-table checkpoint for %s: %s", table, _ck_err)
 
         try:
             conn = self.pool.getconn()

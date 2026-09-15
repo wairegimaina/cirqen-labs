@@ -354,14 +354,30 @@ class NetworkLoopsMixin(SmartDeleteMixin):
                             sync_id = self.redis_queue.enqueue_batch(all_changes)
                             LOG.info(f"   Enqueued batch: sync_id={sync_id[:8] if sync_id else 'N/A'}...")
 
-                            # Update checkpoint
-                            if all_changes:
+                            # Update checkpoint — ONLY if the enqueue actually
+                            # succeeded. enqueue_batch() returns None when Redis
+                            # is unavailable; advancing regardless skipped those
+                            # rows on every future scan, so they could never
+                            # reach HQ by any path.
+                            #
+                            # NOTE: even on success this advances on ENQUEUE, not
+                            # on confirmed delivery to HQ. If the local queue is
+                            # flushed or its worker never drains it, these rows
+                            # are still silently skipped. Advancing only once the
+                            # queue worker confirms upload is the correct design.
+                            if sync_id and all_changes:
                                 latest_time = max(
                                     e.get("created_at", e.get("updated_at", ""))
                                     for e in all_changes
                                 )
                                 if latest_time:
                                     self.set_last_upload_time(latest_time)
+                            elif not sync_id:
+                                LOG.error(
+                                    "❌ Enqueue failed for %d changes — holding checkpoint "
+                                    "so they are rediscovered on the next scan",
+                                    len(all_changes),
+                                )
 
                     # Check queue status periodically
                     if loop_count % 30 == 0:
@@ -440,13 +456,16 @@ class NetworkLoopsMixin(SmartDeleteMixin):
                         time.sleep(poll_interval)
                         continue
 
-                    # Check each table individually and upload immediately
-                    last_upload_time = self.get_last_upload_time()
-
+                    # Check each table individually and upload immediately.
+                    # The checkpoint is read PER TABLE: a single shared value let
+                    # a busy table (Inventory_equipment) drag it forward past
+                    # other tables' older pending rows, which then became
+                    # permanently invisible to `updated_at > checkpoint`.
                     for table in self.tables:
                         if self.stop_event.is_set():
                             break
 
+                        last_upload_time = self.get_last_upload_time(table)
                         table_changes = self.fetch_recent_changes_for_table(table, last_upload_time)
                         restore_events = self.detect_local_restores(table, last_upload_time)
 
@@ -474,14 +493,16 @@ class NetworkLoopsMixin(SmartDeleteMixin):
                                     is_online = True
                                     LOG.info(f"✅ Batch {batch_num}/{total_batches} uploaded in {duration:.2f}s")
 
-                                    # Advance checkpoint so the next poll skips these rows
+                                    # Advance checkpoint so the next poll skips these
+                                    # rows — scoped to THIS table, so finishing one
+                                    # table cannot skip another's pending rows.
                                     try:
                                         latest_ts = max(
                                             e.get("created_at") or e.get("updated_at") or ""
                                             for e in batch
                                         )
                                         if latest_ts:
-                                            self.set_last_upload_time(latest_ts)
+                                            self.set_last_upload_time(latest_ts, table=table)
                                     except Exception as _ckpt_err:
                                         LOG.warning("Could not advance upload checkpoint: %s", _ckpt_err)
                                 else:
@@ -512,6 +533,43 @@ class NetworkLoopsMixin(SmartDeleteMixin):
                     time.sleep(1)
 
             LOG.info("Upload loop exiting")
+    @staticmethod
+    def _parse_download_ts(value):
+            from datetime import datetime, timezone
+            dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+            return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+    def _download_cursor_checkpoint(self, last_ts, next_since, failed_updates):
+            """
+            Checkpoint for an HQ page that carries a ``next_since`` cursor.
+
+            HQ pages by its own receive time and reports how far the page reached,
+            so the checkpoint no longer depends on row timestamps from other
+            machines' clocks: an edit made offline and uploaded days later is still
+            ahead of it, and a page whose events were all filtered out still moves
+            it forward (the old code returned early on an empty page, which is how
+            this machine sat on the same 300k-event window since August). If
+            anything failed to apply, stop just before the earliest failure so the
+            next request fetches it again.
+            """
+            from datetime import timedelta
+            try:
+                target = self._parse_download_ts(next_since)
+                if failed_updates:
+                    cursors = [u.get("cursor") for u in failed_updates]
+                    if not all(cursors):
+                        return last_ts
+                    target = min(
+                        [target]
+                        + [self._parse_download_ts(c) - timedelta(microseconds=1) for c in cursors]
+                    )
+                if last_ts and target <= self._parse_download_ts(last_ts):
+                    return last_ts
+                return target.isoformat()
+            except (TypeError, ValueError):
+                LOG.warning("Unreadable download cursor %r — keeping checkpoint %s", next_since, last_ts)
+                return last_ts
+
     def download_updates(self):
             """
             ENHANCED: Download updates from HQ with cross-workshop transfer support
@@ -525,7 +583,10 @@ class NetworkLoopsMixin(SmartDeleteMixin):
 
             try:
 
-                r = requests.get(url, params=params, headers=headers, timeout=30)
+                # Long read timeout: HQ answers a large backlog page slower than
+                # 30s, and a timeout here means the page is lost and re-requested
+                # forever. HQ's gunicorn timeout is 120s.
+                r = requests.get(url, params=params, headers=headers, timeout=(10, 90))
 
                 if r.status_code != 200:
                     LOG.warning(f"❌ Download returned status {r.status_code}: {r.text}")
@@ -533,8 +594,13 @@ class NetworkLoopsMixin(SmartDeleteMixin):
 
                 payload = r.json()
                 updates = payload.get("updates", [])
+                next_since = payload.get("next_since")
 
                 if not updates:
+                    if next_since:
+                        checkpoint = self._download_cursor_checkpoint(last_ts, next_since, [])
+                        if checkpoint != last_ts:
+                            self.set_last_download_time(checkpoint)
                     LOG.debug(f"📭 No new updates available from HQ")
                     return
 
@@ -705,7 +771,11 @@ class NetworkLoopsMixin(SmartDeleteMixin):
                 # (and anything after them — safe, since apply is upsert-style
                 # and idempotent). Only use the full `latest_ts` when nothing is
                 # left unresolved.
-                if failed_updates:
+                if next_since:
+                    safe_checkpoint_ts = self._download_cursor_checkpoint(
+                        last_ts, next_since, failed_updates
+                    )
+                elif failed_updates:
                     failed_timestamps = [
                         u.get("last_modified") or u.get("updated_at") or u.get("ts")
                         for u in failed_updates
@@ -752,6 +822,10 @@ class NetworkLoopsMixin(SmartDeleteMixin):
 
                 else:
                     LOG.warning(f"⚠️  No updates could be applied from this batch")
+                    # With a cursor, the checkpoint may still move up to just
+                    # before the earliest failure.
+                    if next_since and safe_checkpoint_ts != last_ts:
+                        self.set_last_download_time(safe_checkpoint_ts)
                     if failed_count > 0:
                         LOG.warning(
                             f"   ⏸️  {failed_count} update(s) failed and checkpoint was not advanced "

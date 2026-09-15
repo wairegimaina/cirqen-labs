@@ -15,173 +15,122 @@
 
 <div class="toast-container position-fixed top-0 end-0 p-3" id="toastContainer" style="z-index: 9999;"></div>
 
-<div class="main-container">
+<div class="page-wrap">
     {# ── Info banner ── #}
-    <div class="row mb-3">
-        <div class="col-12">
-            <div class="alert alert-info alert-dismissible fade show" role="alert">
-                <div class="d-flex align-items-center">
-                    <i class="fas fa-info-circle me-2"></i>
-                    <div>
-                        <strong>Quality Assurance Policy:</strong>
-                        Technicians cannot approve their own work. Sessions marked with
-                        <span class="badge bg-info"><i class="fas fa-user"></i> Own</span>
-                        require approval from another team member.
-                    </div>
-                </div>
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>
+    <div class="alert alert-info alert-dismissible fade show d-flex align-items-start gap-2" role="alert">
+        <i class="fas fa-circle-info mt-1" aria-hidden="true"></i>
+        <div>
+            <strong>Quality assurance policy:</strong>
+            technicians can't approve their own work. Sessions marked
+            <span class="badge bg-secondary"><i class="fas fa-user"></i> Own</span>
+            need approval from another team member.
         </div>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
     </div>
 
     {# ── Tabs ── #}
-    <div class="row mt-4">
-        <div class="col-12">
-            <ul class="nav nav-tabs" role="tablist">
-                <li class="nav-item" role="presentation">
-                    <a class="nav-link {% if active_tab == 'pending' or not active_tab %}active{% endif %}"
-                       href="?tab=pending"
-                       data-action="switch-tab"
-                       data-tab="pending">
-                        <i class="fas fa-clock me-2"></i>Pending Approval
-                        <span class="badge bg-warning ms-2" id="pendingCount">{{ pending_count|default:0 }}</span>
-                    </a>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <a class="nav-link {% if active_tab == 'declined' %}active{% endif %}"
-                       href="?tab=declined"
-                       data-action="switch-tab"
-                       data-tab="declined">
-                        <i class="fas fa-times-circle me-2"></i>Declined Sessions (30 days)
-                        <span class="badge bg-danger ms-2" id="declinedCount">{{ declined_count|default:0 }}</span>
-                    </a>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <a class="nav-link {% if active_tab == 'awaiting_certificate' %}active{% endif %}"
-                       href="?tab=awaiting_certificate"
-                       data-action="switch-tab"
-                       data-tab="awaiting_certificate">
-                        <i class="fas fa-certificate me-2"></i>Awaiting Certificate
-                        <span class="badge bg-primary ms-2" id="awaitingCertCount">{{ awaiting_cert_count|default:0 }}</span>
-                    </a>
-                </li>
-            </ul>
-        </div>
-    </div>
+    <ul class="nav nav-tabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <a class="nav-link {% if active_tab == 'pending' or not active_tab %}active{% endif %}"
+               href="?tab=pending"
+               data-action="switch-tab"
+               data-tab="pending">
+                Pending approval
+                <span class="badge rounded-pill" id="pendingCount">{{ pending_count|default:0 }}</span>
+            </a>
+        </li>
+        <li class="nav-item" role="presentation">
+            <a class="nav-link {% if active_tab == 'declined' %}active{% endif %}"
+               href="?tab=declined"
+               data-action="switch-tab"
+               data-tab="declined">
+                Declined (30 days)
+                <span class="badge rounded-pill" id="declinedCount">{{ declined_count|default:0 }}</span>
+            </a>
+        </li>
+        <li class="nav-item" role="presentation">
+            <a class="nav-link {% if active_tab == 'awaiting_certificate' %}active{% endif %}"
+               href="?tab=awaiting_certificate"
+               data-action="switch-tab"
+               data-tab="awaiting_certificate">
+                Awaiting certificate
+                <span class="badge rounded-pill" id="awaitingCertCount">{{ awaiting_cert_count|default:0 }}</span>
+            </a>
+        </li>
+    </ul>
 
-    {# ── Stats cards ── #}
-    <div class="row mt-4" id="statsCards">
-        <div class="col-md-3">
-            <div class="card bg-warning bg-opacity-10">
-                <div class="card-body text-center">
-                    <i class="fas fa-clock fa-2x text-warning"></i>
-                    <h4 class="mt-2" id="summaryPending">{{ pending_count|default:0 }}</h4>
-                    <p class="mb-0">Pending Approval</p>
-                </div>
-            </div>
+    {# ── Stats ── #}
+    <div class="kpi-grid" id="statsCards">
+        <div class="kpi-card kpi-pending">
+            <div class="kpi-icon"><i class="fas fa-clock" aria-hidden="true"></i></div>
+            <div class="kpi-num" id="summaryPending">{{ pending_count|default:0 }}</div>
+            <div class="kpi-label">Pending approval</div>
         </div>
-        <div class="col-md-3">
-            <div class="card bg-success bg-opacity-10">
-                <div class="card-body text-center">
-                    <i class="fas fa-check-circle fa-2x text-success"></i>
-                    <h4 class="mt-2" id="summaryApproved">{{ approved_count|default:0 }}</h4>
-                    <p class="mb-0">Approved Today</p>
-                </div>
-            </div>
+        <div class="kpi-card kpi-approved">
+            <div class="kpi-icon"><i class="fas fa-check" aria-hidden="true"></i></div>
+            <div class="kpi-num" id="summaryApproved">{{ approved_count|default:0 }}</div>
+            <div class="kpi-label">Approved today</div>
         </div>
-        <div class="col-md-3">
-            <div class="card bg-danger bg-opacity-10">
-                <div class="card-body text-center">
-                    <i class="fas fa-exclamation-triangle fa-2x text-danger"></i>
-                    <h4 class="mt-2" id="summaryHighPriority">{{ high_priority_count|default:0 }}</h4>
-                    <p class="mb-0">High Priority</p>
-                </div>
-            </div>
+        <div class="kpi-card kpi-overdue">
+            <div class="kpi-icon"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i></div>
+            <div class="kpi-num" id="summaryHighPriority">{{ high_priority_count|default:0 }}</div>
+            <div class="kpi-label">High priority</div>
         </div>
-        <div class="col-md-3">
-            <div class="card bg-info bg-opacity-10">
-                <div class="card-body text-center">
-                    <i class="fas fa-undo fa-2x text-info"></i>
-                    <h4 class="mt-2" id="summaryCanReview">{{ can_review_count|default:0 }}</h4>
-                    <p class="mb-0">Can Review (after 3 days)</p>
-                </div>
-            </div>
+        <div class="kpi-card kpi-info">
+            <div class="kpi-icon"><i class="fas fa-rotate-left" aria-hidden="true"></i></div>
+            <div class="kpi-num" id="summaryCanReview">{{ can_review_count|default:0 }}</div>
+            <div class="kpi-label">Can review (after 3 days)</div>
         </div>
-        <div class="col-md-3 mt-3 mt-md-0">
-            <div class="card bg-primary bg-opacity-10">
-                <div class="card-body text-center">
-                    <i class="fas fa-certificate fa-2x text-primary"></i>
-                    <h4 class="mt-2" id="summaryAwaitingCert">{{ awaiting_cert_count|default:0 }}</h4>
-                    <p class="mb-0">Awaiting Certificate</p>
-                </div>
-            </div>
+        <div class="kpi-card kpi-primary">
+            <div class="kpi-icon"><i class="fas fa-certificate" aria-hidden="true"></i></div>
+            <div class="kpi-num" id="summaryAwaitingCert">{{ awaiting_cert_count|default:0 }}</div>
+            <div class="kpi-label">Awaiting certificate</div>
         </div>
     </div>
 
     {# ── Filters ── #}
-    <div class="filter mt-4">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-body py-2">
-                    <form method="GET" class="row g-3 align-items-center" id="filterForm">
-                        <input type="hidden" name="tab" value="{{ active_tab }}">
-                        <div class="col-md-3">
-                            <label class="form-label" for="filter_date_from">Date From</label>
-                            <input type="date" class="form-control form-control-sm" id="filter_date_from" name="date_from"
-                                   value="{{ current_filters.date_from }}">
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label" for="filter_date_to">Date To</label>
-                            <input type="date" class="form-control form-control-sm" id="filter_date_to" name="date_to"
-                                   value="{{ current_filters.date_to }}">
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label" for="filter_equipment">Equipment</label>
-                            <input type="text" class="form-control form-control-sm" id="filter_equipment" name="equipment"
-                                   placeholder="Search equipment..." value="{{ current_filters.equipment }}">
-                        </div>
-                        <div class="col-md-3">
-                            <div class="form-label" aria-hidden="true">&nbsp;</div>
-                            <div>
-                                <button type="submit" class="btn btn-primary btn-sm">
-                                    <i class="fas fa-search"></i> Filter
-                                </button>
-                                <a href="?tab={{ active_tab }}" class="btn btn-outline-secondary btn-sm">
-                                    <i class="fas fa-times"></i> Clear
-                                </a>
-                            </div>
-                        </div>
-                    </form>
-                </div>
+    <div class="section-card toolbar-card">
+        <form method="GET" class="toolbar" id="filterForm">
+            <input type="hidden" name="tab" value="{{ active_tab }}">
+            <div class="search-field">
+                <i class="fas fa-search" aria-hidden="true"></i>
+                <input type="text" class="form-control" id="filter_equipment" name="equipment"
+                       placeholder="Search equipment" aria-label="Equipment" value="{{ current_filters.equipment }}">
             </div>
-        </div>
+            <div class="toolbar-field">
+                <label for="filter_date_from">From</label>
+                <input type="date" class="form-control" id="filter_date_from" name="date_from"
+                       value="{{ current_filters.date_from }}">
+            </div>
+            <div class="toolbar-field">
+                <label for="filter_date_to">To</label>
+                <input type="date" class="form-control" id="filter_date_to" name="date_to"
+                       value="{{ current_filters.date_to }}">
+            </div>
+            <button type="submit" class="btn btn-secondary">Apply</button>
+            <a href="?tab={{ active_tab }}" class="btn btn-link">Clear</a>
+        </form>
     </div>
 
     {# ── Sessions table ── #}
-    <div class="table-section mt-4">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0" id="tableHeaderTitle">
-                        {% if active_tab == 'declined' %}
-                            <i class="fas fa-times-circle"></i> Declined Sessions
-                        {% elif active_tab == 'awaiting_certificate' %}
-                            <i class="fas fa-certificate"></i> Awaiting Certificate
-                        {% else %}
-                            <i class="fas fa-list"></i> Pending Sessions
-                        {% endif %}
-                    </h5>
-                    {# data-action wires into sessions_pending_approval.js event delegation #}
-                    <button class="btn btn-outline-primary btn-sm" data-action="refresh-table">
-                        <i class="fas fa-sync"></i> Refresh
-                    </button>
-                </div>
-                <div class="card-body p-0">
-                    <div id="sessionsTableContainer">
-                        {% include 'Calibrition/partials/sessions_table.html' with page_obj=page_obj active_tab=active_tab %}
-                    </div>
-                </div>
-            </div>
+    <div class="section-card">
+        <div class="section-card-head">
+            <h2 class="section-card-title" id="tableHeaderTitle">
+                {% if active_tab == 'declined' %}
+                    <i class="fas fa-times-circle"></i> Declined sessions
+                {% elif active_tab == 'awaiting_certificate' %}
+                    <i class="fas fa-certificate"></i> Awaiting certificate
+                {% else %}
+                    <i class="fas fa-list"></i> Pending sessions
+                {% endif %}
+            </h2>
+            {# data-action wires into sessions_pending_approval.js event delegation #}
+            <button class="btn btn-secondary btn-sm" data-action="refresh-table">
+                <i class="fas fa-sync" aria-hidden="true"></i> Refresh
+            </button>
+        </div>
+        <div id="sessionsTableContainer">
+            {% include 'Calibrition/partials/sessions_table.html' with page_obj=page_obj active_tab=active_tab %}
         </div>
     </div>
 </div>
@@ -190,31 +139,26 @@
 <div class="modal fade" id="reviewModal" tabindex="-1" aria-labelledby="reviewModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-scrollable">
         <div class="modal-content">
-            <div class="modal-header bg-info text-white">
-                <h5 class="modal-title" id="reviewModalLabel">
-                    <i class="fas fa-clipboard-check me-2"></i>Review Calibration Session
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
-                        aria-label="Close"></button>
+            <div class="modal-header">
+                <h5 class="modal-title" id="reviewModalLabel">Review calibration session</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body" id="reviewSessionBody">
                 {# Populated by JS after fetchSessionDetails() #}
-                <div class="text-center py-4">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                    <p class="text-muted mt-2">Loading session details...</p>
+                <div class="empty-state">
+                    <div class="loading-spinner" role="status"><span class="visually-hidden">Loading...</span></div>
+                    <p>Loading session details…</p>
                 </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                {# data-action picked up by sessions_pending_approval.js → handleShowRejectionModal #}
+                <button type="button" class="btn btn-outline-danger" data-action="show-rejection-modal">
+                    <i class="fas fa-times" aria-hidden="true"></i> Reject
+                </button>
                 {# data-action picked up by sessions_pending_approval.js → handleShowApprovalModal #}
                 <button type="button" class="btn btn-success" data-action="show-approval-modal">
-                    <i class="fas fa-check me-1"></i>Approve
-                </button>
-                {# data-action picked up by sessions_pending_approval.js → handleShowRejectionModal #}
-                <button type="button" class="btn btn-danger" data-action="show-rejection-modal">
-                    <i class="fas fa-times me-1"></i>Reject
+                    <i class="fas fa-check" aria-hidden="true"></i> Approve
                 </button>
             </div>
         </div>
@@ -225,21 +169,17 @@
 <div class="modal fade" id="approvalModal" tabindex="-1" aria-labelledby="approvalModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
-            <div class="modal-header bg-success text-white">
-                <h5 class="modal-title" id="approvalModalLabel">
-                    <i class="fas fa-check-circle me-2"></i>Confirm Approval
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
-                        aria-label="Close"></button>
+            <div class="modal-header">
+                <h5 class="modal-title" id="approvalModalLabel">Confirm approval</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-
                 <form id="approvalForm" autocomplete="off">
-                    <div class="mb-3">
-                        <label class="form-label" for="approvalComments">Approval Comments</label>
+                    <div class="mb-0">
+                        <label class="form-label" for="approvalComments">Comments <span class="text-muted">(optional)</span></label>
                         <textarea class="form-control" id="approvalComments"
                                   name="approval_comments" rows="3"
-                                  placeholder="Optional comments for the technician..."></textarea>
+                                  placeholder="Notes for the technician"></textarea>
                     </div>
                 </form>
             </div>
@@ -247,7 +187,7 @@
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                 {# data-action → handleConfirmApproval in sessions_pending_approval.js #}
                 <button type="button" class="btn btn-success" data-action="confirm-approval">
-                    <i class="fas fa-check me-1"></i>Confirm Approval
+                    <i class="fas fa-check" aria-hidden="true"></i> Confirm approval
                 </button>
             </div>
         </div>
@@ -258,27 +198,22 @@
 <div class="modal fade" id="rejectionModal" tabindex="-1" aria-labelledby="rejectionModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
-            <div class="modal-header bg-danger text-white">
-                <h5 class="modal-title" id="rejectionModalLabel">
-                    <i class="fas fa-times-circle me-2"></i>Reject Session
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
-                        aria-label="Close"></button>
+            <div class="modal-header">
+                <h5 class="modal-title" id="rejectionModalLabel">Reject session</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 <div class="alert alert-warning">
-                    <i class="fas fa-exclamation-triangle me-2"></i>
-                    <strong>Warning:</strong> Rejecting this session will require the technician
-                    to perform recalibration.
+                    Rejecting this session means the technician has to recalibrate.
                 </div>
                 <form id="rejectionForm" autocomplete="off">
                     <div class="mb-3">
                         <label class="form-label" for="rejectionReason">
-                            Rejection Reason <span class="text-danger">*</span>
+                            Reason <span class="req">*</span>
                         </label>
                         <select class="form-select" id="rejectionReason"
                                 name="rejection_reason" required>
-                            <option value="">Select a reason...</option>
+                            <option value="">Select a reason…</option>
                             <option value="data_quality">Data Quality Issues</option>
                             <option value="procedure_not_followed">Procedure Not Followed</option>
                             <option value="equipment_error">Equipment Error</option>
@@ -286,13 +221,13 @@
                             <option value="other">Other</option>
                         </select>
                     </div>
-                    <div class="mb-3">
+                    <div class="mb-0">
                         <label class="form-label" for="rejectionComments">
-                            Detailed Comments <span class="text-danger">*</span>
+                            Details <span class="req">*</span>
                         </label>
                         <textarea class="form-control" id="rejectionComments"
                                   name="rejection_comments" rows="4" required
-                                  placeholder="Describe the specific issue that requires recalibration..."></textarea>
+                                  placeholder="Describe the issue that requires recalibration"></textarea>
                     </div>
                 </form>
             </div>
@@ -300,7 +235,7 @@
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                 {# data-action → handleConfirmRejection in sessions_pending_approval.js #}
                 <button type="button" class="btn btn-danger" data-action="confirm-rejection">
-                    <i class="fas fa-times me-1"></i>Confirm Rejection
+                    Confirm rejection
                 </button>
             </div>
         </div>
@@ -312,20 +247,16 @@
      aria-labelledby="successModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
-            <div class="modal-header flex-column border-0 text-center pt-4">
-                <div class="success-icon text-success mb-2">
-                    <i class="fas fa-check-circle fa-4x"></i>
-                </div>
-                <h3 class="mt-2 mb-0" id="successModalLabel">Session Approved Successfully!</h3>
-            </div>
-            <div class="modal-body">
+            <div class="modal-body text-center pt-4">
+                <div class="success-mark"><i class="fas fa-check" aria-hidden="true"></i></div>
+                <h5 class="modal-title mb-3" id="successModalLabel">Session approved</h5>
                 {# Populated by buildSuccessModalContent() in sessions_pending_approval.js #}
-                <div class="session-info" id="successSessionInfo"></div>
+                <div class="session-info text-start" id="successSessionInfo"></div>
             </div>
-            <div class="modal-footer border-0 justify-content-center pb-4">
+            <div class="modal-footer justify-content-center">
                 {# data-action → handleCloseSuccessModal in sessions_pending_approval.js #}
-                <button type="button" class="btn btn-primary px-4" data-action="close-success-modal">
-                    <i class="fas fa-arrow-left me-2"></i>Continue
+                <button type="button" class="btn btn-primary" data-action="close-success-modal">
+                    Continue
                 </button>
             </div>
         </div>

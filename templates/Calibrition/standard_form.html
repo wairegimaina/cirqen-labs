@@ -11,80 +11,76 @@
 
 {% block content %}
 
-        <div class="row">
-            <!-- Standard Creation Form (Left Column) -->
-            <div class="col-lg-8 mb-4">
+    <div class="page-wrap standard-form">
+        <div class="row g-3">
+            <!-- Standard form (left column) -->
+            <div class="col-lg-8">
                 <form id="standardForm" method="post"
                     action="{% if standard %}{% url 'calibration:standard_edit' pk=standard.pk %}{% else %}{% url 'calibration:standard_create' %}{% endif %}">
                     {% csrf_token %}
-                    <!-- Standard Basic Information Section -->
-                    <div class="card section-card mb-4">
-                        <div class="section-header p-3">
-                            <h3 class="mb-0">
-                                <i class="fas fa-info-circle me-2"></i>
-                                Standard Information
-                            </h3>
-                            <small class="opacity-75">Basic details and identification information for the
-                                standard</small>
+
+                    <!-- Standard information -->
+                    <section class="section-card">
+                        <div class="section-card-head">
+                            <div>
+                                <h2 class="section-card-title">Standard information</h2>
+                                <p class="section-card-sub">Identification and calibration details</p>
+                            </div>
+                            {% if not standard %}{% if user.userprofile.role == 'Tech' or user.userprofile.role == 'HOD' %}
+                            <button type="button" class="btn btn-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#uploadStandardsModal">
+                                <i class="fas fa-file-excel" aria-hidden="true"></i> Import from Excel
+                            </button>
+                            {% endif %}{% endif %}
                         </div>
-                        <div class="card-body p-4">
+                        <div class="section-card-body">
                             <div class="row g-3">
                                 <div class="col-md-6">
-                                    <label for="id_name" class="form-label fw-bold">Standard Name</label>
-                                    <div class="required-field">
-                                        {{ form.name }}
-                                        {% if form.name.errors %}
-                                        <ul class="errorlist">
-                                            {% for error in form.name.errors %}
-                                            <li>{{ error }}</li>
-                                            {% endfor %}
-                                        </ul>
-                                        {% endif %}
-                                    </div>
-                                    <small class="text-muted">Descriptive name for the standard</small>
+                                    <label for="id_name" class="form-label">Standard name <span class="req">*</span></label>
+                                    {{ form.name }}
+                                    {% if form.name.errors %}
+                                    <ul class="errorlist">
+                                        {% for error in form.name.errors %}
+                                        <li>{{ error }}</li>
+                                        {% endfor %}
+                                    </ul>
+                                    {% endif %}
+                                    <div class="form-text">Descriptive name for the standard</div>
                                 </div>
                                 <div class="col-md-6">
-                                    <label for="id_model_number" class="form-label fw-bold">Model Number</label>
-                                    <div class="required-field">
-                                        {{ form.model_number }}
-                                        {% if form.model_number.errors %}
-                                        <ul class="errorlist">
-                                            {% for error in form.model_number.errors %}
-                                            <li>{{ error }}</li>
-                                            {% endfor %}
-                                        </ul>
-                                        {% endif %}
-                                    </div>
+                                    <label for="id_model_number" class="form-label">Model number <span class="req">*</span></label>
+                                    {{ form.model_number }}
+                                    {% if form.model_number.errors %}
+                                    <ul class="errorlist">
+                                        {% for error in form.model_number.errors %}
+                                        <li>{{ error }}</li>
+                                        {% endfor %}
+                                    </ul>
+                                    {% endif %}
                                 </div>
                                 <div class="col-md-6">
-                                    <label for="id_serial_number" class="form-label fw-bold">Serial Number</label>
-                                    <div class="required-field">
-                                        {{ form.serial_number }}
-                                        {% if form.serial_number.errors %}
-                                        <ul class="errorlist">
-                                            {% for error in form.serial_number.errors %}
-                                            <li>{{ error }}</li>
-                                            {% endfor %}
-                                        </ul>
-                                        {% endif %}
-                                    </div>
+                                    <label for="id_serial_number" class="form-label">Serial number <span class="req">*</span></label>
+                                    {{ form.serial_number }}
+                                    {% if form.serial_number.errors %}
+                                    <ul class="errorlist">
+                                        {% for error in form.serial_number.errors %}
+                                        <li>{{ error }}</li>
+                                        {% endfor %}
+                                    </ul>
+                                    {% endif %}
                                 </div>
                                 <div class="col-md-6">
-                                    <label for="id_manufacturer" class="form-label fw-bold">Manufacturer</label>
-                                    <div class="required-field">
-                                        {{ form.manufacturer }}
-                                        {% if form.manufacturer.errors %}
-                                        <ul class="errorlist">
-                                            {% for error in form.manufacturer.errors %}
-                                            <li>{{ error }}</li>
-                                            {% endfor %}
-                                        </ul>
-                                        {% endif %}
-                                    </div>
+                                    <label for="id_manufacturer" class="form-label">Manufacturer <span class="req">*</span></label>
+                                    {{ form.manufacturer }}
+                                    {% if form.manufacturer.errors %}
+                                    <ul class="errorlist">
+                                        {% for error in form.manufacturer.errors %}
+                                        <li>{{ error }}</li>
+                                        {% endfor %}
+                                    </ul>
+                                    {% endif %}
                                 </div>
                                 <div class="col-md-4">
-                                    <label for="id_certificate_number" class="form-label fw-bold">Certificate
-                                        Number</label>
+                                    <label for="id_certificate_number" class="form-label">Certificate number</label>
                                     {{ form.certificate_number }}
                                     {% if form.certificate_number.errors %}
                                     <ul class="errorlist">
@@ -95,34 +91,29 @@
                                     {% endif %}
                                 </div>
                                 <div class="col-md-4">
-                                    <label for="id_calibration_date" class="form-label fw-bold">Calibration Date</label>
-                                    <div class="required-field">
-                                        {{ form.calibration_date }}
-                                        {% if form.calibration_date.errors %}
-                                        <ul class="errorlist">
-                                            {% for error in form.calibration_date.errors %}
-                                            <li>{{ error }}</li>
-                                            {% endfor %}
-                                        </ul>
-                                        {% endif %}
-                                    </div>
+                                    <label for="id_calibration_date" class="form-label">Calibration date <span class="req">*</span></label>
+                                    {{ form.calibration_date }}
+                                    {% if form.calibration_date.errors %}
+                                    <ul class="errorlist">
+                                        {% for error in form.calibration_date.errors %}
+                                        <li>{{ error }}</li>
+                                        {% endfor %}
+                                    </ul>
+                                    {% endif %}
                                 </div>
                                 <div class="col-md-4">
-                                    <label for="id_calibration_due_date" class="form-label fw-bold">Due Date</label>
-                                    <div class="required-field">
-                                        {{ form.calibration_due_date }}
-                                        {% if form.calibration_due_date.errors %}
-                                        <ul class="errorlist">
-                                            {% for error in form.calibration_due_date.errors %}
-                                            <li>{{ error }}</li>
-                                            {% endfor %}
-                                        </ul>
-                                        {% endif %}
-                                    </div>
+                                    <label for="id_calibration_due_date" class="form-label">Due date <span class="req">*</span></label>
+                                    {{ form.calibration_due_date }}
+                                    {% if form.calibration_due_date.errors %}
+                                    <ul class="errorlist">
+                                        {% for error in form.calibration_due_date.errors %}
+                                        <li>{{ error }}</li>
+                                        {% endfor %}
+                                    </ul>
+                                    {% endif %}
                                 </div>
                                 <div class="col-12">
-                                    <label for="id_calibration_agency" class="form-label fw-bold">Calibration
-                                        Agency</label>
+                                    <label for="id_calibration_agency" class="form-label">Calibration agency</label>
                                     {{ form.calibration_agency }}
                                     {% if form.calibration_agency.errors %}
                                     <ul class="errorlist">
@@ -134,24 +125,20 @@
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    </section>
 
-                    <!-- Parameters Section -->
-                    <div class="card section-card mb-4">
-                        <div class="section-header p-3 d-flex justify-content-between align-items-center">
+                    <!-- Parameters -->
+                    <section class="section-card">
+                        <div class="section-card-head">
                             <div>
-                                <h3 class="mb-0">
-                                    <i class="fas fa-cog me-2"></i>
-                                    Parameters & Uncertainties
-                                </h3>
-                                <small class="opacity-75">Define measurement parameters and their associated
-                                    uncertainties</small>
+                                <h2 class="section-card-title">Parameters &amp; uncertainties</h2>
+                                <p class="section-card-sub">What this standard can measure, and how precisely</p>
                             </div>
-                            <button type="button" class="add-parameter-btn" onclick="addParameter()">
-                                <i class="fas fa-plus me-2"></i>Add Parameter
+                            <button type="button" class="btn btn-secondary btn-sm add-parameter-btn" onclick="addParameter()">
+                                <i class="fas fa-plus" aria-hidden="true"></i> Add parameter
                             </button>
                         </div>
-                        <div class="card-body p-4">
+                        <div class="section-card-body">
                             {{ formset.management_form }}
                             {% if formset.non_form_errors %}
                             <ul class="errorlist">
@@ -163,10 +150,10 @@
                             <div id="parameters-section">
                                 <!-- Initial parameter form(s) -->
                                 {% for form in formset %}
-                                <div class="parameter-row p-3" data-parameter-index="{{ forloop.counter0 }}">
+                                <div class="parameter-row" data-parameter-index="{{ forloop.counter0 }}">
                                     <div class="row g-3 align-items-end">
                                         <div class="col-md-5">
-                                            <label class="form-label fw-bold" for="{{ form.parameter.id_for_label }}">Parameter</label>
+                                            <label class="form-label" for="{{ form.parameter.id_for_label }}">Parameter</label>
                                             {{ form.parameter }}
                                             {% if form.parameter.errors %}
                                             <ul class="errorlist">
@@ -177,7 +164,7 @@
                                             {% endif %}
                                         </div>
                                         <div class="col-md-4">
-                                            <label class="form-label fw-bold" for="{{ form.uncertainty.id_for_label }}">Uncertainty (k=2)</label>
+                                            <label class="form-label" for="{{ form.uncertainty.id_for_label }}">Uncertainty (k=2)</label>
                                             <div class="input-group">
                                                 {{ form.uncertainty }}
                                                 <span class="input-group-text">±</span>
@@ -190,93 +177,86 @@
                                             </ul>
                                             {% endif %}
                                         </div>
-                                        <div class="col-md-2">
-                                            <button type="button" class="delete-parameter"
-                                                onclick="removeParameter(this)" title="Remove Parameter" aria-label="Remove Parameter">
-                                                <i class="fas fa-trash"></i>
+                                        <div class="col-md-3 text-end">
+                                            <button type="button" class="btn btn-outline-danger btn-sm delete-parameter"
+                                                onclick="removeParameter(this)" title="Remove parameter" aria-label="Remove parameter">
+                                                <i class="fas fa-trash" aria-hidden="true"></i> Remove
                                             </button>
                                         </div>
                                     </div>
                                     {{ form.id }}
-                                    {{ form.DELETE }}
+                                    {% if form.initial.id %}
+                                    <label class="form-check delete-flag mt-2 mb-0">
+                                        {{ form.DELETE }} <span class="form-check-label">Delete on save</span>
+                                    </label>
+                                    {% else %}
+                                    <span class="d-none">{{ form.DELETE }}</span>
+                                    {% endif %}
                                 </div>
                                 {% endfor %}
                             </div>
-                            <div class="row mt-4">
-                                <div class="col-12">
-                                    <div class="alert alert-info">
-                                        <i class="fas fa-info-circle me-2"></i>
-                                        <strong>Note:</strong> Uncertainty values should be specified with coverage
-                                        factor k=2 (95% confidence level).
-                                        Add all parameters that this standard can measure with their respective
-                                        uncertainties.
-                                    </div>
-                                </div>
+                            <div class="alert alert-info mt-3 mb-0">
+                                Uncertainty values use coverage factor k=2 (95% confidence level). Add every
+                                parameter this standard can measure, with its uncertainty.
                             </div>
                         </div>
-                    </div>
+                    </section>
 
-                    <!-- Action Buttons -->
-                    <div class="row">
-                        <div class="col-12">
-                            <div class="d-flex gap-3 justify-content-end">
-                                <a href="{% url 'calibration:standard_list' %}" class="btn btn-outline-secondary px-4">
-                                    <i class="fas fa-times me-2"></i>Cancel
-                                </a>
-                                <button type="submit" class="btn btn-primary btn-save">
-                                    <i class="fas fa-save me-2"></i>{% if standard %}Update{% else %}Create{% endif %}
-                                    Standard
-                                </button>
-                            </div>
-                        </div>
+                    <!-- Actions -->
+                    <div class="form-actions">
+                        <a href="{% url 'calibration:standard_list' %}" class="btn btn-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save" aria-hidden="true"></i>
+                            {% if standard %}Update{% else %}Create{% endif %} standard
+                        </button>
                     </div>
                 </form>
             </div>
 
-            <!-- Parameter Creation Form (Right Column) -->
-            <div class="col-lg-4 mb-4">
-                <div class="card section-card">
-                    <div class="section-header p-3">
-                        <h3 class="mb-0">
-                            <i class="fas fa-cog me-2"></i>
-                            Create New Parameter
-                        </h3>
-                        <small class="opacity-75">Add a new parameter to the system</small>
+            <!-- New parameter (right column) -->
+            <div class="col-lg-4">
+                <section class="section-card">
+                    <div class="section-card-head">
+                        <div>
+                            <h2 class="section-card-title">New parameter</h2>
+                            <p class="section-card-sub">Add a parameter to the system</p>
+                        </div>
+                        {% if not standard %}{% if user.userprofile.role == 'Tech' or user.userprofile.role == 'HOD' %}
+                        <button type="button" class="btn btn-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#uploadParametersModal">
+                            <i class="fas fa-file-excel" aria-hidden="true"></i> Import
+                        </button>
+                        {% endif %}{% endif %}
                     </div>
-                    <div class="card-body p-4">
+                    <div class="section-card-body">
                         <form id="parameterForm" method="post" action="{% url 'calibration:parameter_create' %}">
                             {% csrf_token %}
                             <div class="mb-3">
-                                <label for="id_param_name" class="form-label fw-bold">Parameter Name</label>
-                                <div class="required-field">
-                                    <input type="text" class="form-control" id="id_param_name" name="name"
-                                        placeholder="e.g., DC Voltage" required>
-                                </div>
+                                <label for="id_param_name" class="form-label">Parameter name <span class="req">*</span></label>
+                                <input type="text" class="form-control" id="id_param_name" name="name"
+                                    placeholder="e.g., DC Voltage" required>
                             </div>
                             <div class="mb-3">
-                                <label for="id_symbol" class="form-label fw-bold">Symbol</label>
+                                <label for="id_symbol" class="form-label">Symbol</label>
                                 <input type="text" class="form-control" id="id_symbol" name="symbol"
                                     placeholder="e.g., V_DC">
                             </div>
                             <div class="mb-3">
-                                <label for="id_unit" class="form-label fw-bold">Unit</label>
-                                <div class="required-field">
-                                    <input type="text" class="form-control" id="id_unit" name="unit"
-                                        placeholder="e.g., V" required>
-                                </div>
+                                <label for="id_unit" class="form-label">Unit <span class="req">*</span></label>
+                                <input type="text" class="form-control" id="id_unit" name="unit"
+                                    placeholder="e.g., V" required>
                             </div>
-                            <div class="d-flex gap-3 justify-content-end">
-                                <button type="button" class="btn btn-outline-secondary px-4"
+                            <div class="d-flex gap-2 justify-content-end">
+                                <button type="button" class="btn btn-secondary"
                                     onclick="document.getElementById('parameterForm').reset()">
-                                    <i class="fas fa-undo me-2"></i>Reset
+                                    Reset
                                 </button>
-                                <button type="submit" class="btn btn-primary btn-save" id="parameterSubmitBtn">
-                                    <i class="fas fa-save me-2"></i>Create Parameter
+                                <button type="submit" class="btn btn-primary" id="parameterSubmitBtn">
+                                    <i class="fas fa-save me-2"></i>Create parameter
                                 </button>
                             </div>
                         </form>
                     </div>
-                </div>
+                </section>
             </div>
         </div>
     </div>
@@ -299,5 +279,13 @@
 {% endblock %}
 
 {% block extra_js %}
-<!-- Page-specific JavaScript -->
+{% if not standard %}{% if user.userprofile.role == 'Tech' or user.userprofile.role == 'HOD' %}
+{% url 'calibration:standards_import_template' as standards_template_url %}
+{% url 'calibration:upload_standards_excel' as standards_upload_url %}
+{% include 'includes/excel_import_modal.html' with modal_id='uploadStandardsModal' title='Bulk Upload Standards' noun='standard' template_url=standards_template_url upload_url=standards_upload_url help_text="Two sheets: 'Standards' (Name, Model Number, Serial Number, Manufacturer, Calibration Date, Due Date) and 'Standard Parameters' (Standard Serial Number, Parameter, Unit, Uncertainty)." create_missing_label="Create parameters that don't exist yet" %}
+{% url 'calibration:parameters_import_template' as parameters_template_url %}
+{% url 'calibration:upload_parameters_excel' as parameters_upload_url %}
+{% include 'includes/excel_import_modal.html' with modal_id='uploadParametersModal' title='Bulk Upload Parameters' noun='parameter' template_url=parameters_template_url upload_url=parameters_upload_url help_text="Required columns: Name, Unit. Symbol is optional." %}
+<script src="{% static 'js/excel_import.js' %}"></script>
+{% endif %}{% endif %}
 {% endblock %}

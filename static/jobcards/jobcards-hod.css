@@ -16,82 +16,21 @@
 /* ============================================================
    CARDS
    ============================================================ */
-.card {
-    background-color: var(--bg-card);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.card:hover {
-    box-shadow: var(--shadow-md) !important;
-}
 
 /* ============================================================
    TABLE
    ============================================================ */
-.table-responsive {
-    background-color: var(--bg-card);
-    border-color: var(--border-color) !important;
-}
-
-.table {
-    margin-bottom: 0;
-    color: var(--text-primary);
-}
-
-.table thead th {
-    background-color: var(--bg-tertiary);
-    color: var(--text-primary);
-    font-size: 0.8rem;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    font-weight: 700;
-    border-bottom: 2px solid var(--border-color);
-    white-space: nowrap;
-    position: sticky;
-    top: 0;
-    z-index: 10;
-}
-
-.table tbody td {
-    padding: 1rem 0.75rem;
-    vertical-align: middle;
-    border-bottom: 1px solid var(--border-color);
-    color: var(--text-primary);
-}
-
-.table-hover tbody tr:hover {
-    background-color: var(--bg-hover) !important;
-    cursor: pointer;
-}
 
 /* ============================================================
    FORMS & INPUTS
    ============================================================ */
-.form-control,
-.input-group-text {
-    background-color: var(--input-bg);
-    border-color: var(--input-border);
-    color: var(--text-primary);
-}
-
-.form-control:focus {
-    background-color: var(--input-bg);
-    border-color: var(--primary-color);
-    box-shadow: var(--input-focus-shadow);
-    color: var(--text-primary);
-}
-
-.form-control::placeholder {
-    color: var(--text-muted);
-    opacity: 0.7;
-}
 
 /* ============================================================
    NAVIGATION TABS (status filter pills)
    ============================================================ */
 .nav-pills .nav-link {
     font-weight: 600;
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     transition: all 0.2s ease;
     color: var(--text-secondary);
 }
@@ -106,7 +45,7 @@
    ============================================================ */
 .avatar-circle {
     font-size: 0.75rem;
-    font-weight: 700;
+    font-weight: 600;
 }
 
 /* ============================================================
@@ -199,7 +138,7 @@
 
 .table-responsive::-webkit-scrollbar-thumb {
     background: var(--scrollbar-thumb);
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
 }
 
 .table-responsive::-webkit-scrollbar-thumb:hover {

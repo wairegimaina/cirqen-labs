@@ -263,16 +263,20 @@ class UserProfile(models.Model):
 
 class UserSignature(models.Model):
     """
-    User signature model with dual storage support:
-    1. signature_data (TextField) - Base64 encoded PNG (PREFERRED for PyInstaller apps)
-    2. signature_image (ImageField) - Traditional file storage (fallback)
+    A user's signature, stored in the database.
 
-    The base64 approach is better for frozen PyInstaller applications because:
-    - No file system dependencies
-    - Signatures stored directly in SQLite database
-    - Database travels with the app
-    - Easier deployment and sync
+    signature_data holds the image as a PNG data URI and is the only place a
+    signature is written. It lives in Postgres, syncs to HQ with the row, and
+    comes back when an install is rebuilt.
+
+    signature_image is legacy. Signatures used to be written to MEDIA_ROOT as
+    files; a rebuild or a new data directory leaves those files behind while
+    the row still names them, which is why signatures appeared to vanish. It
+    is only read as a fallback for rows that predate the database column, and
+    migration 0005 copies every file still reachable into signature_data.
     """
+    PNG_DATA_URI_PREFIX = "data:image/png;base64,"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
@@ -308,153 +312,127 @@ class UserSignature(models.Model):
 
     syncable = True
 
-    def save_user_drawn_signature(self, signature_file):
+    @classmethod
+    def image_bytes_to_data_uri(cls, image_bytes):
         """
-        Save a user-drawn signature from a file.
-        Stores BOTH as ImageField AND as base64 for maximum compatibility.
+        Validate image bytes and normalise them to a PNG data URI.
+
+        Raises if the bytes are not an image, so a bad upload fails loudly
+        instead of saving a signature that can never be rendered.
         """
-        # Save to ImageField (traditional)
-        if self.signature_image:
-            self.signature_image.delete(save=False)
+        with Image.open(io.BytesIO(image_bytes)) as img:
+            img.load()
+            if img.mode not in ('1', 'L', 'LA', 'P', 'RGB', 'RGBA'):
+                img = img.convert('RGBA')
+            buffer = io.BytesIO()
+            img.save(buffer, format='PNG')
+        return cls.PNG_DATA_URI_PREFIX + base64.b64encode(buffer.getvalue()).decode('ascii')
 
-        self.signature_image = signature_file
-
-        # ALSO save as base64 (for PyInstaller apps)
-        try:
-            signature_file.seek(0)  # Reset file pointer
-            image_data = signature_file.read()
-            base64_encoded = base64.b64encode(image_data).decode('utf-8')
-            self.signature_data = f"data:image/png;base64,{base64_encoded}"
-        except Exception as e:
-            # If base64 conversion fails, log but continue
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning(f"Failed to create base64 signature for {self.user.username}: {e}")
-
-        self.is_user_drawn = True
+    def _set_signature_data(self, data_uri, user_drawn):
+        self.signature_data = data_uri
+        # The database copy supersedes any legacy file. Keeping the file
+        # reference would send readers to a path that may not exist.
+        self.signature_image = None
+        self.is_user_drawn = user_drawn
         self.is_active = True
         self.signature_hash = self.generate_signature_hash()
-        super().save()
 
-        # Update user profile flag
+    def _mark_profile_signed(self):
         try:
             profile = self.user.userprofile
             profile.has_uploaded_signature = True
             profile.save()
         except Exception:
             pass
+
+    def save_user_drawn_signature(self, signature_file):
+        """Store a drawn or uploaded signature file in the database."""
+        signature_file.seek(0)
+        self._set_signature_data(self.image_bytes_to_data_uri(signature_file.read()), user_drawn=True)
+        self.save()
+        self._mark_profile_signed()
 
     def save_signature_from_base64(self, base64_data):
+        """Store a signature given as raw base64 or as a data URI."""
+        image_bytes = base64.b64decode(base64_data.split('base64,', 1)[-1])
+        self._set_signature_data(self.image_bytes_to_data_uri(image_bytes), user_drawn=True)
+        self.save()
+        self._mark_profile_signed()
+
+    def generate_signature_image(self):
         """
-        Save signature directly from base64 string.
-        Perfect for web-based signature pads or direct database imports.
+        Render a system signature from the user's name into signature_data.
+        Sets the fields but does not save.
         """
-        self.signature_data = base64_data
-        self.is_user_drawn = True
-        self.is_active = True
-        self.signature_hash = self.generate_signature_hash()
+        name = (self.user.get_full_name() or self.user.username).strip()
+        try:
+            font = ImageFont.load_default(size=56)
+        except TypeError:  # Pillow < 10.1 has no sized default font
+            font = ImageFont.load_default()
+        left, top, right, bottom = ImageDraw.Draw(Image.new('RGBA', (1, 1))).textbbox((0, 0), name, font=font)
+        img = Image.new('RGBA', (right - left + 48, bottom - top + 48), (255, 255, 255, 0))
+        ImageDraw.Draw(img).text((24 - left, 24 - top), name, fill=(20, 30, 80, 255), font=font)
+        buffer = io.BytesIO()
+        img.save(buffer, format='PNG')
+        self._set_signature_data(
+            self.PNG_DATA_URI_PREFIX + base64.b64encode(buffer.getvalue()).decode('ascii'),
+            user_drawn=False,
+        )
+
+    def regenerate_signature(self):
+        """Replace the signature with a freshly rendered system signature."""
+        self.generate_signature_image()
         self.save()
 
-        # Update user profile flag
+    def _read_legacy_file(self):
+        """Bytes of a pre-database signature file, or None if it is gone."""
+        if not self.signature_image:
+            return None
         try:
-            profile = self.user.userprofile
-            profile.has_uploaded_signature = True
-            profile.save()
+            with self.signature_image.storage.open(self.signature_image.name, 'rb') as f:
+                return f.read()
         except Exception:
-            pass
+            return None
 
     def get_signature_as_base64(self):
-        """
-        Get signature as base64 string.
-        Returns base64 data if available, otherwise converts ImageField to base64.
-        """
-        # First priority: return stored base64
+        """The signature as a PNG data URI, or None when the user has none."""
         if self.signature_data:
             return self.signature_data
+        legacy = self._read_legacy_file()
+        if legacy is None:
+            return None
+        try:
+            return self.image_bytes_to_data_uri(legacy)
+        except Exception:
+            return None
 
-        # Second priority: convert ImageField to base64
-        if self.signature_image:
-            try:
-                from django.core.files.storage import default_storage
-                import os
-
-                # Try to read the file
-                if default_storage.exists(self.signature_image.name):
-                    with default_storage.open(self.signature_image.name, 'rb') as f:
-                        image_data = f.read()
-                elif hasattr(self.signature_image, 'path') and os.path.exists(self.signature_image.path):
-                    with open(self.signature_image.path, 'rb') as f:
-                        image_data = f.read()
-                else:
-                    return None
-
-                # Convert to base64
-                base64_encoded = base64.b64encode(image_data).decode('utf-8')
-                return f"data:image/png;base64,{base64_encoded}"
-
-            except Exception as e:
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.error(f"Failed to convert ImageField to base64 for {self.user.username}: {e}")
-                return None
-
-        return None
+    def get_signature_bytes(self):
+        """The signature image bytes, or None when the user has none."""
+        data_uri = self.get_signature_as_base64()
+        if not data_uri:
+            return None
+        try:
+            return base64.b64decode(data_uri.split('base64,', 1)[-1])
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Undecodable signature data for {self.user.username}: {e}")
+            return None
 
     def get_signature_as_image_buffer(self):
-        """
-        Convert signature to image buffer for ReportLab/PIL.
-        Works with both base64 and ImageField storage.
-        """
-        # Try base64 first
-        if self.signature_data:
-            try:
-                # Remove data URI prefix if present
-                if 'base64,' in self.signature_data:
-                    base64_str = self.signature_data.split('base64,')[1]
-                else:
-                    base64_str = self.signature_data
-
-                # Decode base64
-                image_data = base64.b64decode(base64_str)
-
-                # Create image buffer
-                img_buffer = io.BytesIO(image_data)
-                img_buffer.seek(0)
-
-                return img_buffer
-
-            except Exception as e:
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.error(f"Error decoding base64 signature for {self.user.username}: {e}")
-
-        # Fall back to ImageField
-        if self.signature_image:
-            try:
-                from django.core.files.storage import default_storage
-                import os
-
-                if default_storage.exists(self.signature_image.name):
-                    with default_storage.open(self.signature_image.name, 'rb') as f:
-                        img_buffer = io.BytesIO(f.read())
-                        img_buffer.seek(0)
-                        return img_buffer
-                elif hasattr(self.signature_image, 'path') and os.path.exists(self.signature_image.path):
-                    with open(self.signature_image.path, 'rb') as f:
-                        img_buffer = io.BytesIO(f.read())
-                        img_buffer.seek(0)
-                        return img_buffer
-
-            except Exception as e:
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.error(f"Error reading signature file for {self.user.username}: {e}")
-
-        return None
+        """The signature as a BytesIO for ReportLab/PIL/docx, or None."""
+        image_bytes = self.get_signature_bytes()
+        return io.BytesIO(image_bytes) if image_bytes else None
 
     def has_signature(self):
-        """Check if user has any signature (base64 or ImageField)"""
-        return bool(self.signature_data or self.signature_image)
+        """True when a signature can actually be rendered."""
+        if self.signature_data:
+            return True
+        if not self.signature_image:
+            return False
+        try:
+            return self.signature_image.storage.exists(self.signature_image.name)
+        except Exception:
+            return False
 
     def generate_signature_hash(self):
         """Generate a unique hash for integrity checking"""

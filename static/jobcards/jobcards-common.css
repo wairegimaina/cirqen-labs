@@ -9,23 +9,13 @@
 }
 
 /* Card Overrides */
-.card {
-    background-color: var(--bg-card);
-    border: 1px solid var(--border-color);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.card:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-md);
-}
 
 /* Navigation Tabs */
 .nav-link {
     padding: 0.5rem 1rem;
     font-weight: 500;
     transition: all 0.2s;
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
 }
 
 .nav-link:hover:not(.active) {
@@ -34,26 +24,10 @@
 }
 
 /* Form Controls */
-.form-control {
-    background-color: var(--input-bg);
-    border: 1px solid var(--input-border);
-    color: var(--text-primary);
-}
-
-.form-control:focus {
-    background-color: var(--input-bg);
-    border-color: var(--primary-color);
-    box-shadow: var(--input-focus-shadow);
-    color: var(--text-primary);
-}
 
 /* Dark Mode Specific Text Overrides */
 h1, h2, h3, h4, h5, h6 {
     color: var(--text-primary);
-}
-
-.text-muted {
-    color: var(--text-muted) !important;
 }
 
 .text-secondary {
@@ -61,19 +35,4 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* Pagination */
-.page-link {
-    background-color: var(--bg-card);
-    border-color: var(--border-color);
-    color: var(--text-primary);
-}
 
-.page-link:hover {
-    background-color: var(--bg-hover);
-    color: var(--primary-color);
-}
-
-.page-item.active .page-link {
-    background-color: var(--primary-color);
-    border-color: var(--primary-color);
-    color: #fff;
-}

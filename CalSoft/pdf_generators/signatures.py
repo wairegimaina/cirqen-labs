@@ -342,16 +342,8 @@ def verify_user_signature_before_pdf(user):
     except Exception as e:
         return False, f"Error accessing signature: {str(e)}"
 
-    # Check if signature has image
-    if not hasattr(signature, 'signature_image') or not signature.signature_image:
-        return False, f"User {user.username} has no signature image uploaded"
-
-    # Check if file exists
-    try:
-        if not default_storage.exists(signature.signature_image.name):
-            return False, f"Signature file does not exist in storage: {signature.signature_image.name}"
-    except Exception as e:
-        return False, f"Error checking signature file: {str(e)}"
+    if not signature.has_signature():
+        return False, f"User {user.username} has no saved signature"
 
     return True, None
 

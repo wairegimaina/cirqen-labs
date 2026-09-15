@@ -102,7 +102,7 @@ INSTALLED_APPS = [
 if DEBUG:
     INSTALLED_APPS += ["debug_toolbar"]
 
-APP_VERSION = "1.4.7"
+APP_VERSION = "1.4.8"
 
 UPDATE_SYSTEM = {
     "enabled": True,
@@ -131,6 +131,7 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "users.middleware.ActiveUserMiddleware",
     "users.session_middleware.SessionExpiryMiddleware",
+    "core.hq_link.HQInstantPushMiddleware",
 ]
 
 if DEBUG:
@@ -209,6 +210,15 @@ SYNC_CONFIG = {
     "CDC_SLOT_NAME": "equiper_cdc_slot",
     "CDC_PUBLICATION": "equiper_publication",
 }
+
+# Online-first write path (core/hq_link.py). Reads stay local; while HQ is
+# reachable, the rows each request saves are pushed to HQ's sync API right away
+# instead of waiting for the agent. Not named SYNC_API_URL: CalSoft reads that
+# as a bare host and appends /api/sync/health itself.
+HQ_SYNC_API_URL = config.get("sync.api_url")
+SYNC_AUTH_TOKEN = config.get("sync.auth_token")
+SYNC_TABLES = config.get("sync_tables", [])
+HQ_INSTANT_PUSH = config.get("sync.instant_push", True)
 
 # ============================================================
 # 🔴 REDIS & CACHING

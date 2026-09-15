@@ -69,7 +69,7 @@
             </div>
             {% empty %}
             {% url 'create_module' as create_module_url %}
-            {% include 'includes/empty_state.html' with icon="🧩" title="No modules found" message="Get started by creating your first calibration module." action_url=create_module_url action_label="Create your first module" %}
+            {% include 'includes/empty_state.html' with icon="fa-puzzle-piece" title="No modules found" message="Get started by creating your first calibration module." action_url=create_module_url action_label="Create your first module" %}
             {% endfor %}
         </div>
     </div>

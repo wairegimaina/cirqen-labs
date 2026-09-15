@@ -162,7 +162,7 @@ def create_job_card(request):
 
     try:
         user_signature = UserSignature.objects.get(user=request.user, active_status=True)
-        user_signature_available = bool(user_signature.signature_image)
+        user_signature_available = user_signature.has_signature()
     except UserSignature.DoesNotExist:
         user_signature_available = False
 

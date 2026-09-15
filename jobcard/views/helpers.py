@@ -93,22 +93,16 @@ def get_or_create_user_signature(user):
     Returns the signature image data as base64 for backward compatibility.
     """
     try:
-        user_signature, created = UserSignature.objects.get_or_create(
+        user_signature, _ = UserSignature.objects.get_or_create(
             user=user,
             defaults={'is_active': True}
         )
 
-        if created or not user_signature.signature_image:
+        if not user_signature.has_signature():
             user_signature.generate_signature_image()
             user_signature.save()
 
-        if user_signature.signature_image:
-            with user_signature.signature_image.open('rb') as img_file:
-                img_data = img_file.read()
-                base64_data = base64.b64encode(img_data).decode('utf-8')
-                return f"data:image/png;base64,{base64_data}"
-
-        return None
+        return user_signature.get_signature_as_base64()
     except Exception as e:
         logger.error(f"Error getting/creating user signature for {user.username}: {str(e)}")
         return None
@@ -119,15 +113,16 @@ def signature_to_image(signature_data, doc_template):
     Convert signature data (base64 or UserSignature) to InlineImage for docxtpl.
     Handles both legacy base64 data and new UserSignature references.
     """
-    if not signature_data or signature_data == "N/A" or signature_data.strip() == "":
+    if not signature_data:
+        return None
+    if isinstance(signature_data, str) and signature_data.strip() in ("", "N/A"):
         return None
 
     try:
         if isinstance(signature_data, UserSignature):
-            if signature_data.signature_image:
-                with signature_data.signature_image.open('rb') as img_file:
-                    img_buffer = BytesIO(img_file.read())
-                    return InlineImage(doc_template, img_buffer, width=Mm(50), height=Mm(25))
+            img_buffer = signature_data.get_signature_as_image_buffer()
+            if img_buffer:
+                return InlineImage(doc_template, img_buffer, width=Mm(50), height=Mm(25))
             return None
 
         if isinstance(signature_data, str):

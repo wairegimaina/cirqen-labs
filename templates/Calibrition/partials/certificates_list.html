@@ -1,131 +1,111 @@
 {% load static %}
 
-<!-- Results Summary -->
 {% if page_obj %}
-<div class="alert alert-info">
-    <i class="bi bi-info-circle"></i>
-    Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ page_obj.paginator.count }} certificates
-</div>
-{% endif %}
-
-{% if page_obj %}
-    {% for session in page_obj %}
-    <div class="certificate-card">
-        <div class="certificate-header d-flex justify-content-between align-items-center">
-            <h4 class="mb-0">
-                <i class="bi bi-file-earmark-text"></i>
-                Certificate NO: {{ session.certificate_number|default:session.pk }}
-            </h4>
-            <div class="d-flex align-items-center gap-2">
-                <span class="certificate-status {% if session.overall_pass %}status-pass{% else %}status-fail{% endif %}">
-                    {% if session.overall_pass %}<i class="bi bi-check-circle-fill"></i> PASS{% else %}<i class="bi bi-x-circle-fill"></i> FAIL{% endif %}
-                </span>
-                {% if session.is_overdue %}
-                    <span class="certificate-status status-overdue"><i class="bi bi-exclamation-triangle-fill"></i> OVERDUE</span>
-                {% elif session.days_until_due and session.days_until_due <= 30 %}
-                    <span class="certificate-status status-due-soon"><i class="bi bi-clock-fill"></i> DUE SOON</span>
-                {% else %}
-                    <span class="certificate-status status-current"><i class="bi bi-check-circle-fill"></i> CURRENT</span>
-                {% endif %}
-            </div>
-        </div>
-
-        <div class="certificate-details">
-            <div class="flex-fill">
-                <div class="detail-label"><i class="bi bi-gear-fill"></i> Equipment</div>
-                <div class="detail-value">{{ session.device_description|default:"Unknown Equipment" }}</div>
-            </div>
-            <div class="flex-fill">
-                <div class="detail-label"><i class="bi bi-hash"></i> Serial Number</div>
-                <div class="detail-value">{{ session.device_serial|default:"N/A" }}</div>
-            </div>
-            <div class="flex-fill">
-                <div class="detail-label"><i class="bi bi-building"></i> Department</div>
-                <div class="detail-value">{{ session.department_name|default:"Unknown Department" }}</div>
-            </div>
-            <div class="flex-fill">
-                <div class="detail-label"><i class="bi bi-calendar-check"></i> Calibration Date</div>
-                <div class="detail-value">{{ session.timestamp|date:"d M Y" }}</div>
-            </div>
-            <div class="flex-fill">
-                <div class="detail-label"><i class="bi bi-calendar-x"></i> Due Date</div>
-                <div class="detail-value">
-                    {% if session.cal_due_date %}
-                        {{ session.cal_due_date|date:"d M Y" }}
-                        <div class="due-date-info">
-                            {% if session.is_overdue %}
-                                <span class="overdue"><i class="bi bi-exclamation-circle-fill"></i> {{ session.days_until_due|floatformat:0|cut:"-" }} days overdue</span>
-                            {% elif session.days_until_due <= 30 %}
-                                <span class="due-soon"><i class="bi bi-hourglass-split"></i> {{ session.days_until_due }} days remaining</span>
-                            {% else %}
-                                <span class="current"><i class="bi bi-check-circle"></i> {{ session.days_until_due }} days remaining</span>
-                            {% endif %}
+<div class="section-card">
+    <div class="section-card-head">
+        <h2 class="section-card-title">Certificates</h2>
+        <span class="text-muted small">
+            Showing {{ page_obj.start_index }}–{{ page_obj.end_index }} of {{ page_obj.paginator.count }}
+        </span>
+    </div>
+    <div class="table-wrapper">
+        <table class="table table-hover certificates-table">
+            <thead>
+                <tr>
+                    <th>Certificate</th>
+                    <th>Equipment</th>
+                    <th>Department</th>
+                    <th>Calibrated</th>
+                    <th>Due</th>
+                    <th>Result</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for session in page_obj %}
+                <tr>
+                    <td><span class="mono-chip">{{ session.certificate_number|default:session.pk }}</span></td>
+                    <td>
+                        <div class="cell-title">{{ session.device_description|default:"Unknown equipment" }}</div>
+                        <div class="cell-sub">
+                            {{ session.device_serial|default:"N/A" }}{% if session.device_manufacturer %} · {{ session.device_manufacturer }}{% endif %}
                         </div>
-                    {% else %}
-                        N/A
-                    {% endif %}
-                </div>
-            </div>
-            <div class="flex-fill">
-                <div class="detail-label"><i class="bi bi-tools"></i> Manufacturer</div>
-                <div class="detail-value">{{ session.device_manufacturer|default:"N/A" }}</div>
-            </div>
-            <div class="action-buttons">
-                <a href="{% url 'calibration:generate_comprehensive_certificate' session.pk %}" class="btn btn-sm btn-outline-success">
-                    <i class="bi bi-file-earmark-pdf"></i> Download PDF
-                </a>
-            </div>
-        </div>
+                    </td>
+                    <td>{{ session.department_name|default:"Unknown department" }}</td>
+                    <td class="text-nowrap">{{ session.timestamp|date:"d M Y" }}</td>
+                    <td class="text-nowrap">
+                        {% if session.cal_due_date %}
+                            <div>{{ session.cal_due_date|date:"d M Y" }}</div>
+                            {% if session.is_overdue %}
+                                <div class="cell-sub text-danger">{{ session.days_until_due|floatformat:0|cut:"-" }} days overdue</div>
+                            {% elif session.days_until_due <= 30 %}
+                                <div class="cell-sub text-warning">{{ session.days_until_due }} days left</div>
+                            {% else %}
+                                <div class="cell-sub">{{ session.days_until_due }} days left</div>
+                            {% endif %}
+                        {% else %}
+                            N/A
+                        {% endif %}
+                    </td>
+                    <td class="text-nowrap">
+                        <span class="badge {% if session.overall_pass %}bg-success{% else %}bg-danger{% endif %}">
+                            {% if session.overall_pass %}Pass{% else %}Fail{% endif %}
+                        </span>
+                        {% if session.is_overdue %}
+                            <span class="badge bg-danger">Overdue</span>
+                        {% elif session.days_until_due and session.days_until_due <= 30 %}
+                            <span class="badge bg-warning">Due soon</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end">
+                        <a href="{% url 'calibration:generate_comprehensive_certificate' session.pk %}" class="btn btn-secondary btn-sm">
+                            <i class="fas fa-file-pdf" aria-hidden="true"></i> PDF
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
-    {% endfor %}
 
-    <!-- Pagination -->
     {% if page_obj.has_other_pages %}
-    <nav aria-label="Page navigation">
-        <ul class="pagination">
-            {% if page_obj.has_previous %}
-            <li class="page-item">
-                <a class="page-link" href="#" data-page="1" aria-label="First">
-                    <span aria-hidden="true">&laquo;&laquo;</span>
-                </a>
-            </li>
-            <li class="page-item">
-                <a class="page-link" href="#" data-page="{{ page_obj.previous_page_number }}" aria-label="Previous">
-                    <span aria-hidden="true">&laquo;</span>
-                </a>
-            </li>
-            {% endif %}
-
-            {% for num in page_obj.paginator.page_range %}
-                {% if page_obj.number == num %}
-                <li class="page-item active"><span class="page-link">{{ num }}</span></li>
-                {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
-                <li class="page-item"><a class="page-link" href="#" data-page="{{ num }}">{{ num }}</a></li>
+    <div class="section-card-foot">
+        <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+        <nav aria-label="Certificates pagination">
+            <ul class="pagination">
+                {% if page_obj.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="#" data-page="1" aria-label="First">&laquo;</a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="#" data-page="{{ page_obj.previous_page_number }}" aria-label="Previous">&lsaquo;</a>
+                </li>
                 {% endif %}
-            {% endfor %}
 
-            {% if page_obj.has_next %}
-            <li class="page-item">
-                <a class="page-link" href="#" data-page="{{ page_obj.next_page_number }}" aria-label="Next">
-                    <span aria-hidden="true">&raquo;</span>
-                </a>
-            </li>
-            <li class="page-item">
-                <a class="page-link" href="#" data-page="{{ page_obj.paginator.num_pages }}" aria-label="Last">
-                    <span aria-hidden="true">&raquo;&raquo;</span>
-                </a>
-            </li>
-            {% endif %}
-        </ul>
-    </nav>
-    {% endif %}
-{% else %}
-    <div class="no-certificates">
-        <i class="bi bi-file-earmark-excel" style="font-size: 3rem;"></i>
-        <h3>No Certificates Found</h3>
-        <p>There are no calibration certificates matching your criteria.</p>
-        <a href="{% url 'calibration:certificate_list' %}" class="btn btn-primary">
-            <i class="bi bi-arrow-counterclockwise"></i> Show All Certificates
-        </a>
+                {% for num in page_obj.paginator.page_range %}
+                    {% if page_obj.number == num %}
+                    <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+                    {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                    <li class="page-item"><a class="page-link" href="#" data-page="{{ num }}">{{ num }}</a></li>
+                    {% endif %}
+                {% endfor %}
+
+                {% if page_obj.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="#" data-page="{{ page_obj.next_page_number }}" aria-label="Next">&rsaquo;</a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="#" data-page="{{ page_obj.paginator.num_pages }}" aria-label="Last">&raquo;</a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
     </div>
+    {% endif %}
+</div>
+{% else %}
+<div class="section-card">
+    {% url 'calibration:certificate_list' as certificates_url %}
+    {% include 'includes/empty_state.html' with icon="fa-file-lines" title="No certificates found" message="No calibration certificates match your filters." action_url=certificates_url action_label="Show all certificates" %}
+</div>
 {% endif %}

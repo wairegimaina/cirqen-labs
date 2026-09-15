@@ -10,67 +10,57 @@
 {% block page_title %}Calibration Standards and Parameters{% endblock %}
 
 {% block content %}
-<div class="main-container">
+<div class="page-wrap">
 
-    <!-- Standards Table -->
-    <div class="row mb-4">
-        <div class="col-12">
-            <div class="card section-card">
-                <div class="section-header p-3 d-flex justify-content-between align-items-center">
-                    <h3 class="mb-0"><i class="fas fa-tools me-2"></i>Standards</h3>
-                </div>
-                <div class="card-body p-4">
-                    <table class="table table-hover">
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th>Model Number</th>
-                                <th>Serial Number</th>
-                                <th>Manufacturer</th>
-                                <th>Calibration Date</th>
-                                <th>Due Date</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="standards-table-body"></tbody>
-                    </table>
-                </div>
-            </div>
+    <!-- Standards -->
+    <section class="section-card">
+        <div class="section-card-head">
+            <h2 class="section-card-title">Standards</h2>
         </div>
-    </div>
+        <div class="table-wrapper">
+            <table class="table table-hover sp-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Model number</th>
+                        <th>Serial number</th>
+                        <th>Manufacturer</th>
+                        <th>Calibration date</th>
+                        <th>Due date</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="standards-table-body"></tbody>
+            </table>
+        </div>
+    </section>
 
-    <!-- Parameters Table -->
-    <div class="row mb-4">
-        <div class="col-12">
-            <div class="card section-card">
-                <div class="section-header p-3 d-flex justify-content-between align-items-center">
-                    <h3 class="mb-0"><i class="fas fa-cog me-2"></i>Parameters</h3>
-                </div>
-                <div class="card-body p-4">
-                    <table class="table table-hover">
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th>Symbol</th>
-                                <th>Unit</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="parameters-table-body"></tbody>
-                    </table>
-                </div>
-            </div>
+    <!-- Parameters -->
+    <section class="section-card">
+        <div class="section-card-head">
+            <h2 class="section-card-title">Parameters</h2>
         </div>
-    </div>
+        <div class="table-wrapper">
+            <table class="table table-hover sp-table sp-table--narrow">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Symbol</th>
+                        <th>Unit</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="parameters-table-body"></tbody>
+            </table>
+        </div>
+    </section>
 
     <!-- Standard Edit Modal -->
     <div class="modal fade" id="standardEditModal" tabindex="-1" aria-labelledby="standardEditModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-xl">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="standardEditModalLabel">
-                        <i class="fas fa-edit me-2"></i>Edit Standard
-                    </h5>
+                    <h5 class="modal-title" id="standardEditModalLabel">Edit standard</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
@@ -82,86 +72,83 @@
                         <input type="hidden" id="standard_id" name="standard_id" value="">
 
                         <!-- Standard fields -->
-                        <div class="card mb-4">
-                            <div class="card-header bg-primary text-white">
-                                <h6 class="mb-0"><i class="fas fa-info-circle me-2"></i>Standard Information</h6>
+                        <section class="section-card">
+                            <div class="section-card-head">
+                                <h6 class="section-card-title">Standard information</h6>
                             </div>
-                            <div class="card-body">
+                            <div class="section-card-body">
                                 <div class="row g-3">
                                     <div class="col-md-6">
-                                        <label for="modal_name" class="form-label fw-bold">Standard Name <span class="text-danger">*</span></label>
+                                        <label for="modal_name" class="form-label">Standard name <span class="req">*</span></label>
                                         <input type="text" class="form-control" id="modal_name" name="name" required>
                                         <div class="invalid-feedback"></div>
                                     </div>
                                     <div class="col-md-6">
-                                        <label for="modal_model_number" class="form-label fw-bold">Model Number <span class="text-danger">*</span></label>
+                                        <label for="modal_model_number" class="form-label">Model number <span class="req">*</span></label>
                                         <input type="text" class="form-control" id="modal_model_number" name="model_number" required>
                                         <div class="invalid-feedback"></div>
                                     </div>
                                     <div class="col-md-6">
-                                        <label for="modal_serial_number" class="form-label fw-bold">Serial Number <span class="text-danger">*</span></label>
+                                        <label for="modal_serial_number" class="form-label">Serial number <span class="req">*</span></label>
                                         <input type="text" class="form-control" id="modal_serial_number" name="serial_number" required>
                                         <div class="invalid-feedback"></div>
                                     </div>
                                     <div class="col-md-6">
-                                        <label for="modal_manufacturer" class="form-label fw-bold">Manufacturer <span class="text-danger">*</span></label>
+                                        <label for="modal_manufacturer" class="form-label">Manufacturer <span class="req">*</span></label>
                                         <input type="text" class="form-control" id="modal_manufacturer" name="manufacturer" required>
                                         <div class="invalid-feedback"></div>
                                     </div>
                                     <div class="col-md-4">
-                                        <label for="modal_certificate_number" class="form-label fw-bold">Certificate Number</label>
+                                        <label for="modal_certificate_number" class="form-label">Certificate number</label>
                                         <input type="text" class="form-control" id="modal_certificate_number" name="certificate_number">
                                         <div class="invalid-feedback"></div>
                                     </div>
                                     <div class="col-md-4">
-                                        <label for="modal_calibration_date" class="form-label fw-bold">Calibration Date <span class="text-danger">*</span></label>
+                                        <label for="modal_calibration_date" class="form-label">Calibration date <span class="req">*</span></label>
                                         <input type="date" class="form-control" id="modal_calibration_date" name="calibration_date" required>
                                         <div class="invalid-feedback"></div>
                                     </div>
                                     <div class="col-md-4">
-                                        <label for="modal_calibration_due_date" class="form-label fw-bold">Due Date <span class="text-danger">*</span></label>
+                                        <label for="modal_calibration_due_date" class="form-label">Due date <span class="req">*</span></label>
                                         <input type="date" class="form-control" id="modal_calibration_due_date" name="calibration_due_date" required>
                                         <div class="invalid-feedback"></div>
                                     </div>
                                     <div class="col-12">
-                                        <label for="modal_calibration_agency" class="form-label fw-bold">Calibration Agency</label>
+                                        <label for="modal_calibration_agency" class="form-label">Calibration agency</label>
                                         <input type="text" class="form-control" id="modal_calibration_agency" name="calibration_agency">
                                         <div class="invalid-feedback"></div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
+                        </section>
 
                         <!-- Parameters formset -->
-                        <div class="card mb-4">
-                            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-                                <h6 class="mb-0"><i class="fas fa-cog me-2"></i>Parameters & Uncertainties</h6>
-                                <button type="button" class="btn btn-sm btn-light" id="modal-add-parameter">
-                                    <i class="fas fa-plus me-1"></i>Add Parameter
+                        <section class="section-card mb-0">
+                            <div class="section-card-head">
+                                <h6 class="section-card-title">Parameters &amp; uncertainties</h6>
+                                <button type="button" class="btn btn-secondary btn-sm" id="modal-add-parameter">
+                                    <i class="fas fa-plus" aria-hidden="true"></i> Add parameter
                                 </button>
                             </div>
-                            <div class="card-body">
+                            <div class="section-card-body">
                                 <input type="hidden" name="parameters-TOTAL_FORMS"   id="modal-TOTAL_FORMS"   value="0">
                                 <input type="hidden" name="parameters-INITIAL_FORMS" id="modal-INITIAL_FORMS" value="0">
                                 <input type="hidden" name="parameters-MIN_NUM_FORMS" value="0">
                                 <input type="hidden" name="parameters-MAX_NUM_FORMS" value="1000">
                                 <div id="modal-parameters-container"></div>
-                                <div class="alert alert-info mt-3">
-                                    <i class="fas fa-info-circle me-2"></i>
-                                    <strong>Note:</strong> Uncertainty values should be specified with coverage factor k=2 (95% confidence level).
+                                <div class="alert alert-info mt-3 mb-0">
+                                    Uncertainty values use coverage factor k=2 (95% confidence level).
                                 </div>
                             </div>
-                        </div>
+                        </section>
                     </form>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                        <i class="fas fa-times me-2"></i>Cancel
-                    </button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="button" class="btn btn-primary" id="modal-save-btn">
-                        <i class="fas fa-save me-2"></i>
+                        <i class="fas fa-save" aria-hidden="true"></i>
                         <span class="btn-text">Save Changes</span>
-                        <span class="spinner-border spinner-border-sm ms-2 d-none" role="status"></span>
+                        <span class="spinner-border spinner-border-sm d-none" role="status"></span>
                     </button>
                 </div>
             </div>
@@ -172,33 +159,33 @@
     <div class="modal fade" id="parameterEditModal" tabindex="-1" aria-labelledby="parameterEditModalLabel" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="parameterEditModalLabel">Update Parameter</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <form id="parameterEditForm" method="post">
-                        {% csrf_token %}
+                <form id="parameterEditForm" method="post">
+                    {% csrf_token %}
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="parameterEditModalLabel">Edit parameter</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
                         <div class="mb-3">
-                            <label for="param_name" class="form-label fw-bold">Parameter Name</label>
+                            <label for="param_name" class="form-label">Parameter name</label>
                             <input type="text" class="form-control" id="param_name" name="name" required>
                         </div>
                         <div class="mb-3">
-                            <label for="param_symbol" class="form-label fw-bold">Symbol</label>
+                            <label for="param_symbol" class="form-label">Symbol</label>
                             <input type="text" class="form-control" id="param_symbol" name="symbol">
                         </div>
-                        <div class="mb-3">
-                            <label for="param_unit" class="form-label fw-bold">Unit</label>
+                        <div class="mb-0">
+                            <label for="param_unit" class="form-label">Unit</label>
                             <input type="text" class="form-control" id="param_unit" name="unit" required>
                         </div>
-                        <div class="d-flex gap-3 justify-content-end">
-                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                            <button type="submit" class="btn btn-primary" id="paramEditSubmitBtn">
-                                <i class="fas fa-save me-2"></i>Save
-                            </button>
-                        </div>
-                    </form>
-                </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary" id="paramEditSubmitBtn">
+                            <i class="fas fa-save me-2"></i>Save
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
@@ -208,14 +195,14 @@
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="deleteConfirmModalLabel">Confirm Deletion</h5>
+                    <h5 class="modal-title" id="deleteConfirmModalLabel">Confirm deletion</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    Are you sure you want to delete this <span id="delete-item-type"></span>?
+                    Delete this <span id="delete-item-type"></span>? This can't be undone.
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="button" class="btn btn-danger" id="confirmDeleteBtn">
                         <i class="fas fa-trash me-2"></i>Delete
                     </button>
@@ -226,12 +213,12 @@
 
     <!-- Parameter row template (used by the standard edit modal) -->
     <template id="parameter-row-template">
-        <div class="parameter-row border rounded p-3 mb-3" data-index="">
+        <div class="parameter-row" data-index="">
             <div class="row g-3 align-items-end">
                 <div class="col-md-5">
-                    <label class="form-label fw-bold" for="param-select-__INDEX__">Parameter</label>
+                    <label class="form-label" for="param-select-__INDEX__">Parameter</label>
                     <select class="form-select parameter-select" id="param-select-__INDEX__" name="parameters-__INDEX__-parameter" required>
-                        <option value="">Select Parameter</option>
+                        <option value="">Select parameter</option>
                         {% for param in parameters %}
                             <option value="{{ param.pk }}">{{ param.name }} ({{ param.unit }})</option>
                         {% endfor %}
@@ -239,7 +226,7 @@
                     <div class="invalid-feedback"></div>
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label fw-bold" for="param-uncertainty-__INDEX__">Uncertainty (k=2)</label>
+                    <label class="form-label" for="param-uncertainty-__INDEX__">Uncertainty (k=2)</label>
                     <div class="input-group">
                         <input type="number" class="form-control" id="param-uncertainty-__INDEX__" name="parameters-__INDEX__-uncertainty"
                                step="0.000001" placeholder="0.001" required>
@@ -247,9 +234,9 @@
                     </div>
                     <div class="invalid-feedback"></div>
                 </div>
-                <div class="col-md-2">
-                    <button type="button" class="btn btn-danger btn-sm w-100 remove-parameter" title="Remove Parameter" aria-label="Remove Parameter">
-                        <i class="fas fa-trash"></i>
+                <div class="col-md-3 text-end">
+                    <button type="button" class="btn btn-outline-danger btn-sm remove-parameter" title="Remove parameter" aria-label="Remove parameter">
+                        <i class="fas fa-trash" aria-hidden="true"></i> Remove
                     </button>
                 </div>
                 <input type="hidden" name="parameters-__INDEX__-id" value="">

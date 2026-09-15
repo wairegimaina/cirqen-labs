@@ -352,9 +352,6 @@ def manage_users_view(request):
 
     # Get users based on role - FILTER ONLY ACTIVE USERS
     if profile.role == 'HOD':
-        from Inventory.models import Department
-        from workshop.models import Workshop
-
         users_list = (
             UserProfile.objects
             .filter(user__active_status=True)  # Only active users

@@ -643,10 +643,10 @@
     const headerTitle = document.getElementById("tableHeaderTitle");
     if (headerTitle) {
       const titles = {
-        pending: '<i class="fas fa-list"></i> Pending Sessions',
-        declined: '<i class="fas fa-times-circle"></i> Declined Sessions',
+        pending: '<i class="fas fa-list"></i> Pending sessions',
+        declined: '<i class="fas fa-times-circle"></i> Declined sessions',
         awaiting_certificate:
-          '<i class="fas fa-certificate"></i> Awaiting Certificate',
+          '<i class="fas fa-certificate"></i> Awaiting certificate',
       };
       headerTitle.innerHTML = titles[tab] || titles.pending;
     }

@@ -108,10 +108,11 @@ def test_idempotency_key_is_stable_across_refetch(agent, jobcard_table, pool):
     _exec(pool, "INSERT INTO public.jobcard_jobcard VALUES (1,'a',now())")
     first, _ = agent.fetch_outbox_batch(0, 100)
     second, _ = agent.fetch_outbox_batch(0, 100)  # re-fetch same rows (a retry)
-    # event_id is random per build, but idempotency_key is deterministic (client:seq)
+    # Both are deterministic: idempotency_key is client:seq, and event_id is
+    # derived from the row version so HQ's audit_log dedupes a re-send.
     assert first[0]["idempotency_key"] == f"{agent.client_id}:1"
     assert first[0]["idempotency_key"] == second[0]["idempotency_key"]
-    assert first[0]["event_id"] != second[0]["event_id"]
+    assert first[0]["event_id"] == second[0]["event_id"]
 
 
 def test_throttle_delay_honors_retry_after_and_backs_off():

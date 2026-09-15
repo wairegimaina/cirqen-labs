@@ -3,7 +3,9 @@ Database router for the CMMS + Calibration system.
 
 Offline-first policy:
     * Reads  → ALWAYS local ("default").
-    * Writes → ALWAYS local ("default"); the sync agent replicates to HQ.
+    * Writes → ALWAYS local ("default"). While HQ is online the rows each
+      request saved are pushed to HQ's sync API right away (core.hq_link);
+      otherwise the sync agent uploads them when HQ is reachable again.
     * Migrations → applied on BOTH local and HQ to keep schemas identical.
 
 Why reads are always local
@@ -32,7 +34,7 @@ class EquiperDatabaseRouter:
     def db_for_read(self, model, **hints):
         return "default"
 
-    # ✏️ Writes — always local; the sync agent replicates to HQ.
+    # ✏️ Writes — always local; core.hq_link or the sync agent pushes them to HQ.
     def db_for_write(self, model, **hints):
         return "default"
 

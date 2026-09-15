@@ -54,7 +54,7 @@ body {
 
 .header h1 {
   font-size: 1.4rem;
-  font-weight: 700;
+  font-weight: 600;
   color: #fff;
   margin: 0 0 3px;
 }
@@ -73,7 +73,7 @@ body {
   padding: 6px 13px;
   font-size: .85rem;
   font-weight: 500;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   text-decoration: none;
   display: inline-flex;
   align-items: center;
@@ -85,7 +85,6 @@ body {
 
 .back-btn:hover {
   background: rgba(0,0,0,.0);
-  transform: translateY(-1px);
   color: #fff;
 }
 
@@ -106,13 +105,13 @@ body {
 
 .instructions h4 {
   font-size: .9rem;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
   margin: 0 0 4px;
 }
 
 .highlight {
-  font-weight: 700;
+  font-weight: 600;
   color: var(--primary-color);
 }
 
@@ -150,7 +149,7 @@ body {
 .filter-input {
   padding: 7px 10px;
   border: 1.5px solid var(--input-border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: .875rem;
   background: var(--input-bg);
   color: var(--text-primary);
@@ -174,7 +173,7 @@ body {
   color: #fff;
   border: none;
   padding: 7px 15px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: .875rem;
   font-weight: 600;
   cursor: pointer;
@@ -185,8 +184,6 @@ body {
 }
 
 .filter-btn:hover {
-  filter: brightness(1.08);
-  transform: translateY(-1px);
 }
 
 /* ----------------------------------------------------------------
@@ -214,7 +211,6 @@ body {
 .stat-card:hover {
   background: var(--bg-hover);
   transform: none;
-  box-shadow: none;
 }
 
 /*
@@ -229,7 +225,7 @@ body {
 
 .stat-number {
   font-size: 1.8rem;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary) !important;
   margin-bottom: 3px;
 }
@@ -250,7 +246,6 @@ body {
   font-size: .775rem;
   font-weight: 600;
   color: var(--text-secondary) !important;
-  text-transform: uppercase;
 }
 
 /* ── Dark mode stat card text ── */
@@ -300,7 +295,7 @@ body {
 .search-input {
   width: 100%;
   padding: 8px 40px 8px 36px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: 1.5px solid var(--input-border);
   background: var(--input-bg);
   color: var(--text-primary);
@@ -337,7 +332,7 @@ body {
   border: 1.5px solid var(--danger-color);
   color: var(--danger-color);
   padding: 5px 12px;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   font-size: .8rem;
   font-weight: 600;
   cursor: pointer;
@@ -359,13 +354,13 @@ body {
   color: var(--text-secondary);
   padding: 7px 10px;
   background: var(--bg-tertiary);
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-color);
 }
 
 .search-results-info .highlight {
   color: var(--primary-color);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 /* ----------------------------------------------------------------
@@ -406,10 +401,8 @@ body {
 
 .schedule-table th {
   padding: 10px 13px;
-  font-weight: 700;
+  font-weight: 600;
   font-size: .75rem;
-  text-transform: uppercase;
-  letter-spacing: .05em;
   color: var(--text-secondary);
   white-space: nowrap;
   text-align: left;
@@ -469,7 +462,7 @@ body {
   color: var(--primary-color);
   border: 1px solid var(--border-color);
   padding: 2px 8px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   letter-spacing: .03em;
 }
 
@@ -481,9 +474,9 @@ body {
   background: var(--primary-light);
   color: var(--primary-color);
   font-size: .75rem;
-  font-weight: 700;
+  font-weight: 600;
   padding: 3px 9px;
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   white-space: nowrap;
 }
 
@@ -493,11 +486,9 @@ body {
   align-items: center;
   gap: 4px;
   font-size: .72rem;
-  font-weight: 700;
+  font-weight: 600;
   padding: 3px 9px;
-  border-radius: 5px;
-  text-transform: uppercase;
-  letter-spacing: .04em;
+  border-radius: var(--radius-sm);
   white-space: nowrap;
 }
 
@@ -547,12 +538,11 @@ body {
 /* ----------------------------------------------------------------
    BUTTONS
    ---------------------------------------------------------------- */
-.btn,
 .btn-calibrate,
 .quick-select-btn {
   border: none;
   padding: 7px 14px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-weight: 600;
   font-size: .875rem;
   cursor: pointer;
@@ -573,44 +563,13 @@ body {
 
 .btn-calibrate:hover,
 .quick-select-btn:hover {
-  filter: brightness(1.08);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(0,0,0,.0);
 }
 
 /* .btn-primary now comes from the shared static/css/components.css */
-.btn-primary:hover {
-  filter: brightness(1.08);
-  transform: translateY(-1px);
-  color: #fff;
-}
-
-.btn-secondary {
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-  border: 1px solid var(--border-color);
-  cursor: default !important;
-  opacity: .75;
-}
-
-.btn-sm {
-  padding: 4px 10px;
-  font-size: .775rem;
-}
 
 /* ----------------------------------------------------------------
    BADGES
    ---------------------------------------------------------------- */
-.badge {
-  font-size: .72rem;
-  font-weight: 700;
-  padding: 3px 7px;
-  border-radius: 4px;
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  text-transform: uppercase;
-}
 
 .badge-pending {
   background: var(--warning-color);
@@ -627,48 +586,9 @@ body {
   color: #fff;
 }
 
-.badge-info {
-  background: var(--info-color);
-  color: #fff;
-}
-
 /* ----------------------------------------------------------------
    CARDS (generic)
    ---------------------------------------------------------------- */
-.card {
-  background: var(--bg-card);
-  border: none;
-  border-bottom: 1px solid var(--border-color);
-  border-radius: 0;
-  margin-bottom: 0;
-  box-shadow: none;
-  transition: background .2s;
-  overflow: hidden;
-}
-
-.card:hover {
-  box-shadow: none;
-  transform: none;
-  background: var(--bg-hover);
-}
-
-.card-header {
-  background: var(--bg-tertiary);
-  border-bottom: 1px solid var(--border-color);
-  padding: 10px 16px;
-  font-weight: 600;
-  font-size: .925rem;
-  color: var(--text-primary);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-radius: 0;
-}
-
-.card-body {
-  padding: 12px 16px;
-  color: var(--text-primary);
-}
 
 /* ----------------------------------------------------------------
    EQUIPMENT ITEMS (card-list view)
@@ -689,7 +609,6 @@ body {
 }
 
 .equipment-item:hover {
-  box-shadow: none;
   transform: none;
   background: var(--bg-hover);
 }
@@ -723,14 +642,6 @@ body {
 /* ----------------------------------------------------------------
    PAGINATION  (plain <a> tags — not Bootstrap)
    ---------------------------------------------------------------- */
-.pagination {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  justify-content: center;
-  padding: 14px 0 10px;
-  flex-wrap: wrap;
-}
 
 /* All direct children: links and current span */
 .pagination>a,
@@ -741,7 +652,7 @@ body {
   min-height: 34px;
   min-width: 34px;
   padding: 5px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: .85rem;
   font-weight: 600;
   text-decoration: none;
@@ -757,8 +668,6 @@ body {
 .pagination>a:hover {
   background: var(--bg-hover);
   border-color: var(--primary-color);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-sm);
 }
 
 /* Current page indicator */
@@ -771,41 +680,6 @@ body {
 }
 
 /* Bootstrap-compatible pagination (page-item / page-link fallback) */
-.pagination .page-link {
-  border-radius: 8px;
-  padding: 5px 11px;
-  border: 1.5px solid var(--border-color);
-  background: var(--bg-card);
-  color: var(--primary-color);
-  font-size: .85rem;
-  min-height: 34px;
-  min-width: 34px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all .25s;
-  text-decoration: none;
-}
-
-.pagination .page-link:hover {
-  background: var(--bg-hover);
-  border-color: var(--primary-color);
-  transform: translateY(-1px);
-}
-
-.pagination .page-item.active .page-link {
-  background: var(--primary-gradient);
-  color: #fff;
-  border-color: transparent;
-  box-shadow: var(--shadow-md);
-}
-
-.pagination .page-item.disabled .page-link {
-  background: var(--bg-tertiary);
-  color: var(--text-muted);
-  opacity: .5;
-  cursor: not-allowed;
-}
 
 /* ----------------------------------------------------------------
    EMPTY STATES
@@ -832,7 +706,7 @@ body {
 
 .empty-state h3 {
   font-size: 1.15rem;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-secondary);
   margin: 0;
 }
@@ -854,7 +728,7 @@ body {
   text-align: center;
   gap: 10px;
   border: 2px dashed var(--border-color);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   margin: 12px;
   background: var(--bg-tertiary);
 }
@@ -867,7 +741,7 @@ body {
 
 .no-search-results h3 {
   font-size: 1.1rem;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-secondary);
   margin: 0;
 }
@@ -888,32 +762,13 @@ mark {
   color: var(--text-primary);
   border-radius: 3px;
   padding: 4px 8px;
-  font-weight: 700;
+  font-weight: 600;
   border-bottom: 1.5px solid var(--warning-color);
 }
 
 /* ----------------------------------------------------------------
    SCROLLBAR
    ---------------------------------------------------------------- */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: var(--scrollbar-track);
-  border-radius: 10px;
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
-  border-radius: 10px;
-  border: 2px solid var(--scrollbar-track);
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--scrollbar-thumb-hover);
-}
 
 * {
   scrollbar-width: thin;
@@ -923,29 +778,6 @@ mark {
 /* ----------------------------------------------------------------
    UTILITY
    ---------------------------------------------------------------- */
-.text-muted {
-  color: var(--text-muted) !important;
-}
-
-.text-success {
-  color: var(--success-color) !important;
-}
-
-.text-danger {
-  color: var(--danger-color) !important;
-}
-
-.text-warning {
-  color: var(--warning-color) !important;
-}
-
-.shadow-sm {
-  box-shadow: var(--shadow-sm) !important;
-}
-
-.shadow-md {
-  box-shadow: var(--shadow-md) !important;
-}
 
 /* ----------------------------------------------------------------
    RESPONSIVE
@@ -1014,14 +846,8 @@ mark {
     font-size: 1.5rem;
   }
 
-  .card-body {
-    padding: 10px 12px;
-  }
-
-  .card-header {
-    padding: 8px 12px;
-  }
-
+  
+  
   .pagination>a,
   .pagination>span.current {
     padding: 5px 9px;
@@ -1143,8 +969,3 @@ mark {
 }
 
 /* ── View Only button (btn-secondary) ── */
-[data-theme="dark"] .btn-secondary {
-  color: var(--text-secondary) !important;
-  background: #334155 !important;
-  border-color: var(--border-strong) !important;
-}

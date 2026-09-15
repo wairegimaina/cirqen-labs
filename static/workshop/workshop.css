@@ -35,7 +35,7 @@ body {
   display: none;
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,.0);
+  background: rgba(11, 12, 14, .45);
   backdrop-filter: blur(8px);
   z-index: 9999;
   align-items: center;
@@ -46,7 +46,7 @@ body {
   text-align: center;
   background: var(--bg-card);
   padding: 16px 20px;
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-xl);
   max-width: 400px;
   animation: fadeIn 0.3s ease-out;
@@ -118,7 +118,7 @@ body {
   text-align: center;
   background: var(--bg-card);
   padding: 16px 20px;
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-xl);
   max-width: 500px;
   animation: slideInUp 0.5s ease-out;
@@ -139,7 +139,7 @@ body {
   color: var(--success-color);
   font-size: 1.75rem;
   margin-bottom: 15px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .success-message p {
@@ -152,7 +152,7 @@ body {
   margin: 5px;
   padding: 12px 24px;
   font-weight: 600;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   transition: all 0.25s;
   text-decoration: none;
   display: inline-flex;
@@ -168,20 +168,14 @@ body {
 }
 
 .success-message .btn-primary:hover {
-  filter: brightness(1.12);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
 }
 
 .success-message .btn-success {
-  background: linear-gradient(135deg, var(--success-color), #155e3a);
+  background: var(--success-color);
   color: var(--text-white);
 }
 
 .success-message .btn-success:hover {
-  filter: brightness(1.1);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
 }
 
 /* ----------------------------------------------------------------
@@ -198,7 +192,7 @@ body {
 
 .header h1 {
   font-size: 2.4rem;
-  font-weight: 700;
+  font-weight: 600;
   margin: 16px 0;
   text-shadow: 0 4px 8px rgba(0,0,0,.0);
   color: #fff;
@@ -236,7 +230,7 @@ body {
   padding: 8px 16px;
   font-size: 0.9rem;
   font-weight: 500;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   text-decoration: none;
   display: inline-flex;
   align-items: center;
@@ -248,9 +242,7 @@ body {
 
 .back-btn:hover {
   background: rgba(0,0,0,.0);
-  transform: translateY(-2px);
   color: #fff;
-  box-shadow: var(--shadow-md);
 }
 
 /* ----------------------------------------------------------------
@@ -261,7 +253,7 @@ body {
   color: #fff;
   border: none;
   padding: 14px 22px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
   font-size: 15px;
   font-weight: 600;
@@ -276,9 +268,6 @@ body {
 }
 
 .toggle-btn:hover {
-  filter: brightness(1.12);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-lg);
 }
 
 .toggle-btn:active {
@@ -291,7 +280,7 @@ body {
 }
 
 .toggle-btn.active {
-  background: linear-gradient(135deg, var(--success-color), #155e3a);
+  background: var(--success-color);
   box-shadow: var(--shadow-md);
 }
 
@@ -304,7 +293,7 @@ body {
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   opacity: 0;
   background: var(--bg-secondary);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   margin: 0 12px 20px;
   box-shadow: none;
 }
@@ -352,7 +341,7 @@ body {
 .form-header h3 {
   margin: 0;
   font-size: 20px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
 }
 
@@ -384,7 +373,7 @@ body {
   width: 100%;
   padding: 13px 18px;
   border: 1.5px solid var(--input-border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   font-size: 14px;
   transition: all 0.25s ease;
   background: var(--input-bg);
@@ -420,11 +409,11 @@ body {
    CREATE BUTTON
    ---------------------------------------------------------------- */
 .create-btn {
-  background: linear-gradient(135deg, var(--success-color), #155e3a);
+  background: var(--success-color);
   color: #fff;
   border: none;
   padding: 13px 26px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
   font-size: 15px;
   font-weight: 600;
@@ -445,7 +434,7 @@ body {
   left: -100%;
   width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.0) 50%, transparent 100%);
+  background: transparent;
   transition: left 0.6s ease;
 }
 
@@ -454,9 +443,6 @@ body {
 }
 
 .create-btn:hover {
-  filter: brightness(1.1);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-lg);
 }
 
 .create-btn i {
@@ -482,7 +468,7 @@ body {
   left: -100%;
   width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.0) 50%, transparent 100%);
+  background: transparent;
   animation: dividerShimmer 3s ease-in-out infinite;
 }
 
@@ -492,7 +478,7 @@ body {
 h2 {
   color: var(--text-primary);
   font-size: 24px;
-  font-weight: 700;
+  font-weight: 600;
   margin: 24px 12px 18px;
   display: flex;
   align-items: center;
@@ -510,7 +496,7 @@ h2::after {
   content: '';
   flex: 1;
   height: 1.5px;
-  background: linear-gradient(90deg, var(--primary-color), transparent);
+  background: var(--primary-color);
   margin-left: 16px;
   border-radius: 1px;
   opacity: 0.4;
@@ -536,9 +522,7 @@ h2::after {
 .workshop-table thead th {
   color: #fff;
   padding: 16px 20px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  font-weight: 600;
   font-size: 13px;
   border: none;
   text-align: left;
@@ -576,70 +560,32 @@ h2::after {
   flex-wrap: wrap;
 }
 
-.btn {
-  padding: 8px 14px;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  border: none;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  text-decoration: none;
-}
-
 .btn-small {
   padding: 6px 10px;
   font-size: 12px;
 }
 
 .btn-edit {
-  background: linear-gradient(135deg, var(--success-color), #155e3a);
+  background: var(--success-color);
   color: #fff;
   box-shadow: var(--shadow-sm);
 }
 
 .btn-edit:hover {
-  filter: brightness(1.1);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
   color: #fff;
 }
 
 .btn-delete {
-  background: linear-gradient(135deg, var(--danger-color), #991100);
+  background: var(--danger-color);
   color: #fff;
   box-shadow: var(--shadow-sm);
 }
 
 .btn-delete:hover {
-  filter: brightness(1.1);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
   color: #fff;
 }
 
 /* .btn-primary now comes from the shared static/css/components.css */
-
-.btn-primary:hover {
-  filter: brightness(1.12);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
-  color: var(--text-white);
-}
-
-.btn-secondary {
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-  border: 1px solid var(--border-color);
-}
-
-.btn-secondary:hover {
-  background: var(--bg-hover);
-  transform: translateY(-1px);
-}
 
 /* ----------------------------------------------------------------
    MESSAGES
@@ -651,7 +597,7 @@ h2::after {
 
 .messages p {
   padding: 14px 18px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   margin-bottom: 10px;
   font-weight: 600;
   display: flex;
@@ -664,19 +610,19 @@ h2::after {
 }
 
 .messages p.success {
-  background: linear-gradient(135deg, var(--success-color), #155e3a);
+  background: var(--success-color);
   color: #fff;
   border-color: transparent;
 }
 
 .messages p.error {
-  background: linear-gradient(135deg, var(--danger-color), #991100);
+  background: var(--danger-color);
   color: #fff;
   border-color: transparent;
 }
 
 .messages p.warning {
-  background: linear-gradient(135deg, var(--warning-color), #92600a);
+  background: var(--warning-color);
   color: #fff;
   border-color: transparent;
 }
@@ -689,7 +635,7 @@ h2::after {
   color: var(--text-primary);
   padding: 20px 24px;
   margin: 20px 12px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   border-left: 4px solid var(--info-color);
   font-weight: 600;
   display: flex;
@@ -703,7 +649,7 @@ h2::after {
   color: var(--danger-color);
   padding: 20px 24px;
   margin: 20px 12px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   border-left: 4px solid var(--danger-color);
   font-weight: 600;
   display: flex;
@@ -724,7 +670,7 @@ h2::after {
 .inline-form select {
   padding: 6px 10px;
   border: 1px solid var(--input-border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   margin-right: 6px;
   font-size: 13px;
   background: var(--input-bg);
@@ -745,7 +691,7 @@ h2::after {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,.0);
+  background: rgba(11, 12, 14, .45);
   backdrop-filter: blur(4px);
   display: flex;
   justify-content: center;
@@ -764,7 +710,7 @@ h2::after {
 .modal-container {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-xl);
   width: 90%;
   max-width: 500px;
@@ -776,15 +722,6 @@ h2::after {
 
 .modal-overlay.show .modal-container {
   transform: scale(1) translateY(0);
-}
-
-.modal-header {
-  padding: 18px 22px;
-  background: var(--primary-gradient);
-  color: #fff;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
 }
 
 .modal-header h3 {
@@ -803,7 +740,7 @@ h2::after {
   font-size: 1.4rem;
   cursor: pointer;
   padding: 4px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   transition: background 0.2s;
 }
 
@@ -834,7 +771,7 @@ h2::after {
   width: 100%;
   padding: 11px 14px;
   border: 1.5px solid var(--input-border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 14px;
   background: var(--input-bg);
   color: var(--text-primary);
@@ -870,7 +807,7 @@ h2::after {
 #confirmModalOverlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,.0);
+  background: rgba(11, 12, 14, .45);
   backdrop-filter: blur(8px);
   display: flex;
   justify-content: center;
@@ -890,7 +827,7 @@ h2::after {
 .delete-modal-container {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-xl);
   width: 90%;
   max-width: 600px;
@@ -906,13 +843,13 @@ h2::after {
 }
 
 .delete-modal-header {
-  background: linear-gradient(135deg, var(--danger-color), #991100);
+  background: var(--danger-color);
   color: #fff;
   padding: 22px 28px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-radius: 16px 16px 0 0;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 }
 
 .delete-modal-header h3 {
@@ -939,7 +876,7 @@ h2::after {
 .department-info-box {
   background: var(--bg-tertiary);
   padding: 18px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   margin-bottom: 18px;
   border: 1px solid var(--border-color);
 }
@@ -962,14 +899,14 @@ h2::after {
 .workshop-info-box strong,
 .department-info-box strong {
   color: var(--text-primary);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 /* Warning box */
 .warning-box {
   background: color-mix(in srgb, var(--warning-color) 15%, var(--bg-card));
   border: 1.5px solid var(--warning-color);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   padding: 18px;
   margin-bottom: 18px;
   display: flex;
@@ -992,14 +929,14 @@ h2::after {
 
 .warning-box strong {
   color: var(--text-primary);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 /* Success box */
 .success-box {
   background: color-mix(in srgb, var(--success-color) 12%, var(--bg-card));
   border: 1.5px solid var(--success-color);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   padding: 18px;
   margin-bottom: 18px;
   display: flex;
@@ -1025,7 +962,7 @@ h2::after {
 .progress-box {
   background: color-mix(in srgb, var(--info-color) 12%, var(--bg-card));
   border: 1.5px solid var(--info-color);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   padding: 18px;
   margin-bottom: 18px;
   display: none;
@@ -1051,7 +988,7 @@ h2::after {
   margin: 18px 0;
   padding: 18px;
   background: var(--bg-secondary);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   border: 1.5px dashed var(--border-color);
 }
 
@@ -1069,7 +1006,7 @@ h2::after {
   width: 100%;
   padding: 11px 14px;
   border: 1.5px solid var(--input-border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 0.9rem;
   background: var(--input-bg);
   color: var(--text-primary);
@@ -1106,9 +1043,6 @@ h2::after {
 }
 
 #transferBtn:hover:not(:disabled) {
-  filter: brightness(1.12);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
 }
 
 #transferBtn:disabled {
@@ -1117,15 +1051,12 @@ h2::after {
 }
 
 #confirmDeleteBtn {
-  background: linear-gradient(135deg, var(--danger-color), #991100);
+  background: var(--danger-color);
   color: #fff;
   box-shadow: var(--shadow-sm);
 }
 
 #confirmDeleteBtn:hover:not(:disabled) {
-  filter: brightness(1.1);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
 }
 
 #confirmDeleteBtn:disabled {
@@ -1141,7 +1072,6 @@ h2::after {
 
 #cancelDeleteBtn:hover {
   background: var(--bg-hover);
-  transform: translateY(-2px);
 }
 
 /* Confirm modal header */
@@ -1150,13 +1080,13 @@ h2::after {
 }
 
 #confirmModalOverlay .delete-modal-header {
-  background: linear-gradient(135deg, var(--warning-color), #92600a);
+  background: var(--warning-color);
 }
 
 #confirmWorkshopName,
 #confirmDepartmentName {
   color: var(--danger-color);
-  font-weight: 700;
+  font-weight: 600;
   font-size: 1.05rem;
 }
 
@@ -1409,25 +1339,6 @@ h2::after {
 /* ----------------------------------------------------------------
    SCROLLBAR
    ---------------------------------------------------------------- */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: var(--scrollbar-track);
-  border-radius: 10px;
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
-  border-radius: 10px;
-  border: 2px solid var(--scrollbar-track);
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--scrollbar-thumb-hover);
-}
 
 * {
   scrollbar-width: thin;
@@ -1556,10 +1467,8 @@ h2::after {
 @media print {
 
   .back-btn,
-  .toggle-btn,
-  .btn,
-  button,
-  .modal {
+.toggle-btn,
+button {
     display: none !important;
   }
 

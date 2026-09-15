@@ -87,11 +87,9 @@ def download_signature(request, user_id):
 
     try:
         signature = user.signature
-        if signature.signature_image:
-            response = HttpResponse(
-                signature.signature_image.read(),
-                content_type='image/png'
-            )
+        image_bytes = signature.get_signature_bytes()
+        if image_bytes:
+            response = HttpResponse(image_bytes, content_type='image/png')
             response['Content-Disposition'] = f'attachment; filename="signature_{user.username}.png"'
             return response
         else:
@@ -125,11 +123,12 @@ def api_get_user_signature(request, user_id):
 
         try:
             signature = user.signature
-            if signature.signature_image:
+            signature_url = signature.get_signature_as_base64()
+            if signature_url:
                 return JsonResponse({
                     'success': True,
                     'hasSignature': True,
-                    'signatureUrl': signature.signature_image.url,
+                    'signatureUrl': signature_url,
                     'signatureId': str(signature.signature_id),
                     'createdAt': signature.created_at.isoformat(),
                     'updatedAt': signature.updated_at.isoformat()
@@ -193,7 +192,7 @@ def api_regenerate_signature(request, user_id):
         return JsonResponse({
             'success': True,
             'message': 'Signature regenerated successfully',
-            'signatureUrl': signature.signature_image.url if signature.signature_image else None,
+            'signatureUrl': signature.get_signature_as_base64(),
             'signatureId': str(signature.signature_id)
         })
 

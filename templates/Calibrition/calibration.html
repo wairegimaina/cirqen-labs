@@ -10,176 +10,164 @@
 {% block page_title %}Perform Calibration{% endblock %}
 
 {% block content %}
-<!-- Loading Overlay -->
-    <div class="loading-overlay" id="loadingOverlay">
-        <div class="loading-content" id="loadingContent">
-            <div class="loading-spinner"></div>
-            <div class="loading-text" id="loadingText">Processing calibration...</div>
+<!-- Loading overlay (content replaced by calibration-perform.js) -->
+<div class="loading-overlay" id="loadingOverlay">
+    <div class="loading-content" id="loadingContent">
+        <div class="loading-spinner"></div>
+        <div class="loading-text" id="loadingText">Processing calibration…</div>
+    </div>
+</div>
+
+<div class="cal-page">
+
+    <!-- Validation alert -->
+    <div class="validation-alert" id="validationAlert" role="alert">
+        <div class="validation-alert-title">
+            <i class="fas fa-circle-exclamation" aria-hidden="true"></i>
+            Can't submit yet — some required information is missing
         </div>
+        <ul id="validationErrors"></ul>
     </div>
 
-    <div class="container">
-
-
-        <!-- Validation Alert -->
-        <div class="validation-alert" id="validationAlert">
-            <h4>⚠️ Cannot Submit - Missing Required Information</h4>
-            <ul id="validationErrors"></ul>
+    <!-- Selected equipment (when pre-selected from a schedule) -->
+    {% if selected_equipment %}
+    <section class="section-card" id="equipment-details">
+        <div class="section-card-head">
+            <h2 class="section-card-title">Equipment</h2>
+            <a href="{% url 'schedule:pending_calibrations' %}" class="btn btn-secondary btn-sm">
+                <i class="fas fa-arrow-left" aria-hidden="true"></i> Change equipment
+            </a>
         </div>
-
-        <!-- Equipment Details Section (shown when equipment is pre-selected) -->
-        {% if selected_equipment %}
-        <div class="equipment-details" id="equipment-details">
-            <h3>
-                🛠️ Selected Equipment
-            </h3>
-
-            <div class="equipment-info-grid">
+        <div class="section-card-body">
+            <div class="info-grid">
                 <div class="info-item">
-                    <div class="info-label">Equipment Name</div>
-                    <div class="info-value">{{ selected_equipment.description.name|default:"N/A" }}</div>
+                    <span class="info-label">Name</span>
+                    <span class="info-value">{{ selected_equipment.description.name|default:"N/A" }}</span>
                 </div>
-
                 <div class="info-item">
-                    <div class="info-label">Model</div>
-                    <div class="info-value">{{ selected_equipment.model|default:"N/A" }}</div>
+                    <span class="info-label">Model</span>
+                    <span class="info-value">{{ selected_equipment.model|default:"N/A" }}</span>
                 </div>
-
                 <div class="info-item">
-                    <div class="info-label">Serial Number</div>
-                    <div class="info-value">
-                        <span class="equipment-serial">{{ selected_equipment.serial_number|default:"N/A" }}</span>
-                    </div>
+                    <span class="info-label">Serial number</span>
+                    <span class="info-value"><span class="mono-chip">{{ selected_equipment.serial_number|default:"N/A" }}</span></span>
                 </div>
-
                 <div class="info-item">
-                    <div class="info-label">Department</div>
-                    <div class="info-value">
-                        <span class="department-badge">{{ selected_equipment.department.name|default:"N/A" }}</span>
-                    </div>
+                    <span class="info-label">Department</span>
+                    <span class="info-value">{{ selected_equipment.department.name|default:"N/A" }}</span>
                 </div>
-
                 {% if selected_schedule %}
                 <div class="info-item">
-                    <div class="info-label">Scheduled Month</div>
-                    <div class="info-value">
-                        <span class="schedule-info">{{ selected_schedule.scheduled_month|date:"F Y" }}</span>
-                    </div>
+                    <span class="info-label">Scheduled month</span>
+                    <span class="info-value">{{ selected_schedule.scheduled_month|date:"F Y" }}</span>
                 </div>
-
                 <div class="info-item">
-                    <div class="info-label">Calibration Period</div>
-                    <div class="info-value">{{ selected_schedule.calibration_period }} Months</div>
+                    <span class="info-label">Calibration period</span>
+                    <span class="info-value">{{ selected_schedule.calibration_period }} months</span>
                 </div>
                 {% endif %}
             </div>
-
-            <a href="{% url 'schedule:pending_calibrations' %}" class="change-equipment-btn">
-                🔄 Change Equipment
-            </a>
         </div>
+    </section>
+    {% endif %}
+
+    <form method="post" id="calibrationForm" action="{% url 'calibration:perform_calibration' %}">
+        {% csrf_token %}
+
+        <!-- Return navigation -->
+        <input type="hidden" name="return_to" value="{{ return_to|default:'dashboard' }}">
+        <input type="hidden" name="return_page" value="{{ return_page|default:'1' }}">
+        <input type="hidden" name="return_department" value="{{ return_department|default:'' }}">
+        <input type="hidden" name="return_month" value="{{ return_month|default:'' }}">
+        <input type="hidden" name="return_year" value="{{ return_year|default:'' }}">
+        <input type="hidden" name="return_search" value="{{ return_search|default:'' }}">
+
+        <!-- Pre-selected equipment -->
+        {% if selected_equipment %}
+            <input type="hidden" name="equipment" value="{{ selected_equipment.id }}">
+        {% endif %}
+        {% if selected_schedule %}
+            <input type="hidden" name="schedule" value="{{ selected_schedule.id }}">
         {% endif %}
 
-        <form method="post" id="calibrationForm" action="{% url 'calibration:perform_calibration' %}">
-            {% csrf_token %}
+        <!-- Procedure -->
+        <section class="section-card">
+            <div class="section-card-head">
+                <h2 class="section-card-title">Procedure</h2>
+            </div>
+            <div class="section-card-body">
+                <div class="form-group">
+                    <label for="procedure">Calibration procedure</label>
+                    <select name="procedure" id="procedure" class="form-select" required>
+                        <option value="">Select a procedure…</option>
 
-            <!-- ✅ NEW: Return navigation hidden fields -->
-            <input type="hidden" name="return_to" value="{{ return_to|default:'dashboard' }}">
-            <input type="hidden" name="return_page" value="{{ return_page|default:'1' }}">
-            <input type="hidden" name="return_department" value="{{ return_department|default:'' }}">
-            <input type="hidden" name="return_month" value="{{ return_month|default:'' }}">
-            <input type="hidden" name="return_year" value="{{ return_year|default:'' }}">
-            <input type="hidden" name="return_search" value="{{ return_search|default:'' }}">
+                        {% if recommended_procedures %}
+                            <optgroup label="Recommended for this equipment type">
+                                {% for proc in recommended_procedures %}
+                                    <option value="{{ proc.id }}"
+                                            class="recommended-procedure"
+                                            {% if selected_schedule and selected_schedule.calibration_procedure and proc.id == selected_schedule.calibration_procedure.id %}selected{% endif %}>
+                                        {{ proc.name }}
+                                    </option>
+                                {% endfor %}
+                            </optgroup>
+                        {% endif %}
 
-            <!-- Hidden fields for pre-selected equipment -->
-            {% if selected_equipment %}
-                <input type="hidden" name="equipment" value="{{ selected_equipment.id }}">
-            {% endif %}
-            {% if selected_schedule %}
-                <input type="hidden" name="schedule" value="{{ selected_schedule.id }}">
-            {% endif %}
+                        {% if other_procedures %}
+                            <optgroup label="Other procedures">
+                                {% for proc in other_procedures %}
+                                    <option value="{{ proc.id }}"
+                                            {% if selected_schedule and selected_schedule.calibration_procedure and proc.id == selected_schedule.calibration_procedure.id %}selected{% endif %}>
+                                        {{ proc.name }}
+                                    </option>
+                                {% endfor %}
+                            </optgroup>
+                        {% endif %}
+                    </select>
+                    <div class="form-text">Recommended procedures are listed first, based on previous calibrations of this equipment type.</div>
+                </div>
+            </div>
+        </section>
 
-            <!-- Equipment and Procedure Selection -->
-            <div class="selection-section">
-                <h3 style="margin-top: 0;">Procedure Selection</h3>
-
-                <div class="form-row">
+        <!-- Environmental conditions -->
+        <section class="section-card">
+            <div class="section-card-head">
+                <h2 class="section-card-title">Environmental conditions</h2>
+                <span class="prefilled-indicator" id="prefilledIndicator" style="display: none;">Prefilled with standard lab values</span>
+            </div>
+            <div class="section-card-body">
+                <div class="form-grid">
                     <div class="form-group">
-                        <select name="procedure" id="procedure" class="form-control" required>
-                            <option value="">📋 Select Procedure </option>
-
-                            {% if recommended_procedures %}
-                                <optgroup label="✅ RECOMMENDED PROCEDURES (Previously Used for This Equipment Type)">
-                                    {% for proc in recommended_procedures %}
-                                        <option value="{{ proc.id }}"
-                                                class="recommended-procedure"
-                                                {% if selected_schedule and selected_schedule.calibration_procedure and proc.id == selected_schedule.calibration_procedure.id %}selected{% endif %}>
-                                            ✅ {{ proc.name }}
-                                        </option>
-                                    {% endfor %}
-                                </optgroup>
-                            {% endif %}
-
-                            {% if other_procedures %}
-                                <optgroup label="📋 OTHER AVAILABLE PROCEDURES">
-                                    {% for proc in other_procedures %}
-                                        <option value="{{ proc.id }}"
-                                                {% if selected_schedule and selected_schedule.calibration_procedure and proc.id == selected_schedule.calibration_procedure.id %}selected{% endif %}>
-                                            {{ proc.name }}
-                                        </option>
-                                    {% endfor %}
-                                </optgroup>
-                            {% endif %}
-                        </select>
-                        <small class="form-text text-muted" style="margin-top: 8px;">
-                            <span style="color: var(--success-color); font-weight: bold;">✅ Recommended procedures</span> are shown first, based on previous calibrations for this equipment type
-                        </small>
-                    </div>
-                </div>
-
-                <!-- Environmental Conditions -->
-                <div class="env-conditions-header">
-                    <span class="env-icon">🌡️</span>
-                    <h3 style="margin: 0;">Environmental Conditions</h3>
-                </div>
-
-                <div class="prefilled-indicator" id="prefilledIndicator" style="display: none;">
-                    ✅ Environmental conditions have been automatically filled with standard lab values
-                </div>
-
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="actual_temperature">🌡️ Temperature (°C):</label>
-                        <input type="number" name="actual_temperature" id="actual_temperature" class="form-control" step="0.1" placeholder="e.g., 23.0" required>
+                        <label for="actual_temperature">Temperature <span class="label-unit">°C</span></label>
+                        <input type="number" name="actual_temperature" id="actual_temperature" class="form-control" step="0.1" placeholder="23.0" required>
                     </div>
                     <div class="form-group">
-                        <label for="actual_humidity">💧 Humidity (%RH):</label>
-                        <input type="number" name="actual_humidity" id="actual_humidity" class="form-control" step="0.1" placeholder="e.g., 50.0" required>
+                        <label for="actual_humidity">Humidity <span class="label-unit">%RH</span></label>
+                        <input type="number" name="actual_humidity" id="actual_humidity" class="form-control" step="0.1" placeholder="50.0" required>
                     </div>
                     <div class="form-group">
-                        <label for="actual_pressure">🌊 Pressure (kPa):</label>
-                        <input type="number" name="actual_pressure" id="actual_pressure" class="form-control" step="0.001" placeholder="e.g., 101.325" required>
+                        <label for="actual_pressure">Pressure <span class="label-unit">kPa</span></label>
+                        <input type="number" name="actual_pressure" id="actual_pressure" class="form-control" step="0.001" placeholder="101.325" required>
                     </div>
                 </div>
 
                 <div class="form-group">
-                    <label for="notes">📝 Notes:</label>
-                    <textarea name="notes" id="notes" class="form-control" rows="3" placeholder="Optional notes about the calibration..."></textarea>
+                    <label for="notes">Notes <span class="label-unit">Optional</span></label>
+                    <textarea name="notes" id="notes" class="form-control" rows="3" placeholder="Anything worth recording about this calibration"></textarea>
                 </div>
             </div>
+        </section>
 
-            <!-- Dynamic Parameter Tables -->
-            <div id="reading-fields">
-                <!-- This will be populated dynamically with parameter tables -->
-            </div>
+        <!-- Parameter tables (generated by calibration-perform.js) -->
+        <div id="reading-fields"></div>
 
-            <div class="form-group" style="text-align: center; margin-top: 30px;">
-                <button type="submit" class="btn" id="submitBtn">🚀 Start Calibration</button>
-            </div>
-        </form>
+        <div class="form-actions">
+            <span class="form-actions-hint">Fill in every required reading (marked *) to enable submission.</span>
+            <button type="submit" class="btn btn-primary" id="submitBtn">Start calibration</button>
+        </div>
+    </form>
 
-    </div>
-
+</div>
 {% endblock %}
 
 {% block extra_js %}

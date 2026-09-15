@@ -69,6 +69,8 @@ from typing import Any, Dict, List, Optional, Tuple
 import requests
 from psycopg2.extras import RealDictCursor, Json
 
+from .agent_prelude import json_safe
+
 LOG = logging.getLogger("data_checker_client")
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -688,6 +690,10 @@ class DataCheckerClient:
                 "client_id": client_id,
                 "machine_id": machine_id,
             }
+
+            # Same JSON-safety problem as the normal upload path: rows carry
+            # date/Decimal/UUID objects requests cannot encode.
+            payload = json_safe(payload)
 
             for attempt in range(1, MAX_RETRIES + 1):
                 try:

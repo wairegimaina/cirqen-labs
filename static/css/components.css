@@ -1,137 +1,388 @@
 /* ============================================================
    SHARED COMPONENTS
-   Consolidates markup/CSS that was previously declared
-   independently in multiple places under the same class names:
-     - static/calibrition/calsoft.css      (.kpi-card, .kpi-num, kpi-pending/pushed/overdue/approved)
-     - static/dashboards/cmms-dashboard.css (.kpi-card, .kpi-value, .kpi-meta, loading shimmer)
-     - templates/Reporthub/report.html      (.kpi-primary/success/info/warning — had NO matching
-       CSS anywhere before this file; those cards rendered unstyled)
-   Loaded globally from base.html so every page gets one real,
-   consistent implementation instead of three-different-or-none.
+   App-specific building blocks reused across modules.
+   Bootstrap components (buttons, cards, forms, badges, alerts,
+   modals, pagination) are styled once in theme.css and tables in
+   enhancements.css — page stylesheets should compose these rather
+   than redefine them.
    ============================================================ */
+
+/* ---------- Page header (for pages that carry their own heading) ---------- */
+.page-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+}
+.page-heading {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  letter-spacing: -.01em;
+  color: var(--text-primary);
+  margin: 0;
+}
+.page-subtitle { font-size: var(--fs-sm); color: var(--text-muted); margin: .25rem 0 0; }
+.page-actions  { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+
+/* ---------- Section card: card with a titled head ---------- */
+.section-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--card-shadow);
+  color: var(--text-primary);
+  margin-bottom: 1rem;
+}
+.section-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  flex-wrap: wrap;
+  padding: .875rem 1.25rem;
+  border-bottom: 1px solid var(--border-color);
+}
+.section-card-title {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  font-size: .9375rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+.section-card-title i { color: var(--text-muted); font-size: .875rem; }
+.section-card-sub  { font-size: var(--fs-sm); color: var(--text-muted); margin: .125rem 0 0; }
+.section-card-body { padding: 1.25rem; }
+.section-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  flex-wrap: wrap;
+  padding: .75rem 1.25rem;
+  border-top: 1px solid var(--border-color);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+.section-card-foot .pagination { margin: 0; }
+
+/* ---------- Toolbar: search + filters ---------- */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  flex-wrap: wrap;
+}
+.toolbar-spacer { flex: 1; }
+
+.search-field {
+  position: relative;
+  flex: 1 1 260px;
+  min-width: 200px;
+  margin: 0;
+}
+.search-field > i {
+  position: absolute;
+  left: .75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  font-size: .8125rem;
+  pointer-events: none;
+}
+.search-field > input,
+.search-field > .form-control { padding-left: 2.125rem; width: 100%; }
+
+.toolbar-card { padding: .75rem; }
+.toolbar > .form-select,
+.toolbar > select { width: auto; min-width: 150px; }
+.toolbar-field { display: flex; align-items: center; gap: .5rem; margin: 0; }
+.toolbar-field > label { margin: 0; font-size: var(--fs-sm); color: var(--text-muted); white-space: nowrap; }
+.toolbar-field > .form-control,
+.toolbar-field > .form-select { width: auto; }
+@media (max-width: 768px) {
+  .toolbar-field { flex: 1 1 100%; }
+  .toolbar-field > .form-control,
+  .toolbar-field > .form-select { flex: 1; }
+}
+
+/* ---------- Page container ---------- */
+.page-wrap { max-width: 1400px; margin: 0 auto; }
+
+/* ---------- Key / value grid ---------- */
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 1rem 1.5rem;
+}
+.info-item  { min-width: 0; }
+.info-label {
+  display: block;
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  color: var(--text-muted);
+  margin-bottom: .125rem;
+}
+.info-value {
+  display: block;
+  font-size: var(--fs-base);
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+/* ---------- Key / value list (side panels) ---------- */
+.kv-list { margin: 0; padding: .25rem 1.25rem; }
+.kv-list > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  padding: .5rem 0;
+  border-bottom: 1px solid var(--border-light);
+  font-size: var(--fs-sm);
+}
+.kv-list > div:last-child { border-bottom: 0; }
+.kv-list dt { font-weight: 400; color: var(--text-muted); }
+.kv-list dd { margin: 0; text-align: right; font-weight: 500; color: var(--text-primary); overflow-wrap: anywhere; }
+
+/* ---------- Sub-section heading inside a card body ---------- */
+.subsection-title {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 1.25rem 0 .5rem;
+}
+/* A table nested inside a card body gets its own light frame */
+.table-bordered-wrap {
+  border: 1px solid var(--border-color) !important;
+  border-radius: var(--radius-md) !important;
+}
+
+/* ---------- Table cell helpers ---------- */
+.cell-title { font-weight: 500; color: var(--text-primary); line-height: 1.35; }
+.cell-sub   { font-size: var(--fs-xs); color: var(--text-muted); margin-top: .125rem; }
+.mono-chip {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: .75rem;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: .0625rem .375rem;
+  white-space: nowrap;
+}
+
+/* ---------- Status badges by workflow state ---------- */
+.status-badge.status-pending, .status-badge.status-in_progress, .status-badge.status-waiting,
+.badge.status-pending, .badge.status-in_progress, .badge.status-waiting {
+  background: var(--warning-bg); color: var(--warning-color);
+}
+.status-badge.status-overdue, .status-badge.status-rejected, .status-badge.status-declined,
+.status-badge.status-failed, .badge.status-overdue, .badge.status-rejected, .badge.status-failed {
+  background: var(--danger-bg); color: var(--danger-color);
+}
+.status-badge.status-completed, .status-badge.status-approved, .status-badge.status-passed,
+.status-badge.status-active, .badge.status-completed, .badge.status-approved, .badge.status-passed {
+  background: var(--success-bg); color: var(--success-color);
+}
+.status-badge.status-scheduled, .status-badge.status-submitted,
+.badge.status-scheduled, .badge.status-submitted {
+  background: var(--info-bg); color: var(--info-color);
+}
+.status-badge.status-pushed, .status-badge.status-draft, .status-badge.status-cancelled,
+.badge.status-pushed, .badge.status-draft, .badge.status-cancelled {
+  background: var(--neutral-bg); color: var(--text-secondary);
+}
+
+/* ---------- Form actions bar (sticky at the bottom of long forms) ---------- */
+.form-actions {
+  position: sticky;
+  bottom: .75rem;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .5rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+  padding: .75rem 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+.form-actions-hint { margin-right: auto; font-size: var(--fs-sm); color: var(--text-muted); }
+@media (max-width: 768px) {
+  .form-actions { flex-direction: column-reverse; align-items: stretch; }
+  .form-actions .btn { width: 100%; }
+  .form-actions-hint { margin: 0; text-align: center; }
+}
+
+/* ---------- Blocking loading overlay ---------- */
+.loading-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 1080;
+  background: rgba(11, 12, 14, .45);
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+.loading-overlay.active,
+.loading-overlay[style*="display: flex"],
+.loading-overlay[style*="display:flex"] { display: flex; }
+.loading-content {
+  width: 100%;
+  max-width: 360px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--text-primary);
+  box-shadow: var(--shadow-xl);
+}
+.loading-content h4 { font-size: var(--fs-md); font-weight: 600; margin: 0 0 .25rem; }
+.loading-content p  { font-size: var(--fs-sm); color: var(--text-muted); margin: 0; }
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  margin: 0 auto 1rem;
+  border: 3px solid var(--border-color);
+  border-top-color: var(--primary-color);
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+
+/* Round check mark for "done" dialogs */
+.success-mark {
+  width: 44px;
+  height: 44px;
+  margin: 0 auto .875rem;
+  border-radius: 50%;
+  background: var(--success-bg);
+  color: var(--success-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+}
+
+/* Required-field marker and Django's default error list */
+.req { color: var(--danger-color); margin-left: .125rem; }
+.errorlist { list-style: none; padding: 0; margin: .25rem 0 0; }
+.errorlist li { color: var(--danger-color); font-size: var(--fs-xs); }
+
+/* Small coloured dot before a label */
+.dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
 
 /* ---------- KPI card ---------- */
 .kpi-strip,
 .kpi-grid,
 .annual-summary-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 16px;
-  margin-bottom: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.25rem;
 }
 
 .kpi-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
-  padding: 1.1rem 1.25rem;
+  border-radius: var(--radius-lg);
+  padding: 1rem 1.25rem;
   position: relative;
-  overflow: hidden;
-  /* --kpi-color is the per-card inline override already used by the 3
-     dashboard templates (style="--kpi-color: #hex"), e.g. dashboard.html,
-     hod_dashboard.html, nurse_dashboard.html — respected here so those
-     21 existing inline colors keep working unchanged. A kpi-* variant
-     class (below) takes precedence over both when present. */
+  box-shadow: var(--card-shadow);
+  /* --kpi-color is the per-card inline override used by the dashboard
+     templates (style="--kpi-color: #hex"); a kpi-* variant class below
+     takes precedence over it when present. */
   --kpi-accent: var(--kpi-color, var(--text-secondary));
-  --kpi-accent-soft: var(--bg-tertiary);
-  transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
-.kpi-card:hover {
-  border-color: var(--border-strong);
-  box-shadow: var(--shadow-sm);
-}
-.kpi-card::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 3px;
-  background: var(--kpi-accent);
-}
+a.kpi-card { text-decoration: none; color: inherit; }
+a.kpi-card:hover { border-color: var(--border-mid); }
 
-/* Generic severity/emphasis variants (report.html's convention) */
-.kpi-card.kpi-primary { --kpi-accent: var(--primary-color); --kpi-accent-soft: color-mix(in srgb, var(--primary-color) 18%, var(--bg-card)); }
-.kpi-card.kpi-success { --kpi-accent: var(--success-color); --kpi-accent-soft: color-mix(in srgb, var(--success-color) 18%, var(--bg-card)); }
-.kpi-card.kpi-info     { --kpi-accent: var(--info-color);    --kpi-accent-soft: color-mix(in srgb, var(--info-color) 18%, var(--bg-card)); }
-.kpi-card.kpi-warning  { --kpi-accent: var(--warning-color); --kpi-accent-soft: color-mix(in srgb, var(--warning-color) 18%, var(--bg-card)); }
-
-/* Calibration-workflow-state variants (calsoft.css's convention) */
-.kpi-card.kpi-pending  { --kpi-accent: var(--warning-color); --kpi-accent-soft: color-mix(in srgb, var(--warning-color) 18%, var(--bg-card)); }
-.kpi-card.kpi-pushed   { --kpi-accent: #8b5cf6; --kpi-accent-soft: color-mix(in srgb, #8b5cf6 18%, var(--bg-card)); }
-.kpi-card.kpi-overdue  { --kpi-accent: var(--danger-color);  --kpi-accent-soft: color-mix(in srgb, var(--danger-color) 18%, var(--bg-card)); }
-.kpi-card.kpi-approved { --kpi-accent: var(--success-color); --kpi-accent-soft: color-mix(in srgb, var(--success-color) 18%, var(--bg-card)); }
+/* Severity variants */
+.kpi-card.kpi-primary  { --kpi-accent: var(--primary-color); }
+.kpi-card.kpi-success  { --kpi-accent: var(--success-color); }
+.kpi-card.kpi-info     { --kpi-accent: var(--info-color); }
+.kpi-card.kpi-warning  { --kpi-accent: var(--warning-color); }
+/* Calibration workflow variants */
+.kpi-card.kpi-pending  { --kpi-accent: var(--warning-color); }
+.kpi-card.kpi-pushed   { --kpi-accent: var(--text-secondary); }
+.kpi-card.kpi-overdue  { --kpi-accent: var(--danger-color); }
+.kpi-card.kpi-approved { --kpi-accent: var(--success-color); }
 
 .kpi-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1rem;
-  margin-bottom: 0.6rem;
-  background: var(--kpi-accent-soft);
+  font-size: .875rem;
+  margin-bottom: .75rem;
+  background: color-mix(in srgb, var(--kpi-accent) 12%, var(--bg-card));
   color: var(--kpi-accent);
 }
 
-/* .kpi-num (calsoft.css) and .kpi-value (cmms-dashboard.css) are the
-   same element styled two different ways under two different names —
-   both selectors kept so neither call-site needs to change markup. */
+/* .kpi-num and .kpi-value are the same element under two names */
 .kpi-num,
 .kpi-value {
-  font-size: 1.85rem;
-  font-weight: 700;
-  line-height: 1;
-  margin-bottom: 0.2rem;
-  /* Neutral by default (matches cmms-dashboard.css's original design,
-     used by 21 dashboard cards) — only the icon/top-bar take the accent
-     color. calsoft.css restores its own accent-colored number locally,
-     since that page's design intentionally differs. */
+  font-family: var(--font-base);
+  font-size: var(--fs-xl);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -.02em;
+  margin-bottom: .125rem;
   color: var(--text-primary);
-  font-family: "DM Mono", monospace;
   font-variant-numeric: tabular-nums;
 }
 .kpi-value.loading {
-  width: 70px;
-  height: 30px;
-  background: var(--bg-secondary);
-  border-radius: 6px;
+  width: 64px;
+  height: 28px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
   animation: kpi-shimmer 1.4s ease infinite;
 }
 @keyframes kpi-shimmer {
-  0%, 100% { opacity: 0.5; }
+  0%, 100% { opacity: .5; }
   50%      { opacity: 1; }
 }
 
 .kpi-label {
-  font-size: 0.72rem;
-  font-weight: 600;
+  font-size: var(--fs-sm);
+  font-weight: 500;
   color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  text-transform: none;
+  letter-spacing: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 4px;
+  gap: .375rem;
+  margin-bottom: .25rem;
 }
-.kpi-label i { color: var(--kpi-accent, var(--primary-color)); }
+.kpi-label i { color: var(--kpi-accent, var(--text-muted)); font-size: .8125rem; }
 
 .kpi-sub {
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
-  margin-top: 0.15rem;
+  margin-top: .125rem;
 }
 
 /* Trend/delta line under a KPI value */
 .kpi-meta {
-  font-size: 0.68rem;
+  font-size: var(--fs-xs);
   color: var(--text-muted);
-  margin-top: 5px;
+  margin-top: .25rem;
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-weight: 500;
+  gap: .25rem;
 }
 .kpi-meta.up   { color: var(--success-color); }
 .kpi-meta.warn { color: var(--warning-color); }
@@ -140,50 +391,61 @@
 /* ---------- Empty state ---------- */
 .empty-state {
   text-align: center;
-  padding: 2.5rem 1.5rem;
+  padding: 3rem 1.5rem;
   color: var(--text-muted);
 }
 .empty-state-icon {
-  font-size: 2.5rem;
-  margin-bottom: 0.75rem;
+  width: 44px;
+  height: 44px;
+  margin: 0 auto .875rem;
+  border-radius: 50%;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
   line-height: 1;
 }
 .empty-state h3 {
-  font-size: 1rem;
-  font-weight: 700;
+  font-size: .9375rem;
+  font-weight: 600;
   color: var(--text-primary);
-  margin-bottom: 0.35rem;
+  margin-bottom: .25rem;
 }
 .empty-state p {
-  font-size: 0.85rem;
+  font-size: var(--fs-sm);
   color: var(--text-muted);
-  max-width: 42ch;
+  max-width: 44ch;
   margin: 0 auto;
 }
 .empty-state .empty-state-action { margin-top: 1rem; }
 
 @media (max-width: 680px) {
-  .kpi-card { padding: 0.85rem 1rem; }
-  .kpi-num, .kpi-value { font-size: 1.4rem; }
-  .kpi-strip, .kpi-grid { gap: 8px; }
+  .kpi-card { padding: .875rem 1rem; }
+  .kpi-num, .kpi-value { font-size: 1.3rem; }
+  .kpi-strip, .kpi-grid { gap: .5rem; }
+  .section-card-head, .section-card-foot { padding: .75rem 1rem; }
+  .section-card-body { padding: 1rem; }
 }
 
 /* ---------- Notification bell + dropdown ---------- */
 .notif-wrap { position: relative; }
 .notif-badge {
   position: absolute;
-  top: 4px;
-  right: 4px;
+  top: 3px;
+  right: 3px;
   min-width: 16px;
   height: 16px;
   padding: 0 4px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--danger-color);
   color: #fff;
-  font-size: 0.62rem;
-  font-weight: 700;
+  font-size: .625rem;
+  font-weight: 600;
   line-height: 16px;
   text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 .notif-dropdown {
   position: absolute;
@@ -195,7 +457,7 @@
   overflow-y: auto;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   z-index: 200;
 }
@@ -204,10 +466,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.75rem 1rem;
+  padding: .75rem 1rem;
   border-bottom: 1px solid var(--border-color);
-  font-weight: 700;
-  font-size: 0.85rem;
+  font-weight: 600;
+  font-size: var(--fs-base);
   color: var(--text-primary);
   position: sticky;
   top: 0;
@@ -217,8 +479,8 @@
   background: none;
   border: none;
   color: var(--primary-color);
-  font-size: 0.76rem;
-  font-weight: 600;
+  font-size: var(--fs-xs);
+  font-weight: 500;
   cursor: pointer;
   padding: 0;
 }
@@ -227,20 +489,19 @@
   padding: 1.75rem 1rem;
   text-align: center;
   color: var(--text-muted);
-  font-size: 0.82rem;
+  font-size: var(--fs-sm);
 }
 .notif-item {
   display: block;
-  padding: 0.7rem 1rem;
+  padding: .7rem 1rem;
   border-bottom: 1px solid var(--border-light);
   cursor: pointer;
-  transition: background 0.12s;
   text-decoration: none;
   color: inherit;
 }
 .notif-item:last-child { border-bottom: none; }
 .notif-item:hover { background: var(--bg-hover); }
-.notif-item.is-unread { background: color-mix(in srgb, var(--primary-color) 5%, var(--bg-card)); }
+.notif-item.is-unread { background: var(--bg-secondary); }
 .notif-item.is-unread::before {
   content: "";
   display: inline-block;
@@ -251,21 +512,22 @@
   margin-right: 6px;
   vertical-align: middle;
 }
-.notif-item-title { font-weight: 600; font-size: 0.84rem; color: var(--text-primary); }
-.notif-item-message { font-size: 0.78rem; color: var(--text-secondary); margin-top: 2px; }
-.notif-item-time { font-size: 0.68rem; color: var(--text-muted); margin-top: 4px; }
+.notif-item-title { font-weight: 500; font-size: var(--fs-sm); color: var(--text-primary); }
+.notif-item-message { font-size: var(--fs-xs); color: var(--text-secondary); margin-top: 2px; }
+.notif-item-time { font-size: .6875rem; color: var(--text-muted); margin-top: 4px; }
 
 /* ---------- Sidebar queue-count badges ---------- */
 .menu-link .queue-badge,
 .dropdown-link .queue-badge {
   margin-left: auto;
-  background: var(--danger-color);
-  color: #fff;
-  font-size: 0.68rem;
-  font-weight: 700;
-  padding: 1px 7px;
-  border-radius: 999px;
-  line-height: 1.4;
+  background: var(--danger-bg);
+  color: var(--danger-color);
+  font-size: .6875rem;
+  font-weight: 600;
+  padding: 0 .4rem;
+  border-radius: var(--radius-pill);
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---------- Saved filters widget ---------- */
@@ -277,21 +539,21 @@
   width: 280px;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   z-index: 150;
-  padding: 0.5rem;
+  padding: .5rem;
 }
 .saved-filters-dropdown[hidden] { display: none; }
-.saved-filters-list { max-height: 220px; overflow-y: auto; margin-bottom: 0.5rem; }
+.saved-filters-list { max-height: 220px; overflow-y: auto; margin-bottom: .5rem; }
 .saved-filter-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  padding: 0.4rem 0.5rem;
-  border-radius: 8px;
-  font-size: 0.82rem;
+  padding: .4rem .5rem;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-sm);
   color: var(--text-primary);
   text-decoration: none;
 }
@@ -303,12 +565,12 @@
   color: var(--text-muted);
   cursor: pointer;
   padding: 2px 5px;
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
 }
 .saved-filter-item .sf-delete:hover { color: var(--danger-color); }
-.saved-filters-save-row { display: flex; gap: 6px; border-top: 1px solid var(--border-light); padding-top: 0.5rem; }
+.saved-filters-save-row { display: flex; gap: 6px; border-top: 1px solid var(--border-light); padding-top: .5rem; }
 .saved-filters-name-input { flex: 1; }
-.saved-filters-empty { padding: 0.75rem 0.5rem; text-align: center; color: var(--text-muted); font-size: 0.8rem; }
+.saved-filters-empty { padding: .75rem .5rem; text-align: center; color: var(--text-muted); font-size: var(--fs-sm); }
 
 /* ============================================================
    SHARED FORM FIELD (templates/includes/form_field.html)
@@ -319,8 +581,8 @@
   border-color: var(--danger-color);
 }
 .form-field-error {
-  margin-top: 0.25rem;
-  font-size: 0.8rem;
+  margin-top: .25rem;
+  font-size: var(--fs-xs);
   color: var(--danger-color);
 }
 
@@ -331,107 +593,85 @@
 .cmdk-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(11, 12, 14, .45);
   z-index: 10000;
   display: flex;
   align-items: flex-start;
   justify-content: center;
   padding-top: 12vh;
 }
-
 .cmdk-panel {
   width: min(560px, 92vw);
   max-height: 60vh;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: 14px;
+  border-radius: 12px;
   box-shadow: var(--shadow-xl);
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
-
 .cmdk-input-row {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.9rem 1.1rem;
+  gap: .75rem;
+  padding: .875rem 1rem;
   border-bottom: 1px solid var(--border-color);
   color: var(--text-muted);
 }
-
 .cmdk-input {
   flex: 1;
   border: none;
   outline: none;
+  box-shadow: none;
+  padding: 0;
   background: transparent;
   color: var(--text-primary);
-  font-size: 0.95rem;
+  font-size: .9375rem;
+  font-family: inherit;
 }
-
 .cmdk-esc {
-  font-size: 0.7rem;
-  padding: 2px 6px;
+  font-family: var(--font-base);
+  font-size: .6875rem;
+  padding: 1px 6px;
   border-radius: 4px;
   background: var(--bg-tertiary);
   color: var(--text-muted);
   border: 1px solid var(--border-color);
 }
-
-.cmdk-results {
-  overflow-y: auto;
-  padding: 0.5rem;
-}
-
+.cmdk-results { overflow-y: auto; padding: .5rem; }
 .cmdk-empty {
   padding: 1.5rem 1rem;
   text-align: center;
   color: var(--text-muted);
-  font-size: 0.85rem;
+  font-size: var(--fs-sm);
 }
-
 .cmdk-group-label {
-  font-size: 0.7rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  font-size: var(--fs-xs);
+  font-weight: 500;
   color: var(--text-muted);
-  padding: 0.5rem 0.6rem 0.25rem;
+  padding: .5rem .6rem .25rem;
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: .4rem;
 }
-
 .cmdk-result {
   display: block;
-  padding: 0.55rem 0.75rem;
-  border-radius: 8px;
+  padding: .5rem .75rem;
+  border-radius: var(--radius-md);
   text-decoration: none;
   color: var(--text-primary);
 }
-
 .cmdk-result:hover,
-.cmdk-result.is-active {
-  background: var(--bg-hover);
-}
+.cmdk-result.is-active { background: var(--bg-hover); }
+.cmdk-result-title { font-size: var(--fs-base); font-weight: 500; }
+.cmdk-result-subtitle { font-size: var(--fs-xs); color: var(--text-muted); margin-top: .1rem; }
 
-.cmdk-result-title {
-  font-size: 0.88rem;
-  font-weight: 600;
-}
-
-.cmdk-result-subtitle {
-  font-size: 0.76rem;
-  color: var(--text-muted);
-  margin-top: 0.1rem;
-}
-
-/* ============================================================
-   SHARED BUTTON PRIMITIVE
-   This exact .btn-primary rule was duplicated verbatim across
-   11 page-specific stylesheets — consolidated here.
-   ============================================================ */
-.btn-primary {
-  background: var(--primary-gradient);
-  color: var(--text-white);
+/* ---------- Search-term highlight ---------- */
+mark {
+  background: var(--warning-bg);
+  color: inherit;
+  padding: 0;
+  border-radius: 2px;
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--warning-color) 45%, transparent);
 }

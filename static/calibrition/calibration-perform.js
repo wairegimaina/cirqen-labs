@@ -183,7 +183,7 @@ function showLoading(message = 'Processing calibration...') {
         <circle class="ring-progress" cx="32" cy="32" r="27"/>
       </svg>
     </div>
-    <div class="loading-title">Processing Calibration</div>
+    <div class="loading-title">Processing calibration</div>
     <div class="loading-text" id="loadingText">${message}</div>
     <div class="loading-steps">
       <div class="loading-step active" id="step-validate">
@@ -210,7 +210,7 @@ function advanceStep(doneId, activeId) {
   if (done) {
     done.classList.remove('active');
     done.classList.add('done');
-    done.querySelector('.step-dot').innerHTML = '✓';
+    done.querySelector('.step-dot').innerHTML = '<i class="fas fa-check"></i>';
   }
   if (active) active.classList.add('active');
 }
@@ -220,7 +220,7 @@ function showSuccess(message = 'Calibration completed successfully!', details = 
   const loadingContent = document.getElementById('loadingContent');
 
   loadingContent.innerHTML = `
-    <div class="loading-success-icon">✅</div>
+    <div class="loading-success-icon"><i class="fas fa-circle-check"></i></div>
     <div class="loading-success-title">${message}</div>
     ${details ? `<div class="loading-success-sub">${details}</div>` : ''}
   `;
@@ -559,7 +559,7 @@ function generateParameterTable(param, setValues) {
   const readingFields = document.getElementById('reading-fields');
 
   const paramSection = document.createElement('div');
-  paramSection.className = 'parameter-section';
+  paramSection.className = 'parameter-section section-card';
 
   // Header
   const header = document.createElement('h3');
@@ -574,7 +574,7 @@ function generateParameterTable(param, setValues) {
   resolutionSection.className = 'parameter-resolution';
   resolutionSection.innerHTML = `
         <div class="form-group">
-            <label for="resolution_${param.id}">⚡ Resolution for ${param.name}:</label>
+            <label for="resolution_${param.id}">Resolution <span class="label-unit">${param.unit || ''}</span></label>
             <input type="number"
                 name="resolution_${param.id}"
                 id="resolution_${param.id}"
@@ -595,15 +595,15 @@ function generateParameterTable(param, setValues) {
   const infoSection = document.createElement('div');
   infoSection.className = 'parameter-info';
   infoSection.innerHTML = `
-        <div class="info-item"><span class="info-label">Standard Reference: </span><span class="info-value">${param.standard_reference || 'N/A'
+        <div class="info-item"><span class="info-label">Standard reference</span><span class="info-value">${param.standard_reference || 'N/A'
     }</span></div>
-        <div class="info-item"><span class="info-label">Reference Uncertainty: </span><span class="info-value">±${param.reference_uncertainty || 'N/A'
+        <div class="info-item"><span class="info-label">Reference uncertainty</span><span class="info-value">±${param.reference_uncertainty || 'N/A'
     } ${param.unit || ''}</span></div>
-        <div class="info-item"><span class="info-label">Tolerance: </span><span class="info-value">±${param.tolerance || 'N/A'
+        <div class="info-item"><span class="info-label">Tolerance</span><span class="info-value">±${param.tolerance || 'N/A'
     } ${param.unit || ''}</span></div>
-        <div class="info-item"><span class="info-label">Coverage Factor: </span><span class="info-value">k = ${param.coverage_factor || '2.0'
+        <div class="info-item"><span class="info-label">Coverage factor</span><span class="info-value">k = ${param.coverage_factor || '2.0'
     }</span></div>
-        <div class="info-item"><span class="info-label">Readings Required: </span><span class="info-value">${requiredReadings} of ${param.num_readings
+        <div class="info-item"><span class="info-label">Readings required</span><span class="info-value">${requiredReadings} of ${param.num_readings
     }</span></div>
     `;
 
@@ -615,8 +615,8 @@ function generateParameterTable(param, setValues) {
   const thead = document.createElement('thead');
   let headerHTML = `
         <tr>
-            <th rowspan="2">Set Value</th>
-            <th rowspan="2">Sub-Parameter</th>
+            <th rowspan="2">Set value</th>
+            <th rowspan="2">Sub-parameter</th>
             <th colspan="${param.num_readings}">Readings (${param.unit || ''})</th>
         </tr>
         <tr>
@@ -694,7 +694,10 @@ function generateParameterTable(param, setValues) {
   paramSection.appendChild(header);
   paramSection.appendChild(resolutionSection);
   paramSection.appendChild(infoSection);
-  paramSection.appendChild(table);
+  const tableWrapper = document.createElement('div');
+  tableWrapper.className = 'table-wrapper';
+  tableWrapper.appendChild(table);
+  paramSection.appendChild(tableWrapper);
 
   readingFields.appendChild(paramSection);
 
@@ -812,18 +815,18 @@ document.getElementById('calibrationForm').addEventListener('submit', function (
 
   const submitBtn = document.getElementById('submitBtn');
   submitBtn.disabled = true;
-  submitBtn.textContent = '⏳ Validating...';
+  submitBtn.textContent = 'Validating…';
 
   if (!validateAllInputs()) {
     // Re-evaluate button state based on current field state (do NOT just re-enable)
     checkAllRequiredFields();
-    submitBtn.textContent = '🚀 Start Calibration';
+    submitBtn.textContent = 'Start calibration';
     hideLoading();
     return false;
   }
 
   showLoading('Processing calibration data...');
-  submitBtn.textContent = '⏳ Processing...';
+  submitBtn.textContent = 'Processing…';
 
   // Step 1 → 2 after 800ms
   setTimeout(() => {
@@ -835,10 +838,10 @@ document.getElementById('calibrationForm').addEventListener('submit', function (
 
       // Show success then submit
       setTimeout(() => {
-        showSuccess('Validation Complete!', 'All inputs are valid. Submitting calibration data…');
+        showSuccess('Validation complete', 'All inputs are valid. Submitting calibration data…');
         setTimeout(() => {
           submitBtn.disabled = false;
-          submitBtn.textContent = '🚀 Start Calibration';
+          submitBtn.textContent = 'Start calibration';
           this.submit();
         }, 1500);
       }, 800);

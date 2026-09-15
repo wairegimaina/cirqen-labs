@@ -4,18 +4,17 @@
 
 /* Card header overrides for report charts */
 .card-header.bg-primary { background: var(--primary-gradient) !important; color: var(--bg-card) !important; }
-.card-header.bg-info    { background: linear-gradient(135deg, var(--info-color), var(--info-color)) !important; color: var(--bg-card) !important; }
-.card-header.bg-success { background: linear-gradient(135deg, var(--success-color), var(--success-color)) !important; color: var(--bg-card) !important; }
-.card-header.bg-warning { background: linear-gradient(135deg, var(--warning-color), var(--warning-color)) !important; color: var(--bg-card) !important; }
-.card-header.bg-danger  { background: linear-gradient(135deg, var(--danger-color), var(--danger-color)) !important; color: var(--bg-card) !important; }
+.card-header.bg-info    { background: var(--info-color) !important; color: var(--bg-card) !important; }
+.card-header.bg-success { background: var(--success-color) !important; color: var(--bg-card) !important; }
+.card-header.bg-warning { background: var(--warning-color) !important; color: var(--bg-card) !important; }
+.card-header.bg-danger  { background: var(--danger-color) !important; color: var(--bg-card) !important; }
 
 /* Metric boxes — replace bg-success/bg-warning/bg-danger/bg-primary bg-opacity-10 */
 .metric-box {
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   transition: transform 0.2s ease;
 }
 .metric-box:hover {
-  transform: scale(1.05);
 }
 
 .metric-box.mb-success {
@@ -37,7 +36,7 @@
 
 /* Progress bar track */
 .progress {
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   background-color: var(--border-light);
 }
 
@@ -48,14 +47,12 @@
 /* Chart card shared */
 .chart-card {
   border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
   box-shadow: var(--shadow-sm);
   transition: box-shadow 0.2s ease, transform 0.2s ease;
 }
 .chart-card:hover {
-  box-shadow: var(--shadow-md);
-  transform: translateY(-2px);
 }
 .chart-card .card-header {
   font-weight: 600;

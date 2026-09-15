@@ -11,124 +11,84 @@
 
 {% block content %}
 
-    <div class="container">
-        <!-- Statistics Cards -->
-        <div class="row mb-4">
-            <div class="col-md-3">
-                <div class="stats-card text-center">
-                    <div class="text-primary mb-2">
-                        <i class="fas fa-list fa-2x"></i>
-                    </div>
-                    <h3 class="mb-1">{{ total_procedures|default:0 }}</h3>
-                    <small class="text-muted">Total Procedures</small>
-                </div>
+    <div class="page-wrap">
+        <!-- Statistics -->
+        <div class="kpi-grid">
+            <div class="kpi-card kpi-primary">
+                <div class="kpi-icon"><i class="fas fa-list" aria-hidden="true"></i></div>
+                <div class="kpi-num">{{ total_procedures|default:0 }}</div>
+                <div class="kpi-label">Total procedures</div>
             </div>
-            <div class="col-md-3">
-                <div class="stats-card text-center">
-                    <div class="text-success mb-2">
-                        <i class="fas fa-check-circle fa-2x"></i>
-                    </div>
-                    <h3 class="mb-1">{{ active_procedures|default:0 }}</h3>
-                    <small class="text-muted">Active Procedures</small>
-                </div>
+            <div class="kpi-card kpi-success">
+                <div class="kpi-icon"><i class="fas fa-check" aria-hidden="true"></i></div>
+                <div class="kpi-num">{{ active_procedures|default:0 }}</div>
+                <div class="kpi-label">Active procedures</div>
             </div>
-            <div class="col-md-3">
-                <div class="stats-card text-center">
-                    <div class="text-info mb-2">
-                        <i class="fas fa-calendar fa-2x"></i>
-                    </div>
-                    <h3 class="mb-1">{{ recent_procedures|default:0 }}</h3>
-                    <small class="text-muted">This Month</small>
-                </div>
+            <div class="kpi-card kpi-info">
+                <div class="kpi-icon"><i class="fas fa-calendar" aria-hidden="true"></i></div>
+                <div class="kpi-num">{{ recent_procedures|default:0 }}</div>
+                <div class="kpi-label">Created this month</div>
             </div>
-            <div class="col-md-3">
-                <div class="stats-card text-center">
-                    <div class="text-warning mb-2">
-                        <i class="fas fa-flask fa-2x"></i>
-                    </div>
-                    <h3 class="mb-1">{{ sessions_count|default:0 }}</h3>
-                    <small class="text-muted">Total Sessions</small>
-                </div>
+            <div class="kpi-card kpi-warning">
+                <div class="kpi-icon"><i class="fas fa-flask" aria-hidden="true"></i></div>
+                <div class="kpi-num">{{ sessions_count|default:0 }}</div>
+                <div class="kpi-label">Total sessions</div>
             </div>
         </div>
 
-        <!-- Search and Filter -->
-        <div class="search-container">
-            <form method="get" class="row g-3">
-                <div class="col-md-4">
-                    <label for="search" class="form-label">Search Procedures</label>
-                    <div class="input-group">
-                        <span class="input-group-text">
-                            <i class="fas fa-search"></i>
-                        </span>
-                        <input type="text" class="form-control" id="search" name="search"
-                            value="{{ search_form.search.value|default:'' }}"
-                            placeholder="Search by name or description...">
-                    </div>
+        <!-- Search and filter -->
+        <div class="section-card toolbar-card search-container">
+            <form method="get" class="toolbar">
+                <div class="search-field">
+                    <i class="fas fa-search" aria-hidden="true"></i>
+                    <input type="text" class="form-control" id="search" name="search"
+                        value="{{ search_form.search.value|default:'' }}"
+                        placeholder="Search by name or description" aria-label="Search procedures">
                 </div>
-
-                <div class="col-md-2">
-                    <label for="date_from" class="form-label">From Date</label>
+                <div class="toolbar-field">
+                    <label for="date_from">From</label>
                     <input type="date" class="form-control" id="date_from" name="date_from"
                         value="{{ search_form.date_from.value|default:'' }}">
                 </div>
-                <div class="col-md-2">
-                    <label for="date_to" class="form-label">To Date</label>
+                <div class="toolbar-field">
+                    <label for="date_to">To</label>
                     <input type="date" class="form-control" id="date_to" name="date_to"
                         value="{{ search_form.date_to.value|default:'' }}">
                 </div>
-                <div class="col-md-1">
-                    <div class="form-label" aria-hidden="true">&nbsp;</div>
-                    <div class="d-grid gap-2">
-                        <button type="submit" class="btn btn-primary" aria-label="Apply filter">
-                            <i class="fas fa-filter"></i>
-                        </button>
-                        <a href="{% url 'calibration:procedure_list' %}" class="btn btn-outline-secondary" aria-label="Clear filter">
-                            <i class="fas fa-times"></i>
-                        </a>
-                    </div>
-                </div>
+                <button type="submit" class="btn btn-secondary">Apply</button>
+                <a href="{% url 'calibration:procedure_list' %}" class="btn btn-link">Clear</a>
             </form>
         </div>
 
-        <!-- Procedures Table - Loaded via AJAX -->
+        <!-- Procedures table — loaded via AJAX -->
         <div id="proceduresList">
-            <div class="text-center py-5 loading-indicator">
-                <div class="spinner-border text-primary" role="status">
-                    <span class="visually-hidden">Loading...</span>
+            <div class="section-card">
+                <div class="empty-state">
+                    <div class="loading-spinner" role="status"><span class="visually-hidden">Loading…</span></div>
+                    <p>Loading procedures…</p>
                 </div>
-                <p class="text-muted mt-2">Loading procedures...</p>
             </div>
         </div>
 
-        <!-- Delete Confirmation Modal -->
+        <!-- Delete confirmation modal -->
         <div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
             <div class="modal-dialog">
                 <div class="modal-content">
-                    <div class="modal-header bg-danger text-white">
-                        <h5 class="modal-title" id="deleteModalLabel">
-                            <i class="fas fa-exclamation-triangle me-2"></i>
-                            Confirm Deletion
-                        </h5>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
-                            aria-label="Close"></button>
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="deleteModalLabel">Delete procedure</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
-                        <div class="text-center mb-3">
-                            <i class="fas fa-exclamation-circle text-danger fa-3x"></i>
-                        </div>
-                        <p class="text-center mb-3">
-                            Are you sure you want to delete the procedure <strong id="procedureName"></strong>?
+                        <p class="mb-0">
+                            Delete the procedure <strong id="procedureName"></strong>? This can't be undone.
                         </p>
                     </div>
                     <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                            <i class="fas fa-times me-2"></i>Cancel
-                        </button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                         <form method="post" id="deleteForm" style="display: inline;">
                             {% csrf_token %}
                             <button type="submit" class="btn btn-danger">
-                                <i class="fas fa-trash me-2"></i>Delete Procedure
+                                <i class="fas fa-trash" aria-hidden="true"></i> Delete procedure
                             </button>
                         </form>
                     </div>
@@ -136,8 +96,6 @@
             </div>
         </div>
     </div>
-
-    <!-- Bootstrap JS -->
 
     <script>
         // AJAX-based procedure loading
@@ -161,7 +119,7 @@
                 if (data.html) {
                     listContainer.innerHTML = data.html;
                 } else {
-                    listContainer.innerHTML = '<div class="text-center py-5"><i class="fas fa-search fa-3x mb-3"></i><h5>No procedures found</h5></div>';
+                    listContainer.innerHTML = '<div class="section-card"><div class="empty-state"><div class="empty-state-icon"><i class="fas fa-search"></i></div><h3>No procedures found</h3></div></div>';
                 }
             } catch (error) {
                 listContainer.innerHTML = '<div class="alert alert-danger">Error loading procedures. Please try again.</div>';

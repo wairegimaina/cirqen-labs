@@ -33,6 +33,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 
 from .agent_prelude import LOG, format_kenyan_time, now_kenyan
+from .event_identity import stable_event_id
 
 
 # ── Schema + trigger DDL (all idempotent) ─────────────────────────────────────
@@ -177,8 +178,13 @@ class OutboxMixin:
     def _event_from_outbox_row(self, row: Dict[str, Any]) -> Dict[str, Any]:
         """Map an outbox row to the event shape the uploader already sends."""
         payload = row["payload"] or {}
+        client_id = getattr(self, "client_id", None)
+        # Version by the row's updated_at when it has one, so the outbox and the
+        # timestamp poller produce the same id for the same row version.
+        version = (payload.get("updated_at") if isinstance(payload, dict) else None) \
+            or f"outbox:{client_id}:{row['seq']}"
         event = {
-            "event_id": str(uuid.uuid4()),
+            "event_id": stable_event_id(row["table_name"], row["row_id"], version, row["op"]),
             # Deterministic idempotency key: stable across retries because seq is
             # immutable. HQ can dedupe on this so a re-sent batch is a no-op.
             "idempotency_key": f"{getattr(self, 'client_id', 'unknown')}:{row['seq']}",
@@ -188,7 +194,7 @@ class OutboxMixin:
             "data": payload,
             "created_at": (row["created_at"].isoformat()
                            if hasattr(row["created_at"], "isoformat") else str(row["created_at"])),
-            "source": "local",
+            "source": client_id or "local",
             "machine_id": getattr(self, "machine_id", None),
             "_outbox_seq": row["seq"],
         }

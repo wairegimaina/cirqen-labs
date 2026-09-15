@@ -44,7 +44,7 @@
             </div>
             {% empty %}
             {% url 'create_reference_module' as create_ref_module_url %}
-            {% include 'includes/empty_state.html' with icon="🧪" title="No reference modules found" message="Add a new reference standard to get started." action_url=create_ref_module_url action_label="Add new reference module" %}
+            {% include 'includes/empty_state.html' with icon="fa-flask" title="No reference modules found" message="Add a new reference standard to get started." action_url=create_ref_module_url action_label="Add new reference module" %}
             {% endfor %}
         </div>
     </div>

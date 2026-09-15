@@ -20,10 +20,28 @@ from CalSoft.models import CalibrationProcedure, CalibrationSession
 
 User = get_user_model()
 
+# trigger_sync_for_changes is imported by name into reconciliation's callers, so
+# it must be patched in every module that looks it up, not on the package.
+SYNC_TARGETS = (
+    "calSchedules.reconciliation.trigger_sync_for_changes",
+    "calSchedules.instant_reconciliation.helpers.trigger_sync_for_changes",
+    "calSchedules.instant_reconciliation.alignment.trigger_sync_for_changes",
+    "calSchedules.instant_reconciliation.signals.trigger_sync_for_changes",
+)
 
-@patch("calSchedules.instant_reconciliation.trigger_sync_for_changes", return_value=0)
-class CertCompleteRescheduleCycleTests(TestCase):
+
+class NoSyncMixin:
     def setUp(self):
+        super().setUp()
+        for target in SYNC_TARGETS:
+            patcher = patch(target, return_value=0)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+
+class CertCompleteRescheduleCycleTests(NoSyncMixin, TestCase):
+    def setUp(self):
+        super().setUp()
         self.user = User.objects.create_user(username="tech", password="pw12345!")
         self.workshop = Workshop.objects.create(name="WS")
         self.dept = Department.objects.create(name="Lab", workshop=self.workshop)
@@ -48,7 +66,7 @@ class CertCompleteRescheduleCycleTests(TestCase):
             certificate_number="BNH-0001",
         )
 
-    def test_certificate_completes_and_locks_schedule(self, _sync):
+    def test_certificate_completes_and_locks_schedule(self):
         session = self._approve_with_certificate()
         session.refresh_from_db()
         self.schedule.refresh_from_db()
@@ -59,7 +77,7 @@ class CertCompleteRescheduleCycleTests(TestCase):
         # avoid UTC-vs-local date-boundary flakiness.
         self.assertEqual(self.schedule.completed_date, session.timestamp.date())
 
-    def test_next_schedule_created_one_period_later(self, _sync):
+    def test_next_schedule_created_one_period_later(self):
         self._approve_with_certificate()
 
         expected_month = self.month + relativedelta(months=12)
@@ -74,15 +92,14 @@ class CertCompleteRescheduleCycleTests(TestCase):
         # generation_source marks it as PPM-auto-created (protected source)
         self.assertEqual(nxt.generation_source, "signal")
 
-    def test_certificate_number_is_sequential_and_pure(self, _sync):
+    def test_certificate_number_is_sequential_and_pure(self):
         # generate_certificate_number now delegates to the pure helper
         self.assertEqual(CalibrationSession.generate_certificate_number(), "BNH-0001")
         self._approve_with_certificate()  # persists BNH-0001
         self.assertEqual(CalibrationSession.generate_certificate_number(), "BNH-0002")
 
 
-@patch("calSchedules.instant_reconciliation.trigger_sync_for_changes", return_value=0)
-class DateBasedGroupsByDepartmentTests(TestCase):
+class DateBasedGroupsByDepartmentTests(NoSyncMixin, TestCase):
     """Proves the vocabulary fix: a schedule stored as 'date_based' is grouped by
     DEPARTMENT (not description) during the PPM auto-reschedule cycle.
 
@@ -92,6 +109,7 @@ class DateBasedGroupsByDepartmentTests(TestCase):
     be its own description-group and reschedule prematurely.
     """
     def setUp(self):
+        super().setUp()
         self.user = User.objects.create_user(username="tech2", password="pw12345!")
         self.workshop = Workshop.objects.create(name="WS")
         self.dept = Department.objects.create(name="Lab", workshop=self.workshop)
@@ -129,13 +147,13 @@ class DateBasedGroupsByDepartmentTests(TestCase):
             equipment=equipment, scheduled_month=nxt, generation_source="signal",
         ).exists()
 
-    def test_partial_department_completion_does_not_reschedule(self, _sync):
+    def test_partial_department_completion_does_not_reschedule(self):
         self._complete(self.sA, "BNH-0001")
         # department group (2 members) is only 1/2 complete → no next schedule yet
         self.assertFalse(self._next_exists(self.eqA))
         self.assertFalse(self._next_exists(self.eqB))
 
-    def test_full_department_completion_reschedules_whole_group(self, _sync):
+    def test_full_department_completion_reschedules_whole_group(self):
         self._complete(self.sA, "BNH-0001")
         self._complete(self.sB, "BNH-0002")
         # now the whole department group is complete → both roll to next period

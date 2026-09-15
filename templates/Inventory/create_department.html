@@ -50,11 +50,17 @@
         {% endif %}
     </div>
 
-    <div class="d-flex justify-content-center mb-4">
+    <div class="d-flex justify-content-center flex-wrap gap-2 mb-4">
         <button type="button" id="toggleFormBtn" class="btn btn-primary btn-lg shadow-md" onclick="toggleAddForm()">
             <i class="fas fa-plus me-2"></i>
             <span>Add New Department</span>
         </button>
+        {% if selected_workshop %}
+        <button type="button" class="btn btn-outline-primary btn-lg shadow-md" data-bs-toggle="modal" data-bs-target="#uploadDepartmentsModal">
+            <i class="fas fa-file-excel me-2"></i>
+            <span>Upload Excel</span>
+        </button>
+        {% endif %}
     </div>
 
     <div id="addDepartmentForm" class="card shadow-md mb-5" style="display: none;">
@@ -134,7 +140,7 @@
             </table>
         </div>
         {% else %}
-        {% include 'includes/empty_state.html' with icon="🏢" title="No Departments Yet" message="This workshop has no departments yet. Create one using the form above." %}
+        {% include 'includes/empty_state.html' with icon="fa-building" title="No Departments Yet" message="This workshop has no departments yet. Create one using the form above." %}
         {% endif %}
     </div>
 </div>
@@ -229,5 +235,11 @@
 {% endblock %}
 
 {% block extra_js %}
+{% if selected_workshop %}
+{% url 'download_department_import_template' selected_workshop.id as departments_template_url %}
+{% url 'upload_departments_excel' selected_workshop.id as departments_upload_url %}
+{% include 'includes/excel_import_modal.html' with modal_id='uploadDepartmentsModal' title='Bulk Upload Departments to '|add:selected_workshop.name noun='department' template_url=departments_template_url upload_url=departments_upload_url help_text='One column: Department Name. Names must be unique across all workshops.' %}
+<script src="{% static 'js/excel_import.js' %}"></script>
+{% endif %}
 <script src="{% static 'Inventory/department_logic.js' %}"></script>
 {% endblock %}

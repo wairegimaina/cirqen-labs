@@ -10,425 +10,368 @@
 {% block page_title %}Calibration Session Detail - {{ session.certificate_number }}{% endblock %}
 
 {% block content %}
-<div class="container">
-      <!-- Header Section -->
+<div class="page-wrap">
 
-          <div class="info-card">
-            <h3>Device Information</h3>
-            <p><strong>Model:</strong> {{ session.device_model }}</p>
-            <p><strong>Serial:</strong> {{ session.device_serial }}</p>
-            <p><strong>Manufacturer:</strong> {{ session.device_manufacturer }}</p>
-            <p><strong>Description:</strong> {{ session.device_description }}</p>
-          </div>
-          <div class="info-card">
-            <h3>Session Status</h3>
-            <span
-              class="status-badge {% if session.overall_pass %}status-pass{% else %}status-fail{% endif %}"
-            >
-              {% if session.overall_pass %}PASSED{% else %}FAILED{% endif %}
-            </span>
-            <p style="margin-top: 10px">
-              <strong>Date:</strong> {{ session.timestamp|date:"Y-m-d H:i" }}
-            </p>
-            <p>
-              <strong>Performed by:</strong> {{ session.performed_by.get_full_name|default:session.performed_by.username }}
-            </p>
+  <div class="page-head">
+    <div>
+      <h2 class="page-heading">{{ session.device_description|default:session.device_model }}</h2>
+      <p class="page-subtitle">
+        Serial <span class="mono-chip">{{ session.device_serial }}</span>
+        · {{ session.timestamp|date:"M d, Y H:i" }}
+      </p>
+    </div>
+    <div class="page-actions">
+      <span class="badge {% if session.overall_pass %}bg-success{% else %}bg-danger{% endif %}">
+        {% if session.overall_pass %}Passed{% else %}Failed{% endif %}
+      </span>
+      <a href="{% url 'calibration:generate_comprehensive_certificate' session.pk %}" class="btn btn-primary">
+        <i class="fas fa-file-pdf" aria-hidden="true"></i> Generate certificate
+      </a>
+    </div>
+  </div>
+
+  <div class="detail-grid">
+    <!-- Main column -->
+    <div class="detail-main">
+
+      <!-- Device -->
+      <section class="section-card">
+        <div class="section-card-head">
+          <h2 class="section-card-title">Device</h2>
+        </div>
+        <div class="section-card-body">
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">Model</span>
+              <span class="info-value">{{ session.device_model|default:"—" }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Serial number</span>
+              <span class="info-value"><span class="mono-chip">{{ session.device_serial|default:"—" }}</span></span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Manufacturer</span>
+              <span class="info-value">{{ session.device_manufacturer|default:"—" }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Description</span>
+              <span class="info-value">{{ session.device_description|default:"—" }}</span>
+            </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div class="content-grid">
-        <!-- Main Content -->
-        <div class="main-content">
-          <!-- Parameter Readings -->
-          <div class="card">
-            <h2>Calibration Readings</h2>
-
-            {% for parameter_key, readings in readings_by_parameter.items %}
-            <div class="parameter-section">
-              <div class="parameter-header">
-                {{ readings.0.parameter.name }}{% if readings.0.sub_parameter %} - {{ readings.0.sub_parameter.name }}{% endif %} ({{ readings.0.parameter.unit }})
-              </div>
-              <div class="parameter-content">
-                <div class="reading-row header">
-                  <div>Set Value</div>
-                  <div>Mean Reading</div>
-                  <div>Std Dev</div>
-                  <div>Error</div>
-                  <div>Uncertainty</div>
-                  <div>Status</div>
-                </div>
+      <!-- Readings -->
+      <section class="section-card">
+        <div class="section-card-head">
+          <h2 class="section-card-title">Calibration readings</h2>
+        </div>
+        {% for parameter_key, readings in readings_by_parameter.items %}
+        <div class="reading-group">
+          <div class="reading-group-title">
+            {{ readings.0.parameter.name }}{% if readings.0.sub_parameter %} — {{ readings.0.sub_parameter.name }}{% endif %}
+            <span class="badge">{{ readings.0.parameter.unit }}</span>
+          </div>
+          <div class="table-wrapper">
+            <table class="table readings-table">
+              <thead>
+                <tr>
+                  <th>Set value</th>
+                  <th class="text-end">Mean reading</th>
+                  <th class="text-end">Std dev</th>
+                  <th class="text-end">Error</th>
+                  <th class="text-end">Uncertainty</th>
+                  <th class="text-end">Result</th>
+                </tr>
+              </thead>
+              <tbody>
                 {% for reading in readings %}
-                <div class="reading-row">
-                  <div class="reading-value">{{ reading.set_value.value }}</div>
-                  <div class="reading-value">
-                    {% if reading.mean %}{{ reading.mean|floatformat:6 }}{% else %}N/A{% endif %}
-                  </div>
-                  <div>
-                    {% if reading.standard_deviation %}{{ reading.standard_deviation|floatformat:6 }}{% else %}N/A{% endif %}
-                  </div>
-                  <div
-                    class="error-value {% if reading.error > 0 %}error-positive{% else %}error-negative{% endif %}"
-                  >
-                    {% if reading.error %}{{ reading.error|floatformat:6 }}{% else %}N/A{% endif %}
-                  </div>
-                  <div>
-                    {% if reading.expanded_uncertainty %}±{{ reading.expanded_uncertainty|floatformat:6 }}{% else %}N/A{% endif %}
-                  </div>
-                  <div
-                    class="{% if reading.passes_tolerance %}tolerance-pass{% else %}tolerance-fail{% endif %}"
-                  >
-                    {% if reading.passes_tolerance %}✓ PASS{% else %}✗ FAIL{% endif %}
-                  </div>
-                </div>
-                {% endfor %}
-              </div>
-            </div>
-            {% empty %}
-            <div class="alert alert-warning">No calibration readings found for this session.</div>
-            {% endfor %}
-          </div>
-
-          <!-- Enhanced Drift Analysis Section -->
-          {% if drift_analysis %}
-          <div class="card">
-            <div class="drift-analysis">
-              <div class="drift-header">
-                <div class="drift-icon">
-                  <i class="bx bx-trending-up"></i>
-                </div>
-                <div>
-                  <h2 style="margin: 0; color: var(--text-primary)">Drift Analysis</h2>
-                  <p style="margin: 5px 0 0 0; color: var(--text-muted)">
-                    Historical performance analysis for {{ session.device_serial }}
-                  </p>
-                </div>
-              </div>
-
-              <!-- Overview Metrics -->
-              <div class="drift-overview">
-                {% if drift_analysis.stability_index %}
-                <div class="drift-metric">
-                  <h4>Stability Index</h4>
-                  <div class="value">{{ drift_analysis.stability_index|floatformat:2 }}</div>
-                </div>
-                {% endif %} {% if drift_analysis.confidence_level %}
-                <div class="drift-metric">
-                  <h4>Confidence Level</h4>
-                  <div class="value">{{ drift_analysis.confidence_level|floatformat:1 }}%</div>
-                </div>
-                {% endif %} {% if drift_analysis.historical_data_points %}
-                <div class="drift-metric">
-                  <h4>Historical Points</h4>
-                  <div class="value">{{ drift_analysis.historical_data_points }}</div>
-                </div>
-                {% endif %}
-
-                <div class="drift-metric">
-                  <h4>Drift Status</h4>
-                  <div class="value">
-                    {% if "stable" in drift_analysis.trend|lower %}
-                    <span class="drift-status drift-stable">Stable</span>
-                    {% elif "significant" in drift_analysis.trend|lower %}
-                    <span class="drift-status drift-critical">Critical</span>
-                    {% else %}
-                    <span class="drift-status drift-warning">Monitoring</span>
-                    {% endif %}
-                  </div>
-                </div>
-              </div>
-
-              <!-- General Trend Information -->
-              {% if drift_analysis.trend %}
-              <div class="alert alert-info">
-                <strong><i class="bx fas fa-info-circle"></i> Overall Drift Trend:</strong> {{ drift_analysis.trend }}
-              </div>
-              {% endif %}
-
-              <!-- Parameter-Specific Drift Analysis -->
-              {% if drift_analysis.parameters %}
-              <div class="drift-parameters">
-                <h3 style="margin-bottom: 15px; color: var(--text-primary)">Parameter Drift Details</h3>
-                {% for param_drift in drift_analysis.parameters %}
-                <div class="drift-parameter">
-                  <div class="parameter-drift-header">
-                    <span class="parameter-name">
-                      {{ param_drift.name }} {% if param_drift.sub_parameter %} - {{ param_drift.sub_parameter }}{% endif %}
+                <tr>
+                  <td class="num">{{ reading.set_value.value }}</td>
+                  <td class="num text-end">{% if reading.mean %}{{ reading.mean|floatformat:6 }}{% else %}—{% endif %}</td>
+                  <td class="num text-end">{% if reading.standard_deviation %}{{ reading.standard_deviation|floatformat:6 }}{% else %}—{% endif %}</td>
+                  <td class="num text-end">{% if reading.error %}{{ reading.error|floatformat:6 }}{% else %}—{% endif %}</td>
+                  <td class="num text-end">{% if reading.expanded_uncertainty %}±{{ reading.expanded_uncertainty|floatformat:6 }}{% else %}—{% endif %}</td>
+                  <td class="text-end">
+                    <span class="badge {% if reading.passes_tolerance %}bg-success{% else %}bg-danger{% endif %}">
+                      {% if reading.passes_tolerance %}Pass{% else %}Fail{% endif %}
                     </span>
-                    <div class="drift-direction">
-                      {% if param_drift.drift_direction == 'increasing' %}
-                      <i class="bx bx-trending-up drift-up"></i>
-                      <span class="drift-up">Increasing</span>
-                      {% elif param_drift.drift_direction == 'decreasing' %}
-                      <i class="bx bx-trending-down drift-down"></i>
-                      <span class="drift-down">Decreasing</span>
-                      {% else %}
-                      <i class="bx bx-minus drift-stable-param"></i>
-                      <span class="drift-stable-param">Stable</span>
-                      {% endif %}
-                    </div>
-                  </div>
-
-                  <div class="drift-details">
-                    {% if param_drift.drift_rate %}
-                    <div class="drift-detail">
-                      <div class="detail-label">Drift Rate</div>
-                      <div class="value">{{ param_drift.drift_rate|floatformat:6 }}/day</div>
-                    </div>
-                    {% endif %} {% if param_drift.confidence %}
-                    <div class="drift-detail">
-                      <div class="detail-label">Confidence</div>
-                      <div class="value">{{ param_drift.confidence|floatformat:1 }}%</div>
-                    </div>
-                    {% endif %} {% if param_drift.historical_readings %}
-                    <div class="drift-detail">
-                      <div class="detail-label">Data Points</div>
-                      <div class="value">{{ param_drift.historical_readings }}</div>
-                    </div>
-                    {% endif %}
-                  </div>
-                </div>
+                  </td>
+                </tr>
                 {% endfor %}
-              </div>
-              {% endif %}
-
-              <!-- Historical Comparison -->
-              {% if drift_analysis.historical_data_points > 5 %}
-              <div class="historical-comparison">
-                <h4><i class="bx bx-history"></i> Historical Performance Comparison</h4>
-                <div class="comparison-grid">
-                  <div class="comparison-item">
-                    <div class="detail-label">Previous Session</div>
-                    <div class="value">
-                      {{ drift_analysis.previous_session_date|default:"N/A" }}
-                    </div>
-                  </div>
-                  <div class="comparison-item">
-                    <div class="detail-label">Avg Drift/Month</div>
-                    <div class="value">
-                      {{ drift_analysis.monthly_drift|default:"N/A"|floatformat:4 }}
-                    </div>
-                  </div>
-                  <div class="comparison-item">
-                    <div class="detail-label">Stability Trend</div>
-                    <div class="value">{{ drift_analysis.stability_trend|default:"Unknown" }}</div>
-                  </div>
-                </div>
-              </div>
-              {% endif %}
-
-              <!-- Recommendations -->
-              {% if drift_analysis.recommendation %}
-              <div class="recommendation-box">
-                <h4><i class="bx bx-lightbulb"></i> Recommendations</h4>
-                <p style="margin: 0">{{ drift_analysis.recommendation }}</p>
-              </div>
-              {% endif %}
-            </div>
+              </tbody>
+            </table>
           </div>
+        </div>
+        {% empty %}
+        <div class="section-card-body">
+          <div class="alert alert-warning mb-0">No calibration readings found for this session.</div>
+        </div>
+        {% endfor %}
+      </section>
+
+      <!-- Drift analysis -->
+      {% if drift_analysis %}
+      <section class="section-card">
+        <div class="section-card-head">
+          <div>
+            <h2 class="section-card-title">Drift analysis</h2>
+            <p class="section-card-sub">Historical performance for {{ session.device_serial }}</p>
+          </div>
+          {% if "stable" in drift_analysis.trend|lower %}
+          <span class="badge bg-success">Stable</span>
+          {% elif "significant" in drift_analysis.trend|lower %}
+          <span class="badge bg-danger">Critical</span>
           {% else %}
-          <div class="card">
-            <div class="drift-analysis">
-              <div class="no-drift-data">
-                <i
-                  class="bx bx-data"
-                  style="font-size: 48px; color: var(--text-muted); display: block; margin-bottom: 15px"
-                ></i>
-                <h3 style="color: var(--text-secondary); margin-bottom: 10px">No Drift Analysis Available</h3>
-                <p style="color: var(--text-muted)">
-                  Insufficient historical data for drift analysis. This feature requires multiple
-                  calibration sessions over time.
-                </p>
-              </div>
+          <span class="badge bg-warning">Monitoring</span>
+          {% endif %}
+        </div>
+        <div class="section-card-body">
+          <div class="info-grid">
+            {% if drift_analysis.stability_index %}
+            <div class="info-item">
+              <span class="info-label">Stability index</span>
+              <span class="info-value">{{ drift_analysis.stability_index|floatformat:2 }}</span>
+            </div>
+            {% endif %}
+            {% if drift_analysis.confidence_level %}
+            <div class="info-item">
+              <span class="info-label">Confidence level</span>
+              <span class="info-value">{{ drift_analysis.confidence_level|floatformat:1 }}%</span>
+            </div>
+            {% endif %}
+            {% if drift_analysis.historical_data_points %}
+            <div class="info-item">
+              <span class="info-label">Historical points</span>
+              <span class="info-value">{{ drift_analysis.historical_data_points }}</span>
+            </div>
+            {% endif %}
+          </div>
+
+          {% if drift_analysis.trend %}
+          <div class="alert alert-info mt-3 mb-0">
+            <strong>Overall trend:</strong> {{ drift_analysis.trend }}
+          </div>
+          {% endif %}
+
+          {% if drift_analysis.parameters %}
+          <h3 class="subsection-title">Parameter drift</h3>
+          <div class="table-wrapper table-bordered-wrap">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Parameter</th>
+                  <th>Direction</th>
+                  <th class="text-end">Drift rate</th>
+                  <th class="text-end">Confidence</th>
+                  <th class="text-end">Data points</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for param_drift in drift_analysis.parameters %}
+                <tr>
+                  <td>{{ param_drift.name }}{% if param_drift.sub_parameter %} — {{ param_drift.sub_parameter }}{% endif %}</td>
+                  <td>
+                    {% if param_drift.drift_direction == 'increasing' %}
+                    <span class="drift-dir is-up"><i class="fas fa-arrow-trend-up" aria-hidden="true"></i> Increasing</span>
+                    {% elif param_drift.drift_direction == 'decreasing' %}
+                    <span class="drift-dir is-down"><i class="fas fa-arrow-trend-down" aria-hidden="true"></i> Decreasing</span>
+                    {% else %}
+                    <span class="drift-dir"><i class="fas fa-minus" aria-hidden="true"></i> Stable</span>
+                    {% endif %}
+                  </td>
+                  <td class="num text-end">{% if param_drift.drift_rate %}{{ param_drift.drift_rate|floatformat:6 }}/day{% else %}—{% endif %}</td>
+                  <td class="num text-end">{% if param_drift.confidence %}{{ param_drift.confidence|floatformat:1 }}%{% else %}—{% endif %}</td>
+                  <td class="num text-end">{% if param_drift.historical_readings %}{{ param_drift.historical_readings }}{% else %}—{% endif %}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% endif %}
+
+          {% if drift_analysis.historical_data_points > 5 %}
+          <h3 class="subsection-title">Historical comparison</h3>
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">Previous session</span>
+              <span class="info-value">{{ drift_analysis.previous_session_date|default:"N/A" }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Average drift / month</span>
+              <span class="info-value">{{ drift_analysis.monthly_drift|default:"N/A"|floatformat:4 }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Stability trend</span>
+              <span class="info-value">{{ drift_analysis.stability_trend|default:"Unknown" }}</span>
             </div>
           </div>
           {% endif %}
 
-          <!-- Linearity Analysis -->
-          {% if linearity_analysis %}
-          <div class="card analysis-card">
-            <h2>Linearity Analysis</h2>
-            <div class="linearity-data">
+          {% if drift_analysis.recommendation %}
+          <div class="alert alert-secondary mt-3 mb-0">
+            <strong>Recommendation:</strong> {{ drift_analysis.recommendation }}
+          </div>
+          {% endif %}
+        </div>
+      </section>
+      {% else %}
+      <section class="section-card">
+        {% include 'includes/empty_state.html' with icon="fa-chart-line" title="No drift analysis yet" message="Drift analysis needs several calibration sessions over time for this device." %}
+      </section>
+      {% endif %}
+
+      <!-- Linearity analysis -->
+      {% if linearity_analysis %}
+      <section class="section-card">
+        <div class="section-card-head">
+          <h2 class="section-card-title">Linearity analysis</h2>
+        </div>
+        <div class="table-wrapper">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Parameter</th>
+                <th class="text-end">Slope</th>
+                <th class="text-end">Intercept</th>
+                <th class="text-end">Max linearity error</th>
+              </tr>
+            </thead>
+            <tbody>
               {% for parameter_key, analysis in linearity_analysis.items %}
-              {% if not analysis.error %}
-              <div class="linearity-item">
-                <h4>{{ parameter_key }} - Slope</h4>
-                <div class="value">{{ analysis.slope|floatformat:6 }}</div>
-              </div>
-              <div class="linearity-item">
-                <h4>{{ parameter_key }} - Intercept</h4>
-                <div class="value">{{ analysis.intercept|floatformat:6 }}</div>
-              </div>
-              <div class="linearity-item">
-                <h4>{{ parameter_key }} - Max Error</h4>
-                <div class="value">{{ analysis.max_linearity_error|floatformat:6 }}</div>
-              </div>
-              {% else %}
-              <div class="linearity-item">
-                <h4>{{ parameter_key }}</h4>
-                <div class="value" style="color: var(--danger-color)">{{ analysis.error }}</div>
-              </div>
-              {% endif %} {% endfor %}
-            </div>
-          </div>
-          {% endif %}
-
-          <!-- Uncertainty Budget -->
-          <div class="card uncertainty-section">
-            <h2>Uncertainty Budget</h2>
-            <div class="uncertainty-grid">
-              {% for parameter_key, readings in readings_by_parameter.items %} {% with readings.0 as first_reading %} {% if first_reading.type_a_uncertainty or first_reading.type_b_uncertainty %}
-              <div class="uncertainty-item">
-                <h4>{{ first_reading.parameter.name }} - Type A</h4>
-                <div class="value">
-                  {% if first_reading.type_a_uncertainty %}±{{ first_reading.type_a_uncertainty|floatformat:6 }}{% else %}N/A{% endif %}
-                </div>
-              </div>
-              <div class="uncertainty-item">
-                <h4>{{ first_reading.parameter.name }} - Type B</h4>
-                <div class="value">
-                  {% if first_reading.type_b_uncertainty %}±{{ first_reading.type_b_uncertainty|floatformat:6 }}{% else %}N/A{% endif %}
-                </div>
-              </div>
-              <div class="uncertainty-item">
-                <h4>{{ first_reading.parameter.name }} - Combined</h4>
-                <div class="value">
-                  {% if first_reading.combined_uncertainty %}±{{ first_reading.combined_uncertainty|floatformat:6 }}{% else %}N/A{% endif %}
-                </div>
-              </div>
-              <div class="uncertainty-item">
-                <h4>{{ first_reading.parameter.name }} - Expanded</h4>
-                <div class="value">
-                  {% if first_reading.expanded_uncertainty %}±{{ first_reading.expanded_uncertainty|floatformat:6 }}{% else %}N/A{% endif %}
-                </div>
-              </div>
-              {% endif %} {% endwith %} {% endfor %}
-            </div>
-          </div>
+              <tr>
+                <td>{{ parameter_key }}</td>
+                {% if not analysis.error %}
+                <td class="num text-end">{{ analysis.slope|floatformat:6 }}</td>
+                <td class="num text-end">{{ analysis.intercept|floatformat:6 }}</td>
+                <td class="num text-end">{{ analysis.max_linearity_error|floatformat:6 }}</td>
+                {% else %}
+                <td colspan="3" class="text-end text-danger">{{ analysis.error }}</td>
+                {% endif %}
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
         </div>
+      </section>
+      {% endif %}
 
-        <!-- Sidebar -->
-        <div class="sidebar">
-          <!-- Environmental Conditions -->
-          <div class="card environmental-conditions">
-            <h2>Environmental Conditions</h2>
-            <div class="env-grid">
-              <div class="env-item">
-                <h4>Temperature</h4>
-                <div class="value">
-                  {% if session.actual_temperature %}{{ session.actual_temperature }}°C{% else %}Not
-                  recorded{% endif %}
-                </div>
-              </div>
-              <div class="env-item">
-                <h4>Humidity</h4>
-                <div class="value">
-                  {% if session.actual_humidity %}{{ session.actual_humidity }}%RH{% else %}Not
-                  recorded{% endif %}
-                </div>
-              </div>
-              <div class="env-item">
-                <h4>Pressure</h4>
-                <div class="value">
-                  {% if session.actual_pressure %}{{ session.actual_pressure }}kPa{% else %}Not
-                  recorded{% endif %}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Session Summary -->
-          <div class="card">
-            <h2>Session Summary</h2>
-            <div style="space-y: 15px">
-              <div style="margin-bottom: 15px">
-                <strong>Procedure:</strong> {{ session.procedure.name }}
-              </div>
-              <div style="margin-bottom: 15px">
-                <strong>Total Readings:</strong> {{ session.readings.count }}
-              </div>
-              <div style="margin-bottom: 15px">
-                <strong>Passed Readings:</strong> {{ session.readings.count }}
-              </div>
-              <div style="margin-bottom: 15px">
-                <strong>Overall Result:</strong>
-                <span
-                  class="{% if session.overall_pass %}tolerance-pass{% else %}tolerance-fail{% endif %}"
-                >
-                  {% if session.overall_pass %}PASSED{% else %}FAILED{% endif %}
-                </span>
-              </div>
-              {% if session.procedure.description %}
-              <div>
-                <strong>Procedure Description:</strong><br />
-                {{ session.procedure.description|truncatewords:20 }}
-              </div>
-              {% endif %}
-            </div>
-          </div>
-
-          <!-- Standards Used -->
-          {% if standards_used %}
-          <div class="card">
-            <h2>Standards Used</h2>
-            {% for standard in standards_used %}
-            <div
-              style="margin-bottom: 15px; padding: 10px; background: var(--bg-secondary); border-radius: 8px"
-            >
-              <div><strong>Parameter:</strong> {{ standard.parameter }}</div>
-              {% if standard.standard_name %}
-              <div><strong>Standard:</strong> {{ standard.standard_name }}</div>
-              <div><strong>Serial:</strong> {{ standard.serial_number }}</div>
-              {% if standard.uncertainty %}
-              <div><strong>Uncertainty:</strong> ±{{ standard.uncertainty }}</div>
-              {% endif %} {% else %}
-              <div>
-                <strong>Reference:</strong> {{ standard.standard_reference|default:"Not specified" }}
-              </div>
-              {% endif %}
-            </div>
-            {% endfor %}
-          </div>
-          {% endif %}
-          <!-- In your session_detail.html template -->
-          <div class="department-info">
-            <h3>Department Information</h3>
-            <p><strong>Department:</strong> {{ department.name }}</p>
-            <p><strong>Workshop:</strong> {{ department.workshop }}</p>
-          </div>
-
-          <!-- Actions -->
-          <div class="card">
-            <h2>Actions</h2>
-            <div class="actions">
-              <a
-                href="{% url 'calibration:generate_comprehensive_certificate' session.pk %}"
-                class="btn btn-primary"
-              >
-                Generate Certificate
-              </a>
-            </div>
-          </div>
+      <!-- Uncertainty budget -->
+      <section class="section-card">
+        <div class="section-card-head">
+          <h2 class="section-card-title">Uncertainty budget</h2>
         </div>
-      </div>
+        <div class="table-wrapper">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Parameter</th>
+                <th class="text-end">Type A</th>
+                <th class="text-end">Type B</th>
+                <th class="text-end">Combined</th>
+                <th class="text-end">Expanded</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for parameter_key, readings in readings_by_parameter.items %}{% with readings.0 as first_reading %}{% if first_reading.type_a_uncertainty or first_reading.type_b_uncertainty %}
+              <tr>
+                <td>{{ first_reading.parameter.name }}</td>
+                <td class="num text-end">{% if first_reading.type_a_uncertainty %}±{{ first_reading.type_a_uncertainty|floatformat:6 }}{% else %}—{% endif %}</td>
+                <td class="num text-end">{% if first_reading.type_b_uncertainty %}±{{ first_reading.type_b_uncertainty|floatformat:6 }}{% else %}—{% endif %}</td>
+                <td class="num text-end">{% if first_reading.combined_uncertainty %}±{{ first_reading.combined_uncertainty|floatformat:6 }}{% else %}—{% endif %}</td>
+                <td class="num text-end">{% if first_reading.expanded_uncertainty %}±{{ first_reading.expanded_uncertainty|floatformat:6 }}{% else %}—{% endif %}</td>
+              </tr>
+              {% endif %}{% endwith %}{% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
-      <!-- Notes Section -->
+      <!-- Notes -->
       {% if session.notes %}
-      <div class="card">
-        <h2>Session Notes</h2>
-        <div
-          style="
-            background: var(--bg-secondary);
-            padding: 20px;
-            border-radius: 10px;
-            border-left: 4px solid #667eea;
-          "
-        >
+      <section class="section-card">
+        <div class="section-card-head">
+          <h2 class="section-card-title">Session notes</h2>
+        </div>
+        <div class="section-card-body session-notes">
           {{ session.notes|linebreaks }}
         </div>
-      </div>
+      </section>
       {% endif %}
     </div>
+
+    <!-- Side column -->
+    <aside class="detail-aside">
+      <section class="section-card">
+        <div class="section-card-head">
+          <h2 class="section-card-title">Summary</h2>
+        </div>
+        <dl class="kv-list">
+          <div>
+            <dt>Result</dt>
+            <dd>
+              <span class="badge {% if session.overall_pass %}bg-success{% else %}bg-danger{% endif %}">
+                {% if session.overall_pass %}Passed{% else %}Failed{% endif %}
+              </span>
+            </dd>
+          </div>
+          <div><dt>Procedure</dt><dd>{{ session.procedure.name }}</dd></div>
+          <div><dt>Performed by</dt><dd>{{ session.performed_by.get_full_name|default:session.performed_by.username }}</dd></div>
+          <div><dt>Date</dt><dd>{{ session.timestamp|date:"Y-m-d H:i" }}</dd></div>
+          <div><dt>Total readings</dt><dd>{{ session.readings.count }}</dd></div>
+          <div><dt>Department</dt><dd>{{ department.name }}</dd></div>
+          <div><dt>Workshop</dt><dd>{{ department.workshop }}</dd></div>
+        </dl>
+        {% if session.procedure.description %}
+        <div class="section-card-foot">{{ session.procedure.description|truncatewords:20 }}</div>
+        {% endif %}
+      </section>
+
+      <section class="section-card">
+        <div class="section-card-head">
+          <h2 class="section-card-title">Environmental conditions</h2>
+        </div>
+        <dl class="kv-list">
+          <div>
+            <dt>Temperature</dt>
+            <dd>{% if session.actual_temperature %}{{ session.actual_temperature }} °C{% else %}Not recorded{% endif %}</dd>
+          </div>
+          <div>
+            <dt>Humidity</dt>
+            <dd>{% if session.actual_humidity %}{{ session.actual_humidity }} %RH{% else %}Not recorded{% endif %}</dd>
+          </div>
+          <div>
+            <dt>Pressure</dt>
+            <dd>{% if session.actual_pressure %}{{ session.actual_pressure }} kPa{% else %}Not recorded{% endif %}</dd>
+          </div>
+        </dl>
+      </section>
+
+      {% if standards_used %}
+      <section class="section-card">
+        <div class="section-card-head">
+          <h2 class="section-card-title">Standards used</h2>
+        </div>
+        <ul class="standards-list">
+          {% for standard in standards_used %}
+          <li>
+            <div class="cell-title">{{ standard.parameter }}</div>
+            {% if standard.standard_name %}
+            <div class="cell-sub">
+              {{ standard.standard_name }} · <span class="mono-chip">{{ standard.serial_number }}</span>
+              {% if standard.uncertainty %} · ±{{ standard.uncertainty }}{% endif %}
+            </div>
+            {% else %}
+            <div class="cell-sub">Reference: {{ standard.standard_reference|default:"Not specified" }}</div>
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+      </section>
+      {% endif %}
+    </aside>
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}

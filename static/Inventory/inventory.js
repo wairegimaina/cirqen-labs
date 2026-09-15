@@ -39,6 +39,7 @@ document.addEventListener('DOMContentLoaded', function () {
     EquipmentReactivation.init();
     ModelAutocomplete.init();
     TransferLogic.init();
+    ExcelImport.init();
 
     if (document.getElementById('inventorySection')) {
       loadEquipmentData();
@@ -951,6 +952,216 @@ function submitAuxData(inputId, selectId, url, fieldName) {
       }
     });
 }
+
+// ==========================================
+// BULK EXCEL IMPORT
+// ==========================================
+// The chosen File is kept in memory and posted twice: once to preview
+// (server validates and rolls back) and once to commit. Nothing is stored
+// server-side between the two calls.
+const ExcelImport = {
+  file: null,
+  modalEl: null,
+
+  init() {
+    this.modalEl = document.getElementById('uploadEquipmentModal');
+    if (!this.modalEl) return;
+
+    document
+      .getElementById('uploadPreviewBtn')
+      ?.addEventListener('click', () => this.send(false));
+    document
+      .getElementById('uploadConfirmBtn')
+      ?.addEventListener('click', () => this.send(true));
+    document
+      .getElementById('uploadBackBtn')
+      ?.addEventListener('click', () => this.reset());
+    document
+      .getElementById('uploadDoneBtn')
+      ?.addEventListener('click', () => this.finish());
+
+    this.modalEl.addEventListener('hidden.bs.modal', () => this.reset());
+  },
+
+  reset() {
+    this.file = null;
+    const input = document.getElementById('equipmentUploadFile');
+    if (input) input.value = '';
+    document.getElementById('uploadStepSelect').style.display = 'block';
+    document.getElementById('uploadStepReview').style.display = 'none';
+    document.getElementById('uploadFooter').style.display = 'none';
+    document.getElementById('uploadError').style.display = 'none';
+    document.getElementById('uploadConfirmBtn').style.display = 'inline-block';
+    document.getElementById('uploadBackBtn').style.display = 'inline-block';
+    document.getElementById('uploadDoneBtn').style.display = 'none';
+    document.getElementById('uploadPreviewBody').innerHTML = '';
+  },
+
+  finish() {
+    bootstrap.Modal.getInstance(this.modalEl)?.hide();
+    loadEquipmentData();
+    loadSummaryData();
+    loadAnalyticsData();
+  },
+
+  showError(message) {
+    const box = document.getElementById('uploadError');
+    box.textContent = message;
+    box.style.display = 'block';
+  },
+
+  send(commit) {
+    if (!commit) {
+      const input = document.getElementById('equipmentUploadFile');
+      if (!input.files.length) return this.showError('Please choose an Excel file first.');
+      this.file = input.files[0];
+      document.getElementById('uploadError').style.display = 'none';
+    }
+    if (!this.file) return this.showError('Please choose an Excel file first.');
+
+    const button = document.getElementById(commit ? 'uploadConfirmBtn' : 'uploadPreviewBtn');
+    const original = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>${
+      commit ? 'Importing...' : 'Validating...'
+    }`;
+
+    const formData = new FormData();
+    formData.append('file', this.file);
+    formData.append('commit', commit ? 'true' : 'false');
+    formData.append(
+      'create_missing',
+      document.getElementById('uploadCreateMissing').checked ? 'true' : 'false',
+    );
+    formData.append('csrfmiddlewaretoken', getCSRFToken());
+
+    fetch(InventoryState.djangoData.urls.uploadEquipmentExcel, {
+      method: 'POST',
+      body: formData,
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (!data.success) {
+          if (commit) {
+            UI.showNotification(data.error || 'Import failed', 'error');
+          } else {
+            this.showError(data.error || 'Could not read that file.');
+          }
+          return;
+        }
+        this.render(data);
+      })
+      .catch(() => {
+        const message = 'Upload failed. Please try again.';
+        commit ? UI.showNotification(message, 'error') : this.showError(message);
+      })
+      .finally(() => {
+        button.disabled = false;
+        button.innerHTML = original;
+      });
+  },
+
+  render(data) {
+    const counts = data.counts;
+    const importable = counts.create + counts.reactivate;
+
+    document.getElementById('uploadStepSelect').style.display = 'none';
+    document.getElementById('uploadStepReview').style.display = 'block';
+    document.getElementById('uploadFooter').style.display = 'flex';
+
+    setText('uploadStatTotal', data.total);
+    setText('uploadStatCreate', counts.create);
+    setText('uploadStatReactivate', counts.reactivate);
+    setText('uploadStatError', counts.error);
+
+    const banner = document.getElementById('uploadResultBanner');
+    banner.style.display = 'block';
+    if (data.committed) {
+      banner.className = 'alert alert-success';
+      banner.innerHTML = `<i class="fas fa-check-circle me-2"></i><strong>Import complete.</strong>
+        ${counts.create} added, ${counts.reactivate} reactivated${
+        counts.error ? `, ${counts.error} skipped due to errors` : ''
+      }.`;
+    } else if (importable === 0) {
+      banner.className = 'alert alert-danger';
+      banner.innerHTML = `<i class="fas fa-times-circle me-2"></i><strong>Nothing can be imported.</strong>
+        Fix the errors below and upload again.`;
+    } else {
+      banner.className = 'alert alert-info';
+      banner.innerHTML = `<i class="fas fa-info-circle me-2"></i><strong>Preview only — nothing has been saved yet.</strong>
+        ${importable} row(s) are ready to import${
+        counts.error ? `; ${counts.error} row(s) have errors and will be skipped` : ''
+      }.`;
+    }
+
+    const newValues = document.getElementById('uploadNewValues');
+    const parts = [];
+    if (data.created_descriptions.length) {
+      parts.push(
+        `<strong>Descriptions ${data.committed ? 'created' : 'to create'}:</strong> ${data.created_descriptions
+          .map(escapeHtml)
+          .join(', ')}`,
+      );
+    }
+    if (data.created_manufacturers.length) {
+      parts.push(
+        `<strong>Manufacturers ${data.committed ? 'created' : 'to create'}:</strong> ${data.created_manufacturers
+          .map(escapeHtml)
+          .join(', ')}`,
+      );
+    }
+    newValues.innerHTML = parts.join('<br>');
+    newValues.style.display = parts.length ? 'block' : 'none';
+
+    const truncated = document.getElementById('uploadTruncated');
+    const warnings = [];
+    if (data.file_truncated) {
+      warnings.push('The file exceeds the 5,000-row limit; only the first 5,000 rows were processed.');
+    }
+    if (data.rows_truncated) {
+      warnings.push('Only the first 500 rows are listed below; all rows were still processed.');
+    }
+    truncated.innerHTML = warnings.join('<br>');
+    truncated.style.display = warnings.length ? 'block' : 'none';
+
+    const badges = {
+      create: '<span class="badge badge-success">New</span>',
+      reactivate: '<span class="badge badge-warning">Reactivate</span>',
+      error: '<span class="badge badge-danger">Error</span>',
+    };
+    document.getElementById('uploadPreviewBody').innerHTML = data.rows
+      .map(
+        (row) => `<tr class="${row.action === 'error' ? 'table-danger' : ''}">
+          <td>${row.row}</td>
+          <td>${badges[row.action] || row.action}</td>
+          <td class="font-monospace">${escapeHtml(row.serial) || '-'}</td>
+          <td>${escapeHtml(row.description) || '-'}</td>
+          <td>${escapeHtml(row.department) || '-'}</td>
+          <td class="small ${row.action === 'error' ? 'text-danger' : 'text-muted'}">
+            ${row.messages.map(escapeHtml).join('<br>')}
+          </td>
+        </tr>`,
+      )
+      .join('');
+
+    const confirmBtn = document.getElementById('uploadConfirmBtn');
+    const doneBtn = document.getElementById('uploadDoneBtn');
+    const backBtn = document.getElementById('uploadBackBtn');
+
+    if (data.committed) {
+      confirmBtn.style.display = 'none';
+      backBtn.style.display = 'none';
+      doneBtn.style.display = 'inline-block';
+      UI.showNotification(`Imported ${importable} equipment record(s)`, 'success');
+    } else {
+      confirmBtn.style.display = importable ? 'inline-block' : 'none';
+      confirmBtn.innerHTML = `<i class="fas fa-check"></i> Import ${importable} row(s)`;
+      doneBtn.style.display = 'none';
+      backBtn.style.display = 'inline-block';
+    }
+  },
+};
 
 // Utils
 function getCSRFToken() {

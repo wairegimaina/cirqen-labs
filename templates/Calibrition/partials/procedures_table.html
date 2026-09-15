@@ -1,86 +1,51 @@
 {% load static %}
 
-<div class="table-container">
-    <div class="table-responsive">
-        <table class="table table-hover mb-0">
-            <thead class="table-dark">
+<div class="section-card">
+    <div class="table-wrapper">
+        <table class="table table-hover procedures-table">
+            <thead>
                 <tr>
-                    <th scope="col">
-                        <i class="fas fa-cog me-2"></i>Procedure
-                    </th>
-                    <th scope="col">
-                        <i class="fas fa-list me-2"></i>Parameters
-                    </th>
-
-                    <th scope="col">
-                        <i class="fas fa-calendar me-2"></i>Created Date
-                    </th>
-
-                    <th scope="col">
-                        <i class="fas fa-cogs me-2"></i>Actions
-                    </th>
+                    <th scope="col">Procedure</th>
+                    <th scope="col">Parameters</th>
+                    <th scope="col">Created</th>
+                    <th scope="col" class="text-end">Actions</th>
                 </tr>
             </thead>
             <tbody>
                 {% for procedure in page_obj %}
                 <tr>
                     <td>
-                        <div class="procedure-name">{{ procedure.name }}</div>
-
-                        <span
-                            class="badge status-badge {% if procedure.is_active %}bg-success{% else %}bg-secondary{% endif %}">
+                        <div class="cell-title procedure-name">{{ procedure.name }}</div>
+                        <span class="badge {% if procedure.is_active %}bg-success{% else %}bg-secondary{% endif %}">
                             {% if procedure.is_active %}Active{% else %}Inactive{% endif %}
                         </span>
                     </td>
                     <td>
-                        <span class="parameter-count">
-                            {{ procedure.parameters.count }}
-                        </span>
+                        <div class="cell-title">{{ procedure.parameters.count }} parameter{{ procedure.parameters.count|pluralize }}</div>
                         {% if procedure.parameters.count > 0 %}
-                        <small class="d-block text-muted mt-1">
-                            {% for param in procedure.parameters.all|slice:":2" %}
-                            {{ param.name }}{% if not forloop.last %}, {% endif %}
-                            {% endfor %}
-                            {% if procedure.parameters.count > 2 %}
-                            <span class="text-muted">... +{{ procedure.parameters.count|add:"-2" }}
-                                more</span>
-                            {% endif %}
-                        </small>
+                        <div class="cell-sub">
+                            {% for param in procedure.parameters.all|slice:":2" %}{{ param.name }}{% if not forloop.last %}, {% endif %}{% endfor %}{% if procedure.parameters.count > 2 %} +{{ procedure.parameters.count|add:"-2" }} more{% endif %}
+                        </div>
                         {% endif %}
                     </td>
-
                     <td>
-                        <div class="created-info">
-                            <i class="fas fa-calendar me-1"></i>
-                            {{ procedure.created_date|date:"M d, Y" }}<br>
-                            <small class="text-muted">{{ procedure.created_date|timesince }} ago</small>
-                        </div>
+                        <div>{{ procedure.created_date|date:"M d, Y" }}</div>
+                        <div class="cell-sub">{{ procedure.created_date|timesince }} ago</div>
                     </td>
-
-                    <td>
-                        <div class="action-buttons">
-
-                            <button type="button" class="btn btn-outline-danger btn-action"
-                                title="Delete Procedure" data-bs-toggle="modal"
-                                data-bs-target="#deleteModal" data-procedure-id="{{ procedure.pk }}"
-                                data-procedure-name="{{ procedure.name }}">
-                                Delete <i class="fas fa-trash"></i>
-                            </button>
-
-                        </div>
+                    <td class="text-end">
+                        <button type="button" class="btn btn-outline-danger btn-sm"
+                            title="Delete procedure" data-bs-toggle="modal"
+                            data-bs-target="#deleteModal" data-procedure-id="{{ procedure.pk }}"
+                            data-procedure-name="{{ procedure.name }}">
+                            <i class="fas fa-trash" aria-hidden="true"></i> Delete
+                        </button>
                     </td>
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="4" class="text-center py-5">
-                        <div class="text-muted">
-                            <i class="fas fa-search fa-3x mb-3"></i>
-                            <h5>No procedures found</h5>
-                            <p>Try adjusting your search criteria or create a new procedure.</p>
-                            <a href="{% url 'calibration:procedure_create' %}" class="btn btn-primary">
-                                <i class="fas fa-plus me-2"></i>Create New Procedure
-                            </a>
-                        </div>
+                    <td colspan="4" class="p-0">
+                        {% url 'calibration:procedure_create' as create_url %}
+                        {% include 'includes/empty_state.html' with icon="fa-clipboard-list" title="No procedures found" message="Try adjusting your search, or create a new procedure." action_url=create_url action_label="Create procedure" %}
                     </td>
                 </tr>
                 {% endfor %}
@@ -88,15 +53,11 @@
         </table>
     </div>
 
-    <!-- Pagination -->
     {% if page_obj.has_other_pages %}
-    <div class="d-flex justify-content-between align-items-center p-3 border-top">
-        <div class="text-muted">
-            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }}
-            procedures
-        </div>
+    <div class="section-card-foot">
+        <span>Showing {{ page_obj.start_index }}–{{ page_obj.end_index }} of {{ page_obj.paginator.count }}</span>
         <nav aria-label="Procedures pagination">
-            <ul class="pagination pagination-sm mb-0">
+            <ul class="pagination">
                 {% if page_obj.has_previous %}
                 <li class="page-item">
                     <a class="page-link" href="#" data-page="1" aria-label="First page">

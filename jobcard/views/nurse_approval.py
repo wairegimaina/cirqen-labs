@@ -49,6 +49,12 @@ from .helpers import get_or_create_user_signature
 from .listing import waiting_jobcards
 
 
+def _has_saved_signature(user):
+    """Whether the user has a stored signature to offer as the auto-signature."""
+    signature = UserSignature.objects.filter(user=user, active_status=True).first()
+    return bool(signature and signature.has_signature())
+
+
 def handle_nurse_approval(request, nurse_department):
     import logging
     from uuid import UUID
@@ -103,7 +109,7 @@ def handle_nurse_approval(request, nurse_department):
             'departments': departments_list,
             'accessories': Accessories.objects.none(),
             'selected_job_card': selected_job_card,
-            'user_signature_available': hasattr(request.user, 'signature_data') and bool(request.user.signature_data)
+            'user_signature_available': _has_saved_signature(request.user)
         })
 
     if not all([jobcard_id, nurse_name]):
@@ -117,7 +123,7 @@ def handle_nurse_approval(request, nurse_department):
             'departments': departments_list,
             'accessories': Accessories.objects.none(),
             'selected_job_card': selected_job_card,
-            'user_signature_available': hasattr(request.user, 'signature_data') and bool(request.user.signature_data)
+            'user_signature_available': _has_saved_signature(request.user)
         })
 
     try:
@@ -135,7 +141,7 @@ def handle_nurse_approval(request, nurse_department):
                 'departments': departments_list,
                 'accessories': Accessories.objects.none(),
                 'selected_job_card': selected_job_card,
-                'user_signature_available': hasattr(request.user, 'signature_data') and bool(request.user.signature_data)
+                'user_signature_available': _has_saved_signature(request.user)
             })
 
         with transaction.atomic():
@@ -157,7 +163,7 @@ def handle_nurse_approval(request, nurse_department):
                     'departments': departments_list,
                     'accessories': Accessories.objects.none(),
                     'selected_job_card': job_card,
-                    'user_signature_available': hasattr(request.user, 'signature_data') and bool(request.user.signature_data)
+                    'user_signature_available': _has_saved_signature(request.user)
                 })
 
             # Set nurse verification details
@@ -200,7 +206,7 @@ def handle_nurse_approval(request, nurse_department):
                                 'departments': departments_list,
                                 'accessories': Accessories.objects.none(),
                                 'selected_job_card': job_card,
-                                'user_signature_available': hasattr(request.user, 'signature_data') and bool(request.user.signature_data)
+                                'user_signature_available': _has_saved_signature(request.user)
                             })
 
                         # Validate equipment still matches
@@ -220,7 +226,7 @@ def handle_nurse_approval(request, nurse_department):
                                 'departments': departments_list,
                                 'accessories': Accessories.objects.none(),
                                 'selected_job_card': job_card,
-                                'user_signature_available': hasattr(request.user, 'signature_data') and bool(request.user.signature_data)
+                                'user_signature_available': _has_saved_signature(request.user)
                             })
 
                     # Deduct stock and update job card
@@ -287,7 +293,7 @@ def handle_nurse_approval(request, nurse_department):
                         'departments': departments_list,
                         'accessories': Accessories.objects.none(),
                         'selected_job_card': job_card,
-                        'user_signature_available': hasattr(request.user, 'signature_data') and bool(request.user.signature_data)
+                        'user_signature_available': _has_saved_signature(request.user)
                     })
 
             # Handle decline
@@ -303,7 +309,7 @@ def handle_nurse_approval(request, nurse_department):
                         'departments': departments_list,
                         'accessories': Accessories.objects.none(),
                         'selected_job_card': job_card,
-                        'user_signature_available': hasattr(request.user, 'signature_data') and bool(request.user.signature_data)
+                        'user_signature_available': _has_saved_signature(request.user)
                     })
 
                 # ✅ NEW: Check if declining a PPM-linked job card
@@ -343,7 +349,7 @@ def handle_nurse_approval(request, nurse_department):
                     'departments': departments_list,
                     'accessories': Accessories.objects.none(),
                     'selected_job_card': job_card,
-                    'user_signature_available': hasattr(request.user, 'signature_data') and bool(request.user.signature_data)
+                    'user_signature_available': _has_saved_signature(request.user)
                 })
 
     except jobcard.DoesNotExist:
@@ -361,7 +367,7 @@ def handle_nurse_approval(request, nurse_department):
             'departments': departments_list,
             'accessories': Accessories.objects.none(),
             'selected_job_card': selected_job_card,
-            'user_signature_available': hasattr(request.user, 'signature_data') and bool(request.user.signature_data)
+            'user_signature_available': _has_saved_signature(request.user)
         })
 
     except Exception as e:
@@ -376,5 +382,5 @@ def handle_nurse_approval(request, nurse_department):
             'departments': departments_list,
             'accessories': Accessories.objects.none(),
             'selected_job_card': selected_job_card,
-            'user_signature_available': hasattr(request.user, 'signature_data') and bool(request.user.signature_data)
+            'user_signature_available': _has_saved_signature(request.user)
         })

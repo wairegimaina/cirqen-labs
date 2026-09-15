@@ -37,6 +37,9 @@
                     <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addEquipmentModal">
                         <i class="fas fa-plus"></i> Add New
                     </button>
+                    <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#uploadEquipmentModal">
+                        <i class="fas fa-file-excel"></i> Upload Excel
+                    </button>
                 </div>
             </div>
 
@@ -160,7 +163,7 @@
                         {% empty %}
                         <tr>
                             <td colspan="8">
-                                {% include 'includes/empty_state.html' with icon="📦" title="No equipment found" message="Try adjusting your search or filters." %}
+                                {% include 'includes/empty_state.html' with icon="fa-box-open" title="No equipment found" message="Try adjusting your search or filters." %}
                             </td>
                         </tr>
                         {% endfor %}
@@ -483,6 +486,121 @@
     </div>
 </div>
 
+<!-- Bulk Upload Equipment Modal -->
+<div class="modal fade" id="uploadEquipmentModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-primary-subtle">
+                <h5 class="modal-title"><i class="fas fa-file-excel me-2"></i>Bulk Upload Equipment</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body">
+                {% csrf_token %}
+
+                <!-- Step 1: pick a file -->
+                <div id="uploadStepSelect">
+                    <div class="alert alert-info d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div>
+                            <strong>New to this?</strong>
+                            Download the template to get the exact columns, dropdowns and the list
+                            of departments already in your workshop.
+                        </div>
+                        <a href="{% url 'download_equipment_import_template' %}" class="btn btn-outline-primary btn-sm text-nowrap">
+                            <i class="fas fa-download"></i> Download Template
+                        </a>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label" for="equipmentUploadFile">Excel file (.xlsx)</label>
+                        <input type="file" id="equipmentUploadFile" class="form-control" accept=".xlsx,.xlsm">
+                        <div class="form-text">
+                            Required columns: Description, Model, Serial Number, Department, Status.
+                            Manufacturer is optional. Maximum 5,000 rows.
+                        </div>
+                    </div>
+
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="uploadCreateMissing" checked>
+                        <label class="form-check-label" for="uploadCreateMissing">
+                            Create missing descriptions and manufacturers automatically
+                        </label>
+                    </div>
+
+                    <div id="uploadError" class="alert alert-danger" style="display:none;"></div>
+
+                    <button type="button" class="btn btn-primary w-100" id="uploadPreviewBtn">
+                        <i class="fas fa-eye"></i> Validate &amp; Preview
+                    </button>
+                </div>
+
+                <!-- Step 2 / 3: preview and result -->
+                <div id="uploadStepReview" style="display:none;">
+                    <div id="uploadResultBanner" class="alert" style="display:none;"></div>
+
+                    <div class="row g-2 mb-3 text-center">
+                        <div class="col-6 col-md-3">
+                            <div class="border rounded p-2">
+                                <div class="fs-4 fw-bold" id="uploadStatTotal">0</div>
+                                <div class="small text-muted">Rows read</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="border rounded p-2">
+                                <div class="fs-4 fw-bold text-success" id="uploadStatCreate">0</div>
+                                <div class="small text-muted">New equipment</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="border rounded p-2">
+                                <div class="fs-4 fw-bold text-warning" id="uploadStatReactivate">0</div>
+                                <div class="small text-muted">Reactivated</div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="border rounded p-2">
+                                <div class="fs-4 fw-bold text-danger" id="uploadStatError">0</div>
+                                <div class="small text-muted">Rows with errors</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="uploadNewValues" class="alert alert-secondary py-2 small" style="display:none;"></div>
+                    <div id="uploadTruncated" class="alert alert-warning py-2 small" style="display:none;"></div>
+
+                    <div class="table-responsive" style="max-height: 340px;">
+                        <table class="table table-sm table-hover align-middle mb-0">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th style="width:70px;">Row</th>
+                                    <th style="width:120px;">Outcome</th>
+                                    <th>Serial No.</th>
+                                    <th>Description</th>
+                                    <th>Department</th>
+                                    <th>Details</th>
+                                </tr>
+                            </thead>
+                            <tbody id="uploadPreviewBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer" id="uploadFooter" style="display:none;">
+                <button type="button" class="btn btn-secondary" id="uploadBackBtn">
+                    <i class="fas fa-arrow-left"></i> Choose another file
+                </button>
+                <button type="button" class="btn btn-success" id="uploadConfirmBtn">
+                    <i class="fas fa-check"></i> Import
+                </button>
+                <button type="button" class="btn btn-primary" id="uploadDoneBtn" style="display:none;">
+                    Done
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Edit Equipment Modal -->
 <div class="modal fade" id="editEquipmentModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -722,6 +840,8 @@
     "createManufacturer": "{% url 'create_manufacturer' %}",
     "createEquipmentDescription": "{% url 'create_equipment_description' %}",
     "checkEquipmentAvailability": "{% url 'check_equipment_availability' %}",
+    "uploadEquipmentExcel": "{% url 'upload_equipment_excel' %}",
+    "importTemplate": "{% url 'download_equipment_import_template' %}",
     "editInventory": "/Inventory/edit_inventory/"
   },
   "currentDepartment": {% if current_department %}"{{ current_department.id }}"{% else %}null{% endif %},

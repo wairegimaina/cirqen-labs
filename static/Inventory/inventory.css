@@ -22,7 +22,7 @@
   display: flex;
   background-color: var(--bg-card);
   padding: 0.5rem;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-color);
   box-shadow: var(--shadow-sm);
   gap: 0.5rem;
@@ -34,7 +34,7 @@
   background: transparent;
   color: var(--text-secondary);
   padding: 0.4rem;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -73,40 +73,21 @@
   overflow: hidden;
   border: 1px solid var(--border-color);
   background-color: var(--bg-card);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
 }
 
-.table {
-  /* Force Bootstrap to use theme variables for its internal styling */
-  --bs-table-bg: var(--bg-card) !important;
-  --bs-table-color: var(--text-primary) !important;
-  --bs-table-hover-bg: var(--bg-hover) !important;
-  --bs-table-hover-color: var(--text-primary) !important;
-  --bs-table-border-color: var(--border-color) !important;
-
-  background-color: var(--bg-card) !important;
-  color: var(--text-primary) !important;
-  margin-bottom: 0;
-  width: 100%;
-  border-collapse: collapse;
-}
-
 /* Table Headers - Fixed for Dark Mode */
-.table thead th,
 #summaryTable thead th {
   background-color: var(--bg-tertiary) !important;
   color: var(--text-primary) !important;
-  font-weight: 700;
-  text-transform: uppercase;
+  font-weight: 600;
   font-size: 0.75rem;
-  letter-spacing: 0.05em;
   border-bottom: 2px solid var(--border-color) !important;
   padding: 0.5rem;
 }
 
 /* Table Body Cells */
-.table tbody td,
 #summaryTable tbody td {
   padding: 0.5rem;
   vertical-align: middle;
@@ -123,7 +104,7 @@
 
 /* Summary Table Specific Fixes */
 #summaryTable {
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   overflow: hidden;
 }
 
@@ -133,14 +114,12 @@
 }
 
 /* Typography Utilities */
-.text-primary { color: var(--primary-color) !important; }
 .font-monospace {
   font-family: var(--font-mono);
   letter-spacing: 0.5px;
   font-size: 0.85rem;
 }
 /* Specific text colors */
-.text-primary { color: var(--primary-color) !important; }
 .font-monospace { font-family: var(--font-mono); letter-spacing: 0.5px; }
 
 /* Loading Overlay */
@@ -158,18 +137,6 @@
 }
 
 /* --- Modals (Theme Adapted) --- */
-.modal-content {
-  background-color: var(--bg-card);
-  color: var(--text-primary);
-  border: 1px solid var(--border-color);
-  box-shadow: var(--shadow-xl);
-}
-
-.modal-header,
-.modal-footer {
-  background-color: var(--bg-tertiary);
-  border-color: var(--border-color);
-}
 
 /* Transfer Modal Specific Styling */
 .modal-header.bg-info-subtle {
@@ -193,17 +160,7 @@
   padding-right: 1.5rem;
 }
 
-.btn-close {
-  /* Inverts close button color in dark mode so it's visible */
-  filter: var(--btn-close-filter);
-}
-
 /* Input group icons */
-.input-group-text {
-  background-color: var(--bg-tertiary);
-  border-color: var(--input-border);
-  color: var(--text-primary);
-}
 
 /* Select options visibility in dark mode */
 select.form-select option {
@@ -214,21 +171,14 @@ select.form-select option {
 /* Responsive Table */
 @media (max-width: 768px) {
   .spa-nav-container { flex-direction: column; }
-  .table thead { display: none; }
-  .table tbody tr {
+    .table tbody tr {
     display: block;
     border: 1px solid var(--border-color);
     margin-bottom: 1rem;
     padding: 0.5rem;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
   }
-  .table tbody td {
-    display: flex;
-    justify-content: space-between;
-    padding: 0.5rem 0;
-    border: none;
-  }
-  .table tbody td::before {
+    .table tbody td::before {
     content: attr(data-label);
     font-weight: 600;
     color: var(--text-secondary);

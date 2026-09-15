@@ -242,6 +242,16 @@ class LifecycleMixin(SmartDeleteMixin):
                 # maintenance version of this same logic).
                 ("CertConflictGuardThread", self.cert_conflict_guard_loop, "Certificate conflict guard thread")
             )
+            self._thread_specs.append(
+                # Drift reconciler — periodically compares row counts with HQ and
+                # rewinds the upload checkpoint of any table HQ is behind on. The
+                # upload loop only looks forward (updated_at > checkpoint), so
+                # rows stranded behind a checkpoint are invisible to it forever;
+                # this is the only thing that makes them visible again. See
+                # drift_reconciler.py for how they get stranded.
+                ("DriftReconcilerThread", self.drift_reconciliation_loop,
+                 "Drift reconciler thread (self-heals stranded rows)")
+            )
 
             self._named_threads = {}
             self._thread_restart_counts = {name: 0 for name, _, _ in self._thread_specs}

@@ -178,7 +178,7 @@
   top: 20%;
   width: 2px;
   height: 60%;
-  background: linear-gradient(to bottom, transparent, rgba(192, 192, 192, 0.28), transparent);
+  background: transparent;
 }
 
 .hero-content {
@@ -224,8 +224,6 @@
 }
 
 .logo-container:hover {
-  transform: scale(1.06) rotate(4deg);
-  box-shadow: 0 0 90px rgba(192, 192, 192, 0.28);
   border-color: rgba(192, 192, 192, 0.38);
 }
 
@@ -244,7 +242,7 @@
 /* Hero text */
 .hero-content h2 {
   font-size: 2.5rem;
-  font-weight: 700;
+  font-weight: 600;
   margin-bottom: var(--sp-md);
   letter-spacing: -0.5px;
   color: var(--hero-text);
@@ -305,7 +303,6 @@
 .feature-item:hover {
   background: rgba(192, 192, 192, 0.05);
   border-color: rgba(192, 192, 192, 0.16);
-  transform: translateX(4px);
 }
 
 .feature-icon {
@@ -421,7 +418,7 @@
 .login-header h2,
 .header-section h2 {
   font-size: 1.875rem;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
   margin-bottom: var(--sp-sm);
   letter-spacing: -0.5px;
@@ -503,15 +500,6 @@ input::placeholder {
 }
 
 /* Labels */
-.form-label {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-sm);
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin-bottom: var(--sp-sm);
-}
 
 .form-label i {
   color: var(--accent);
@@ -519,8 +507,7 @@ input::placeholder {
 }
 
 /* Field-level errors */
-.field-error,
-.text-danger {
+.field-error {
   display: flex;
   align-items: center;
   gap: var(--sp-xs);
@@ -612,27 +599,6 @@ input::placeholder {
 }
 
 /* Generic .form-control (setup / verify pages) */
-.form-control {
-  width: 100%;
-  padding: 0.8rem var(--sp-lg);
-  font-size: 0.9375rem;
-  color: var(--text-primary);
-  background: var(--input-bg);
-  border: 1px solid var(--input-border);
-  border-radius: var(--r-lg);
-  outline: none;
-  font-family: inherit;
-}
-
-.form-control:focus {
-  border-color: var(--input-focus-border);
-  box-shadow: var(--input-focus-shadow);
-  background: var(--bg-card);
-}
-
-.form-control::placeholder {
-  color: var(--text-muted);
-}
 
 .password-input-wrapper {
   position: relative;
@@ -699,7 +665,7 @@ input::placeholder {
 }
 
 #countdown {
-  font-weight: 700;
+  font-weight: 600;
   color: var(--warning-color);
   font-size: 1.125rem;
 }
@@ -746,7 +712,7 @@ input::placeholder {
   left: -100%;
   width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
+  background: transparent;
   transition: left 0.5s;
 }
 
@@ -757,9 +723,6 @@ input::placeholder {
 
 .login-btn:hover,
 .btn.btn-primary:hover {
-  filter: brightness(1.12);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-lg);
 }
 
 .login-btn:active,
@@ -772,7 +735,6 @@ input::placeholder {
 }
 
 .login-btn:hover i {
-  transform: translateX(4px);
 }
 
 .login-btn.loading {
@@ -801,28 +763,6 @@ input::placeholder {
 }
 
 .back-link:hover i {
-  transform: translateX(-4px);
-}
-
-.btn-secondary {
-  padding: var(--sp-sm) var(--sp-lg);
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  background: var(--border-mid);
-  border: 1px solid var(--border-color);
-  border-radius: var(--r-lg);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-sm);
-  text-decoration: none;
-}
-
-.btn-secondary:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-  transform: translateY(-1px);
 }
 
 /* Powered-by footer */
@@ -844,17 +784,6 @@ input::placeholder {
 }
 
 /* ─── Alerts ─── */
-.alert {
-  border-radius: var(--r-xl);
-  padding: var(--sp-md) var(--sp-lg);
-  margin-bottom: var(--sp-lg);
-  font-size: 0.875rem;
-  display: flex;
-  align-items: center;
-  gap: var(--sp-md);
-  border: none;
-  animation: alertDrop 0.3s ease-out;
-}
 
 @keyframes alertDrop {
   from {
@@ -866,46 +795,6 @@ input::placeholder {
     opacity: 1;
     transform: translateY(0);
   }
-}
-
-.alert-success {
-  background: color-mix(in srgb, var(--success-color) 12%, var(--bg-card));
-  color: var(--success-color);
-  border-left: 3px solid var(--success-color);
-}
-
-[data-theme="light"] .alert-success {
-  background: var(--border-mid);
-  color: var(--primary-dark);
-  border-left: 3px solid var(--success-color);
-}
-
-.alert-danger {
-  background: color-mix(in srgb, var(--danger-color) 12%, var(--bg-card));
-  color: var(--danger-color);
-  border-left: 3px solid var(--danger-color);
-}
-
-.alert-info {
-  background: color-mix(in srgb, var(--info-color) 12%, var(--bg-card));
-  color: var(--info-color);
-  border-left: 3px solid var(--info-color);
-}
-
-.alert-warning {
-  background: color-mix(in srgb, var(--warning-color) 12%, var(--bg-card));
-  color: var(--warning-color);
-  border-left: 3px solid var(--warning-color);
-}
-
-.btn-close {
-  margin-left: auto;
-  filter: var(--btn-close-filter);
-  opacity: 0.6;
-}
-
-.btn-close:hover {
-  opacity: 1;
 }
 
 /* Submit section */
@@ -927,7 +816,7 @@ input::placeholder {
   text-align: center !important;
   font-size: 2rem !important;
   letter-spacing: 0.6rem !important;
-  font-weight: 700 !important;
+  font-weight: 600 !important;
   padding: 1.25rem !important;
   color: var(--text-primary) !important;
   background: var(--input-bg) !important;
@@ -988,7 +877,7 @@ input::placeholder {
 
 .setup-header h1 {
   font-size: 1.875rem;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
   margin-bottom: var(--sp-sm);
   display: flex;
@@ -1018,7 +907,7 @@ input::placeholder {
 
 .welcome-message h3 {
   font-size: 1.25rem;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
   margin-bottom: var(--sp-sm);
   display: flex;
@@ -1097,7 +986,7 @@ input::placeholder {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 700;
+  font-weight: 600;
   font-size: 1.2rem;
   flex-shrink: 0;
 }
@@ -1232,7 +1121,7 @@ input::placeholder {
 .password-requirements li::before {
   content: '✓';
   color: var(--accent);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .requirement {
@@ -1287,7 +1176,6 @@ input::placeholder {
 
 #signature-pad:hover {
   border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px var(--primary-light);
 }
 
 .signature-controls {
@@ -1297,22 +1185,6 @@ input::placeholder {
 }
 
 /* ─── Scrollbar ─── */
-::-webkit-scrollbar {
-  width: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: var(--bg-primary);
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: 3px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
-}
 
 /* =====================================================
    RESPONSIVE
@@ -1403,7 +1275,7 @@ input::placeholder {
   display: flex;
   align-items: center;
   gap: 12px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 13px 14px 13px 16px;
   margin-bottom: 20px;
   animation: bannerSlideIn 0.35s cubic-bezier(0.22, 1, 0.36, 1);
@@ -1464,7 +1336,7 @@ input::placeholder {
   border: none;
   padding: 4px;
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   transition: opacity 0.15s, background 0.15s;
   opacity: 0.55;
 }
@@ -1498,7 +1370,7 @@ input::placeholder {
   background: #fffbeb;
   border: 1.5px solid #fde68a;
   border-left: 4px solid var(--warning-color);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   padding: 11px 12px 11px 14px;
   margin-top: -0.6rem;
   margin-bottom: 1.2rem;
@@ -1544,7 +1416,7 @@ input::placeholder {
   color: #b45309;
   opacity: 0.55;
   transition: opacity 0.15s, background 0.15s;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   margin-top: 3px;
 }
 
@@ -1618,7 +1490,7 @@ input::placeholder {
   background: #fff5f5;
   border: 1.5px solid #feb2b2;
   border-left: 4px solid #e53e3e;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   padding: 14px 14px 14px 16px;
   margin-bottom: 20px;
   box-shadow: 0 2px 12px rgba(229, 62, 62, 0.10);
@@ -1674,12 +1546,10 @@ input::placeholder {
 }
 
 .auth-error-title {
-  font-weight: 700;
+  font-weight: 600;
   font-size: 0.88rem;
   color: #c53030;
   margin: 0 0 4px;
-  letter-spacing: 0.01em;
-  text-transform: uppercase;
 }
 
 .auth-error-list {
@@ -1714,7 +1584,7 @@ input::placeholder {
   color: #c53030;
   opacity: 0.6;
   transition: opacity 0.15s;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 .auth-error-dismiss:hover {

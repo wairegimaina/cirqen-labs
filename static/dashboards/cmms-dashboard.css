@@ -39,7 +39,7 @@
   margin-bottom: 24px;
   border-bottom: 1px solid var(--border-color);
   background: var(--bg-secondary);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 18px 22px;
   border: 1px solid var(--border-color);
 }
@@ -74,10 +74,8 @@
   color: var(--success-color);
   font-size: 0.72rem;
   font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
   padding: 6px 12px;
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
 }
 
 .live-badge::before {
@@ -112,30 +110,20 @@
   font-size: 0.78rem;
   font-weight: 500;
   padding: 8px 16px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
   transition: all 0.25s ease;
 }
 .btn-refresh:hover {
   border-color: var(--info-color);
-  background: linear-gradient(
-    135deg,
-    rgba(14, 165, 233, 0.1) 0%,
-    rgba(99, 102, 241, 0.1) 100%
-  );
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(14, 165, 233, 0.2);
+  background: rgba(14, 165, 233, 0.1);
 }
 
 /* ─── Alert Banner ──────────────────────────────── */
 .alert-banner {
-  background: linear-gradient(
-    135deg,
-    rgba(245, 158, 11, 0.15) 0%,
-    rgba(239, 68, 68, 0.12) 100%
-  );
+  background: rgba(245, 158, 11, 0.15);
   border: 1px solid rgba(245, 158, 11, 0.4);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 14px 20px;
   font-size: 0.82rem;
   color: var(--warning-color);
@@ -163,8 +151,6 @@
 .modules-section-title {
   font-size: 0.78rem;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--text-muted);
   margin-bottom: 10px;
   display: flex;
@@ -186,7 +172,7 @@
 .ql-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 18px 20px;
   display: flex;
   flex-direction: column;
@@ -208,7 +194,6 @@
 
 .ql-card:hover {
   border-color: var(--ql-accent, var(--primary-color));
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
   text-decoration: none;
   color: var(--text-primary);
 }
@@ -238,7 +223,7 @@
   font-size: 0.72rem;
   font-weight: 600;
   padding: 5px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   border: none;
   cursor: pointer;
   text-decoration: none;
@@ -254,7 +239,7 @@
 .ql-icon {
   width: 36px;
   height: 36px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -306,20 +291,17 @@
 .panel {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 20px 24px;
   transition: all 0.3s ease;
 }
 
 .panel:hover {
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
 }
 
 .panel-title {
   font-size: 0.72rem;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--text-muted);
   margin-bottom: 12px;
   display: flex;
@@ -353,7 +335,7 @@ canvas {
 
 .status-row:hover {
   background: rgba(99, 102, 241, 0.03);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding-left: 6px;
 }
 
@@ -374,12 +356,12 @@ canvas {
 }
 
 .status-count {
-  font-family: "DM Mono", monospace;
+  font-family: var(--font-mono);
   font-weight: 600;
   color: var(--text-primary);
   background: var(--bg-secondary);
   padding: 4px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 0.78rem;
 }
 
@@ -388,13 +370,13 @@ canvas {
   margin: 0 14px;
   height: 6px;
   background: var(--bg-secondary);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
 }
 
 .status-bar {
   height: 100%;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -427,8 +409,6 @@ canvas {
   text-align: left;
   font-size: 0.68rem;
   font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
   color: var(--text-muted);
   padding: 0 0 8px;
   border-bottom: 2px solid var(--border-color);
@@ -452,16 +432,6 @@ canvas {
 
 .data-table tbody tr:hover {
   background: rgba(99, 102, 241, 0.03);
-}
-
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  border-radius: 20px;
-  font-size: 0.68rem;
-  font-weight: 600;
 }
 
 .badge-green {
@@ -513,7 +483,7 @@ canvas {
 
 .skel-line {
   height: 14px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: var(--bg-secondary);
   animation: shimmer 1.4s ease infinite;
 }
@@ -543,16 +513,14 @@ canvas {
 
 .donut-center .big {
   font-size: 1.8rem;
-  font-weight: 700;
-  font-family: "DM Mono", monospace;
+  font-weight: 600;
+  font-family: var(--font-mono);
   color: var(--text-primary);
 }
 
 .donut-center .tiny {
   font-size: 0.68rem;
   color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
   font-weight: 500;
 }
 
@@ -632,7 +600,7 @@ canvas {
   color: var(--text-primary);
   background: var(--input-bg);
   border: 1px solid var(--input-border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   outline: none;
   transition:
     border-color 0.15s ease,
@@ -681,7 +649,7 @@ canvas {
   font-size: 0.85rem;
   font-weight: 500;
   font-family: var(--font-base);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: 1px solid transparent;
   cursor: pointer;
   transition:

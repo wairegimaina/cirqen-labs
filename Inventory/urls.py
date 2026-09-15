@@ -24,6 +24,12 @@ urlpatterns = [
     path('create_equipment_description/', views.create_equipment_description, name='create_equipment_description'),
     path('create-manufacturer/', views.create_manufacturer, name='create_manufacturer'),
 
+    # Bulk import (Excel upload)
+    path('import_equipment_template/', views.download_equipment_import_template, name='download_equipment_import_template'),
+    path('upload_equipment_excel/', views.upload_equipment_excel, name='upload_equipment_excel'),
+    path('import_departments_template/<uuid:workshop_id>/', views.download_department_import_template, name='download_department_import_template'),
+    path('upload_departments_excel/<uuid:workshop_id>/', views.upload_departments_excel, name='upload_departments_excel'),
+
     # Export views
     path('export_equipment_excel/', views.export_equipment_to_excel, name='export_equipment_excel'),
     path('inventory_summary/', views.inventory_summary, name='inventory_summary'),

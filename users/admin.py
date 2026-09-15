@@ -17,10 +17,7 @@ class UserSignatureAdmin(admin.ModelAdmin):
 
     def regenerate_signature(self, request, queryset):
         for signature in queryset:
-            if signature.signature_image:
-                signature.signature_image.delete(save=False)
-            signature.generate_signature_image()
-            signature.save()
+            signature.regenerate_signature()
         self.message_user(request, "Signatures regenerated successfully")
     regenerate_signature.short_description = "Regenerate selected signatures"
     actions = ["regenerate_signature"]

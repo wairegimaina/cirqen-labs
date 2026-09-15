@@ -1,42 +1,45 @@
+from django.contrib.auth import get_user_model
 from django.test import TestCase, Client
 from django.urls import reverse
-from django.contrib.auth.models import User
 from users.models import UserProfile, UserSignature, UserPasswordReset
 from workshop.models import Workshop
-from Inventory.models import department
+from Inventory.models import Department
+
+User = get_user_model()
+
 
 class UserViewsTestCase(TestCase):
     def setUp(self):
         """Setup test data before each test"""
         self.client = Client()
 
-        # Create departments and workshops
-        self.department = department.objects.create(name="Engineering")
-        self.workshop = Workshop.objects.create(name="Lab1", department=self.department)
+        # Departments belong to a workshop
+        self.workshop = Workshop.objects.create(name="Lab1")
+        self.department = Department.objects.create(name="Engineering", workshop=self.workshop)
 
-        # Create HOD user
+        # Profile fields follow UserProfile.clean(): HOD has no department,
+        # workshop or level; NIC has a department; Tech has a workshop + level.
         self.hod_user = User.objects.create_user(
             username="hoduser", password="hodpass", email="hod@test.com"
         )
-        self.hod_profile = UserProfile.objects.create(
-            user=self.hod_user, role="HOD", department=self.department
-        )
+        self.hod_profile = self._profile(self.hod_user, role="HOD")
 
-        # Create NIC user
         self.nic_user = User.objects.create_user(
             username="nicuser", password="nicpass", email="nic@test.com"
         )
-        self.nic_profile = UserProfile.objects.create(
-            user=self.nic_user, role="NIC", department=self.department
-        )
+        self.nic_profile = self._profile(self.nic_user, role="NIC", department=self.department)
 
-        # Create Tech user
         self.tech_user = User.objects.create_user(
             username="techuser", password="techpass", email="tech@test.com"
         )
-        self.tech_profile = UserProfile.objects.create(
-            user=self.tech_user, role="Tech", workshop=self.workshop, department=self.department
+        self.tech_profile = self._profile(
+            self.tech_user, role="Tech", workshop=self.workshop, level="Engineer"
         )
+
+    def _profile(self, user, **fields):
+        # A signal may already have created the profile; update it either way.
+        profile, _ = UserProfile.objects.update_or_create(user=user, defaults=fields)
+        return profile
 
     def login_hod(self):
         self.client.login(username="hoduser", password="hodpass")
@@ -48,12 +51,24 @@ class UserViewsTestCase(TestCase):
     # Test Login View
     # ------------------------
     def test_custom_login_valid_user(self):
+        # A user who has finished first-login setup goes to their role's dashboard.
+        UserProfile.objects.filter(user=self.hod_user).update(
+            must_change_password=False, has_uploaded_signature=True
+        )
         response = self.client.post(
             reverse("custom_login"),
             {"username": "hoduser", "password": "hodpass"}
         )
-        self.assertEqual(response.status_code, 302)  # redirect
-        self.assertIn("/dashboard", response.url)
+        self.assertRedirects(
+            response, reverse("dashboard:hod_dashboard"), fetch_redirect_response=False
+        )
+
+    def test_custom_login_first_time_user_is_sent_to_setup(self):
+        response = self.client.post(
+            reverse("custom_login"),
+            {"username": "hoduser", "password": "hodpass"}
+        )
+        self.assertRedirects(response, reverse("force_setup"), fetch_redirect_response=False)
 
     def test_custom_login_invalid_password(self):
         response = self.client.post(
@@ -61,7 +76,7 @@ class UserViewsTestCase(TestCase):
             {"username": "hoduser", "password": "wrongpass"}
         )
         self.assertEqual(response.status_code, 200)  # re-render login page
-        self.assertContains(response, "Incorrect password")
+        self.assertContains(response, "Invalid username or password")
 
     # ------------------------
     # Test Manage Users
@@ -86,7 +101,7 @@ class UserViewsTestCase(TestCase):
         response = self.client.get(reverse("api_get_users"))
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()["success"])
-        self.assertGreaterEqual(response.json()["total"], 1)
+        self.assertGreaterEqual(response.json()["pagination"]["total"], 1)
 
     def test_api_get_departments(self):
         self.login_hod()

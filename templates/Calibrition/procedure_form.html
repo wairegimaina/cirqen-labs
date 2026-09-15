@@ -11,43 +11,43 @@
 
 {% block content %}
 
-<!-- Loading Overlay -->
+<!-- Loading overlay -->
 <div id="loadingOverlay" class="loading-overlay">
   <div class="loading-content">
     <div class="loading-spinner"></div>
-    <h4>Saving Procedure<span class="loading-dots"></span></h4>
-    <p class="text-muted">Please wait while we save your calibration procedure</p>
+    <h4>Saving procedure<span class="loading-dots"></span></h4>
+    <p>Please wait while the procedure is saved.</p>
   </div>
 </div>
 
-<!-- Success Message -->
+<!-- Success message -->
 <div id="successMessage" class="loading-overlay">
-  <div class="success-message">
-    <div class="success-icon"><i class="fas fa-check-circle"></i></div>
-    <h4 class="text-success">Procedure Created Successfully!</h4>
-    <p class="mb-3">Your calibration procedure has been saved successfully.</p>
-    <div class="mt-4">
-      <button id="createAnother" class="btn btn-primary me-2">
-        <i class="fas fa-plus me-1"></i>Create Another Procedure
+  <div class="loading-content success-message">
+    <div class="success-mark"><i class="fas fa-check" aria-hidden="true"></i></div>
+    <h4>Procedure created</h4>
+    <p>Your calibration procedure has been saved.</p>
+    <div class="success-actions">
+      <button id="createAnother" class="btn btn-secondary">
+        <i class="fas fa-plus" aria-hidden="true"></i> Create another
       </button>
-      <a href="{% url 'calibration:procedure_list' %}" class="btn btn-success">
-        <i class="fas fa-list me-1"></i>View All Procedures
-      </a>
+      <a href="{% url 'calibration:procedure_list' %}" class="btn btn-primary">View all procedures</a>
     </div>
   </div>
 </div>
 
-<!-- Main Form -->
-<div class="main-container">
+<!-- Main form -->
+<div class="page-wrap">
   <form method="POST" id="procedureForm">
     {% csrf_token %}
 
-    <!-- Procedure Details -->
-    <div class="card mb-4">
-      <div class="card-header">Procedure Details</div>
-      <div class="card-body">
+    <!-- Procedure details -->
+    <section class="section-card">
+      <div class="section-card-head">
+        <h2 class="section-card-title">Procedure details</h2>
+      </div>
+      <div class="section-card-body">
         <div class="form-group">
-          <label for="id_name" class="form-label">Procedure Name</label>
+          <label for="id_name" class="form-label">Procedure name <span class="req">*</span></label>
           <input type="text" name="name" id="id_name" class="form-control"
             placeholder="Enter procedure name" required minlength="3" maxlength="100">
         </div>
@@ -74,177 +74,180 @@
           </div>
         </div>
       </div>
-    </div>
+    </section>
 
-    <!-- Parameter Formset Management Fields -->
+    <!-- Parameter formset management fields -->
     <input type="hidden" name="parameters-TOTAL_FORMS"   value="1"    id="id_parameters-TOTAL_FORMS">
     <input type="hidden" name="parameters-INITIAL_FORMS" value="0"    id="id_parameters-INITIAL_FORMS">
     <input type="hidden" name="parameters-MIN_NUM_FORMS" value="1"    id="id_parameters-MIN_NUM_FORMS">
     <input type="hidden" name="parameters-MAX_NUM_FORMS" value="1000" id="id_parameters-MAX_NUM_FORMS">
 
-    <!-- Parameter Formset -->
-    <div id="parameter-formset" class="formset-container">
-      <h3 class="mb-3">Parameters</h3>
-      <div id="parameter-forms">
+    <!-- Parameters -->
+    <section class="section-card" id="parameter-formset">
+      <div class="section-card-head">
+        <h2 class="section-card-title">Parameters</h2>
+        <button type="button" class="btn btn-secondary btn-sm add-parameter add-formset">
+          <i class="fas fa-plus" aria-hidden="true"></i> Add parameter
+        </button>
+      </div>
+      <div class="section-card-body">
+        <div id="parameter-forms">
 
-        <!-- Initial Parameter Form -->
-        <div class="parameter-form formset-container mb-3" data-formset-index="0">
-          <input type="hidden" name="parameters-0-id" value="">
-          <input type="hidden" name="parameters-0-DELETE" id="id_parameters-0-DELETE">
+          <!-- Initial parameter form -->
+          <div class="parameter-form" data-formset-index="0">
+            <input type="hidden" name="parameters-0-id" value="">
+            <input type="hidden" name="parameters-0-DELETE" id="id_parameters-0-DELETE">
 
-          <div class="row">
-            <div class="col-md-3 form-group">
-              <label for="id_parameters-0-name" class="form-label">Parameter Name</label>
-              <select name="parameters-0-name" id="id_parameters-0-name"
-                class="form-control parameter-name-select" required>
-                <option value="">Select a parameter...</option>
-              </select>
+            <div class="row">
+              <div class="col-md-3 form-group">
+                <label for="id_parameters-0-name" class="form-label">Parameter Name</label>
+                <select name="parameters-0-name" id="id_parameters-0-name"
+                  class="form-control parameter-name-select" required>
+                  <option value="">Select a parameter...</option>
+                </select>
+              </div>
+              <div class="col-md-2 form-group">
+                <label for="id_parameters-0-unit" class="form-label">Unit</label>
+                <input type="text" name="parameters-0-unit" id="id_parameters-0-unit"
+                  class="form-control" readonly>
+              </div>
+              <div class="col-md-2 form-group">
+                <label for="id_parameters-0-num_readings" class="form-label">Number of Readings</label>
+                <input type="number" name="parameters-0-num_readings" id="id_parameters-0-num_readings"
+                  class="form-control" min="3" max="20" value="5" required>
+              </div>
+              <div class="col-md-3 form-group">
+                <label for="id_parameters-0-standard_reference" class="form-label">Standard Reference</label>
+                <select name="parameters-0-standard_reference" id="id_parameters-0-standard_reference"
+                  class="form-control standard-select">
+                  <option value="">Select a standard...</option>
+                </select>
+                <div class="standard-info" id="standard-info-0"></div>
+              </div>
+              <div class="col-md-2 form-group d-flex align-items-end justify-content-end">
+                <button type="button"
+                  class="btn btn-outline-danger btn-sm delete-parameter delete-formset">
+                  <i class="fas fa-trash-alt"></i> Delete parameter
+                </button>
+              </div>
             </div>
-            <div class="col-md-2 form-group">
-              <label for="id_parameters-0-unit" class="form-label">Unit</label>
-              <input type="text" name="parameters-0-unit" id="id_parameters-0-unit"
-                class="form-control" readonly>
+
+            <div class="row">
+              <div class="col-md-3 form-group">
+                <label for="id_parameters-0-reference_uncertainty" class="form-label">
+                  Reference Uncertainty (k=2)
+                </label>
+                <input type="number" name="parameters-0-reference_uncertainty"
+                  id="id_parameters-0-reference_uncertainty"
+                  class="form-control" step="0.000001" value="0.001" required readonly>
+              </div>
+              <div class="col-md-2 form-group">
+                <label for="id_parameters-0-coverage_factor" class="form-label">Coverage Factor</label>
+                <input type="number" name="parameters-0-coverage_factor"
+                  id="id_parameters-0-coverage_factor"
+                  class="form-control" step="0.1" value="2.0" min="1" required>
+              </div>
+              <div class="col-md-2 form-group">
+                <label for="id_parameters-0-tolerance" class="form-label">Tolerance (±)</label>
+                <input type="number" name="parameters-0-tolerance" id="id_parameters-0-tolerance"
+                  class="form-control" step="0.000001" value="1.0" min="0">
+              </div>
+              <div class="col-md-2 form-group">
+                <label for="id_parameters-0-order" class="form-label">Order</label>
+                <input type="number" name="parameters-0-order" id="id_parameters-0-order"
+                  class="form-control" min="0" value="0">
+              </div>
+              <div class="col-md-3 form-group d-flex align-items-end">
+                <div class="form-check mb-2">
+                  <input type="checkbox" class="form-check-input"
+                    id="id_parameters-0-has_sub_parameters"
+                    name="parameters-0-has_sub_parameters">
+                  <label class="form-check-label" for="id_parameters-0-has_sub_parameters">
+                    Has Sub-Parameters
+                  </label>
+                </div>
+              </div>
             </div>
-            <div class="col-md-2 form-group">
-              <label for="id_parameters-0-num_readings" class="form-label">Number of Readings</label>
-              <input type="number" name="parameters-0-num_readings" id="id_parameters-0-num_readings"
-                class="form-control" min="3" max="20" value="5" required>
-            </div>
-            <div class="col-md-3 form-group">
-              <label for="id_parameters-0-standard_reference" class="form-label">Standard Reference</label>
-              <select name="parameters-0-standard_reference" id="id_parameters-0-standard_reference"
-                class="form-control standard-select">
-                <option value="">Select a standard...</option>
-              </select>
-              <div class="standard-info" id="standard-info-0"></div>
-            </div>
-            <div class="col-md-2 form-group d-flex align-items-end">
+
+            <!-- Sub-parameters -->
+            <div class="sub-formset-container hidden" id="sub-parameter-container-0">
+              <h4 class="mb-3">Sub-Parameters</h4>
+              <input type="hidden" name="parameters-0-sub_parameters-TOTAL_FORMS"
+                value="0" id="id_parameters-0-sub_parameters-TOTAL_FORMS">
+              <input type="hidden" name="parameters-0-sub_parameters-INITIAL_FORMS" value="0">
+              <input type="hidden" name="parameters-0-sub_parameters-MIN_NUM_FORMS" value="0">
+              <input type="hidden" name="parameters-0-sub_parameters-MAX_NUM_FORMS" value="1000">
+              <div class="sub-parameter-forms" id="sub-parameter-forms-0"></div>
               <button type="button"
-                class="btn btn-danger btn-sm delete-parameter delete-formset w-100">
-                <i class="fas fa-trash-alt me-1"></i> Delete Parameter
+                class="btn btn-secondary btn-sm add-sub-parameter add-formset"
+                data-parent-index="0">
+                <i class="fas fa-plus"></i> Add sub-parameter
+              </button>
+            </div>
+
+            <!-- Set values -->
+            <div class="set-value-formset sub-formset-container">
+              <h4 class="mb-3">Set Values</h4>
+              <input type="hidden" name="parameters-0-set_values-TOTAL_FORMS"
+                value="1" id="id_parameters-0-set_values-TOTAL_FORMS">
+              <input type="hidden" name="parameters-0-set_values-INITIAL_FORMS" value="0">
+              <input type="hidden" name="parameters-0-set_values-MIN_NUM_FORMS" value="1">
+              <input type="hidden" name="parameters-0-set_values-MAX_NUM_FORMS" value="1000">
+              <div class="set-value-forms" id="set-value-forms-0">
+                <div class="set-value-form formset-container mb-3" data-set-value-index="0">
+                  <input type="hidden" name="parameters-0-set_values-0-id" value="">
+                  <input type="hidden" name="parameters-0-set_values-0-DELETE"
+                    id="id_parameters-0-set_values-0-DELETE">
+                  <div class="row">
+                    <div class="col-md-4 form-group">
+                      <label for="id_parameters-0-set_values-0-value" class="form-label">Set Value</label>
+                      <input type="number" name="parameters-0-set_values-0-value"
+                        id="id_parameters-0-set_values-0-value"
+                        class="form-control" step="0.000001" placeholder="Set value" required>
+                    </div>
+                    <div class="col-md-3 form-group">
+                      <label for="id_parameters-0-set_values-0-order" class="form-label">Order</label>
+                      <input type="number" name="parameters-0-set_values-0-order"
+                        id="id_parameters-0-set_values-0-order"
+                        class="form-control" min="0" value="0">
+                    </div>
+                    <div class="col-md-3 form-group sub-parameter-select hidden">
+                      <label for="id_parameters-0-set_values-0-sub_parameter" class="form-label">
+                        Sub-Parameter
+                      </label>
+                      <select name="parameters-0-set_values-0-sub_parameter"
+                        id="id_parameters-0-set_values-0-sub_parameter" class="form-control">
+                        <option value="">Select sub-parameter...</option>
+                      </select>
+                    </div>
+                    <div class="col-md-2 form-group d-flex align-items-end">
+                      <button type="button"
+                        class="btn btn-outline-danger btn-sm delete-set-value delete-formset">
+                        <i class="fas fa-trash-alt"></i> Delete
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <button type="button"
+                class="btn btn-secondary btn-sm add-set-value add-formset"
+                data-parent-index="0">
+                <i class="fas fa-plus"></i> Add set value
               </button>
             </div>
           </div>
 
-          <div class="row">
-            <div class="col-md-3 form-group">
-              <label for="id_parameters-0-reference_uncertainty" class="form-label">
-                Reference Uncertainty (k=2)
-              </label>
-              <input type="number" name="parameters-0-reference_uncertainty"
-                id="id_parameters-0-reference_uncertainty"
-                class="form-control" step="0.000001" value="0.001" required readonly>
-            </div>
-            <div class="col-md-2 form-group">
-              <label for="id_parameters-0-coverage_factor" class="form-label">Coverage Factor</label>
-              <input type="number" name="parameters-0-coverage_factor"
-                id="id_parameters-0-coverage_factor"
-                class="form-control" step="0.1" value="2.0" min="1" required>
-            </div>
-            <div class="col-md-2 form-group">
-              <label for="id_parameters-0-tolerance" class="form-label">Tolerance (±)</label>
-              <input type="number" name="parameters-0-tolerance" id="id_parameters-0-tolerance"
-                class="form-control" step="0.000001" value="1.0" min="0">
-            </div>
-            <div class="col-md-2 form-group">
-              <label for="id_parameters-0-order" class="form-label">Order</label>
-              <input type="number" name="parameters-0-order" id="id_parameters-0-order"
-                class="form-control" min="0" value="0">
-            </div>
-            <div class="col-md-3 form-group">
-              <div class="form-check mt-4">
-                <input type="checkbox" class="form-check-input"
-                  id="id_parameters-0-has_sub_parameters"
-                  name="parameters-0-has_sub_parameters">
-                <label class="form-check-label" for="id_parameters-0-has_sub_parameters">
-                  Has Sub-Parameters
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <!-- Sub-Parameters -->
-          <div class="sub-formset-container hidden" id="sub-parameter-container-0">
-            <h4 class="mb-3">Sub-Parameters</h4>
-            <input type="hidden" name="parameters-0-sub_parameters-TOTAL_FORMS"
-              value="0" id="id_parameters-0-sub_parameters-TOTAL_FORMS">
-            <input type="hidden" name="parameters-0-sub_parameters-INITIAL_FORMS" value="0">
-            <input type="hidden" name="parameters-0-sub_parameters-MIN_NUM_FORMS" value="0">
-            <input type="hidden" name="parameters-0-sub_parameters-MAX_NUM_FORMS" value="1000">
-            <div class="sub-parameter-forms" id="sub-parameter-forms-0"></div>
-            <button type="button"
-              class="btn btn-primary btn-sm add-sub-parameter add-formset"
-              data-parent-index="0">
-              <i class="fas fa-plus me-1"></i> Add Sub-Parameter
-            </button>
-          </div>
-
-          <!-- Set Values -->
-          <div class="set-value-formset sub-formset-container">
-            <h4 class="mb-3">Set Values</h4>
-            <input type="hidden" name="parameters-0-set_values-TOTAL_FORMS"
-              value="1" id="id_parameters-0-set_values-TOTAL_FORMS">
-            <input type="hidden" name="parameters-0-set_values-INITIAL_FORMS" value="0">
-            <input type="hidden" name="parameters-0-set_values-MIN_NUM_FORMS" value="1">
-            <input type="hidden" name="parameters-0-set_values-MAX_NUM_FORMS" value="1000">
-            <div class="set-value-forms" id="set-value-forms-0">
-              <div class="set-value-form formset-container mb-3" data-set-value-index="0">
-                <input type="hidden" name="parameters-0-set_values-0-id" value="">
-                <input type="hidden" name="parameters-0-set_values-0-DELETE"
-                  id="id_parameters-0-set_values-0-DELETE">
-                <div class="row">
-                  <div class="col-md-4 form-group">
-                    <label for="id_parameters-0-set_values-0-value" class="form-label">Set Value</label>
-                    <input type="number" name="parameters-0-set_values-0-value"
-                      id="id_parameters-0-set_values-0-value"
-                      class="form-control" step="0.000001" placeholder="Set value" required>
-                  </div>
-                  <div class="col-md-3 form-group">
-                    <label for="id_parameters-0-set_values-0-order" class="form-label">Order</label>
-                    <input type="number" name="parameters-0-set_values-0-order"
-                      id="id_parameters-0-set_values-0-order"
-                      class="form-control" min="0" value="0">
-                  </div>
-                  <div class="col-md-3 form-group sub-parameter-select hidden">
-                    <label for="id_parameters-0-set_values-0-sub_parameter" class="form-label">
-                      Sub-Parameter
-                    </label>
-                    <select name="parameters-0-set_values-0-sub_parameter"
-                      id="id_parameters-0-set_values-0-sub_parameter" class="form-control">
-                      <option value="">Select sub-parameter...</option>
-                    </select>
-                  </div>
-                  <div class="col-md-2 form-group d-flex align-items-end">
-                    <button type="button"
-                      class="btn btn-danger btn-sm delete-set-value delete-formset w-100">
-                      <i class="fas fa-trash-alt me-1"></i> Delete
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <button type="button"
-              class="btn btn-primary btn-sm add-set-value add-formset"
-              data-parent-index="0">
-              <i class="fas fa-plus me-1"></i> Add Set Value
-            </button>
-          </div>
         </div>
-
       </div>
+    </section>
 
-      <button type="button" class="btn btn-primary add-parameter add-formset mt-2">
-        <i class="fas fa-plus me-1"></i> Add Parameter
+    <!-- Form actions -->
+    <div class="form-actions">
+      <button type="button" class="btn btn-secondary" id="clearForm">
+        <i class="fas fa-undo" aria-hidden="true"></i> Clear form
       </button>
-    </div>
-
-    <!-- Form Actions -->
-    <div class="mt-4 text-center">
-      <button type="submit" class="btn btn-success btn-lg">
-        <i class="fas fa-save me-1"></i> Save Procedure
-      </button>
-      <button type="button" class="btn btn-secondary btn-lg ms-2" id="clearForm">
-        <i class="fas fa-undo me-1"></i> Clear Form
+      <button type="submit" class="btn btn-primary">
+        <i class="fas fa-save" aria-hidden="true"></i> Save procedure
       </button>
     </div>
 

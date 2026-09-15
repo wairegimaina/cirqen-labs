@@ -1,6 +1,8 @@
 from .agent_prelude import LOG
 import os
 import json
+import shutil
+import threading
 from pathlib import Path
 from typing import Dict, Any, Optional
 
@@ -21,6 +23,13 @@ class StateManager:
 
         self.redis = redis_client
         self.use_redis = redis_client is not None
+
+        # Serialises writes. Several threads persist state concurrently — the
+        # upload loop, the download loop and the drift reconciler all call set().
+        # Without this they race on the shared temp file: two writers create it,
+        # the first rename consumes it, and the second fails with
+        # "No such file or directory: sync_state.tmp -> sync_state.json".
+        self._write_lock = threading.Lock()
 
         # Load initial state from file
         self._state_cache = self._load_state_from_file()
@@ -56,25 +65,46 @@ class StateManager:
         return {}
 
     def _save_state_to_file(self, state: Dict[str, Any]):
-        """Atomically save state to file with backup"""
-        try:
-            temp_file = self.state_file.with_suffix(".tmp")
-            with open(temp_file, "w") as f:
-                json.dump(state, f, indent=2, default=str)
-                f.flush()
-                os.fsync(f.fileno())
+        """Atomically save state to file with backup.
 
-            if self.state_file.exists():
+        Two things here are load-bearing:
+
+        * The temp file name is UNIQUE per writer. A shared name let concurrent
+          writers clobber each other's temp file, so the second rename failed
+          with ENOENT. The lock below already prevents that within one process;
+          the unique name also covers a second process (a stray agent instance)
+          touching the same state directory.
+        * The backup is a COPY, not a move. The previous code did
+          ``state_file.replace(backup)``, which removes the live state file — so
+          if the following rename failed for any reason, the agent was left with
+          NO state file and would re-scan every table from epoch on next start.
+        """
+        with self._write_lock:
+            temp_file = self.state_file.with_suffix(f".{os.getpid()}.{threading.get_ident()}.tmp")
+            try:
+                with open(temp_file, "w") as f:
+                    json.dump(state, f, indent=2, default=str)
+                    f.flush()
+                    os.fsync(f.fileno())
+
+                if self.state_file.exists():
+                    try:
+                        shutil.copy2(self.state_file, self.state_file_backup)
+                    except Exception as e:
+                        LOG.debug("Could not create backup: %s", e)
+
+                temp_file.replace(self.state_file)   # atomic on the same filesystem
+                LOG.debug("State saved to file")
+
+            except Exception as e:
+                LOG.error("Failed to save state file: %s", e)
+            finally:
+                # Never leave a stray temp behind if the write or rename failed.
                 try:
-                    self.state_file.replace(self.state_file_backup)
-                except Exception as e:
-                    LOG.debug("Could not create backup: %s", e)
-
-            temp_file.replace(self.state_file)
-            LOG.debug("State saved to file")
-
-        except Exception as e:
-            LOG.error("Failed to save state file: %s", e)
+                    if temp_file.exists():
+                        temp_file.unlink()
+                except Exception:
+                    pass
 
     def get(self, key: str, default: Any = None) -> Any:
         """Get value with triple redundancy: Redis → Cache → File → Default"""
@@ -105,7 +135,10 @@ class StateManager:
             except Exception as e:
                 LOG.debug("Redis write failed for %s: %s", key, e)
 
-        self._save_state_to_file(self._state_cache)
+        # Snapshot before writing: json.dump iterates the mapping, and another
+        # thread adding a key mid-dump raises "dictionary changed size during
+        # iteration", which would abort the save and lose the checkpoint.
+        self._save_state_to_file(dict(self._state_cache))
 
     def get_client_id(self) -> Optional[str]:
         """Get client ID from Redis or file"""

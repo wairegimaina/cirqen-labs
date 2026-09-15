@@ -7,6 +7,8 @@ views are now grouped by concern across submodules:
 * :mod:`.inventory_list` – equipment browsing / summary page views
 * :mod:`.equipment`      – equipment create/edit/delete/transfer/reactivate
 * :mod:`.departments`    – department CRUD + dependency transfer
+* :mod:`.imports`        – bulk equipment upload from Excel (template + upload)
+* :mod:`.department_imports` – bulk department upload from Excel
 * :mod:`.exports`        – Excel / PDF exports and the reports dashboard
 * :mod:`.helpers`        – pure, unit-tested helpers shared by the list views
 
@@ -53,6 +55,14 @@ from .departments import (
     transfer_department_dependencies,
     delete_department,
 )
+from .imports import (
+    download_equipment_import_template,
+    upload_equipment_excel,
+)
+from .department_imports import (
+    download_department_import_template,
+    upload_departments_excel,
+)
 from .exports import (
     export_equipment_to_excel,
     export_inventory_summary_excel,
@@ -96,6 +106,11 @@ __all__ = [
     "get_department_dependency_count",
     "transfer_department_dependencies",
     "delete_department",
+    # imports
+    "download_equipment_import_template",
+    "upload_equipment_excel",
+    "download_department_import_template",
+    "upload_departments_excel",
     # exports
     "export_equipment_to_excel",
     "export_inventory_summary_excel",

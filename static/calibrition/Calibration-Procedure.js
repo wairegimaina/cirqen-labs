@@ -265,8 +265,8 @@ document.addEventListener("DOMContentLoaded", () => {
           </div>
           <div class="col-md-2 form-group d-flex align-items-end">
             <button type="button"
-              class="btn btn-danger btn-sm delete-set-value delete-formset w-100">
-              <i class="fas fa-trash-alt me-1"></i> Delete
+              class="btn btn-outline-danger btn-sm delete-set-value delete-formset">
+              <i class="fas fa-trash-alt"></i> Delete
             </button>
           </div>
         </div>
@@ -298,8 +298,8 @@ document.addEventListener("DOMContentLoaded", () => {
           </div>
           <div class="col-md-2 form-group d-flex align-items-end">
             <button type="button"
-              class="btn btn-danger btn-sm delete-sub-parameter delete-formset w-100">
-              <i class="fas fa-trash-alt me-1"></i> Delete
+              class="btn btn-outline-danger btn-sm delete-sub-parameter delete-formset">
+              <i class="fas fa-trash-alt"></i> Delete
             </button>
           </div>
         </div>
@@ -337,10 +337,10 @@ document.addEventListener("DOMContentLoaded", () => {
           </select>
           <div class="standard-info" id="standard-info-${idx}"></div>
         </div>
-        <div class="col-md-2 form-group d-flex align-items-end">
+        <div class="col-md-2 form-group d-flex align-items-end justify-content-end">
           <button type="button"
-            class="btn btn-danger btn-sm delete-parameter delete-formset w-100">
-            <i class="fas fa-trash-alt me-1"></i> Delete Parameter
+            class="btn btn-outline-danger btn-sm delete-parameter delete-formset">
+            <i class="fas fa-trash-alt"></i> Delete parameter
           </button>
         </div>
       </div>
@@ -369,8 +369,8 @@ document.addEventListener("DOMContentLoaded", () => {
           <input type="number" name="${p}-order" id="id_${p}-order"
             class="form-control" min="0" value="${idx}">
         </div>
-        <div class="col-md-3 form-group">
-          <div class="form-check mt-4">
+        <div class="col-md-3 form-group d-flex align-items-end">
+          <div class="form-check mb-2">
             <input type="checkbox" class="form-check-input"
               id="id_${p}-has_sub_parameters" name="${p}-has_sub_parameters">
             <label class="form-check-label" for="id_${p}-has_sub_parameters">
@@ -389,9 +389,9 @@ document.addEventListener("DOMContentLoaded", () => {
         <input type="hidden" name="${p}-sub_parameters-MAX_NUM_FORMS" value="1000">
         <div class="sub-parameter-forms" id="sub-parameter-forms-${idx}"></div>
         <button type="button"
-          class="btn btn-primary btn-sm add-sub-parameter add-formset"
+          class="btn btn-secondary btn-sm add-sub-parameter add-formset"
           data-parent-index="${idx}">
-          <i class="fas fa-plus me-1"></i> Add Sub-Parameter
+          <i class="fas fa-plus"></i> Add sub-parameter
         </button>
       </div>
 
@@ -406,9 +406,9 @@ document.addEventListener("DOMContentLoaded", () => {
           ${setValueRowHTML(idx, 0)}
         </div>
         <button type="button"
-          class="btn btn-primary btn-sm add-set-value add-formset"
+          class="btn btn-secondary btn-sm add-set-value add-formset"
           data-parent-index="${idx}">
-          <i class="fas fa-plus me-1"></i> Add Set Value
+          <i class="fas fa-plus"></i> Add set value
         </button>
       </div>`;
   }
@@ -418,7 +418,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function addParameter() {
     const container = document.getElementById("parameter-forms");
     const form = document.createElement("div");
-    form.className = "parameter-form formset-container mb-3";
+    form.className = "parameter-form";
     form.dataset.formsetIndex = parameterCount;
     form.innerHTML = parameterFormHTML(parameterCount);
     container.appendChild(form);

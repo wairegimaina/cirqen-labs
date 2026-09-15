@@ -2,6 +2,8 @@ from .agent_prelude import LOG, now_kenyan, now_utc, now_iso, format_kenyan_time
 from .agent_prelude import KENYAN_TZ, PerformanceMonitor, encrypt_token, setup_logging, load_agent_config
 from .agent_prelude import load_config_from_unified_manager, load_config_from_env_fallback
 from .agent_prelude import sleep_with_jitter, is_online, CERT_TABLES, DEFAULT_CONFIG
+from .agent_prelude import json_safe
+from .event_identity import stable_event_id
 import uuid
 import traceback
 from typing import Any, Dict, List, Optional, Tuple, Set
@@ -21,6 +23,13 @@ from .smart_delete import SmartDeleteMixin
 
 class UploadMixin(SmartDeleteMixin):
     """Upload path: event construction, upload_batch (with idempotency + backpressure), and upload/download checkpoints."""
+
+    # How many consecutive partially-failed uploads to retry before advancing the
+    # checkpoint anyway. Holding it forever would let one permanently-bad row
+    # stall all sync; advancing immediately loses data silently. Retries are
+    # safe because HQ upserts are idempotent, so re-sending the events that DID
+    # apply is a no-op.
+    MAX_UPLOAD_SKIP_STRIKES = 3
     def _is_record_soft_deleted(self, row: dict, has_pending_delete: bool,
                                     has_active_status: bool, has_deleted_at: bool) -> bool:
             """Check if record is soft deleted"""
@@ -52,14 +61,17 @@ class UploadMixin(SmartDeleteMixin):
                 metrics['deactivations'] += 1
                 LOG.info(f"   🟡 Deactivate (has deps): {row_id}")
 
+                # Stable id so re-sends of this row version dedupe on HQ, and the
+                # real client id so HQ never serves it back to this machine
+                # (see sync/event_identity.py). Same in the builders below.
                 return {
-                    "event_id": str(uuid.uuid4()),
+                    "event_id": stable_event_id(table, row_id, timestamp, "deactivate"),
                     "table": table,
                     "row_id": row_id,
                     "operation": "deactivate",
                     "data": row["row_data"],
                     "created_at": timestamp.isoformat(),
-                    "source": "local",
+                    "source": getattr(self, "client_id", None) or "local",
                     "machine_id": self.machine_id,
                     "active_status": False,
                     "pending_delete": True,
@@ -70,13 +82,13 @@ class UploadMixin(SmartDeleteMixin):
                 LOG.info(f"   🔴 Hard delete (no deps): {row_id}")
 
                 return {
-                    "event_id": str(uuid.uuid4()),
+                    "event_id": stable_event_id(table, row_id, timestamp, "d"),
                     "table": table,
                     "row_id": row_id,
                     "operation": "d",
                     "data": {"id": row_id},
                     "created_at": timestamp.isoformat(),
-                    "source": "local",
+                    "source": getattr(self, "client_id", None) or "local",
                     "machine_id": self.machine_id,
                     "has_dependencies": False
                 }
@@ -88,13 +100,13 @@ class UploadMixin(SmartDeleteMixin):
             LOG.debug(f"   ✅ Active update: {row_id}")
 
             event = {
-                "event_id": str(uuid.uuid4()),
+                "event_id": stable_event_id(table, row_id, timestamp, "u"),
                 "table": table,
                 "row_id": row_id,
                 "operation": "u",
                 "data": row["row_data"],
                 "created_at": timestamp.isoformat(),
-                "source": "local",
+                "source": getattr(self, "client_id", None) or "local",
                 "machine_id": self.machine_id
             }
 
@@ -159,6 +171,15 @@ class UploadMixin(SmartDeleteMixin):
             }
             headers = self._http_headers()
 
+            # Rows come straight from psycopg2, so they carry date/datetime/
+            # Decimal/UUID objects the stdlib JSON encoder cannot handle. Without
+            # this, requests raises TypeError before sending, the broad
+            # `except Exception` below reports it as a generic upload failure,
+            # and the affected table NEVER syncs — silently, forever. That is
+            # exactly what happened to the two tables with a `scheduled_month`
+            # DATE column.
+            data = json_safe(data)
+
             try:
                 r = requests.post(url, json=data, headers=headers, timeout=30)
 
@@ -174,6 +195,47 @@ class UploadMixin(SmartDeleteMixin):
                 if r.status_code == 200:
                     LOG.info("✅ Batch uploaded successfully")
                     resp_json = r.json()
+
+                    # A 200 does NOT mean every event was applied. HQ returns
+                    # success on partial failures so one bad row cannot block the
+                    # queue forever, reporting the count in events_skipped.
+                    # Advancing the checkpoint regardless is silent data loss:
+                    # the skipped rows are dead-lettered server-side and this
+                    # agent will never re-send them. That is how HQ ended up
+                    # ~6,800 rows short while every upload logged success.
+                    skipped = int(resp_json.get("events_skipped") or 0)
+
+                    # The flag is what actually protects the checkpoint —
+                    # set_last_upload_time() honours it no matter which of the
+                    # five call sites tries to advance. Returning True here is
+                    # deliberate: the HTTP request DID succeed, and the outer
+                    # loops treat False as "HQ offline" and stop uploading.
+                    if skipped > 0:
+                        self._upload_skip_strikes = getattr(self, "_upload_skip_strikes", 0) + 1
+                        LOG.warning(
+                            "⚠️  HQ skipped %d/%d events — holding checkpoint "
+                            "so they are re-sent (attempt %d/%d)",
+                            skipped, resp_json.get("events_received", len(events)),
+                            self._upload_skip_strikes, self.MAX_UPLOAD_SKIP_STRIKES,
+                        )
+                        # Bounded: without a cap, an event that can NEVER apply
+                        # (genuinely bad data) would pin the checkpoint and stall
+                        # sync permanently — the opposite failure to the one
+                        # above, and just as bad.
+                        if self._upload_skip_strikes < self.MAX_UPLOAD_SKIP_STRIKES:
+                            self._hold_checkpoint = True
+                            return True, None
+                        LOG.error(
+                            "❌ %d events still failing after %d attempts — advancing "
+                            "checkpoint to unblock sync. These rows are dead-lettered "
+                            "on HQ; recover them with POST /api/sync/dead_letter/replay "
+                            "and inspect GET /api/sync/dead_letter.",
+                            skipped, self._upload_skip_strikes,
+                        )
+                        self._upload_skip_strikes = 0
+                    else:
+                        self._upload_skip_strikes = 0
+                    self._hold_checkpoint = False
 
                     # ✅ CRITICAL: Update last_upload_time to the LATEST event timestamp
                     if events:
@@ -279,13 +341,39 @@ class UploadMixin(SmartDeleteMixin):
                 LOG.warning("=" * 80)
 
             return all_events
-    def get_last_upload_time(self) -> str:
-            """
-            Get last upload checkpoint.
+    EPOCH = "1970-01-01T00:00:00+00:00"
 
-            If no checkpoint exists, use epoch so the upload loop scans ALL local
-            records and pushes them to HQ — not just the last hour.
+    def get_last_upload_time(self, table: str = None) -> str:
             """
+            Get the upload checkpoint, PER TABLE when a table is given.
+
+            A single global checkpoint is unsafe here because the upload loop
+            scans every table against the same value and advances it to the
+            newest timestamp it uploaded. A table with many pending rows (e.g.
+            Inventory_equipment, 3,776 of them) drags the shared checkpoint
+            forward to ITS newest row, and every other table's older pending
+            rows silently fall behind it — fetch_recent_changes_for_table() uses
+            `updated_at > checkpoint`, so they can never be seen again.
+
+            That is exactly how calSchedules_calibrationschedule and
+            ppms_ppmschedule froze (at 150/3,791 and 606/3,776) at the moment
+            Inventory_equipment finished converging.
+
+            Per-table checkpoints seed from the legacy global value the first
+            time each table is seen, so upgrading does not re-upload everything.
+            Use reset_upload_checkpoint(table) to force a full re-scan of a table
+            whose rows were skipped under the old shared checkpoint.
+            """
+            if table:
+                per_table = self.state.get(f"last_upload_time:{table}")
+                if per_table:
+                    return per_table
+                # Seed from the legacy shared checkpoint on first use.
+                seeded = self.state.get("last_upload_time") or self.EPOCH
+                self.state.set(f"last_upload_time:{table}", seeded)
+                LOG.info("📅 Seeded checkpoint for %s from global: %s", table, seeded)
+                return seeded
+
             last_time = self.state.get("last_upload_time")
 
             if last_time:
@@ -293,12 +381,59 @@ class UploadMixin(SmartDeleteMixin):
                 return last_time
 
             LOG.warning("⚠️  No upload checkpoint found — scanning ALL local records (epoch baseline)")
-            return "1970-01-01T00:00:00+00:00"
-    def set_last_upload_time(self, timestamp: str = None):
+            return self.EPOCH
+
+    def reset_upload_checkpoint(self, table: str = None):
+            """
+            Force a full re-scan.
+
+            Needed to recover rows that were skipped while a single shared
+            checkpoint was in use: those rows still exist locally, but their
+            updated_at is behind the checkpoint, so nothing will ever re-detect
+            them. Resetting to epoch makes the next scan see them again. Uploads
+            are idempotent upserts on HQ, so re-sending rows that already
+            arrived is harmless.
+            """
+            if table:
+                self.state.set(f"last_upload_time:{table}", self.EPOCH)
+                LOG.warning("♻️  Upload checkpoint reset for %s — will re-scan all rows", table)
+            else:
+                self.state.set("last_upload_time", self.EPOCH)
+                for t in getattr(self, "tables", []):
+                    self.state.set(f"last_upload_time:{t}", self.EPOCH)
+                LOG.warning("♻️  ALL upload checkpoints reset — will re-scan every table")
+    def set_last_upload_time(self, timestamp: str = None, table: str = None):
             """
             ✅ ENHANCED: Update last upload time with verification
+
+            Honours the checkpoint hold set by upload_batch() when HQ reported
+            events_skipped > 0. The guard lives HERE, not at the call sites,
+            because the checkpoint is advanced from five different places:
+            sync_agent_3 (this file), sync_agent_4:364 and :484, and
+            sync_agent_8:130 and :723. Guarding only the upload_batch path left
+            the outer loops free to advance anyway, silently defeating it — so
+            any future call site inherits the protection automatically.
             """
+            if getattr(self, "_hold_checkpoint", False):
+                LOG.warning(
+                    "⏸️  Checkpoint advance SUPPRESSED (HQ skipped events on the "
+                    "last upload) — these rows will be re-sent rather than lost"
+                )
+                return
+
             ts = timestamp or now_iso()
+            if table:
+                # Per-table advance. Only ever move forward: batches are not
+                # strictly ordered, so a late-arriving older batch must not drag
+                # a table's checkpoint backwards and cause endless re-uploads.
+                current = self.state.get(f"last_upload_time:{table}")
+                if current and ts < current:
+                    LOG.debug("Ignoring backwards checkpoint for %s (%s < %s)", table, ts, current)
+                    return
+                self.state.set(f"last_upload_time:{table}", ts)
+                LOG.info("✅ Updated last_upload_time[%s]: %s", table, ts)
+                return
+
             self.state.set("last_upload_time", ts)
             LOG.info(f"✅ Updated last_upload_time: {ts}")
 

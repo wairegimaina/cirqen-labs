@@ -184,9 +184,13 @@ def api_update_user(request, user_id):
                     }, status=400)
 
                 signature, _ = UserSignature.objects.get_or_create(user=user)
-                signature.signature_image = signature_file
-                signature.is_active = True
-                signature.save()
+                try:
+                    signature.save_user_drawn_signature(signature_file)
+                except Exception:
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'Could not read the signature image.'
+                    }, status=400)
 
                 # Update profile flag
                 profile.has_uploaded_signature = True

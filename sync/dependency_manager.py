@@ -130,15 +130,10 @@ class DependencyManager:
                     child = f"{child_schema}.{child_table}"
                     G.add_edge(parent, child)
 
-                try:
-                    sorted_tables = list(nx.topological_sort(G))
-                    LOG.info("📊 Discovered %d table dependencies", len(sorted_tables))
-                    self._sorted_tables_cache = sorted_tables
-                    return sorted_tables
-                except (nx.NetworkXUnfeasible, nx.NetworkXError):
-                    LOG.warning("⚠️ Cyclic dependencies detected; using node order")
-                    self._sorted_tables_cache = list(G.nodes())
-                    return self._sorted_tables_cache
+                sorted_tables = self._topological_order(G)
+                LOG.info("📊 Discovered %d table dependencies", len(sorted_tables))
+                self._sorted_tables_cache = sorted_tables
+                return sorted_tables
 
         except Exception as e:
             LOG.error("Failed to discover table dependencies: %s", e)
@@ -146,6 +141,63 @@ class DependencyManager:
         finally:
             if conn:
                 self.pool.putconn(conn)
+
+    @staticmethod
+    def _topological_order(G):
+        """
+        Parent-before-child table order that survives dependency cycles.
+
+        The previous fallback for a cyclic graph was ``list(G.nodes())`` — plain
+        insertion order, which discards the dependency information entirely. That
+        uploaded children before their parents, so every child hit a foreign-key
+        violation and was dead-lettered: on 2026-08-06 it cost ~6,800 rows across
+        calSchedules_calibrationschedule and ppms_ppmschedule.
+
+        A cycle does not make ordering impossible — it only makes the members of
+        that cycle mutually unorderable. Everything else still has a correct
+        position, so:
+
+        1. Drop self-loops. A table with a self-referencing FK (parent_id, and
+           similar) is the most common cause of "cyclic" here and imposes no
+           constraint at all on TABLE-level ordering.
+        2. If a real cycle remains, collapse each strongly-connected component
+           to a single node. That condensation is always a DAG, so it sorts
+           cleanly; expanding it preserves correct ordering for every table
+           outside a cycle, which is nearly all of them.
+        """
+        try:
+            return list(nx.topological_sort(G))
+        except (nx.NetworkXUnfeasible, nx.NetworkXError):
+            pass
+
+        self_loops = list(nx.selfloop_edges(G))
+        if self_loops:
+            G = G.copy()
+            G.remove_edges_from(self_loops)
+            LOG.info(
+                "ℹ️  Ignoring %d self-referencing FK(s) for ordering: %s",
+                len(self_loops), ", ".join(sorted({e[0] for e in self_loops})),
+            )
+            try:
+                return list(nx.topological_sort(G))
+            except (nx.NetworkXUnfeasible, nx.NetworkXError):
+                pass
+
+        condensed = nx.condensation(G)
+        ordered = []
+        cycles = 0
+        for scc_id in nx.topological_sort(condensed):
+            members = sorted(condensed.nodes[scc_id]["members"])
+            if len(members) > 1:
+                cycles += 1
+                LOG.warning("⚠️  FK cycle among: %s", ", ".join(members))
+            ordered.extend(members)
+        LOG.warning(
+            "⚠️  %d FK cycle(s) collapsed; %d tables still correctly ordered "
+            "(only same-cycle tables are mutually unordered)",
+            cycles, len(ordered),
+        )
+        return ordered
 
     def sort_updates_by_dependency(self, updates):
         """Sort updates based on table dependencies (parents first)"""
