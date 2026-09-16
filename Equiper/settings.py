@@ -461,7 +461,10 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "Africa/Nairobi"
-USE_I18N = True
+# The UI is English-only: no template or view marks strings for translation.
+# Turn this back on together with {% translate %} tags and LocaleMiddleware
+# if a second language is ever needed (IMPROVEMENT_PLAN.md section 8).
+USE_I18N = False
 USE_TZ = True
 
 # Static files — source dirs stay in BASE_DIR (read-only OK), output goes to DATA_PATH
