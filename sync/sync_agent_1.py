@@ -137,6 +137,17 @@ class AgentInitMixin(SmartDeleteMixin):
         # Initialize client_id
         self.client_id = self.auto_register_client()
 
+        # First run of a new install: exchange the installer's enrollment code
+        # for this client's own key (sync/enrollment.py).
+        if not self.auth_token:
+            try:
+                from .enrollment import ensure_client_key_for_data_path
+            except ImportError:
+                from enrollment import ensure_client_key_for_data_path
+            self.auth_token = ensure_client_key_for_data_path(
+                data_path, self.hq_base_url, self.client_id
+            ) or None
+
         # Thread management
         self.stop_event = threading.Event()
         self.threads = []

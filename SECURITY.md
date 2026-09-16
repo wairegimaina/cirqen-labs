@@ -74,8 +74,27 @@ EOF
 # then force-push and have every collaborator re-clone
 ```
 
-## Next hardening step (Phase 1, item 2)
+## Per-client sync keys (enrollment)
 
-Replace the single shared `SYNC_AUTH_TOKEN` with **one token per client/workshop**,
-validated and tenant-scoped on the HQ server, so a leaked token can only affect
-one site rather than the whole fleet.
+Each client now authenticates with its own key, bound to its client_id on HQ
+(hq_server `sync_api_keys` table, hashes only). Installers carry an
+**enrollment code**, not a key:
+
+1. On HQ (Render → Environment) set `HQ_ADMIN_TOKEN` (admin API only, never
+   given to clients) and `HQ_ENROLLMENT_CODES` (one or more random codes,
+   comma-separated).
+2. Build installers with `SYNC_ENROLLMENT_CODE=<code>` in the build `.env`
+   (and no `SYNC_AUTH_TOKEN`). The code lands in provisioning.json.
+3. On first start the sync agent posts the code and its client_id to
+   `/api/sync/enroll`, saves the returned key in config.json and clears the code.
+   A client that already holds a key cannot be re-enrolled with a code.
+4. Existing sites: issue a key per client with
+   `POST /api/admin/generate_api_key {"device_id": <client_id>, "device_name": …}`
+   (Bearer `HQ_ADMIN_TOKEN`), put it in that client's config.json as
+   `sync.auth_token`.
+5. Once every client has its own key, remove the shared master key from
+   `API_KEYS_JSON` and rotate `SYNC_AUTH_TOKEN`. Rotate `HQ_ENROLLMENT_CODES`
+   after each rollout.
+
+Lost or compromised client: `POST /api/admin/revoke_api_key {"device_id": …}`,
+then re-issue with `generate_api_key` and `"replace": true`.

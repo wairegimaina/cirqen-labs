@@ -24,7 +24,8 @@ class CirqenConfig:
         # ===== SYNC AGENT =====
         "sync": {
             "api_url": "https://hq-server-dgs6.onrender.com/api/sync",
-            "auth_token": "",  # secret: env SYNC_AUTH_TOKEN or provisioning.json
+            "auth_token": "",  # secret: env SYNC_AUTH_TOKEN, or issued at enrollment
+            "enrollment_code": "",  # secret: installer's one-time code (provisioning.json)
             "enabled": True,
             "debug": False,
             "poll_interval": 1,
@@ -496,6 +497,7 @@ class CirqenConfig:
 
     SECRET_ENV = {
         "sync.auth_token": "SYNC_AUTH_TOKEN",
+        "sync.enrollment_code": "SYNC_ENROLLMENT_CODE",
         "update.api_key": "HQ_API_KEY",
         "hq_db.password": "POSTGRES_HQ_PASSWORD",
     }
@@ -578,8 +580,11 @@ class CirqenConfig:
     def missing_secrets(self) -> list:
         """Secrets that are required by the current config but not set."""
         missing = []
-        if self.get("sync.enabled", True) and not self.get("sync.auth_token"):
-            missing.append("sync.auth_token (SYNC_AUTH_TOKEN)")
+        # A new install has no key yet but an enrollment code to obtain one.
+        if self.get("sync.enabled", True) and not (
+            self.get("sync.auth_token") or self.get("sync.enrollment_code")
+        ):
+            missing.append("sync.auth_token (SYNC_AUTH_TOKEN) or sync.enrollment_code (SYNC_ENROLLMENT_CODE)")
         if self.get("hq_db.enabled") and not self.get("hq_db.password"):
             missing.append("hq_db.password (POSTGRES_HQ_PASSWORD)")
         if not self.get("update.api_key"):
@@ -590,7 +595,8 @@ class CirqenConfig:
         """Write the secrets an installer must carry to provisioning.json."""
         data = {}
         for dotted in self.SECRET_ENV:
-            self._put(data, dotted, self.get(dotted) or "")
+            if self.get(dotted):
+                self._put(data, dotted, self.get(dotted))
         output_path = Path(output_path)
         output_path.write_text(json.dumps(data, indent=2))
         try:
