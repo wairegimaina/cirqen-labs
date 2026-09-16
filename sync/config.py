@@ -24,7 +24,7 @@ class CirqenConfig:
         # ===== SYNC AGENT =====
         "sync": {
             "api_url": "https://hq-server-dgs6.onrender.com/api/sync",
-            "auth_token": "G6PScpbnjBWe4PMhi9c_31FzFzzxnHkyfnyzqsdE-JgIYwe4WBRBkBgLyuje43F5",
+            "auth_token": "",  # secret: env SYNC_AUTH_TOKEN or provisioning.json
             "enabled": True,
             "debug": False,
             "poll_interval": 1,
@@ -52,7 +52,7 @@ class CirqenConfig:
             "port": 5432,
             "database": "postgres",
             "user": "postgres.nwlwaeeyduxroykrgksi",
-            "password": "M0707337206m",
+            "password": "",  # secret: env POSTGRES_HQ_PASSWORD or provisioning.json
             "sslmode": "require",
             "enabled": True,
         },
@@ -84,7 +84,7 @@ class CirqenConfig:
         # views.py → _get_hq_config() for check / download / apply.
         "update": {
             "server_url": "https://cirqen-hq.onrender.com",
-            "api_key": "58f8605e1966ce148990c477dcb99d02",
+            "api_key": "",  # secret: env HQ_API_KEY or provisioning.json
             "check_interval_hours": 24,
             "auto_apply": False,
             "require_confirmation": True,
@@ -453,6 +453,7 @@ class CirqenConfig:
                 "EMAIL_HOST_PASSWORD", cfg["email"]["host_password"]
             )
 
+            self._apply_secret_sources(cfg)
             print("✓ Configuration loaded from .env file")
             return cfg
 
@@ -463,23 +464,140 @@ class CirqenConfig:
 
     def _load_from_json(self) -> Dict[str, Any]:
         """Load from config.json, creating it from defaults on first run."""
+        cfg = self._deep_copy(self.DEFAULT_CONFIG)
         if self.config_file.exists():
             try:
                 with open(self.config_file, "r") as f:
                     user_config = json.load(f)
-                cfg = self._deep_copy(self.DEFAULT_CONFIG)
                 self._deep_merge(cfg, user_config)
                 print(f"✓ Configuration loaded from {self.config_file}")
-                return cfg
             except Exception as exc:
                 print(f"⚠️  Error loading config.json: {exc}")
                 print("   Recreating from defaults")
-                self._save_json(self.DEFAULT_CONFIG)
-                return self._deep_copy(self.DEFAULT_CONFIG)
+                cfg = self._deep_copy(self.DEFAULT_CONFIG)
+                self._save_json(cfg)
         else:
             print("🔍 First run — creating default config.json")
-            self._save_json(self.DEFAULT_CONFIG)
-            return self._deep_copy(self.DEFAULT_CONFIG)
+            self._save_json(cfg)
+        if self._apply_secret_sources(cfg):
+            # Persist secrets that came from a provisioning file, so the file
+            # can be deleted after first run. Environment values are not saved.
+            self._save_json(self._without_env_secrets(cfg))
+        return cfg
+
+    # ── Secrets ───────────────────────────────────────────────────────────────
+    #
+    # Secrets are never baked into this file. Each is resolved from, in order:
+    #   1. its environment variable (never written to disk by this class),
+    #   2. config.json in the data directory,
+    #   3. a provisioning.json shipped with the installer (first run only; the
+    #      values are copied into config.json).
+    # A missing secret is reported loudly by missing_secrets()/validate_config().
+
+    SECRET_ENV = {
+        "sync.auth_token": "SYNC_AUTH_TOKEN",
+        "update.api_key": "HQ_API_KEY",
+        "hq_db.password": "POSTGRES_HQ_PASSWORD",
+    }
+
+    def _provisioning_candidates(self):
+        import sys
+
+        candidates = []
+        if os.getenv("CIRQEN_PROVISIONING_FILE"):
+            candidates.append(Path(os.environ["CIRQEN_PROVISIONING_FILE"]))
+        candidates.append(self.data_path / "provisioning.json")
+        if getattr(sys, "frozen", False):
+            candidates.append(Path(sys.executable).resolve().parent / "provisioning.json")
+        candidates.append(Path(__file__).resolve().parent / "provisioning.json")
+        return candidates
+
+    def _read_provisioning(self) -> dict:
+        for candidate in self._provisioning_candidates():
+            try:
+                if candidate.is_file():
+                    with open(candidate) as fh:
+                        return json.load(fh)
+            except (OSError, ValueError) as exc:
+                print(f"⚠️  Ignoring unreadable provisioning file {candidate}: {exc}")
+        return {}
+
+    @staticmethod
+    def _dig(cfg: dict, dotted: str):
+        node = cfg
+        for part in dotted.split("."):
+            if not isinstance(node, dict) or part not in node:
+                return None
+            node = node[part]
+        return node
+
+    @staticmethod
+    def _put(cfg: dict, dotted: str, value):
+        *parents, leaf = dotted.split(".")
+        node = cfg
+        for part in parents:
+            node = node.setdefault(part, {})
+        node[leaf] = value
+
+    def _apply_secret_sources(self, cfg: dict) -> bool:
+        """Fill secrets from env / provisioning. Returns True if provisioning supplied any."""
+        self._env_secret_keys = set()
+        provisioning = None
+        from_provisioning = False
+        for dotted, env_name in self.SECRET_ENV.items():
+            env_value = os.getenv(env_name, "").strip()
+            if env_value:
+                self._put(cfg, dotted, env_value)
+                self._env_secret_keys.add(dotted)
+                continue
+            if self._dig(cfg, dotted):
+                continue
+            if provisioning is None:
+                provisioning = self._read_provisioning()
+            value = self._dig(provisioning, dotted)
+            if value:
+                self._put(cfg, dotted, value)
+                from_provisioning = True
+        return from_provisioning
+
+    def _without_env_secrets(self, cfg: dict) -> dict:
+        """Copy of cfg for writing to disk: env-supplied secrets keep the value
+        already stored in config.json instead of the environment's."""
+        saved = self._deep_copy(cfg)
+        env_keys = getattr(self, "_env_secret_keys", ())
+        if env_keys:
+            try:
+                with open(self.config_file) as fh:
+                    on_disk = json.load(fh)
+            except (OSError, ValueError):
+                on_disk = {}
+            for dotted in env_keys:
+                self._put(saved, dotted, self._dig(on_disk, dotted) or "")
+        return saved
+
+    def missing_secrets(self) -> list:
+        """Secrets that are required by the current config but not set."""
+        missing = []
+        if self.get("sync.enabled", True) and not self.get("sync.auth_token"):
+            missing.append("sync.auth_token (SYNC_AUTH_TOKEN)")
+        if self.get("hq_db.enabled") and not self.get("hq_db.password"):
+            missing.append("hq_db.password (POSTGRES_HQ_PASSWORD)")
+        if not self.get("update.api_key"):
+            missing.append("update.api_key (HQ_API_KEY)")
+        return missing
+
+    def export_provisioning(self, output_path: Path) -> Path:
+        """Write the secrets an installer must carry to provisioning.json."""
+        data = {}
+        for dotted in self.SECRET_ENV:
+            self._put(data, dotted, self.get(dotted) or "")
+        output_path = Path(output_path)
+        output_path.write_text(json.dumps(data, indent=2))
+        try:
+            output_path.chmod(0o600)
+        except OSError:
+            pass
+        return output_path
 
     # ── Internal helpers ──────────────────────────────────────────────────────
 
@@ -517,7 +635,7 @@ class CirqenConfig:
 
     def save(self):
         if not self.use_env_file:
-            self._save_json(self.config)
+            self._save_json(self._without_env_secrets(self.config))
 
     def get(self, key_path: str, default=None):
         """
@@ -696,6 +814,19 @@ class CirqenConfig:
         os.environ["DJANGO_SECRET_KEY"] = self._get_or_create_secret_key()
         os.environ["DJANGO_ALLOWED_HOSTS"] = "localhost,127.0.0.1"
 
+        missing = self.missing_secrets()
+        if missing:
+            import logging
+
+            message = (
+                "Cirqen is missing required secrets: " + ", ".join(missing) + ". "
+                "Set the environment variables, add them to config.json, or place the "
+                "installer's provisioning.json in the data directory. Sync and updates "
+                "will fail until then."
+            )
+            print("\n" + "!" * 60 + "\n❌ " + message + "\n" + "!" * 60)
+            logging.getLogger("cirqen.config").error(message)
+
         print("✓ Environment variables configured")
         print(f"  • Local DB  : {self.get('local_db.host')}:{self.get('local_db.port')}")
         print(f"  • HQ DB     : {self.get('hq_db.host')}:{self.get('hq_db.port')}")
@@ -733,8 +864,8 @@ class CirqenConfig:
             errors.append("hq_db.host is required when hq_db.enabled=True")
         if not self.get("update.server_url"):
             errors.append("update.server_url is required for the update system")
-        if not self.get("update.api_key"):
-            errors.append("update.api_key is required for the update system")
+        for secret in self.missing_secrets():
+            errors.append(f"missing secret: {secret}")
         if self.get("update.check_interval_hours") < 0:
             errors.append("update.check_interval_hours cannot be negative")
         if self.get("update.max_backups") < 1:

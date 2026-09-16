@@ -1133,10 +1133,29 @@ def setup_config():
             for error in errors:
                 print(f"  • {error}")
 
+        # Hard stops (IMPROVEMENT_PLAN.md 3.3 / 3.4): an installer without its
+        # secrets cannot sync, and one with DEBUG on leaks stack traces.
+        missing = config.missing_secrets()
+        if missing:
+            print("❌ Refusing to build: missing secrets " + ", ".join(missing))
+            print("   Provide them via environment variables or the git-ignored .env file.")
+            return False
+        debug_env = os.getenv("DJANGO_DEBUG")
+        debug_on = (debug_env.strip().lower() in ("1", "true", "yes", "on")) if debug_env is not None \
+            else bool(config.get("app.debug"))
+        if debug_on:
+            print("❌ Refusing to build: DEBUG resolves true (set app.debug=false / DJANGO_DEBUG=0).")
+            return False
+
         # Export to .env for build process
         env_path = PROJECT_ROOT / '.env.build'
         config.export_to_env_file(env_path)
         print(f"✅ Configuration exported to {env_path}")
+
+        # Secrets travel with the installer in provisioning.json (git-ignored,
+        # copied into dist/Cirqen by package_distribution), never in source.
+        config.export_provisioning(PROJECT_ROOT / 'provisioning.json')
+        print("✅ provisioning.json written (git-ignored)")
 
         # Clean up temp data
         shutil.rmtree(temp_data, ignore_errors=True)
@@ -3409,6 +3428,13 @@ def package_distribution():
     print_banner("Packaging Distribution")
 
     dist_dir = DIST_DIR / "Cirqen"
+
+    provisioning = PROJECT_ROOT / 'provisioning.json'
+    if provisioning.exists():
+        shutil.copy2(provisioning, dist_dir / 'provisioning.json')
+        print("✅ provisioning.json included in the distribution")
+    else:
+        print("⚠️ provisioning.json not found; clients will need secrets supplied separately")
 
     # Calculate size
     total_size = sum(f.stat().st_size for f in dist_dir.rglob('*') if f.is_file())

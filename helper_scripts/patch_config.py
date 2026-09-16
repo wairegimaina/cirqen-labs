@@ -7,6 +7,7 @@ left exactly as-is.
 """
 
 import json
+import os
 import shutil
 from pathlib import Path
 
@@ -31,7 +32,7 @@ cfg["hq_db"] = {
     "port": 6543,
     "database": "postgres",
     "user": "postgres.nwlwaeeyduxroykrgksi",
-    "password": "M0707337206m",
+    "password": os.environ["POSTGRES_HQ_PASSWORD"],  # never commit the value
     "sslmode": "require",
     "enabled": True,
 }

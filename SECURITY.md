@@ -2,22 +2,38 @@
 
 ## Where credentials live now
 
-Secrets are **no longer hardcoded in tracked source**. They are resolved at
-runtime in this order:
+`config.py` and `sync/config.py` carry **no secrets** in `DEFAULT_CONFIG`
+(checked by `core/tests/test_config_secrets.py`). The three HQ secrets —
+`sync.auth_token`, `update.api_key`, `hq_db.password` — are resolved at runtime
+from, in order:
 
-1. **Environment variables** (`POSTGRES_*`, `SYNC_AUTH_TOKEN`, `HQ_API_KEY`, …)
-2. **`~/.cirqen/data/config.json`** — the running app's config (per machine, outside the repo)
-3. **`.env`** at the repo root — git-ignored; loaded by `config.py` / `sync/config.py`
-   and the helper scripts via `python-dotenv`
+1. **Environment variables**: `SYNC_AUTH_TOKEN`, `HQ_API_KEY`, `POSTGRES_HQ_PASSWORD`
+   (used for that run, never written to disk by the config manager)
+2. **`<data dir>/config.json`**: `~/.cirqen/data/config.json` on Linux, the
+   running app's per-machine config, outside the repo
+3. **`provisioning.json`**: read once when config.json lacks a secret, from
+   `$CIRQEN_PROVISIONING_FILE`, the data directory, or next to the installed
+   executable. Values are copied into config.json, after which the file can be
+   deleted.
 
-`.env.example` documents every required variable. To set up a dev machine:
+A missing secret is reported at startup (console banner + `cirqen.config` error
+log) and by `validate_config()`.
+
+### How installers get their secrets
+
+`bulid_V1.py` reads the secrets from the build machine's environment or its
+git-ignored `.env`, **refuses to build** if any is missing or if DEBUG resolves
+true, writes `provisioning.json` (git-ignored, mode 600) and copies it into
+`dist/Cirqen/`. Treat a built installer as containing credentials.
+
+`.env.example` documents every variable. To set up a dev machine:
 
 ```bash
 cp .env.example .env      # then fill in real values
 ```
 
 Helper scripts under `helper_scripts/` load credentials via `helper_scripts/_creds.py`
-(env → config.json → .env). They contain **no secrets**.
+(env → config.json → .env).
 
 ## ⚠️ REQUIRED: rotate the exposed credentials
 
@@ -32,11 +48,16 @@ make them safe — they must be rotated. Assume all of these are compromised:
 | Local PostgreSQL password (`cirqen1` role) | `ALTER ROLE cirqen1 WITH PASSWORD '<new>';` on each client, then update `.env` / config.json |
 | Sync auth token (`SYNC_AUTH_TOKEN`) | Regenerate on the HQ server; issue **per-client** tokens (see below) and redistribute |
 | HQ update API key (`HQ_API_KEY`) | Render → HQ FastAPI service → Environment → regenerate |
+| HQ Supabase database password (`postgres.nwlwaeeyduxroykrgksi`) | Supabase → Project settings → Database → reset password; then Render env `POSTGRES_HQ_PASSWORD` and every client's config.json |
 
 After rotating, update `~/.cirqen/data/config.json` on each client (and `.env`
 for dev) with the new values.
 
 ### Optional but recommended: purge history
+
+The Supabase password was also committed (in `config.py`, `sync/config.py` and
+`helper_scripts/patch_config.py`) and is not listed below: add it to your local
+replacement file rather than writing it into this document again.
 
 Rotation is the real fix. If you also want the old values gone from history:
 
