@@ -6,8 +6,13 @@ binaries (runtime/postgresql/), so the trigger/JSONB/xmax behaviour is exercised
 against a real server — no external DB, no touching the user's data. The whole
 cluster is created in a temp dir and torn down after the session.
 
-If the embedded binaries are not present, every DB-backed test is skipped
-(``pytest.skip``) rather than failing.
+Binaries are looked up in this order: $CIRQEN_PG_BIN, the embedded
+runtime/postgresql/bin (git-ignored, present on dev machines), then a system
+PostgreSQL install (initdb on PATH or /usr/lib/postgresql/<ver>/bin, as in CI).
+
+If none is found the DB-backed tests are skipped, and a warning says so loudly.
+Set CIRQEN_REQUIRE_PG=1 (CI does) to turn that skip into a failure, so the sync
+suite can never pass by silently running nothing.
 """
 import os
 import shutil
@@ -15,13 +20,38 @@ import socket
 import subprocess
 import tempfile
 import time
+import warnings
 from pathlib import Path
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-PG_BIN = REPO_ROOT / "runtime" / "postgresql" / "bin"
-PG_LIB = REPO_ROOT / "runtime" / "postgresql" / "lib"
+
+
+def _find_pg_bin():
+    candidates = []
+    if os.environ.get("CIRQEN_PG_BIN"):
+        candidates.append(Path(os.environ["CIRQEN_PG_BIN"]))
+    candidates.append(REPO_ROOT / "runtime" / "postgresql" / "bin")
+    on_path = shutil.which("initdb")
+    if on_path:
+        candidates.append(Path(on_path).parent)
+    candidates.extend(sorted(Path("/usr/lib/postgresql").glob("*/bin"), reverse=True))
+    for candidate in candidates:
+        if (candidate / "initdb").exists() and (candidate / "pg_ctl").exists():
+            return candidate
+    return None
+
+
+PG_BIN = _find_pg_bin()
+PG_LIB = PG_BIN.parent / "lib" if PG_BIN else None
+
+
+def _skip_or_fail(reason):
+    if os.environ.get("CIRQEN_REQUIRE_PG") == "1":
+        pytest.fail(f"{reason} (CIRQEN_REQUIRE_PG=1)", pytrace=False)
+    warnings.warn(f"SYNC DB TESTS SKIPPED: {reason}", stacklevel=2)
+    pytest.skip(reason)
 
 
 def _free_port() -> int:
@@ -34,15 +64,16 @@ def _free_port() -> int:
 
 def _env():
     env = dict(os.environ)
-    env["LD_LIBRARY_PATH"] = f"{PG_LIB}:{env.get('LD_LIBRARY_PATH', '')}"
+    if PG_LIB and PG_LIB.exists():
+        env["LD_LIBRARY_PATH"] = f"{PG_LIB}:{env.get('LD_LIBRARY_PATH', '')}"
     return env
 
 
 @pytest.fixture(scope="session")
 def pg_dsn():
     """Start an embedded throwaway Postgres; yield connection kwargs."""
-    if not (PG_BIN / "initdb").exists() or not (PG_BIN / "pg_ctl").exists():
-        pytest.skip("embedded postgres binaries not found (runtime/postgresql)")
+    if PG_BIN is None:
+        _skip_or_fail("no PostgreSQL binaries found (CIRQEN_PG_BIN, runtime/postgresql or system)")
 
     tmp = Path(tempfile.mkdtemp(prefix="cirqen_pgtest_"))
     data = tmp / "data"
@@ -77,7 +108,7 @@ def pg_dsn():
         subprocess.run([str(PG_BIN / "pg_ctl"), "-D", str(data), "-m", "immediate", "stop"],
                        env=env, capture_output=True)
         shutil.rmtree(tmp, ignore_errors=True)
-        pytest.skip("embedded postgres did not become ready")
+        _skip_or_fail("throwaway postgres did not become ready")
 
     yield kwargs
 

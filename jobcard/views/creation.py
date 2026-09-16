@@ -124,6 +124,7 @@ def get_pending_ppm_schedules(request):
         return JsonResponse({'error': f'Failed to load schedules: {str(e)}'}, status=500)
 
 
+@login_required
 def create_job_card(request):
     profile, department, workshop, role = get_user_context(request)
 

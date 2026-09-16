@@ -13,17 +13,17 @@ from django.core.paginator import Paginator
 from django.db.models import Q
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
-from django.views.decorators.csrf import csrf_protect, csrf_exempt
+from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_POST, require_http_methods
 from django.db import transaction
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.files.base import ContentFile
 from workshop.models import Workshop
 from Inventory.models import Department
 from ..forms import CustomLoginForm, UserCreationForm, ForgotPasswordForm, VerifyResetCodeForm, CustomSetPasswordForm
 from ..models import UserProfile, UserSecurityLog, UserSignature, UserPasswordReset
 from ..utils import UserManagementUtils
-from ..control import hod_required, role_required
+from ..control import get_user_role, hod_required, role_required
 User = get_user_model()
 logger = logging.getLogger(__name__)
 
@@ -82,8 +82,14 @@ def api_force_signature_reset(request, user_id):
 
 @login_required
 def download_signature(request, user_id):
-    """Download user's signature image"""
+    """Download user's signature image.
+
+    Signatures authorise job cards and certificates, so only the owner and an
+    HOD may download one.
+    """
     user = get_object_or_404(User, id=user_id)
+    if user != request.user and get_user_role(request.user) != 'HOD':
+        raise PermissionDenied("You can only download your own signature.")
 
     try:
         signature = user.signature
@@ -94,10 +100,10 @@ def download_signature(request, user_id):
             return response
         else:
             messages.error(request, "Signature image not found.")
-            return redirect('user_profile', user_id=user_id)
+            return redirect('manage_users')
     except UserSignature.DoesNotExist:
         messages.error(request, "User signature not found.")
-        return redirect('user_profile', user_id=user_id)
+        return redirect('manage_users')
 
 
 @login_required
@@ -154,7 +160,6 @@ def api_get_user_signature(request, user_id):
         }, status=500)
 
 
-@csrf_exempt
 @login_required
 @role_required('HOD', 'NIC')
 @require_http_methods(["POST"])

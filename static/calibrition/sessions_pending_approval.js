@@ -23,14 +23,14 @@
     const toastId = "toast-" + Date.now();
 
     const toastHTML = `
-            <div id="${toastId}" class="toast ${type}" role="alert" aria-live="assertive" aria-atomic="true">
+            <div id="${escapeHTML(toastId)}" class="toast ${escapeHTML(type)}" role="alert" aria-live="assertive" aria-atomic="true">
                 <div class="toast-header">
-                    <i class="fas fa-${type === "success" ? "check-circle" : "exclamation-circle"} me-2"></i>
-                    <strong class="me-auto">${type === "success" ? "Success" : "Error"}</strong>
+                    <i class="fas fa-${escapeHTML(type === "success" ? "check-circle" : "exclamation-circle")} me-2"></i>
+                    <strong class="me-auto">${escapeHTML(type === "success" ? "Success" : "Error")}</strong>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"></button>
                 </div>
                 <div class="toast-body">
-                    ${message}
+                    ${escapeHTML(message)}
                 </div>
             </div>
         `;
@@ -189,8 +189,9 @@
 
   // UI: Build session details HTML
   function buildSessionDetailsHTML(data) {
-    const safeValue = (val) => val || "N/A";
-    const safeNestedValue = (obj, key) => (obj && obj[key] ? obj[key] : "N/A");
+    // Every value placed in the HTML below goes through one of these, so they escape.
+    const safeValue = (val) => escapeHTML(val || "N/A");
+    const safeNestedValue = (obj, key) => escapeHTML(obj && obj[key] ? obj[key] : "N/A");
 
     let html =
       '<h6 class="border-bottom pb-2 mb-3"><i class="fas fa-info-circle text-info me-2"></i>Session Information</h6>' +
@@ -320,7 +321,7 @@
           safeValue(reading.unit) +
           "</span></td>" +
           "<td><small>" +
-          (reading.readings ? reading.readings.join(", ") : "N/A") +
+          (reading.readings ? escapeHTML(reading.readings.join(", ")) : "N/A") +
           "</small></td>" +
           "<td>" +
           (reading.mean != null ? reading.mean.toFixed(3) : "N/A") +
@@ -357,27 +358,27 @@
     return `
             <div class="info-row">
                 <span class="info-label"><i class="fas fa-certificate me-2"></i>Certificate Number:</span>
-                <span class="info-value"><strong>${certificateNumber || "Pending"}</strong></span>
+                <span class="info-value"><strong>${escapeHTML(certificateNumber || "Pending")}</strong></span>
             </div>
             <div class="info-row">
                 <span class="info-label"><i class="fas fa-hashtag me-2"></i>Session ID:</span>
-                <span class="info-value">${currentSessionId}</span>
+                <span class="info-value">${escapeHTML(currentSessionId)}</span>
             </div>
             <div class="info-row">
                 <span class="info-label"><i class="fas fa-cog me-2"></i>Equipment:</span>
-                <span class="info-value">${safeValue(sessionData.device?.description)}</span>
+                <span class="info-value">${escapeHTML(safeValue(sessionData.device?.description))}</span>
             </div>
             <div class="info-row">
                 <span class="info-label"><i class="fas fa-barcode me-2"></i>Serial Number:</span>
-                <span class="info-value">${safeValue(sessionData.device?.serial)}</span>
+                <span class="info-value">${escapeHTML(safeValue(sessionData.device?.serial))}</span>
             </div>
             <div class="info-row">
                 <span class="info-label"><i class="fas fa-user me-2"></i>Performed By:</span>
-                <span class="info-value">${safeValue(sessionData.performed_by)}</span>
+                <span class="info-value">${escapeHTML(safeValue(sessionData.performed_by))}</span>
             </div>
             <div class="info-row">
                 <span class="info-label"><i class="fas fa-calendar me-2"></i>Date:</span>
-                <span class="info-value">${safeValue(sessionData.timestamp)}</span>
+                <span class="info-value">${escapeHTML(safeValue(sessionData.timestamp))}</span>
             </div>
         `;
   }

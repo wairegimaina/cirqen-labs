@@ -322,20 +322,3 @@ def accept_accessory_request(request, request_id):
     return redirect('partstools:accessories_dashboard')
 
 
-@login_required
-def view_request_history(request, request_id):
-    """View the full history log of a specific accessory request."""
-    accessory_request = get_object_or_404(AccessoryRequest, id=request_id)
-    profile = request.user.userprofile
-
-    if profile.role != 'HOD' and accessory_request.workshop != profile.workshop:
-        messages.error(request, "You don't have permission to view this request.")
-        return redirect('partstools:accessories_dashboard')
-
-    history = accessory_request.history.all().select_related('performed_by__user')
-
-    return render(request, 'Parts & tools/request_history.html', {
-        'show_sidebar': True,
-        'request': accessory_request,
-        'history': history,
-    })

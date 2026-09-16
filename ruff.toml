@@ -1,0 +1,16 @@
+# Lint baseline for CI (IMPROVEMENT_PLAN.md section 6).
+#
+# Starts with the rules that catch code which cannot run: syntax errors,
+# undefined names, bad comparisons and misplaced statements. The codebase
+# passes these today, and CI keeps it that way. Widen `select` one rule
+# family at a time as the tree is cleaned up.
+target-version = "py312"
+extend-exclude = [
+    "venv", "dist", "build", "runtime", "Archives", "node_modules",
+    "*/migrations/*",
+    # Duplicate build scripts, to be collapsed into build_backup.py (plan section 7).
+    "bulid_V1.py", "builder/bulid_backup.py",
+]
+
+[lint]
+select = ["E9", "F63", "F7", "F82"]

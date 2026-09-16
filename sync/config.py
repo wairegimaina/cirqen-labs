@@ -26,7 +26,7 @@ class CirqenConfig:
             "api_url": "https://hq-server-dgs6.onrender.com/api/sync",
             "auth_token": "G6PScpbnjBWe4PMhi9c_31FzFzzxnHkyfnyzqsdE-JgIYwe4WBRBkBgLyuje43F5",
             "enabled": True,
-            "debug": True,
+            "debug": False,
             "poll_interval": 1,
             "download_interval": 5,
             "upload_batch_size": 50,

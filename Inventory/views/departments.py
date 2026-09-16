@@ -19,6 +19,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction, models
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from core.scoping import get_for_user_or_404
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
@@ -194,7 +195,7 @@ def create_department(request, workshop_id=None):
             target_workshop = get_object_or_404(Workshop, id=workshop_id)
         else:
             messages.error(request, "HODs must select a workshop to create a department.")
-            return redirect('hod_dashboard')
+            return redirect('dashboard:hod_dashboard')
     elif profile.role == 'Tech':
         target_workshop = profile.workshop
         if not target_workshop:
@@ -447,7 +448,7 @@ def transfer_department(request, dept_id):
 def get_department_dependency_count(request, dept_id):
     """API endpoint to get dependency count for a department"""
     try:
-        department = get_object_or_404(Department, id=dept_id)
+        department = get_for_user_or_404(Department, request.user, id=dept_id)
         count = get_department_dependencies_count(department)
 
         return JsonResponse({

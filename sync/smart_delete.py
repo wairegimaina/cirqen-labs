@@ -4,6 +4,10 @@ import uuid
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import requests
+try:
+    from .sql_ident import qualified
+except ImportError:  # loaded as a top-level module with sync/ on sys.path
+    from sql_ident import qualified
 
 
 class SmartDeleteMixin:
@@ -23,8 +27,7 @@ class SmartDeleteMixin:
             else:
                 schema, tbl = "public", table
 
-            quoted_table = f'"{tbl}"'
-            full_table = f"{schema}.{quoted_table}"
+            full_table = qualified(schema, tbl)
 
             # Check if table has status columns
             with conn.cursor() as cur:
@@ -223,8 +226,7 @@ class SmartDeleteMixin:
             else:
                 schema, tbl = "public", table
 
-            quoted_table = f'"{tbl}"'
-            full_table = f"{schema}.{quoted_table}"
+            full_table = qualified(schema, tbl)
 
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 if operation_type == "soft_delete":
@@ -308,8 +310,7 @@ class SmartDeleteMixin:
             else:
                 schema, tbl = "public", table
 
-            quoted_table = f'"{tbl}"'
-            full_table = f"{schema}.{quoted_table}"
+            full_table = qualified(schema, tbl)
 
             # Check if table has status columns
             with conn.cursor() as cur:
@@ -496,8 +497,7 @@ class SmartDeleteMixin:
             else:
                 schema, tbl = "public", table
 
-            quoted_table = f'"{tbl}"'
-            full_table = f"{schema}.{quoted_table}"
+            full_table = qualified(schema, tbl)
 
             # Get schema info
             schema_info = self.get_table_schema_info(table)

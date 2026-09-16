@@ -195,40 +195,40 @@ const UI = {
       else if (item.status === 'Under repair') badgeClass = 'badge-warning';
 
       tr.innerHTML = `
-                <td>${startCount + index + 1}</td>
+                <td>${escapeHTML(startCount + index + 1)}</td>
                 <td class="fw-bold text-primary">${escapeHtml(item.description || 'Unknown')}</td>
                 <td>${escapeHtml(item.manufacturer || '-')}</td>
                 <td>${escapeHtml(item.model || '-')}</td>
                 <td class="font-monospace">${escapeHtml(item.serial || '-')}</td>
                 <td>${escapeHtml(item.department || '-')}</td>
-                <td><span class="badge ${badgeClass}">${item.status}</span></td>
+                <td><span class="badge ${badgeClass}">${escapeHTML(item.status)}</span></td>
                 <td class="text-end">
                     <div class="btn-group btn-group-sm">
                         <button class="btn btn-outline-primary edit-button"
-                            data-id="${item.id}"
-                            data-description="${item.description_id}"
-                            data-manufacturer="${item.manufacturer_id || ''}"
+                            data-id="${escapeHTML(item.id)}"
+                            data-description="${escapeHTML(item.description_id)}"
+                            data-manufacturer="${escapeHTML(item.manufacturer_id || '')}"
                             data-model="${escapeHtml(item.model || '')}"
                             data-serial="${escapeHtml(item.serial || '')}"
-                            data-department="${item.department_id}"
-                            data-status="${item.status}"
+                            data-department="${escapeHTML(item.department_id)}"
+                            data-status="${escapeHTML(item.status)}"
                             title="Edit">
                             <i class="fas fa-pen"></i>
                         </button>
                         <button class="btn btn-outline-danger delete-button"
-                            data-equipment-id="${item.id}"
+                            data-equipment-id="${escapeHTML(item.id)}"
                             title="Delete">
                             <i class="fas fa-trash"></i>
                         </button>
                         <button class="btn btn-outline-info transfer-button"
-                            data-id="${item.id}"
+                            data-id="${escapeHTML(item.id)}"
                             data-description="${escapeHtml(item.description)}"
                             data-serial="${escapeHtml(item.serial)}"
                             data-department="${escapeHtml(item.department)}"
-                            data-department-id="${item.department_id}"
+                            data-department-id="${escapeHTML(item.department_id)}"
                             data-workshop="${escapeHtml(item.workshop)}"
-                            data-workshop-id="${item.workshop_id}"
-                            data-status="${item.status}"
+                            data-workshop-id="${escapeHTML(item.workshop_id)}"
+                            data-status="${escapeHTML(item.status)}"
                             title="Transfer">
                             <i class="fas fa-exchange-alt"></i>
                         </button>
@@ -246,7 +246,7 @@ const UI = {
                 <tr>
                     <td colspan="8" class="text-center py-5 text-muted">
                         <i class="fas fa-inbox fa-3x mb-3 opacity-25"></i>
-                        <p>${msg}</p>
+                        <p>${escapeHTML(msg)}</p>
                     </td>
                 </tr>`;
     }
@@ -271,7 +271,7 @@ const UI = {
       else {
         const active =
           p === pagination.current_page ? 'active btn-primary' : 'btn-outline-secondary';
-        buttons += `<button class="btn btn-sm ${active} ajax-page-btn" data-page="${p}">${p}</button>`;
+        buttons += `<button class="btn btn-sm ${escapeHTML(active)} ajax-page-btn" data-page="${p}">${p}</button>`;
       }
     });
 
@@ -307,7 +307,7 @@ const UI = {
       tr.className = 'fade-in';
 
       tr.innerHTML = `
-                <td>${row.description__name}</td>
+                <td>${escapeHTML(row.description__name)}</td>
                 <td class="text-center text-success">${row.working_count}</td>
                 <td class="text-center text-danger">${row.not_working_count}</td>
                 <td class="text-center text-warning">${row.under_repair_count}</td>
@@ -874,7 +874,7 @@ const ModelAutocomplete = {
               document.body.appendChild(datalist);
               modelInput.setAttribute('list', listId);
             }
-            datalist.innerHTML = data.models.map((m) => `<option value="${m}">`).join('');
+            datalist.innerHTML = data.models.map((m) => `<option value="${escapeHTML(m)}">`).join('');
           } else {
             modelInput.placeholder = 'Enter new model name';
             modelInput.removeAttribute('list');
@@ -1080,7 +1080,7 @@ const ExcelImport = {
     if (data.committed) {
       banner.className = 'alert alert-success';
       banner.innerHTML = `<i class="fas fa-check-circle me-2"></i><strong>Import complete.</strong>
-        ${counts.create} added, ${counts.reactivate} reactivated${
+        ${escapeHTML(counts.create)} added, ${escapeHTML(counts.reactivate)} reactivated${
         counts.error ? `, ${counts.error} skipped due to errors` : ''
       }.`;
     } else if (importable === 0) {
@@ -1090,7 +1090,7 @@ const ExcelImport = {
     } else {
       banner.className = 'alert alert-info';
       banner.innerHTML = `<i class="fas fa-info-circle me-2"></i><strong>Preview only — nothing has been saved yet.</strong>
-        ${importable} row(s) are ready to import${
+        ${escapeHTML(importable)} row(s) are ready to import${
         counts.error ? `; ${counts.error} row(s) have errors and will be skipped` : ''
       }.`;
     }
@@ -1132,13 +1132,13 @@ const ExcelImport = {
     };
     document.getElementById('uploadPreviewBody').innerHTML = data.rows
       .map(
-        (row) => `<tr class="${row.action === 'error' ? 'table-danger' : ''}">
-          <td>${row.row}</td>
-          <td>${badges[row.action] || row.action}</td>
+        (row) => `<tr class="${escapeHTML(row.action === 'error' ? 'table-danger' : '')}">
+          <td>${escapeHTML(row.row)}</td>
+          <td>${badges[row.action] || escapeHtml(row.action)}</td>
           <td class="font-monospace">${escapeHtml(row.serial) || '-'}</td>
           <td>${escapeHtml(row.description) || '-'}</td>
           <td>${escapeHtml(row.department) || '-'}</td>
-          <td class="small ${row.action === 'error' ? 'text-danger' : 'text-muted'}">
+          <td class="small ${escapeHTML(row.action === 'error' ? 'text-danger' : 'text-muted')}">
             ${row.messages.map(escapeHtml).join('<br>')}
           </td>
         </tr>`,
@@ -1156,7 +1156,7 @@ const ExcelImport = {
       UI.showNotification(`Imported ${importable} equipment record(s)`, 'success');
     } else {
       confirmBtn.style.display = importable ? 'inline-block' : 'none';
-      confirmBtn.innerHTML = `<i class="fas fa-check"></i> Import ${importable} row(s)`;
+      confirmBtn.innerHTML = `<i class="fas fa-check"></i> Import ${escapeHTML(importable)} row(s)`;
       doneBtn.style.display = 'none';
       backBtn.style.display = 'inline-block';
     }
@@ -1177,10 +1177,7 @@ function setText(id, text) {
 }
 
 function escapeHtml(text) {
-  if (!text) return '';
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
+  return window.escapeHTML(text); // static/js/escape.js
 }
 
 function updateBrowserURL(params) {

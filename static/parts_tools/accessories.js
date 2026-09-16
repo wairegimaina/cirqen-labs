@@ -214,7 +214,7 @@ const AccessoryManager = {
     const cols = isHod ? 9 : 7;
 
     if (!accessories.length) {
-      tbody.innerHTML = `<tr><td colspan="${cols}" class="text-center text-muted py-4">No accessories found.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="${escapeHTML(cols)}" class="text-center text-muted py-4">No accessories found.</td></tr>`;
       return;
     }
 
@@ -223,16 +223,16 @@ const AccessoryManager = {
         (a, i) => `
       <tr>
         <td>${i + 1}</td>
-        <td><strong>${a.name || '-'}</strong></td>
-        <td>${a.equipment || '-'}</td>
-        <td>${a.manufacturer || '-'}</td>
+        <td><strong>${escapeHTML(a.name || '-')}</strong></td>
+        <td>${escapeHTML(a.equipment || '-')}</td>
+        <td>${escapeHTML(a.manufacturer || '-')}</td>
         <td>
           <span class="badge ${a.stock_count < 5 ? 'bg-danger' : a.stock_count < 10 ? 'bg-warning text-dark' : 'bg-success'}">
             ${a.stock_count}
           </span>
         </td>
-        <td>${a.unit_cost} KSh</td>
-        <td>${a.note || '-'}</td>
+        <td>${escapeHTML(a.unit_cost)} KSh</td>
+        <td>${escapeHTML(a.note || '-')}</td>
         ${isHod ? `<td>${a.workshop || 'Global'}</td>` : ''}
         ${
           isHod
@@ -294,7 +294,7 @@ const ToolManager = {
     const cols = isHod ? 7 : 5;
 
     if (!tools.length) {
-      tbody.innerHTML = `<tr><td colspan="${cols}" class="text-center text-muted py-4">No tools found.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="${escapeHTML(cols)}" class="text-center text-muted py-4">No tools found.</td></tr>`;
       return;
     }
 
@@ -303,10 +303,10 @@ const ToolManager = {
         (t, i) => `
       <tr>
         <td>${i + 1}</td>
-        <td><strong>${t.name || '-'}</strong></td>
-        <td>${t.manufacturer || '-'}</td>
-        <td>${t.model || '-'}</td>
-        <td>${t.serial_number || '-'}</td>
+        <td><strong>${escapeHTML(t.name || '-')}</strong></td>
+        <td>${escapeHTML(t.manufacturer || '-')}</td>
+        <td>${escapeHTML(t.model || '-')}</td>
+        <td>${escapeHTML(t.serial_number || '-')}</td>
         ${isHod ? `<td>${t.workshop || 'Global'}</td>` : ''}
         ${
           isTech

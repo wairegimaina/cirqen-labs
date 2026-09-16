@@ -215,7 +215,7 @@ def equipment_analytics_api(request):
         equipments_queryset = equipments_queryset.filter(status=status_filter)
 
     # Get filtered equipment
-    equipments = list(equipments_queryset.select_related('department'))
+    equipments = list(equipments_queryset.select_related('department', 'description'))
 
     # --- Status summary ---
     status_counts = Counter(e.status for e in equipments)

@@ -34,6 +34,10 @@ from psycopg2.extras import RealDictCursor
 
 from .agent_prelude import LOG, format_kenyan_time, now_kenyan
 from .event_identity import stable_event_id
+try:
+    from .sql_ident import qualified
+except ImportError:  # loaded as a top-level module with sync/ on sys.path
+    from sql_ident import qualified
 
 
 # ── Schema + trigger DDL (all idempotent) ─────────────────────────────────────
@@ -124,7 +128,7 @@ class OutboxMixin:
                         LOG.debug("   ⏭️  outbox: table missing locally, skipping %s", table)
                         continue
 
-                    ident = f'"{schema}"."{tbl}"'
+                    ident = qualified(schema, tbl)
                     cur.execute(f'DROP TRIGGER IF EXISTS {_TRIGGER_NAME} ON {ident}')
                     cur.execute(
                         f'CREATE TRIGGER {_TRIGGER_NAME} '

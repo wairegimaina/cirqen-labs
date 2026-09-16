@@ -12,7 +12,7 @@ from decimal import Decimal, InvalidOperation
 from django.utils import timezone
 from django.contrib.auth import get_user_model
 
-from CalSoft.models import CalibrationProcedure, CalibrationParameter, Standard, Parameter, SubParameter, SetValue, CalibrationSession
+from CalSoft.models import CalibrationAuditLog, CalibrationProcedure, CalibrationParameter, Standard, Parameter, SubParameter, SetValue, CalibrationSession
 from CalSoft.forms import CalibrationProcedureForm, ParameterFormSet, ProcedureSearchForm
 
 User = get_user_model()

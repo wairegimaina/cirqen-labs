@@ -31,6 +31,14 @@ from ..calibration_pdf_generator import create_calibration_pdf_response
 from .helpers import get_user_access_context
 
 
+def _no_access_response():
+    """JSON answer for a user with no workshop or department to scope schedules to
+    (for example an HOD, or an In-Charge whose department was deleted)."""
+    return JsonResponse(
+        {'error': 'Your account has no workshop or department assigned.'}, status=403
+    )
+
+
 def _apply_ajax_common_filters(qs, request, access_context):
     search = request.GET.get('search', '').strip()
     month = request.GET.get('month', '').strip()
@@ -95,6 +103,8 @@ def _ajax_schedule_to_dict(schedule, is_overdue=False, is_warning=False, waiting
 def ajax_schedules(request):
     today = datetime.today().date()
     access_context = get_user_access_context(request)
+    if access_context is None:
+        return _no_access_response()
 
     qs = CalibrationSchedule.objects.select_related(
         'equipment__department', 'equipment__description'
@@ -134,6 +144,8 @@ def ajax_schedules(request):
 @login_required
 def ajax_completed_schedules(request):
     access_context = get_user_access_context(request)
+    if access_context is None:
+        return _no_access_response()
     thirty_days_ago = datetime.today().date() - timedelta(days=30)
 
     qs = CalibrationSchedule.objects.select_related(
@@ -185,6 +197,8 @@ def ajax_completed_schedules(request):
 @login_required
 def ajax_unscheduled_equipment(request):
     access_context = get_user_access_context(request)
+    if access_context is None:
+        return _no_access_response()
 
     scheduled_ids = CalibrationSchedule.objects.filter(
         equipment__active_status=True,
@@ -243,6 +257,8 @@ def ajax_unscheduled_equipment(request):
 @login_required
 def ajax_schedule_stats(request):
     access_context = get_user_access_context(request)
+    if access_context is None:
+        return _no_access_response()
     today = datetime.today().date()
 
     base = CalibrationSchedule.objects.filter(equipment__active_status=True)

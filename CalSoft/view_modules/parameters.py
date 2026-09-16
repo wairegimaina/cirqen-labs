@@ -71,25 +71,6 @@ def api_standards_parameters_data(request):
 
 
 @login_required
-def standards_list(request):
-    try:
-        standards = Standard.objects.all().order_by("name")
-        paginator = Paginator(standards, 20)
-        page_number = request.GET.get("page")
-        page_obj = paginator.get_page(page_number)
-        context = {
-            "page_obj": page_obj,
-            "total_standards": standards.count(),
-            "show_sidebar": True,
-        }
-        return render(request, "Calibration/standards_list.html", context)
-    except Exception as e:
-        logger.error(f"Error loading standards list: {str(e)}")
-        messages.error(request, f"Error loading standards: {str(e)}")
-        return redirect("calibration:calsoft_dashboard")
-
-
-@login_required
 def standard_create(request):
     if request.method == "POST":
         form = StandardForm(request.POST)
@@ -249,10 +230,10 @@ def parameter_create(request):
             if is_ajax(request):
                 return JsonResponse({"success": False, "errors": form.errors.as_json()}, status=400)
             messages.error(request, "Please correct the errors below.")
-    else:
-        form = ParameterForm()
 
-    return render(request, "Calibrition/parameter_form.html", {"form": form, "show_sidebar": True})
+    # Parameters are created from the modal on the standard form; there is no
+    # stand-alone page (the template this used to render never existed).
+    return redirect("calibration:standard_create")
 
 
 @login_required
@@ -276,7 +257,7 @@ def parameter_edit(request, pk):
                     }
                 )
             messages.success(request, "Parameter updated successfully.")
-            return redirect("calibration:calibration_lists")
+            return redirect("calibration:StandardsParameters_lists")
         else:
             if is_ajax(request):
                 return JsonResponse({"success": False, "errors": form.errors.as_json()}, status=400)
@@ -292,9 +273,9 @@ def parameter_edit(request, pk):
                     "unit": parameter.unit,
                 }
             )
-        form = ParameterForm(instance=parameter)
 
-    return render(request, "Calibration/parameter_form.html", {"form": form, "show_sidebar": True})
+    # Editing happens in the modal on the standards & parameters list.
+    return redirect("calibration:StandardsParameters_lists")
 
 
 @login_required
@@ -326,10 +307,3 @@ def parameter_delete(request, pk):
 # ------------------------------------------------------------------
 
 
-@login_required
-def StandardsParameters_lists(request):
-    return render(
-        request,
-        "Calibrition/stand-parameters-list.html",
-        {"show_sidebar": True},
-    )

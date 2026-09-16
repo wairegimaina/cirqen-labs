@@ -73,13 +73,14 @@
       {% endif %}
 
       {# ── Inline credential-error banner ── #}
-      {% if form.non_field_errors or form.errors %}
+      {% if throttle_error or form.non_field_errors or form.errors %}
       <div class="auth-error-banner" id="authErrorBanner" role="alert" aria-live="assertive">
         <div class="auth-error-icon-wrap">
           <i class="fas fa-circle-exclamation auth-error-icon"></i>
         </div>
         <div class="auth-error-body">
           <ul class="auth-error-list">
+            {% if throttle_error %}<li>{{ throttle_error }}</li>{% endif %}
             {% for error in form.non_field_errors %}
               <li>{{ error }}</li>
             {% endfor %}

@@ -65,7 +65,7 @@ def waiting_jobcards(request):
             job_cards = jobcard.objects.filter(
                 status="Waiting Approval",
                 department=department
-            ).select_related('department', 'equipment', 'performed_by', 'workshop').order_by('-date_issued')
+            ).select_related('department', 'equipment__description', 'performed_by', 'workshop').order_by('-date_issued')
 
     elif role == 'Tech':
         if not workshop:
@@ -75,7 +75,7 @@ def waiting_jobcards(request):
             job_cards = jobcard.objects.filter(
                 status="Waiting Approval",
                 workshop=workshop
-            ).select_related('department', 'equipment', 'performed_by', 'workshop').order_by('-date_issued')
+            ).select_related('department', 'equipment__description', 'performed_by', 'workshop').order_by('-date_issued')
 
     job_cards = get_filtered_jobcards(job_cards, search_query)
 
@@ -155,7 +155,7 @@ def approved_jobcards(request):
         if month:
             jobcards = jobcards.filter(nurse_signed_date__month=month)
 
-    jobcards = jobcards.select_related('department', 'equipment', 'performed_by', 'verified_by_nurse', 'workshop')
+    jobcards = jobcards.select_related('department', 'equipment__description', 'performed_by', 'verified_by_nurse', 'workshop')
 
     paginator = Paginator(jobcards, 50)
     page = request.GET.get("page")
@@ -213,7 +213,7 @@ def declined_jobcards(request):
     elif role == 'HOD':
         pass
 
-    job_cards = job_cards.select_related('department', 'equipment', 'performed_by', 'workshop').order_by('-date_issued')
+    job_cards = job_cards.select_related('department', 'equipment__description', 'performed_by', 'workshop').order_by('-date_issued')
 
     job_cards = get_filtered_jobcards(job_cards, search_query)
 

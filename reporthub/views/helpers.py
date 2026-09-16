@@ -2,6 +2,7 @@
 import calendar
 from datetime import date, timedelta
 
+from core import aggregate_cache
 from workshop.models import Workshop
 from ..utils import (
     get_report_data, get_month_dates,
@@ -34,6 +35,22 @@ def get_weekly_choices(year):
 
 
 def get_annual_data(workshop, year):
+    """Annual report data, cached per workshop and year (core.aggregate_cache, "rpt").
+
+    Twelve months of per-technician job card queries for every workshop is the
+    slowest thing the report hub does; job card and report saves invalidate it.
+    """
+    data = aggregate_cache.get_or_compute(
+        "rpt", ["annual", workshop.id if workshop else "all", year],
+        lambda: _compute_annual_data(workshop, year),
+    )
+    # The cache stores JSON, where dict keys are strings; callers such as the PDF
+    # trend chart look months up by number.
+    data["monthly_breakdown"] = {int(k): v for k, v in data["monthly_breakdown"].items()}
+    return data
+
+
+def _compute_annual_data(workshop, year):
     """Get comprehensive annual data for reports"""
     annual_data = {
         'year': year,

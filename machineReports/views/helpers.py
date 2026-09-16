@@ -77,8 +77,20 @@ def calculate_manufacturer_performance(equipment_qs):
         'avg_repair_cost': 0
     })
 
+    active_equipment = equipment_qs.filter(active_status=True).select_related('manufacturer')
+
+    # All approved repairs for these devices in one query (plus one for their
+    # parts), grouped by device, instead of a query per device.
+    repairs_by_equipment = defaultdict(list)
+    for repair in jobcard.objects.filter(
+        equipment__in=active_equipment,
+        action_taken='Repair',
+        status='Approved',
+    ).prefetch_related('spare_parts__part'):
+        repairs_by_equipment[repair.equipment_id].append(repair)
+
     # Get equipment data grouped by manufacturer - filter active_status
-    for equipment in equipment_qs.filter(active_status=True).select_related('category', 'workshop', 'manufacturer'):
+    for equipment in active_equipment:
         # Get manufacturer name instead of manufacturer instance
         manufacturer_name = equipment.manufacturer.name if equipment.manufacturer else 'Unknown'
         manufacturers[manufacturer_name]['equipment_count'] += 1
@@ -86,14 +98,7 @@ def calculate_manufacturer_performance(equipment_qs):
         if equipment.status == 'Working':
             manufacturers[manufacturer_name]['working_equipment'] += 1
 
-        # Get repair data for this equipment
-        repairs = jobcard.objects.filter(
-            equipment=equipment,
-            action_taken='Repair',
-            status='Approved'
-        ).prefetch_related('spare_parts__part')
-
-        for repair in repairs:
+        for repair in repairs_by_equipment[equipment.id]:
             manufacturers[manufacturer_name]['total_repairs'] += 1
 
             # Calculate downtime

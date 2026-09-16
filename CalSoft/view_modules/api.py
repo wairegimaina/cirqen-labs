@@ -105,6 +105,7 @@ def api_procedure(request, procedure_id):
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
+@login_required
 def api_parameters(request):
     name = request.GET.get('name', '')
     parameters = Parameter.objects.filter(active_status=True)
@@ -119,6 +120,7 @@ def api_parameters(request):
     return JsonResponse(data)
 
 
+@login_required
 def api_standards(request):
     parameter_name = request.GET.get('parameter_name', '')
     standard_id = request.GET.get('standard_id', '')

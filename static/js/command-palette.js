@@ -76,7 +76,7 @@
           .join("");
         return `
           <div class="cmdk-group">
-            <div class="cmdk-group-label"><i class="fas ${GROUP_ICONS[group] || "fa-circle"}" aria-hidden="true"></i> ${GROUP_LABELS[group] || group}</div>
+            <div class="cmdk-group-label"><i class="fas ${escapeHTML(GROUP_ICONS[group] || "fa-circle")}" aria-hidden="true"></i> ${escapeHTML(GROUP_LABELS[group] || group)}</div>
             ${items}
           </div>`;
       })

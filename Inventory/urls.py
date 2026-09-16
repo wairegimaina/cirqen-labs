@@ -32,7 +32,6 @@ urlpatterns = [
 
     # Export views
     path('export_equipment_excel/', views.export_equipment_to_excel, name='export_equipment_excel'),
-    path('inventory_summary/', views.inventory_summary, name='inventory_summary'),
     path('export_inventory_summary_excel/', views.export_inventory_summary_excel, name='export_inventory_summary_excel'),
 
     # Department management (existing URLs)
@@ -57,7 +56,6 @@ urlpatterns = [
     # PDF exports
     path('export-equipment-pdf/', views.export_equipment_to_pdf, name='export_equipment_to_pdf'),
     path('export-summary-pdf/', views.export_inventory_summary_to_pdf, name='export_inventory_summary_to_pdf'),
-    path('equipment-reports/', views.equipment_reports_dashboard, name='equipment_reports_dashboard'),
     path('check-pdf-status/', views.check_pdf_generation_status, name='check_pdf_generation_status'),
     path('bulk-export-departments/', views.bulk_export_departments_pdf, name='bulk_export_departments_pdf'),
 

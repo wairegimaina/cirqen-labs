@@ -253,18 +253,14 @@ def certificate_list(request):
 @require_http_methods(["GET", "POST"])
 def generate_comprehensive_certificate(request, session_pk):
     try:
-        session = get_object_or_404(
-            CalibrationSession.objects.select_related("Department"), pk=session_pk
-        )
+        # CalibrationSession has no department field (select_related("Department")
+        # raised FieldError on every call); the location comes from the device.
+        session = get_object_or_404(CalibrationSession, pk=session_pk)
 
         department_name = "Unknown Department"
         workshop_name = "Unknown Workshop"
 
-        if session.Department:
-            department_name = session.Department.name
-            if session.Department.workshop:
-                workshop_name = session.Department.workshop.name
-        elif session.device_serial:
+        if session.device_serial:
             try:
                 equipment = Equipment.objects.select_related("department").get(
                     serial_number=session.device_serial
@@ -304,7 +300,7 @@ def generate_comprehensive_certificate(request, session_pk):
     except CalibrationSession.DoesNotExist:
         logger.error(f"Session {session_pk} not found")
         messages.error(request, f"Calibration session {session_pk} not found.")
-        return redirect("calibration:session_list")
+        return redirect("calibration:certificate_list")
 
     except Exception as e:
         logger.error(
@@ -407,14 +403,12 @@ def get_accessible_sessions(user, date_from=None, date_to=None):
         if not user_department:
             raise PermissionError("No department assigned to NIC profile.")
 
-        sessions = base_sessions.filter(department=user_department)
-
+        # CalibrationSession has no department field; a session belongs to the
+        # department that owns the device it calibrated.
         nic_equipment = Equipment.objects.filter(department=user_department)
-        extra_sessions = base_sessions.filter(
+        sessions = base_sessions.filter(
             device_serial__in=nic_equipment.values_list("serial_number", flat=True)
         )
-
-        sessions = sessions.union(extra_sessions)
         accessible_equipment = nic_equipment
     else:
         raise PermissionError(
@@ -436,8 +430,8 @@ def bulk_certificates_download(request):
     week_start = today - timedelta(days=today.weekday())
     week_end = week_start + timedelta(days=6)
 
-    date_from = parse_date(request.GET.get("date_from")) or week_start
-    date_to = parse_date(request.GET.get("date_to")) or week_end
+    date_from = parse_date(request.GET.get("date_from", "")) or week_start
+    date_to = parse_date(request.GET.get("date_to", "")) or week_end
     check_only = request.GET.get("check_only") == "1"
 
     try:
@@ -464,9 +458,9 @@ def bulk_certificates_download(request):
                 workshop_name = "Unknown Workshop"
 
                 if hasattr(session, "department") and session.department:
-                    department_name = session.Department.name
+                    department_name = session.department.name
                     if hasattr(session.department, "workshop") and session.department.workshop:
-                        workshop_name = session.Department.workshop.name
+                        workshop_name = session.department.workshop.name
                 elif session.device_serial:
                     try:
                         equipment = accessible_equipment.select_related("department").get(

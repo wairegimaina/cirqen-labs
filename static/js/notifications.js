@@ -29,11 +29,7 @@
     return `${Math.floor(hours / 24)}d ago`;
   }
 
-  function escapeHtml(s) {
-    const div = document.createElement('div');
-    div.textContent = s || '';
-    return div.innerHTML;
-  }
+  const escapeHtml = window.escapeHTML; // static/js/escape.js
 
   function render(notifications) {
     if (!notifications.length) {
@@ -41,10 +37,10 @@
       return;
     }
     list.innerHTML = notifications.map((n) => `
-      <a href="#" class="notif-item ${n.is_read ? '' : 'is-unread'}" data-id="${n.id}" data-url="${escapeHtml(n.action_url)}">
+      <a href="#" class="notif-item ${n.is_read ? '' : 'is-unread'}" data-id="${escapeHTML(n.id)}" data-url="${escapeHtml(n.action_url)}">
         <div class="notif-item-title">${escapeHtml(n.title)}</div>
         <div class="notif-item-message">${escapeHtml(n.message)}</div>
-        <div class="notif-item-time">${timeAgo(n.created_at)}</div>
+        <div class="notif-item-time">${escapeHTML(timeAgo(n.created_at))}</div>
       </a>
     `).join('');
   }

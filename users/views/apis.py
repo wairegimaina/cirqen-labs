@@ -13,7 +13,7 @@ from django.core.paginator import Paginator
 from django.db.models import Q
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
-from django.views.decorators.csrf import csrf_protect, csrf_exempt
+from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_POST, require_http_methods
 from django.db import transaction
 from django.core.exceptions import ValidationError
@@ -28,17 +28,12 @@ User = get_user_model()
 logger = logging.getLogger(__name__)
 
 
-@csrf_exempt
 @login_required
 @role_required('HOD', 'NIC')
 @require_http_methods(["POST", "PUT"])
 def api_update_user(request, user_id):
     """API endpoint to update user information (supports both JSON and multipart form data)"""
     try:
-        print(f"\n=== API UPDATE USER CALLED ===")
-        print(f"User ID: {user_id}")
-        print(f"Content-Type: {request.content_type}")
-        print(f"Method: {request.method}")
 
         user = get_object_or_404(User, id=user_id)
         profile = user.userprofile
@@ -55,19 +50,14 @@ def api_update_user(request, user_id):
         # Handle both JSON and multipart form data
         if request.content_type and 'multipart/form-data' in request.content_type:
             # Form data with file upload
-            print("Processing as multipart/form-data")
             data = request.POST
             files = request.FILES
-            print(f"POST data: {dict(data)}")
-            print(f"FILES: {list(files.keys())}")
         else:
             # JSON data (backward compatibility)
-            print("Processing as JSON")
             try:
                 data = json.loads(request.body)
-                print(f"JSON data: {data}")
             except json.JSONDecodeError as je:
-                print(f"JSON decode error: {str(je)}")
+                logger.warning("api_update_user: invalid JSON body: %s", je)
                 return JsonResponse({
                     'success': False,
                     'error': 'Invalid JSON data'
@@ -114,7 +104,6 @@ def api_update_user(request, user_id):
             if profile.role == "NIC":
                 if data.get("department"):
                     dept_value = data["department"]
-                    print(f"Looking up department: {dept_value}")
 
                     dept = None
                     # Try to determine if it's a UUID or a name
@@ -123,13 +112,10 @@ def api_update_user(request, user_id):
                         uuid.UUID(str(dept_value))
                         # It's a valid UUID, look up by ID
                         dept = Department.objects.get(id=dept_value)
-                        print(f"Found department by ID: {dept.name}")
                     except (ValueError, Department.DoesNotExist):
                         # Not a UUID or not found by ID, try by name
-                        print(f"Not a valid UUID or not found by ID, trying by name...")
                         try:
                             dept = Department.objects.get(name=dept_value)
-                            print(f"Found department by name: {dept.name}")
                         except Department.DoesNotExist:
                             return JsonResponse({
                                 'success': False,
@@ -145,7 +131,6 @@ def api_update_user(request, user_id):
 
                 if data.get("workshop"):
                     workshop_value = data["workshop"]
-                    print(f"Looking up workshop: {workshop_value}")
 
                     workshop = None
                     # Try to determine if it's a UUID or a name
@@ -154,13 +139,10 @@ def api_update_user(request, user_id):
                         uuid.UUID(str(workshop_value))
                         # It's a valid UUID, look up by ID
                         workshop = Workshop.objects.get(id=workshop_value)
-                        print(f"Found workshop by ID: {workshop.name}")
                     except (ValueError, Workshop.DoesNotExist):
                         # Not a UUID or not found by ID, try by name
-                        print(f"Not a valid UUID or not found by ID, trying by name...")
                         try:
                             workshop = Workshop.objects.get(name=workshop_value)
-                            print(f"Found workshop by name: {workshop.name}")
                         except Workshop.DoesNotExist:
                             return JsonResponse({
                                 'success': False,
@@ -236,16 +218,14 @@ def api_update_user(request, user_id):
         })
 
     except ValidationError as e:
-        print(f"Validation Error: {str(e)}")
-        print(traceback.format_exc())
+        logger.warning("api_update_user validation error: %s", e)
         return JsonResponse({
             'success': False,
             'error': 'Validation error',
             'details': str(e)
         }, status=400)
     except Exception as e:
-        print(f"Exception in api_update_user: {str(e)}")
-        print(traceback.format_exc())
+        logger.exception("api_update_user failed")
         return JsonResponse({
             'success': False,
             'error': f'Error updating user: {str(e)}'
@@ -409,15 +389,13 @@ def api_get_users(request):
         })
 
     except Exception as e:
-        print(f"Error in api_get_users: {str(e)}")
-        print(traceback.format_exc())
+        logger.exception("api_get_users failed")
         return JsonResponse({
             'success': False,
             'error': str(e)
         }, status=500)
 
 
-@csrf_exempt
 @login_required
 @role_required('HOD')
 @require_http_methods(["DELETE"])
@@ -461,7 +439,6 @@ def api_delete_user(request, user_id):
         }, status=500)
 
 
-@csrf_exempt
 @login_required
 @role_required('HOD')
 @require_http_methods(["POST"])

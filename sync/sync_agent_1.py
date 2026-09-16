@@ -38,6 +38,10 @@ import pytz
 from .state_manager import StateManager
 from .dependency_manager import DependencyManager
 from .smart_delete import SmartDeleteMixin
+try:
+    from .sql_ident import qualified
+except ImportError:  # loaded as a top-level module with sync/ on sys.path
+    from sql_ident import qualified
 
 
 class AgentInitMixin(SmartDeleteMixin):
@@ -654,8 +658,7 @@ class AgentInitMixin(SmartDeleteMixin):
                         else:
                             schema, tbl = "public", first_table
 
-                        quoted_table = f'"{tbl}"'
-                        full_table = f"{schema}.{quoted_table}"
+                        full_table = qualified(schema, tbl)
 
                         cur.execute(f"SELECT COUNT(*) FROM {full_table} LIMIT 1")
                         count = cur.fetchone()[0]
@@ -689,7 +692,7 @@ class AgentInitMixin(SmartDeleteMixin):
             else:
                 schema, tbl = "public", first_table
 
-            full_table = f'{schema}."{tbl}"'
+            full_table = qualified(schema, tbl)
             conn = self.pool.getconn()
             try:
                 with conn.cursor() as cur:

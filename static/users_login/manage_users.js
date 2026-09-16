@@ -191,7 +191,7 @@ async function loadUsers() {
                 <div class="no-results">
                     <i class="fas fa-exclamation-triangle"></i>
                     <h3>Error Loading Users</h3>
-                    <p>${data.error}</p>
+                    <p>${escapeHTML(data.error)}</p>
                 </div>
             `;
     }
@@ -201,7 +201,7 @@ async function loadUsers() {
             <div class="no-results">
                 <i class="fas fa-exclamation-triangle"></i>
                 <h3>Error Loading Users</h3>
-                <p>${error.message}</p>
+                <p>${escapeHTML(error.message)}</p>
             </div>
         `;
   }
@@ -301,11 +301,11 @@ function renderPagination(pagination) {
   const { page, total_pages, has_previous, has_next, total } = pagination;
 
   paginationContainer.innerHTML = `
-        <button onclick="changePage(${page - 1})" ${!has_previous ? 'disabled' : ''}>
+        <button onclick="changePage(${page - 1})" ${escapeHTML(!has_previous ? 'disabled' : '')}>
             <i class="fas fa-chevron-left"></i> Prev
         </button>
-        <span>Page ${page} of ${total_pages} (${total} users)</span>
-        <button onclick="changePage(${page + 1})" ${!has_next ? 'disabled' : ''}>
+        <span>Page ${page} of ${escapeHTML(total_pages)} (${total} users)</span>
+        <button onclick="changePage(${page + 1})" ${escapeHTML(!has_next ? 'disabled' : '')}>
             Next <i class="fas fa-chevron-right"></i>
         </button>
     `;
@@ -351,10 +351,10 @@ function createUserCard(user) {
   return `
         <div class="user-card">
             <div class="user-header">
-                <div class="user-avatar">${initials}</div>
+                <div class="user-avatar">${escapeHTML(initials)}</div>
                 <div class="user-info">
-                    <h3>${user.firstName} ${user.lastName}</h3>
-                    <div class="username">@${user.username}</div>
+                    <h3>${escapeHTML(user.firstName)} ${escapeHTML(user.lastName)}</h3>
+                    <div class="username">@${escapeHTML(user.username)}</div>
                 </div>
             </div>
             <div class="user-details">
@@ -362,21 +362,21 @@ function createUserCard(user) {
                     <span class="detail-label">
                         <i class="fas fa-id-badge"></i> Employee ID
                     </span>
-                    <span class="detail-value">${user.employeeId}</span>
+                    <span class="detail-value">${escapeHTML(user.employeeId)}</span>
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">
                         <i class="fas fa-envelope"></i> Email
                     </span>
-                    <span class="detail-value">${user.email}</span>
+                    <span class="detail-value">${escapeHTML(user.email)}</span>
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">
                         <i class="fas fa-user-tag"></i> Role
                     </span>
                     <span class="detail-value">
-                        <span class="role-badge ${roleClass}">${
-    user.roleDisplay || user.role
+                        <span class="role-badge ${roleClass}">${escapeHTML(
+    user.roleDisplay || user.role)
   }</span>
                     </span>
                 </div>
@@ -421,15 +421,15 @@ function createUserCard(user) {
                         <i class="fas fa-toggle-on"></i> Status
                     </span>
                     <span class="detail-value">
-                        <span class="status-badge ${statusClass}">${statusText}</span>
+                        <span class="status-badge ${statusClass}">${escapeHTML(statusText)}</span>
                     </span>
                 </div>
             </div>
             <div class="user-actions">
-                <button class="action-btn btn-primary" onclick="editUser('${user.id}')">
+                <button class="action-btn btn-primary" onclick="editUser('${escapeHTML(user.id)}')">
                     <i class="fas fa-edit"></i> Edit
                 </button>
-                <button class="action-btn btn-danger" onclick="deleteUser('${user.id}')">
+                <button class="action-btn btn-danger" onclick="deleteUser('${escapeHTML(user.id)}')">
                     <i class="fas fa-trash"></i> Delete
                 </button>
             </div>
@@ -636,11 +636,9 @@ async function loadCurrentSignature(userId) {
     if (data.success && data.hasSignature) {
       signatureDisplay.innerHTML = `
                 <h4>Current Signature</h4>
-                <img src="${
-                  data.signatureUrl
-                }" alt="Current Signature" class="signature-preview" style="max-width: 200px; display: block; margin: 10px auto;">
+                <img src="${escapeHTML(data.signatureUrl)}" alt="Current Signature" class="signature-preview" style="max-width: 200px; display: block; margin: 10px auto;">
                 <div style="font-size: 12px; color: #6c757d; margin-top: 10px;">
-                    <p><strong>ID:</strong> ${data.signatureId}</p>
+                    <p><strong>ID:</strong> ${escapeHTML(data.signatureId)}</p>
                     <p><strong>Last Updated:</strong> ${new Date(
                       data.updatedAt,
                     ).toLocaleString()}</p>
@@ -708,8 +706,8 @@ function showAlert(message, type, container = 'alertContainer') {
   const alertDiv = document.createElement('div');
   alertDiv.className = `alert alert-${type}`;
   alertDiv.innerHTML = `
-        <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'}"></i>
-        ${message}
+        <i class="fas fa-${escapeHTML(type === 'success' ? 'check-circle' : 'exclamation-circle')}"></i>
+        ${escapeHTML(message)}
         <button style="float: right; background: none; border: none; font-size: 18px; cursor: pointer;" onclick="this.parentElement.remove()">&times;</button>
     `;
   alertContainer.appendChild(alertDiv);

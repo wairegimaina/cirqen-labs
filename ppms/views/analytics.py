@@ -4,6 +4,7 @@ from django.db.models import Count
 from django.shortcuts import get_object_or_404, render, redirect
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, HttpResponse
+from core import aggregate_cache
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.utils.timezone import now
@@ -35,6 +36,16 @@ def get_analytics_data(request):
         return JsonResponse({'error': 'Access denied'}, status=403)
 
     today = now().date()
+    # Cached per access scope and day; PPM and equipment saves invalidate it.
+    scope = [access_context['access_type'], access_context['workshop_id'],
+             access_context['department_id'], today]
+    response_data = aggregate_cache.get_or_compute(
+        "ppm", ["analytics", *scope], lambda: _ppm_analytics(access_context, today)
+    )
+    return JsonResponse(response_data, safe=False)
+
+
+def _ppm_analytics(access_context, today):
     current_month_start = today.replace(day=1)
 
     # Base queryset based on access level
@@ -184,7 +195,7 @@ def get_analytics_data(request):
                 days_remaining = (month_end_date - today).days
 
                 upcoming_schedules.append({
-                    'id': schedule.id,
+                    'id': str(schedule.id),
                     'equipment': schedule.equipment.description.name if schedule.equipment.description else 'N/A',
                     'department': schedule.equipment.department.name if schedule.equipment.department else 'N/A',
                     'scheduled_date': schedule.scheduled_month.strftime('%Y-%m-%d'),
@@ -207,7 +218,7 @@ def get_analytics_data(request):
         'equipment_types': equipment_type_data,
         'upcoming_maintenance': sorted(upcoming_schedules, key=lambda x: x['days_remaining'])[:10],
         'overdue_list': [{
-            'id': s.id,
+            'id': str(s.id),
             'equipment': s.equipment.description.name if s.equipment.description else 'N/A',
             'department': s.equipment.department.name if s.equipment.department else 'N/A',
             'scheduled_date': s.scheduled_month.strftime('%Y-%m-%d'),
@@ -216,7 +227,7 @@ def get_analytics_data(request):
         } for s in overdue_schedules[:10]]
     }
 
-    return JsonResponse(response_data, safe=False)
+    return response_data
 
 
 @login_required

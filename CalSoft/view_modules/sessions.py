@@ -144,59 +144,6 @@ def session_detail(request, pk):
 
 
 @login_required
-def session_list(request):
-    sessions = CalibrationSession.objects.select_related(
-        'procedure', 'performed_by'
-    ).order_by('-timestamp')
-
-    search_form = SessionSearchForm(request.GET)
-    if search_form.is_valid():
-        search = search_form.cleaned_data.get('search', '')
-        procedure = search_form.cleaned_data.get('procedure')
-        performed_by = search_form.cleaned_data.get('performed_by')
-        pass_status = search_form.cleaned_data.get('pass_status')
-        date_from = search_form.cleaned_data.get('date_from')
-        date_to = search_form.cleaned_data.get('date_to')
-
-        if search:
-            sessions = sessions.filter(
-                Q(device_serial__icontains=search) |
-                Q(device_model__icontains=search) |
-                Q(certificate_number__icontains=search) |
-                Q(device_description__icontains=search)
-            )
-        if procedure:
-            sessions = sessions.filter(procedure=procedure)
-        if performed_by:
-            sessions = sessions.filter(performed_by=performed_by)
-        if pass_status:
-            sessions = sessions.filter(overall_pass=(pass_status == 'pass'))
-        if date_from:
-            sessions = sessions.filter(timestamp__gte=date_from)
-        if date_to:
-            sessions = sessions.filter(timestamp__lte=date_to)
-
-    paginator = Paginator(sessions, 15)
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
-
-    total_sessions = sessions.count()
-    passed_sessions = sessions.filter(overall_pass=True).count()
-    pass_rate = (passed_sessions / total_sessions * 100) if total_sessions > 0 else 0
-
-    context = {
-        'page_obj': page_obj,
-        'search_form': search_form,
-        'total_sessions': total_sessions,
-        'passed_sessions': passed_sessions,
-        'pass_rate': round(pass_rate, 1),
-        'show_sidebar': True,
-    }
-
-    return render(request, 'calibration/session_list.html', context)
-
-
-@login_required
 def certificate_validation(request, certificate_number):
     try:
         session = CalibrationSession.objects.get(certificate_number=certificate_number)

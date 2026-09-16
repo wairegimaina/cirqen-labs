@@ -263,6 +263,9 @@
 {% block extra_js %}
   <script src="{% static 'js/chart.min.js' %}"></script>
   <script src="{% static 'dashboards/cmms-dashboard.js' %}"></script>
+  {{ jobcard_status|json_script:"jobcard-status-data" }}
+  {{ ppm_monthly_labels|json_script:"ppm-monthly-labels-data" }}
+  {{ ppm_monthly_by_workshop|json_script:"ppm-monthly-by-workshop-data" }}
   <script>
     (function () {
       function cssVar(name, fallback) {
@@ -270,9 +273,12 @@
         return v || fallback;
       }
 
-      var jobcardStatus = {{ jobcard_status_json|safe }};
-      var ppmMonthlyLabels = {{ ppm_monthly_labels_json|safe }};
-      var ppmMonthlyByWorkshop = {{ ppm_monthly_by_workshop_json|safe }};
+      function readJson(id) {
+        return JSON.parse(document.getElementById(id).textContent);
+      }
+      var jobcardStatus = readJson('jobcard-status-data');
+      var ppmMonthlyLabels = readJson('ppm-monthly-labels-data');
+      var ppmMonthlyByWorkshop = readJson('ppm-monthly-by-workshop-data');
       var fontFamily = getComputedStyle(document.body).fontFamily;
 
       // One distinct colour per workshop, cycling if there are more

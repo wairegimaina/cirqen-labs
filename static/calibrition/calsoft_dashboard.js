@@ -132,7 +132,7 @@
     if (!pendingApproval) return "";
     return `
       <div class="alert alert-warning cs-banner" role="status">
-        <span><strong>${pendingApproval}</strong> ${pluralize(pendingApproval, "session")} waiting for your review</span>
+        <span><strong>${escapeHTML(pendingApproval)}</strong> ${escapeHTML(pluralize(pendingApproval, "session"))} waiting for your review</span>
         <a class="btn btn-secondary btn-sm" href="${escapeHTML(urls.sessionsPendingApproval)}">Review sessions</a>
       </div>`;
   }

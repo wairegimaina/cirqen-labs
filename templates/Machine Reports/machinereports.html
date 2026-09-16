@@ -486,7 +486,7 @@
 
 <!-- Manufacturer Data JSON -->
 {% if manufacturer_performance %}
-    <script id="manufacturer-data" type="application/json">{{ manufacturer_performance|safe }}</script>
+    {{ manufacturer_performance|json_script:"manufacturer-data" }}
 {% endif %}
 
 {% endblock %}

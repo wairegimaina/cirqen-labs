@@ -20,6 +20,10 @@ import pytz
 from .state_manager import StateManager
 from .dependency_manager import DependencyManager
 from .smart_delete import SmartDeleteMixin
+try:
+    from .sql_ident import qualified
+except ImportError:  # loaded as a top-level module with sync/ on sys.path
+    from sql_ident import qualified
 
 class UploadMixin(SmartDeleteMixin):
     """Upload path: event construction, upload_batch (with idempotency + backpressure), and upload/download checkpoints."""
@@ -626,8 +630,7 @@ class UploadMixin(SmartDeleteMixin):
                 else:
                     schema, tbl = "public", table
 
-                quoted_table = f'"{tbl}"'
-                full_table = f"{schema}.{quoted_table}"
+                full_table = qualified(schema, tbl)
 
                 # === Check current local state ===
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:

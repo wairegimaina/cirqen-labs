@@ -37,6 +37,10 @@ import requests
 from dataclasses import dataclass, asdict
 from enum import Enum
 from psycopg2.extras import RealDictCursor, Json
+try:
+    from .sql_ident import qualified
+except ImportError:  # loaded as a top-level module with sync/ on sys.path
+    from sql_ident import qualified
 
 # Setup logging
 LOG = logging.getLogger("mirror_sync")
@@ -164,8 +168,7 @@ def fetch_parent_record_from_local(local_conn, table: str, parent_id: str,
     else:
         schema, tbl = "public", table
 
-    quoted_table = f'"{tbl}"'
-    full_table = f"{schema}.{quoted_table}"
+    full_table = qualified(schema, tbl)
 
     try:
         with local_conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -243,8 +246,7 @@ def check_and_fetch_missing_parents_for_mirror(
         else:
             schema, tbl = "public", table
 
-        quoted_table = f'"{tbl}"'
-        full_table = f"{schema}.{quoted_table}"
+        full_table = qualified(schema, tbl)
 
         try:
             with source_conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -909,8 +911,7 @@ class DatabaseMirror:
             schema, tbl = "public", table
 
         tbl = tbl.strip('"')
-        quoted_table = f'"{tbl}"'
-        full_table = f"{schema}.{quoted_table}"
+        full_table = qualified(schema, tbl)
 
         try:
             with conn.cursor() as cur:
@@ -1031,7 +1032,7 @@ class DatabaseMirror:
 
                     # Try to count records
                     try:
-                        cur.execute(f'SELECT COUNT(*) FROM "{schema}"."{tbl}"')
+                        cur.execute(f'SELECT COUNT(*) FROM {qualified(schema, tbl)}')
                         count = cur.fetchone()[0]
                         LOG.info(f"   📊 Total records: {count}")
                     except Exception as e:
@@ -1060,8 +1061,7 @@ class DatabaseMirror:
             schema, tbl = "public", table
 
         tbl = tbl.strip('"')
-        quoted_table = f'"{tbl}"'
-        full_table = f"{schema}.{quoted_table}"
+        full_table = qualified(schema, tbl)
 
         try:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -1184,8 +1184,7 @@ class DatabaseMirror:
             schema, tbl = "public", table
 
         tbl = tbl.strip('"')
-        quoted_table = f'"{tbl}"'
-        full_table = f"{schema}.{quoted_table}"
+        full_table = qualified(schema, tbl)
 
         try:
             with self.hq_conn.cursor() as cur:
@@ -1394,8 +1393,7 @@ class DatabaseMirror:
             schema, tbl = "public", table
 
         tbl = tbl.strip('"')
-        quoted_table = f'"{tbl}"'
-        full_table = f"{schema}.{quoted_table}"
+        full_table = qualified(schema, tbl)
 
         try:
             with self.local_conn.cursor() as cur:

@@ -38,7 +38,7 @@
            Routing priority:
              1. HOD            → hod_dashboard   (always, regardless of workshop)
              2. calibration_center workshop → cal-dashboard
-             3. Tech, no ws    → workshop_dashboard
+             3. Tech, no ws    → dashboard-main
              4. NIC, no ws     → nic_dashboard
              5. fallback       → dashboard-main
       -->
@@ -54,7 +54,7 @@
             class="menu-link {% if request.resolver_match.url_name == 'cal-dashboard' %}active-link{% endif %}"
             role="menuitem">
             {% elif nav.is_tech and not ws %}
-            <a href="{% url 'workshop_dashboard' %}"
+            <a href="{% url 'dashboard:dashboard-main' %}"
               class="menu-link {% if request.resolver_match.url_name == 'workshop_dashboard' %}active-link{% endif %}"
               role="menuitem">
               {% elif nav.is_nic and not ws %}

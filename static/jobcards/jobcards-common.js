@@ -40,7 +40,7 @@ class JobCardListManager {
                 <div class="py-5 text-center">
                     <i class="fas fa-search fa-3x mb-3 text-muted opacity-50"></i>
                     <h5 style="color: var(--text-primary)">No matches found</h5>
-                    <p class="text-muted">No cards match "<strong>${term}</strong>"</p>
+                    <p class="text-muted">No cards match "<strong>${escapeHTML(term)}</strong>"</p>
                 </div>
             `;
     } else {

@@ -11,9 +11,7 @@ from .auth import (
 )
 from .user_management import (
     api_create_user,
-    create_user_view,
     admin_reset_user_password,
-    user_management_page,
     manage_users_view,
 )
 from .apis import (
@@ -52,9 +50,7 @@ __all__ = [
     "verify_reset_code_view",
     "reset_password_view",
     "api_create_user",
-    "create_user_view",
     "admin_reset_user_password",
-    "user_management_page",
     "manage_users_view",
     "api_update_user",
     "api_check_setup_status",

@@ -144,13 +144,16 @@
 
 </div>
 
+{% if report_type == 'annual' and annual_data.monthly_breakdown %}
+{{ annual_data.monthly_breakdown|json_script:"annual-breakdown-data" }}
+{% endif %}
 <script>
     window.reportConfig = {
         reportType: "{{ report_type }}",
         totalWaitingApproval: {{ total_waiting_approval|default:0 }},
         totalApproved: {{ total_approved|default:0 }},
         {% if report_type == 'annual' and annual_data.monthly_breakdown %}
-        annualData: {{ annual_data.monthly_breakdown|safe }},
+        annualData: JSON.parse(document.getElementById("annual-breakdown-data").textContent),
         {% else %}
         annualData: null,
         {% endif %}

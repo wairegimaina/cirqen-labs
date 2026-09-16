@@ -245,9 +245,9 @@ function renderActivityTable(top) {
         ? '<span class="badge bg-success">Active</span>'
         : '<span class="badge bg-danger">Inactive</span>';
       return `<tr>
-      <td>${eq.name || eq.description || eq.equipment_name || "—"}</td>
-      <td class="text-muted">${eq.department || eq.department_name || "—"}</td>
-      <td class="tabular">${jc}</td>
+      <td>${escapeHTML(eq.name || eq.description || eq.equipment_name || "—")}</td>
+      <td class="text-muted">${escapeHTML(eq.department || eq.department_name || "—")}</td>
+      <td class="tabular">${escapeHTML(jc)}</td>
       <td>${badge}</td>
     </tr>`;
     })
@@ -287,10 +287,10 @@ function loadPPMSummaryFromData(d) {
         const pct = total > 0 ? Math.round((s.count / total) * 100) : 0;
         return `<div class="status-row">
           <span class="status-label">
-            <span class="status-dot" style="background:${s.color}"></span>${s.label}
+            <span class="status-dot" style="background:${escapeHTML(s.color)}"></span>${escapeHTML(s.label)}
           </span>
           <div class="status-bar-wrap">
-            <div class="status-bar" style="width:${pct}%;background:${s.color}"></div>
+            <div class="status-bar" style="width:${pct}%;background:${escapeHTML(s.color)}"></div>
           </div>
           <span class="status-count">${s.count}</span>
         </div>`;
@@ -349,10 +349,10 @@ async function loadPPMSummary() {
           const pct = total > 0 ? Math.round((s.count / total) * 100) : 0;
           return `<div class="status-row">
             <span class="status-label">
-              <span class="status-dot" style="background:${s.color}"></span>${s.label}
+              <span class="status-dot" style="background:${escapeHTML(s.color)}"></span>${escapeHTML(s.label)}
             </span>
             <div class="status-bar-wrap">
-              <div class="status-bar" style="width:${pct}%;background:${s.color}"></div>
+              <div class="status-bar" style="width:${pct}%;background:${escapeHTML(s.color)}"></div>
             </div>
             <span class="status-count">${s.count}</span>
           </div>`;
@@ -499,9 +499,9 @@ chartDonut = new Chart($("chart-inventory-donut"), {
       .map(
         (s) => `
         <div class="legend-item">
-          <span class="legend-dot" style="background:${s.color}"></span>
-          <span>${s.label}</span>
-          <span class="legend-count">${s.empty ? 0 : s.count}</span>
+          <span class="legend-dot" style="background:${escapeHTML(s.color)}"></span>
+          <span>${escapeHTML(s.label)}</span>
+          <span class="legend-count">${escapeHTML(s.empty ? 0 : s.count)}</span>
         </div>
       `,
       )
@@ -583,9 +583,9 @@ async function loadInventorySummary() {
         .map(
           (s) => `
           <div class="legend-item">
-            <span class="legend-dot" style="background:${s.color}"></span>
-            <span>${s.label}</span>
-            <span class="legend-count">${s.empty ? 0 : s.count}</span>
+            <span class="legend-dot" style="background:${escapeHTML(s.color)}"></span>
+            <span>${escapeHTML(s.label)}</span>
+            <span class="legend-count">${escapeHTML(s.empty ? 0 : s.count)}</span>
           </div>
         `,
         )

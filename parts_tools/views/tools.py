@@ -1,7 +1,9 @@
 """Tools management (Tech users) — CRUD, listing, AJAX name/manufacturer helpers."""
 import logging
 
+from django.http import Http404
 from django.shortcuts import render, redirect, get_object_or_404
+from core.scoping import get_for_user_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse
@@ -144,13 +146,15 @@ def edit_tool(request, pk):
 def get_tool(request, pk):
     """Return tool data as JSON for the edit modal."""
     try:
-        tool = get_object_or_404(Tools, pk=pk)
+        tool = get_for_user_or_404(Tools, request.user, pk=pk)
         return JsonResponse({
             'name': str(tool.name.id) if tool.name else '',
             'manufacturer': str(tool.manufacturer.id) if tool.manufacturer else '',
             'model': tool.model or '',
             'serial_number': tool.serial_number or '',
         })
+    except Http404:
+        raise
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=400)
 

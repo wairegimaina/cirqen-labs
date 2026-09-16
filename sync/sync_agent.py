@@ -69,6 +69,13 @@ def main():
     # the agent (and its threads) start producing output.
     setup_logging(log_file=log_file, level=log_level)
 
+    try:
+        from core.monitoring import init_sentry
+
+        init_sentry("sync_agent")
+    except ImportError:  # running from a checkout without the Django apps
+        pass
+
     agent = SyncAgent(data_path=data_path)
 
     def _handle_signal(signum, frame):

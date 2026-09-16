@@ -28,6 +28,10 @@ import pytz
 from .state_manager import StateManager
 from .dependency_manager import DependencyManager
 from .smart_delete import SmartDeleteMixin
+try:
+    from .sql_ident import qualified
+except ImportError:  # loaded as a top-level module with sync/ on sys.path
+    from sql_ident import qualified
 
 
 class SchemaAndChangeDetectionMixin(SmartDeleteMixin):
@@ -415,8 +419,7 @@ class SchemaAndChangeDetectionMixin(SmartDeleteMixin):
             else:
                 schema, tbl = "public", table
 
-            quoted_table = f'"{tbl}"'
-            full_table = f"{schema}.{quoted_table}"
+            full_table = qualified(schema, tbl)
 
             # Check if table has status columns
             with conn.cursor() as cur:
@@ -614,8 +617,7 @@ class SchemaAndChangeDetectionMixin(SmartDeleteMixin):
                 else:
                     schema, tbl = "public", table
 
-                quoted_table = f'"{tbl}"'
-                full_table_name = f"{schema}.{quoted_table}"
+                full_table_name = qualified(schema, tbl)
 
                 # ⚡ Parse and validate timestamp
                 since_dt = self._parse_timestamp(since_ts)

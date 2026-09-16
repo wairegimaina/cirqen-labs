@@ -141,15 +141,15 @@ def export_inventory_summary_excel(request):
             workshop_to_export = get_object_or_404(Workshop, id=requested_workshop_id)
         else:
             messages.error(request, "Please select a workshop to export summary from.")
-            return redirect('inventory_summary')
+            return redirect('inventory')
     else:  # Tech
         if not profile.workshop:
             messages.error(request, "Your profile is not associated with a workshop. Cannot export summary.")
-            return redirect('inventory_summary')
+            return redirect('inventory')
         workshop_to_export = profile.workshop
         if requested_workshop_id and int(requested_workshop_id) != workshop_to_export.id:
             messages.error(request, "Unauthorized to export summary from selected workshop.")
-            return redirect('inventory_summary')
+            return redirect('inventory')
 
     department_filter = request.GET.get('department', '')
     description_filter = request.GET.get('description', '')
@@ -356,15 +356,15 @@ def export_inventory_summary_to_pdf(request):
             workshop_to_export = get_object_or_404(Workshop, id=requested_workshop_id)
         else:
             messages.error(request, "Please select a workshop to export summary from.")
-            return redirect('inventory_summary')
+            return redirect('inventory')
     else:  # Tech
         if not profile.workshop:
             messages.error(request, "Your profile is not associated with a workshop. Cannot export summary.")
-            return redirect('inventory_summary')
+            return redirect('inventory')
         workshop_to_export = profile.workshop
         if requested_workshop_id and int(requested_workshop_id) != workshop_to_export.id:
             messages.error(request, "Unauthorized to export summary from selected workshop.")
-            return redirect('inventory_summary')
+            return redirect('inventory')
 
     # Get filters
     department_filter = request.GET.get('department', '')
@@ -393,7 +393,7 @@ def export_inventory_summary_to_pdf(request):
 
     if not filtered_queryset.exists():
         messages.warning(request, "No equipment found matching the selected criteria.")
-        return redirect('inventory_summary')
+        return redirect('inventory')
 
     # Prepare context
     context = {
@@ -415,91 +415,7 @@ def export_inventory_summary_to_pdf(request):
     except Exception as e:
         logger.error(f"Summary PDF generation failed: {str(e)}")
         messages.error(request, "Failed to generate summary PDF report. Please try again.")
-        return redirect('inventory_summary')
-
-
-@login_required
-def equipment_reports_dashboard(request):
-    """Dashboard for choosing different PDF report types"""
-    profile = request.user.userprofile
-
-    # Determine available workshops
-    if profile.role == 'HOD':
-        all_workshops = Workshop.objects.all().order_by('name')
-        selected_workshop_id = request.GET.get('workshop')
-        if selected_workshop_id:
-            try:
-                selected_workshop = get_object_or_404(Workshop, id=selected_workshop_id)
-            except (Workshop.DoesNotExist, ValueError):
-                selected_workshop = all_workshops.first() if all_workshops.exists() else None
-        else:
-            selected_workshop = all_workshops.first() if all_workshops.exists() else None
-    else:  # Tech
-        if not profile.workshop:
-            messages.error(request, "Your profile is not associated with a workshop.")
-            return redirect('inventory')
-        selected_workshop = profile.workshop
-        all_workshops = [selected_workshop]
-
-    if not selected_workshop:
-        messages.warning(request, "No workshops available.")
-        return render(request, 'Inventory/equipment_reports.html', {
-            'show_sidebar': True,  # Enable sidebar with hamburger menu
-            'all_workshops': [],
-            'selected_workshop': None,
-            'departments': [],
-            'report_types': [],
-        })
-
-    # Get departments for the selected workshop
-    departments = Department.objects.filter(workshop=selected_workshop).order_by('name')
-
-    # Get equipment statistics for the dashboard
-    total_equipment = Equipment.objects.filter(department__workshop=selected_workshop, active_status=True).count()
-    status_stats = Equipment.objects.filter(
-        department__workshop=selected_workshop, active_status=True
-    ).values('status').annotate(count=Count('status'))
-
-    # Define available report types
-    report_types = [
-        {
-            'key': 'detailed',
-            'name': 'Detailed Equipment List',
-            'description': 'Complete listing of all equipment with full details',
-            'icon': 'fas fa-list-ul'
-        },
-        {
-            'key': 'summary',
-            'name': 'Equipment Summary',
-            'description': 'Summary report grouped by equipment type',
-            'icon': 'fas fa-chart-pie'
-        },
-        {
-            'key': 'department',
-            'name': 'Department Analysis',
-            'description': 'Equipment distribution and status by department',
-            'icon': 'fas fa-building'
-        },
-        {
-            'key': 'status',
-            'name': 'Status Analysis',
-            'description': 'Comprehensive analysis of equipment conditions',
-            'icon': 'fas fa-stethoscope'
-        }
-    ]
-
-    context = {
-        'show_sidebar': True,  # Enable sidebar with hamburger menu
-        'all_workshops': all_workshops,
-        'selected_workshop': selected_workshop,
-        'departments': departments,
-        'report_types': report_types,
-        'total_equipment': total_equipment,
-        'status_stats': {item['status']: item['count'] for item in status_stats},
-        'user_role': profile.role,
-    }
-
-    return render(request, 'Inventory/equipment_reports.html', context)
+        return redirect('inventory')
 
 
 @login_required
@@ -514,7 +430,7 @@ def bulk_export_departments_pdf(request):
     workshop_id = request.GET.get('workshop')
     if not workshop_id:
         messages.error(request, "Please select a workshop for bulk export.")
-        return redirect('equipment_reports_dashboard')
+        return redirect('inventory')
 
     try:
         workshop = get_object_or_404(Workshop, id=workshop_id)
@@ -522,7 +438,7 @@ def bulk_export_departments_pdf(request):
 
         if not departments.exists():
             messages.warning(request, f"No departments found in {workshop.name}.")
-            return redirect('equipment_reports_dashboard')
+            return redirect('inventory')
 
         # Create a ZIP file containing multiple PDFs
         import zipfile
@@ -569,4 +485,4 @@ def bulk_export_departments_pdf(request):
     except Exception as e:
         logger.error(f"Bulk PDF export failed: {str(e)}")
         messages.error(request, "Failed to generate bulk PDF reports. Please try again.")
-        return redirect('equipment_reports_dashboard')
+        return redirect('inventory')

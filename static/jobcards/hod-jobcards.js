@@ -53,7 +53,7 @@ class HODJobCardManager {
     // Update Info Text
     if (this.resultsInfo) {
       this.resultsInfo.innerHTML = term
-        ? `Found <strong>${count}</strong> matches for "<em>${term}</em>"`
+        ? `Found <strong>${count}</strong> matches for "<em>${escapeHTML(term)}</em>"`
         : `Showing <strong>${count}</strong> records`;
     }
   }

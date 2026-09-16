@@ -237,7 +237,7 @@ $(document).ready(function () {
             '<tr id="noSearchResults">' +
               '<td colspan="8" class="text-center py-4 text-muted">' +
                 '<i class="fas fa-search fa-2x mb-2 opacity-50"></i>' +
-                '<p class="mb-0">No equipment found matching "' + searchTerm + '"</p>' +
+                '<p class="mb-0">No equipment found matching "' + escapeHTML(searchTerm) + '"</p>' +
               '</td>' +
             '</tr>'
           );
@@ -633,13 +633,13 @@ $(document).ready(function () {
           '<div class="activity-item">' +
             '<div class="activity-dot" style="background:#dc3545"><i class="fas fa-clock"></i></div>' +
             '<div class="activity-body">' +
-              '<div class="activity-title">' + item.equipment + '</div>' +
+              '<div class="activity-title">' + escapeHTML(item.equipment) + '</div>' +
               '<div class="activity-meta">' +
-                '<i class="fas fa-building me-1"></i>' + item.department +
-                ' &nbsp;·&nbsp; <i class="far fa-calendar me-1"></i>' + item.scheduled_date +
+                '<i class="fas fa-building me-1"></i>' + escapeHTML(item.department) +
+                ' &nbsp;·&nbsp; <i class="far fa-calendar me-1"></i>' + escapeHTML(item.scheduled_date) +
               '</div>' +
             '</div>' +
-            '<span class="badge bg-danger activity-badge">' + item.days_overdue + 'd overdue</span>' +
+            '<span class="badge bg-danger activity-badge">' + escapeHTML(item.days_overdue) + 'd overdue</span>' +
           '</div>';
       });
 
@@ -659,13 +659,13 @@ $(document).ready(function () {
           '<div class="activity-item">' +
             '<div class="activity-dot" style="background:#0d6efd"><i class="fas fa-tools"></i></div>' +
             '<div class="activity-body">' +
-              '<div class="activity-title">' + item.equipment + '</div>' +
+              '<div class="activity-title">' + escapeHTML(item.equipment) + '</div>' +
               '<div class="activity-meta">' +
-                '<i class="fas fa-building me-1"></i>' + item.department +
-                ' &nbsp;·&nbsp; <i class="far fa-calendar me-1"></i>' + item.scheduled_date +
+                '<i class="fas fa-building me-1"></i>' + escapeHTML(item.department) +
+                ' &nbsp;·&nbsp; <i class="far fa-calendar me-1"></i>' + escapeHTML(item.scheduled_date) +
               '</div>' +
             '</div>' +
-            '<span class="badge ' + urgencyCls + ' activity-badge">' + item.days_remaining + 'd left</span>' +
+            '<span class="badge ' + urgencyCls + ' activity-badge">' + escapeHTML(item.days_remaining) + 'd left</span>' +
           '</div>';
       });
 
@@ -696,14 +696,14 @@ $(document).ready(function () {
               '<i class="fas ' + meta.icon + '"></i>' +
             '</div>' +
             '<div class="activity-body">' +
-              '<div class="activity-title">' + a.equipment + '</div>' +
+              '<div class="activity-title">' + escapeHTML(a.equipment) + '</div>' +
               '<div class="activity-meta">' +
-                '<i class="fas fa-building me-1"></i>' + a.department +
-                ' &nbsp;·&nbsp; <i class="far fa-calendar me-1"></i>' + a.scheduled_date +
-                ' &nbsp;·&nbsp; <i class="far fa-clock me-1"></i>' + a.updated_at +
+                '<i class="fas fa-building me-1"></i>' + escapeHTML(a.department) +
+                ' &nbsp;·&nbsp; <i class="far fa-calendar me-1"></i>' + escapeHTML(a.scheduled_date) +
+                ' &nbsp;·&nbsp; <i class="far fa-clock me-1"></i>' + escapeHTML(a.updated_at) +
               '</div>' +
             '</div>' +
-            '<span class="badge ' + meta.badgeCls + ' activity-badge">' + statusLabel + '</span>' +
+            '<span class="badge ' + meta.badgeCls + ' activity-badge">' + escapeHTML(statusLabel) + '</span>' +
           '</div>';
       });
 

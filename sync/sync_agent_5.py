@@ -23,6 +23,10 @@ import pytz
 from .state_manager import StateManager
 from .dependency_manager import DependencyManager
 from .smart_delete import SmartDeleteMixin
+try:
+    from .sql_ident import qualified
+except ImportError:  # loaded as a top-level module with sync/ on sys.path
+    from sql_ident import qualified
 
 
 class ParentRecoveryMixin(SmartDeleteMixin):
@@ -77,8 +81,7 @@ class ParentRecoveryMixin(SmartDeleteMixin):
                 else:
                     schema, tbl = "public", parent_table
 
-                quoted_table = f'"{tbl}"'
-                full_table = f"{schema}.{quoted_table}"
+                full_table = qualified(schema, tbl)
 
                 # Fetch parent record from HQ
                 with hq_conn.cursor() as cur:

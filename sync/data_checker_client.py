@@ -70,6 +70,10 @@ import requests
 from psycopg2.extras import RealDictCursor, Json
 
 from .agent_prelude import json_safe
+try:
+    from .sql_ident import qualified
+except ImportError:  # loaded as a top-level module with sync/ on sys.path
+    from sql_ident import qualified
 
 LOG = logging.getLogger("data_checker_client")
 
@@ -185,7 +189,7 @@ def _split_table(table: str) -> Tuple[str, str]:
 
 
 def _quoted(schema: str, tbl: str) -> str:
-    return f'"{schema}"."{tbl}"'
+    return qualified(schema, tbl)
 
 
 def _decode_value(value: Any) -> Any:

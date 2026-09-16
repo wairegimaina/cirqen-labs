@@ -47,7 +47,6 @@ from .requests import (
     request_accessory,
     approve_accessory_request,
     accept_accessory_request,
-    view_request_history,
 )
 from .exports import (
     export_excel_tools,
@@ -88,7 +87,6 @@ __all__ = [
     "request_accessory",
     "approve_accessory_request",
     "accept_accessory_request",
-    "view_request_history",
     # exports
     "export_excel_tools",
     "export_excel_accessories",

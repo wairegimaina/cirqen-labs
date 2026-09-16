@@ -7,11 +7,7 @@
 (function () {
   const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
 
-  function escapeHtml(s) {
-    const div = document.createElement('div');
-    div.textContent = s || '';
-    return div.innerHTML;
-  }
+  const escapeHtml = window.escapeHTML; // static/js/escape.js
 
   function initWidget(root) {
     const viewName = root.dataset.viewName;
@@ -29,8 +25,8 @@
       }
       list.innerHTML = filters.map((f) => `
         <div class="saved-filter-item">
-          <a href="?${new URLSearchParams(f.filter_params).toString()}" class="sf-name">${escapeHtml(f.name)}</a>
-          <button type="button" class="sf-delete" data-id="${f.id}" aria-label="Delete ${escapeHtml(f.name)}">
+          <a href="?${escapeHTML(new URLSearchParams(f.filter_params).toString())}" class="sf-name">${escapeHtml(f.name)}</a>
+          <button type="button" class="sf-delete" data-id="${escapeHTML(f.id)}" aria-label="Delete ${escapeHtml(f.name)}">
             <i class="fas fa-times"></i>
           </button>
         </div>
