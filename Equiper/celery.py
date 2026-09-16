@@ -44,12 +44,20 @@ def config_loggers(*args, **kwargs):
 # ============================================================================
 
 app.conf.beat_schedule = {
+    # Local database backup (core.backups). Midday rather than overnight:
+    # clinic machines are often switched off at night and beat does not
+    # catch up on missed runs.
+    "backup-local-database": {
+        "task": "core.tasks.backup_local_database",
+        "schedule": crontab(hour=12, minute=30),
+        "options": {"expires": 6 * 3600},
+    },
     # ============================================================================
     # PPM (PREVENTIVE MAINTENANCE) TASKS - KEEP AS IS
     # ============================================================================
     # Check and push overdue PPMs every day at 1:00 AM
     "check-overdue-ppms": {
-        "task": "PPM.tasks.check_and_push_overdue_ppms",
+        "task": "ppms.tasks.check_and_push_overdue_ppms",
         "schedule": crontab(hour=1, minute=0),  # Daily at 1:00 AM
         "options": {
             "expires": 3600,
@@ -57,7 +65,7 @@ app.conf.beat_schedule = {
     },
     # Auto-schedule unscheduled equipment every day at 2:00 AM
     "auto-schedule-unscheduled-ppm-equipment": {
-        "task": "PPM.tasks.auto_schedule_unscheduled_equipment",
+        "task": "ppms.tasks.auto_schedule_unscheduled_equipment",
         "schedule": crontab(hour=2, minute=0),  # Daily at 2:00 AM
         "kwargs": {
             "planning_logic": "department",  # 'department' or 'description'
@@ -71,7 +79,7 @@ app.conf.beat_schedule = {
     },
     # Generate report of unscheduled equipment every day at 8:00 AM
     "generate-unscheduled-ppm-report": {
-        "task": "PPM.tasks.generate_unscheduled_equipment_report",
+        "task": "ppms.tasks.generate_unscheduled_equipment_report",
         "schedule": crontab(hour=8, minute=0),  # Daily at 8:00 AM
         "options": {
             "expires": 3600,
@@ -79,7 +87,7 @@ app.conf.beat_schedule = {
     },
     # Clean up orphaned PPM schedules every Sunday at 3:00 AM
     "cleanup-orphaned-ppm-schedules": {
-        "task": "PPM.tasks.cleanup_orphaned_ppm_schedules",
+        "task": "ppms.tasks.cleanup_orphaned_ppm_schedules",
         "schedule": crontab(hour=3, minute=0, day_of_week=0),  # Weekly on Sunday
         "options": {
             "expires": 7200,  # 2 hours
@@ -87,7 +95,7 @@ app.conf.beat_schedule = {
     },
     # Remove inactive equipment schedules every day at 3:30 AM
     "cleanup-inactive-ppm-schedules": {
-        "task": "PPM.tasks.periodic_cleanup_inactive_schedules",
+        "task": "ppms.tasks.periodic_cleanup_inactive_schedules",
         "schedule": crontab(hour=3, minute=30),  # Daily at 3:30 AM
         "options": {
             "expires": 3600,
