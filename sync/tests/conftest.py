@@ -153,12 +153,11 @@ def agent(pool):
     wired to the test pool. Avoids the heavy full-agent __init__ (config, redis,
     HQ registration) so tests stay hermetic.
     """
-    from sync.outbox import OutboxMixin
     from sync.conflict_quarantine import ConflictQuarantineMixin
     from sync.conflict_resolver import ConflictResolverMixin
     from sync.schema_guard import SchemaGuardMixin
 
-    class TestAgent(OutboxMixin, ConflictQuarantineMixin,
+    class TestAgent(ConflictQuarantineMixin,
                     ConflictResolverMixin, SchemaGuardMixin):
         def __init__(self, pool):
             self.pool = pool
@@ -166,7 +165,7 @@ def agent(pool):
             self.machine_id = "M-TEST"
             self.client_id = "CLIENT-TEST"
             self.tables = ["public.jobcard_jobcard"]
-            self.sync_cfg = {"upload_batch_size": 2, "use_outbox": True, "outbox_prune": True}
+            self.sync_cfg = {"upload_batch_size": 2}
 
     return TestAgent(pool)
 

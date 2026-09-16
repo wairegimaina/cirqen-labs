@@ -812,10 +812,6 @@ class LifecycleMixin(SmartDeleteMixin):
             LOG.info("Stopping SyncAgent...")
             self.stop_event.set()
 
-            # Stop Redis queue worker
-            if hasattr(self, 'redis_queue') and self.redis_queue:
-                self.redis_queue.stop()
-
             for t in self.threads:
                 if t.is_alive():
                     t.join(timeout=5)

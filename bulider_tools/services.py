@@ -1624,7 +1624,7 @@ daemonize no
 
         KEY FIX: Before calling sync_agent.main() we forcibly route every
         logger that the sync subsystem uses (sync_agent, sync_agent_optimized,
-        mirror_sync, data_checker_client, RedisQueueSync, ...) to the same
+        mirror_sync, data_checker_client, ...) to the same
         log file at DEBUG level.  Previously only the SyncAgentThread
         wrapper logger wrote to the file, so everything inside main() was
         silently dropped (the module-level LOG was set to WARNING and had
@@ -1711,7 +1711,6 @@ daemonize no
                     'sync.mirror',
                     'data_checker_client',
                     'data_checker',
-                    'RedisQueueSync',
                     '',                   # root logger catches everything else
                 ]
 

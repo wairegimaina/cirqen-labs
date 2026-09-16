@@ -24,14 +24,13 @@ from .sync_agent_9 import StatusReportingMixin
 from .conflict_quarantine import ConflictQuarantineMixin
 from .conflict_resolver import ConflictResolverMixin
 from .schema_guard import SchemaGuardMixin
-from .outbox import OutboxMixin
 from .cert_conflict_guard import CertConflictGuardMixin
 from .drift_reconciler import DriftReconcilerMixin
 
 
 class SyncAgent(
     # New capabilities first (override legacy where names overlap).
-    OutboxMixin, ConflictQuarantineMixin, ConflictResolverMixin, SchemaGuardMixin,
+    ConflictQuarantineMixin, ConflictResolverMixin, SchemaGuardMixin,
     CertConflictGuardMixin, DriftReconcilerMixin,
     # Legacy engine, in dependency order (unchanged MRO).
     AgentInitMixin, SchemaAndChangeDetectionMixin, UploadMixin, NetworkLoopsMixin,

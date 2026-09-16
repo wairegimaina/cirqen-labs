@@ -18,10 +18,10 @@ instead of needing someone to notice and run the script manually:
      reassigned the next free, non-conflicting BNH-NNNN number.
 
 Both writes go through the local pool and bump ``updated_at``, so the
-existing upload/outbox pipeline picks them up and pushes them to HQ on its
+existing upload pipeline picks them up and pushes them to HQ on its
 normal schedule. No new HQ write path is introduced — HQ is only ever
 read here, matching how the rest of the sync agent treats HQ as
-authoritative and reaches it exclusively through the sync API/outbox flow.
+authoritative and reaches it exclusively through the sync API upload flow.
 """
 import os
 import threading

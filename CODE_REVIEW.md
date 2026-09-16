@@ -234,7 +234,9 @@ not `outbox.py`, is what actually runs in production.
 
 **Top fixes, in priority order**
 
-1. 🔴 **Decide what to do about `outbox.py` being dead code.** Either wire it
+1. ✅ *Resolved: `outbox.py`, the Redis upload queue and `sync_agent_4`'s dead
+   dispatcher were deleted; `upload_loop_with_background_init` is the only
+   upload engine.* Original finding: 🔴 **Decide what to do about `outbox.py` being dead code.** Either wire it
    in as the real `UploadThread` target (re-audit first — it's never run
    under load) and delete `upload_loop_with_background_init`, or delete
    `outbox.py`/`sync_agent_4.upload_loop`/`_upload_loop_legacy` and stop

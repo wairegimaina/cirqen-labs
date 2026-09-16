@@ -58,20 +58,6 @@ try:
 except ImportError:
     REDIS_AVAILABLE = False
 
-# ============================================================
-# REDIS QUEUE INTEGRATION
-# ============================================================
-if REDIS_AVAILABLE:
-    try:
-        from sync.sync_agent_redis_queue import RedisQueueSync
-
-        REDIS_QUEUE_AVAILABLE = True
-    except ImportError as e:
-        REDIS_QUEUE_AVAILABLE = False
-        RedisQueueSync = None
-else:
-    REDIS_QUEUE_AVAILABLE = False
-    RedisQueueSync = None
 
 
 # ============================================================
@@ -256,7 +242,6 @@ _SYNC_LOGGER_NAMES = [
     "sync_agent_optimized",
     "mirror_sync",
     "data_checker_client",
-    "RedisQueueSync",
 ]
 
 _KENYAN_FORMATTER = KenyanTimeFormatter(

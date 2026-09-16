@@ -33,8 +33,8 @@ computed on every request, and login throttling uses a file cache.
 "Approved offline. Certificate will be generated when connection is restored";
 HQ's watchdog may send a *stale client* alert.
 
-**What happens meanwhile:** local work continues. Changes queue in the local
-outbox and upload when HQ is back. Approved calibration sessions wait in
+**What happens meanwhile:** local work continues. Changed records stay flagged
+for sync and upload when HQ is back. Approved calibration sessions wait in
 `approved_pending_certificate` and get their certificate numbers on reconnect.
 
 **Check, in order:**
