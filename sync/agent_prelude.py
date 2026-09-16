@@ -101,7 +101,7 @@ except ImportError:
                 saved_id = state_manager.get_client_id()
                 if saved_id:
                     return saved_id
-            except:
+            except Exception:
                 pass
         # Simple MAC-based fallback
         mac = uuid.getnode()
@@ -110,7 +110,7 @@ except ImportError:
         if state_manager:
             try:
                 state_manager.set_client_id(generated_id)
-            except:
+            except Exception:
                 pass
         return generated_id
 

@@ -805,7 +805,7 @@ class LifecycleMixin(SmartDeleteMixin):
             # 📊 FINAL STATUS: Shutting down
             try:
                 self.write_status_file(hq_online=False, pending_changes=0)
-            except:
+            except Exception:
                 pass
     def stop(self):
             """Stop all sync loops gracefully"""

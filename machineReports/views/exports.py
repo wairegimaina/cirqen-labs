@@ -370,7 +370,7 @@ class ManufacturerPerformanceDocTemplate(BaseDocTemplate):
         if os.path.exists(logo_path):
             try:
                 canvas.drawImage(logo_path, 1*cm, A4[1]-2.5*cm, width=2*cm, height=1.5*cm, mask='auto')
-            except:
+            except Exception:
                 # If logo fails to load, draw a placeholder
                 canvas.setFillColor(colors.white)
                 canvas.rect(1*cm, A4[1]-2.5*cm, 2*cm, 1.5*cm, fill=1, stroke=1)

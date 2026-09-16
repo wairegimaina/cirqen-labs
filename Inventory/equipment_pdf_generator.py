@@ -1876,5 +1876,5 @@ def create_equipment_pdf_response(workshop, equipment_queryset, report_type='det
         if pdf_buffer is not None:
             try:
                 pdf_buffer.close()
-            except:
+            except Exception:
                 pass

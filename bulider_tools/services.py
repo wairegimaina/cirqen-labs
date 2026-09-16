@@ -106,7 +106,7 @@ class ServiceManager(QObject):
                                 process.kill()
                             elif hasattr(process, 'is_alive') and process.is_alive():
                                 process.kill()
-                        except:
+                        except Exception:
                             pass
 
                     QTimer.singleShot(2000, force_kill)
@@ -115,7 +115,7 @@ class ServiceManager(QObject):
                 if log_file:
                     try:
                         log_file.close()
-                    except:
+                    except Exception:
                         pass
 
             except Exception as e:
@@ -411,7 +411,7 @@ class ServiceManager(QObject):
                             logger.error(f"   ✓ {name}: Running")
                         else:
                             logger.error(f"   ✗ {name}: Stopped")
-                except:
+                except Exception:
                     logger.error(f"   ? {name}: Unknown status")
 
             logger.error("")
@@ -504,7 +504,7 @@ class ServiceManager(QObject):
                             if sync_log_file:
                                 try:
                                     sync_log_file.close()
-                                except:
+                                except Exception:
                                     pass
 
                             # Remove the dead entry from the processes list
@@ -941,7 +941,7 @@ class ServiceManager(QObject):
                     logger.info("✅ PostgreSQL HQ is ready")
                     postgres_hq_ready = True
                     break
-                except:
+                except Exception:
                     time.sleep(0.5)
 
             if not postgres_hq_ready:
@@ -1084,7 +1084,7 @@ daemonize no
             # Emit progress
             try:
                 self.progress_update.emit(f"Starting Django (PID: {django_process.pid})...", 65)
-            except:
+            except Exception:
                 pass
 
             # ====================================================================
@@ -1318,7 +1318,7 @@ daemonize no
 
             try:
                 self.progress_update.emit("Django ready! 🚀", 70)
-            except:
+            except Exception:
                 pass
 
             # ====================================================================
@@ -1339,7 +1339,7 @@ daemonize no
                 )
                 urllib.request.urlopen(request, timeout=5)
                 logger.info("🔥 Django fully warmed up and ready")
-            except:
+            except Exception:
                 logger.warning("⚠️  Warmup request failed, but continuing...")
 
             return True
@@ -1459,7 +1459,7 @@ daemonize no
                             logger.error("   Last 30 lines of log:")
                             for line in lines[-30:]:
                                 logger.error(f"      {line.rstrip()}")
-                except:
+                except Exception:
                     pass
 
                 return False
@@ -1575,7 +1575,7 @@ daemonize no
                             logger.error("   Last 30 lines of log:")
                             for line in lines[-30:]:
                                 logger.error(f"      {line.rstrip()}")
-                except:
+                except Exception:
                     pass
 
                 return False
@@ -1874,7 +1874,7 @@ daemonize no
                             logger.info(f"   Waiting for Celery to stop...")
                             process.wait(timeout=10)
                             logger.info(f"   ✅ Celery stopped gracefully")
-                        except:
+                        except Exception:
                             logger.warning(f"   ⚠️  Celery did not stop, forcing...")
                             if hasattr(process, 'kill'):
                                 process.kill()
@@ -1890,7 +1890,7 @@ daemonize no
                             logger.info(f"   Waiting for Django to stop...")
                             process.join(timeout=10)
                             logger.info(f"   ✅ Django stopped gracefully")
-                        except:
+                        except Exception:
                             logger.warning(f"   ⚠️  Django did not stop, forcing...")
                             if hasattr(process, 'kill'):
                                 process.kill()
@@ -1910,7 +1910,7 @@ daemonize no
 
                             logger.info(f"   ✅ {name} stopped gracefully")
 
-                        except:
+                        except Exception:
                             logger.warning(f"   ⚠️  {name} did not stop, forcing...")
                             if hasattr(process, 'kill'):
                                 process.kill()
@@ -1924,7 +1924,7 @@ daemonize no
                 if log_file:
                     try:
                         log_file.close()
-                    except:
+                    except Exception:
                         pass
 
             except Exception as e:

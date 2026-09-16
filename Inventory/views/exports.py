@@ -113,7 +113,7 @@ def export_equipment_to_excel(request):
             if cell.value:
                 try:
                     max_length = max(max_length, len(str(cell.value)))
-                except:
+                except Exception:
                     pass
             adjusted_width = max(max_length + 2, 3)
             ws.column_dimensions[column_letter].width = adjusted_width
@@ -241,7 +241,7 @@ def export_inventory_summary_excel(request):
             try:
                 if len(str(cell.value)) > max_length:
                     max_length = len(str(cell.value))
-            except:
+            except Exception:
                 pass
         adjusted_width = (max_length + 2) * 1.2
         ws.column_dimensions[column].width = adjusted_width

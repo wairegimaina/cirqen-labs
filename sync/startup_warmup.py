@@ -108,7 +108,7 @@ class StartupStateManager:
                     pid = lock_data.get('pid')
                     if pid and psutil.pid_exists(pid):
                         lock_valid = True
-                except:
+                except Exception:
                     pass
 
                 if not lock_valid:

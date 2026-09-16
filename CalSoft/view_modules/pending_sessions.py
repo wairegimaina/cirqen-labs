@@ -316,7 +316,7 @@ def approve_calibration_session_ajax(request, pk):
                 sync_url = getattr(settings, "SYNC_API_URL", "http://192.168.10.50:5000")
                 response = requests.get(f"{sync_url}/api/sync/health", timeout=5)
                 return response.status_code == 200
-            except:
+            except Exception:
                 return False
 
         def get_machine_identifier():
@@ -325,7 +325,7 @@ def approve_calibration_session_ajax(request, pk):
                 mac_hex = ":".join(f"{(mac_int >> ele) & 0xff:02x}" for ele in range(40, -1, -8))
                 mac_hash = hashlib.sha1(mac_hex.encode()).hexdigest()[:12]
                 return f"mac-{mac_hash}"
-            except:
+            except Exception:
                 return f"machine-{str(uuid.uuid4())[:8]}"
 
         with transaction.atomic():

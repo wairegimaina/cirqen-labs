@@ -901,7 +901,7 @@ class SingleInstanceLock:
                     if lock_data.get('pid') == os.getpid():
                         self.lock_file.unlink()
                         released_items.append("lock file")
-                except:
+                except Exception:
                     self.lock_file.unlink()
                     released_items.append("lock file")
         except Exception as e:

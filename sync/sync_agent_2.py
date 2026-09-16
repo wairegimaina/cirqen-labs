@@ -302,7 +302,7 @@ class SchemaAndChangeDetectionMixin(SmartDeleteMixin):
             try:
                 hostname = os.uname().nodename
                 return f"host-{hostname}"
-            except:
+            except Exception:
                 return f"machine-{str(uuid.uuid4())[:8]}"
 
     def _create_db_pool(self, db_cfg: Dict[str, Any]) -> ThreadedConnectionPool:

@@ -104,7 +104,7 @@ class StatusReportingMixin(SmartDeleteMixin):
                 try:
                     if "temp_path" in locals() and Path(temp_path).exists():
                         Path(temp_path).unlink()
-                except:
+                except Exception:
                     pass
                 raise write_error
 

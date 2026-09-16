@@ -161,7 +161,7 @@ def check_ports():
                 lines = output.strip().split('\n')[1:]  # Skip header
                 if lines:
                     print(f"      Used by: {lines[0].split()[0]} (PID: {lines[0].split()[1]})")
-            except:
+            except Exception:
                 pass
         else:
             print(f"  ✅ Port {port} ({service}): Available")
@@ -198,7 +198,7 @@ def check_session_file():
                     print(f"  ⚠️  Process {pid} still exists: {proc.name()}")
                 else:
                     print(f"  ℹ️  Process {pid} no longer exists (stale session)")
-            except:
+            except Exception:
                 pass
 
     except Exception as e:
@@ -239,7 +239,7 @@ def check_lock_file():
                     return False
                 else:
                     print(f"  ℹ️  Process {pid} no longer exists (stale lock)")
-            except:
+            except Exception:
                 pass
 
     except Exception as e:
@@ -286,7 +286,7 @@ def check_logs():
                         print(f"     ⚠️  Found {len(error_lines)} error(s) in last 50 lines:")
                         for error_line in error_lines[-3:]:  # Show last 3 errors
                             print(f"        {error_line.strip()[:100]}")
-            except:
+            except Exception:
                 pass
         else:
             print(f"  ℹ️  {log_file} (not created yet)")

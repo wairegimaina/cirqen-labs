@@ -1188,7 +1188,7 @@ def create_resources():
         # Draw text
         try:
             font = ImageFont.truetype("arial.ttf", 60)
-        except:
+        except Exception:
             font = ImageFont.load_default()
 
         draw.text((128, 128), "C", font=font, fill='#e94560', anchor='mm')
@@ -2868,7 +2868,7 @@ def copy_runtime_to_dist():
                     if bin_file.is_file():
                         try:
                             bin_file.chmod(0o755)
-                        except:
+                        except Exception:
                             pass
     else:
         logger.warning("⚠️ PostgreSQL source directory not found!")
@@ -2900,7 +2900,7 @@ def copy_runtime_to_dist():
                 if bin_file.is_file() and 'redis' in bin_file.name:
                     try:
                         bin_file.chmod(0o755)
-                    except:
+                    except Exception:
                         pass
     else:
         logger.warning("⚠️ Redis source directory not found!")
@@ -3815,7 +3815,7 @@ Created: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
                         while chunk := f.read(8192):
                             sha256.update(chunk)
                     checksums[rel_path] = sha256.hexdigest()
-                except:
+                except Exception:
                     pass
 
         (code_dir / ".checksums.json").write_text(json.dumps(checksums, indent=2))
@@ -4184,7 +4184,7 @@ Created: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
                         while chunk := f.read(8192):
                             sha256.update(chunk)
                     checksums[rel_path] = sha256.hexdigest()
-                except:
+                except Exception:
                     pass
 
         (code_dir / ".checksums.json").write_text(json.dumps(checksums, indent=2))

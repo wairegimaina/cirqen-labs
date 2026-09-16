@@ -213,7 +213,7 @@ def fetch_parent_record_from_local(local_conn, table: str, parent_id: str,
         LOG.error(f"   ❌ Error fetching parent {table}[{parent_id}]: {e}")
         try:
             local_conn.rollback()
-        except:
+        except Exception:
             pass
         return None
 # ============================================================
@@ -951,14 +951,14 @@ class DatabaseMirror:
             LOG.error(f"   Error message: {str(e).split('CONTEXT:')[0].strip()}")
             try:
                 conn.rollback()
-            except:
+            except Exception:
                 pass
             return set()
         except Exception as e:
             LOG.error(f"❌ Error getting record IDs for {table}: {str(e)}")
             try:
                 conn.rollback()
-            except:
+            except Exception:
                 pass
             return set()
 
@@ -1211,7 +1211,7 @@ class DatabaseMirror:
                             try:
                                 parsed = json.loads(value)
                                 prepared_data[key] = Json(parsed)
-                            except:
+                            except Exception:
                                 prepared_data[key] = Json(value)
                         else:
                             prepared_data[key] = Json(value)
@@ -1283,7 +1283,7 @@ class DatabaseMirror:
             LOG.error(f"   ❌ Failed to sync to HQ {table}[{row_id}]: {e}")
             try:
                 self.hq_conn.rollback()
-            except:
+            except Exception:
                 pass
             return False
 
@@ -1446,7 +1446,7 @@ class DatabaseMirror:
                             try:
                                 parsed = json.loads(value)
                                 prepared_data[key] = Json(parsed)
-                            except:
+                            except Exception:
                                 prepared_data[key] = Json(value)
                         else:
                             prepared_data[key] = Json(value)
@@ -1476,7 +1476,7 @@ class DatabaseMirror:
             LOG.error(f"   ❌ Failed to sync to local {table}[{row_id}]: {e}")
             try:
                 self.local_conn.rollback()
-            except:
+            except Exception:
                 pass
             return False
     def resolve_conflict(self, conflict: RecordDifference,

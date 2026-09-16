@@ -380,7 +380,7 @@ class ApplyRemoteUpdateMixin(SmartDeleteMixin):
                                 try:
                                     parsed = json.loads(val)
                                     return Json(parsed)
-                                except:
+                                except Exception:
                                     return Json(val)
                             else:
                                 return Json(val)
@@ -618,12 +618,12 @@ class ApplyRemoteUpdateMixin(SmartDeleteMixin):
                 error_msg = str(null_error)
                 try:
                     column_match = error_msg.split('column "')[1].split('"')[0]
-                except:
+                except Exception:
                     column_match = 'unknown'
 
                 try:
                     failing_row = error_msg.split('Failing row contains (')[1].split(')')[0]
-                except:
+                except Exception:
                     failing_row = 'not available'
 
                 LOG.error("")

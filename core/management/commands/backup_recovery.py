@@ -159,7 +159,7 @@ class BackupManager:
                     start_id = f"({msg_id}"  # Next iteration starts after this ID
 
             return messages
-        except:
+        except Exception:
             return []
 
     def _write_compressed(self, file_path: Path, data: any) -> int:

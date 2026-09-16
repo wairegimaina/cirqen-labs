@@ -11,4 +11,11 @@ extend-exclude = [
 ]
 
 [lint]
-select = ["E9", "F63", "F7", "F82"]
+# E722: a bare `except:` also swallows KeyboardInterrupt/SystemExit, which
+# keeps sync threads alive through shutdown. Name the exception instead.
+select = ["E9", "F63", "F7", "F82", "E722"]
+
+[lint.per-file-ignores]
+# Files with uncommitted local work in progress at the time E722 was enabled.
+"CalSoft/pdf_generators/signatures.py" = ["E722"]
+"users/management/commands/create_base64_signatures.py" = ["E722"]

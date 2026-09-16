@@ -183,7 +183,7 @@ class MonitoringSystem:
             try:
                 retry_len = self.redis_client.xlen('sync:retry_stream')
                 dlq_len = self.redis_client.xlen('sync:dlq_stream')
-            except:
+            except Exception:
                 retry_len = 0
                 dlq_len = 0
 
@@ -465,7 +465,7 @@ This is an automated alert from the B12 sync monitoring system.
                     json.dumps(alert.to_dict())
                 )
                 self.redis_client.ltrim('sync:alerts', 0, 999)  # Keep last 1000
-            except:
+            except Exception:
                 pass
 
     def export_metrics(self) -> Dict:
@@ -486,7 +486,7 @@ This is an automated alert from the B12 sync monitoring system.
                     'sync_runtime_seconds': stats.get('runtime', 0)
                 }
             return {}
-        except:
+        except Exception:
             return {}
 
 

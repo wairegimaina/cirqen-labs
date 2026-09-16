@@ -318,7 +318,7 @@ class RedisQueueSync:
                 # Always release lock
                 try:
                     self.redis.delete(RedisKeys.LOCK)
-                except:
+                except Exception:
                     pass
 
         self.log.info("Worker stopped")

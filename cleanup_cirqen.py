@@ -276,7 +276,7 @@ def remove_lock_files() -> Tuple[int, List[str]]:
                         print(f"       PID: {data.get('pid', 'N/A')}")
                         if 'ports' in data:
                             print(f"       Ports: {len(data['ports'])} configured")
-                    except:
+                    except Exception:
                         pass
 
                 file_path.unlink()
