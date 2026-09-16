@@ -253,14 +253,20 @@ def certificate_list(request):
 @require_http_methods(["GET", "POST"])
 def generate_comprehensive_certificate(request, session_pk):
     try:
-        # CalibrationSession has no department field (select_related("Department")
-        # raised FieldError on every call); the location comes from the device.
-        session = get_object_or_404(CalibrationSession, pk=session_pk)
+        # The FK is named ``Department`` (capital D); the old code followed it
+        # as ``session.department`` and raised AttributeError on every call.
+        session = get_object_or_404(
+            CalibrationSession.objects.select_related("Department__workshop"), pk=session_pk
+        )
 
         department_name = "Unknown Department"
         workshop_name = "Unknown Workshop"
 
-        if session.device_serial:
+        if session.Department:
+            department_name = session.Department.name
+            if session.Department.workshop:
+                workshop_name = session.Department.workshop.name
+        elif session.device_serial:
             try:
                 equipment = Equipment.objects.select_related("department").get(
                     serial_number=session.device_serial
@@ -403,11 +409,13 @@ def get_accessible_sessions(user, date_from=None, date_to=None):
         if not user_department:
             raise PermissionError("No department assigned to NIC profile.")
 
-        # CalibrationSession has no department field; a session belongs to the
-        # department that owns the device it calibrated.
+        # A session belongs to the NIC's department if it was recorded against
+        # it, or if it calibrated a device that department owns. (The old code
+        # filtered on ``department``; the field is ``Department``, so it raised.)
         nic_equipment = Equipment.objects.filter(department=user_department)
         sessions = base_sessions.filter(
-            device_serial__in=nic_equipment.values_list("serial_number", flat=True)
+            Q(Department=user_department)
+            | Q(device_serial__in=nic_equipment.values_list("serial_number", flat=True))
         )
         accessible_equipment = nic_equipment
     else:
@@ -457,10 +465,10 @@ def bulk_certificates_download(request):
                 department_name = "Unknown Department"
                 workshop_name = "Unknown Workshop"
 
-                if hasattr(session, "department") and session.department:
-                    department_name = session.department.name
-                    if hasattr(session.department, "workshop") and session.department.workshop:
-                        workshop_name = session.department.workshop.name
+                if session.Department:
+                    department_name = session.Department.name
+                    if session.Department.workshop:
+                        workshop_name = session.Department.workshop.name
                 elif session.device_serial:
                     try:
                         equipment = accessible_equipment.select_related("department").get(

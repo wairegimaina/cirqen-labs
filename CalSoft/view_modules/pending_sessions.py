@@ -1,4 +1,7 @@
 import logging
+from functools import wraps
+
+from users.control import get_user_role
 import uuid
 import hashlib
 from datetime import timedelta
@@ -26,6 +29,30 @@ def is_ajax(request):
     return request.headers.get(
         "X-Requested-With"
     ) == "XMLHttpRequest" or "application/json" in request.headers.get("Accept", "")
+
+
+def can_review_calibrations(user):
+    """Approving, rejecting and restoring calibration sessions issues or voids
+    certificates, so it is limited to calibration-centre technologists (the
+    users the sidebar shows this queue to) and HODs."""
+    role = get_user_role(user)
+    if role == "HOD":
+        return True
+    workshop = getattr(getattr(user, "userprofile", None), "workshop", None)
+    return role == "Tech" and workshop is not None and workshop.category == "calibration_center"
+
+
+def calibration_reviewer_required(view_func):
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        if not can_review_calibrations(request.user):
+            logger.warning("Denied calibration review %s to %s", request.path, request.user)
+            return JsonResponse(
+                {"success": False, "error": "Only calibration-centre staff can review calibration sessions."},
+                status=403,
+            )
+        return view_func(request, *args, **kwargs)
+    return wrapper
 
 
 def _mark_schedule_for_session_approval(schedule, status, now):
@@ -276,6 +303,7 @@ def session_details(request, pk):
 
 @login_required
 @require_http_methods(["POST"])
+@calibration_reviewer_required
 def approve_calibration_session_ajax(request, pk):
     try:
         session = get_object_or_404(CalibrationSession, pk=pk, status="pending_review")
@@ -401,6 +429,7 @@ def approve_calibration_session_ajax(request, pk):
 
 
 @login_required
+@calibration_reviewer_required
 def reject_calibration_session(request, pk):
     try:
         session = get_object_or_404(CalibrationSession, pk=pk, status="pending_review")
@@ -452,6 +481,7 @@ def reject_calibration_session(request, pk):
 
 
 @login_required
+@calibration_reviewer_required
 def restore_rejected_session(request, pk):
     session = get_object_or_404(CalibrationSession, pk=pk)
 

@@ -230,10 +230,12 @@ def handle_technician_job_card(request, workshop):
         # Get department and equipment
         if workshop.category == 'calibration_center':
             department = Department.objects.get(id=department_uuid, active_status=True)
-            equipment = Equipment.objects.get(id=equipment_uuid, active_status=True)
+            # The device must belong to the selected department, otherwise a job
+            # card could be raised against another workshop's equipment.
+            equipment = Equipment.objects.get(id=equipment_uuid, department=department, active_status=True)
         else:
             department = Department.objects.get(id=department_uuid, workshop=workshop, active_status=True)
-            equipment = Equipment.objects.get(id=equipment_uuid, active_status=True)
+            equipment = Equipment.objects.get(id=equipment_uuid, department=department, active_status=True)
 
     except Department.DoesNotExist:
         messages.error(request, "Invalid department selected or department is inactive.", extra_tags="jobcard")
