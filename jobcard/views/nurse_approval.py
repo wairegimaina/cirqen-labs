@@ -1,52 +1,35 @@
-"""jobcard.views — nurse approval handler for job-card creation."""
-from locale import D_T_FMT
-from uuid import UUID
-import zipfile
-from django.utils.timezone import now
-from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib import messages
-from django.http import FileResponse, HttpResponse, JsonResponse
-from django.contrib.auth.decorators import login_required
-from django import forms
-from docxtpl import DocxTemplate
-from docxtpl import InlineImage
-from docx.shared import Mm
-from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
-import os
-from django.db.models import Q
-from io import BytesIO
-from django.conf import settings
-from django.contrib.messages import error as messages_error, success as messages_success
-import json
+"""jobcard.views — nurse approval handler for job-card creation.
+
+``handle_nurse_approval`` lets a department's in-charge approve or decline a
+waiting job card. Approval deducts stock and completes a linked PPM schedule;
+decline records the reason. Every refusal re-renders the form with the
+in-charge's input intact.
+"""
 import logging
-from jobcard.modern_jobcard_pdf import generate_jobcard_pdf, create_jobcard_pdf_response
-from django.db import transaction, IntegrityError
-from users.models import UserProfile, UserSignature
-from workshop.models import Workshop
-from ..models import jobcard, SparePartUsed
-from Inventory.models import Equipment, Department
-from parts_tools.models import Accessories
-from PIL import Image
-import base64
-import io
-from django.core.exceptions import ValidationError
-from datetime import timedelta, datetime, date
-from django.db.models.functions import ExtractYear
-from django.utils.dateparse import parse_date
-from decimal import Decimal, InvalidOperation
-import json
 from uuid import UUID
-from django.utils.timezone import now
+
+from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.contrib import messages
-from django.shortcuts import render, redirect
-import logging
+from django.shortcuts import redirect, render
+from django.utils.timezone import now
+
+from Inventory.models import Department
+from parts_tools.models import Accessories
+from users.models import UserSignature
+
+from ..models import jobcard
+from .helpers import get_or_create_user_signature
+
 logger = logging.getLogger(__name__)
 
-# sibling modules in this package
-from .helpers import get_or_create_user_signature
-from .listing import waiting_jobcards
+
+class FormRejected(Exception):
+    """Raised by a step to re-render the form with an error message."""
+
+    def __init__(self, message, job_card=None):
+        super().__init__(message)
+        self.job_card = job_card
 
 
 def _has_saved_signature(user):
@@ -55,332 +38,164 @@ def _has_saved_signature(user):
     return bool(signature and signature.has_signature())
 
 
-def handle_nurse_approval(request, nurse_department):
-    import logging
-    from uuid import UUID
-    from django.utils.timezone import now
-    from django.core.exceptions import ValidationError
-    from django.db import transaction
-    from django.contrib import messages
-    from django.shortcuts import render, redirect
-
-    logger = logging.getLogger(__name__)
-
-    jobcard_id = request.POST.get('jobcard_id')
-    nurse_name = request.POST.get('nurse_name')
-    nurse_signature_data = request.POST.get('nurse_signature_data')
-    use_auto_signature = request.POST.get('use_auto_signature') == 'true'
-    decline_reason = request.POST.get('decline_reason', '').strip()
-
-    # Store form data for re-rendering in case of errors
-    form_data = {
-        'jobcard_id': jobcard_id,
-        'nurse_name': nurse_name,
-        'nurse_signature_data': nurse_signature_data,
-        'decline_reason': decline_reason,
-        'use_auto_signature': use_auto_signature
+def _read_form(request):
+    post = request.POST
+    return {
+        "jobcard_id": post.get("jobcard_id"),
+        "nurse_name": post.get("nurse_name"),
+        "nurse_signature_data": post.get("nurse_signature_data"),
+        "decline_reason": post.get("decline_reason", "").strip(),
+        "use_auto_signature": post.get("use_auto_signature") == "true",
     }
 
-    # Get the context data for rendering
-    waiting_jobcards = jobcard.objects.filter(status="Waiting Approval", department=nurse_department)
-    departments_list = Department.objects.filter(id=nurse_department.id)
 
-    # Get selected job card for display
-    selected_job_card = None
-    if jobcard_id:
-        try:
-            selected_job_card = jobcard.objects.filter(
-                id=jobcard_id,
-                status="Waiting Approval",
-                department=nurse_department
-            ).first()
-        except (ValueError, AttributeError):
-            selected_job_card = None
+def _waiting_card(department, jobcard_id):
+    """The department's waiting card with this id, or None (malformed ids included)."""
+    if not jobcard_id:
+        return None
+    try:
+        return jobcard.objects.filter(id=jobcard_id, status="Waiting Approval", department=department).first()
+    except (ValueError, AttributeError, ValidationError):
+        return None
 
-    # Basic validation
-    if not use_auto_signature and not nurse_signature_data:
-        messages.error(request, "Please provide a signature or enable auto-signature.", extra_tags="jobcard")
-        return render(request, 'jobcard/jbb.html', {
-        'show_sidebar': True,  # Enable sidebar with hamburger menu
-        'form_data': form_data,
-            'is_nurse': True,
-            'is_technician': False,
-            'job_cards': waiting_jobcards,
-            'departments': departments_list,
-            'accessories': Accessories.objects.none(),
-            'selected_job_card': selected_job_card,
-            'user_signature_available': _has_saved_signature(request.user)
-        })
 
-    if not all([jobcard_id, nurse_name]):
-        messages.error(request, "Job card and nurse name are required.", extra_tags="jobcard")
-        return render(request, 'jobcard/jbb.html', {
-        'show_sidebar': True,  # Enable sidebar with hamburger menu
-        'form_data': form_data,
-            'is_nurse': True,
-            'is_technician': False,
-            'job_cards': waiting_jobcards,
-            'departments': departments_list,
-            'accessories': Accessories.objects.none(),
-            'selected_job_card': selected_job_card,
-            'user_signature_available': _has_saved_signature(request.user)
-        })
+def _render_form(request, department, form, selected_job_card):
+    return render(request, "jobcard/jbb.html", {
+        "show_sidebar": True,
+        "form_data": form,
+        "is_nurse": True,
+        "is_technician": False,
+        "job_cards": jobcard.objects.filter(status="Waiting Approval", department=department),
+        "departments": Department.objects.filter(id=department.id),
+        "accessories": Accessories.objects.none(),
+        "selected_job_card": selected_job_card,
+        "user_signature_available": _has_saved_signature(request.user),
+    })
+
+
+def _validate(form):
+    if not form["use_auto_signature"] and not form["nurse_signature_data"]:
+        raise FormRejected("Please provide a signature or enable auto-signature.")
+    if not (form["jobcard_id"] and form["nurse_name"]):
+        raise FormRejected("Job card and nurse name are required.")
+    try:
+        return UUID(form["jobcard_id"])
+    except (ValueError, AttributeError):
+        raise FormRejected("Invalid job card ID format.")
+
+
+def _sign(request, job_card, form):
+    job_card.verified_by_nurse = request.user
+    job_card.nurse_name = form["nurse_name"]
+    job_card.nurse_signed_date = now()
+    signature = form["nurse_signature_data"]
+    if form["use_auto_signature"]:
+        auto_signature = get_or_create_user_signature(request.user)
+        if auto_signature:
+            signature = auto_signature
+        else:
+            messages.warning(request, "Auto-signature could not be generated. Using manual signature.",
+                             extra_tags="jobcard")
+    job_card.verified_signature = signature
+
+
+def _check_linked_ppm(job_card):
+    schedule = job_card.related_ppm_schedule
+    if not schedule:
+        return
+    if schedule.status == "completed":
+        raise FormRejected(
+            f"Cannot approve: Linked PPM schedule for {schedule.scheduled_month.strftime('%B %Y')} "
+            "is already marked as completed.",
+            job_card,
+        )
+    if schedule.equipment != job_card.equipment:
+        raise FormRejected(
+            f"PPM schedule equipment mismatch. Schedule is for {schedule.equipment.description}, "
+            f"job card is for {job_card.equipment.description}.",
+            job_card,
+        )
+
+
+def _approve(request, job_card, form):
+    _check_linked_ppm(job_card)
+    try:
+        job_card.deduct_stock()
+    except ValidationError as exc:
+        logger.error("Validation error approving job card #%s: %s", job_card.id, exc)
+        raise FormRejected(f"Cannot approve job card: {exc}", job_card)
+    job_card.status = "Approved"
+    job_card.decline_reason = None
+    job_card.save()
+
+    ppm_updated = bool(job_card.related_ppm_schedule) and job_card.update_ppm_status_if_applicable()
+
+    message = (
+        f"Job card #{job_card.id} approved successfully. "
+        f"Total cost: KSh {job_card.get_total_cost():,.2f}. Stock has been updated."
+    )
+    schedule = job_card.related_ppm_schedule
+    if ppm_updated:
+        message += f" PPM schedule for {schedule.scheduled_month.strftime('%B %Y')} has been marked as completed."
+        logger.info("Job card #%s approval completed PPM schedule %s", job_card.id, schedule.id)
+    elif job_card.action_taken == "PPM" and not schedule:
+        message += " (Manual PPM work - no schedule was linked)"
+    elif job_card.action_taken == "PPM":
+        message += " (PPM schedule was already completed)"
+    messages.success(request, message, extra_tags="jobcard")
+
+    logger.info(
+        "Job card #%s approved by %s (%s): equipment=%s action=%s cost=%s department=%s workshop=%s ppm_linked=%s",
+        job_card.id, request.user.get_full_name(), form["nurse_name"], job_card.equipment.description,
+        job_card.action_taken, job_card.get_total_cost(), job_card.department.name, job_card.workshop.name,
+        bool(schedule),
+    )
+    return redirect("jobcard:approved_jobcards")
+
+
+def _decline(request, job_card, form):
+    if not form["decline_reason"]:
+        raise FormRejected("Reason for decline is required.", job_card)
+    if job_card.related_ppm_schedule and job_card.action_taken == "PPM":
+        logger.warning("Declining PPM-linked job card #%s; PPM schedule %s remains pending.",
+                       job_card.id, job_card.related_ppm_schedule.id)
+    job_card.status = "Declined"
+    job_card.decline_reason = form["decline_reason"]
+    job_card.save()
+    messages.success(request, f"Job card #{job_card.id} declined successfully. No stock changes made.",
+                     extra_tags="jobcard")
+    logger.info("Job card #%s declined by %s (%s): %s",
+                job_card.id, request.user.get_full_name(), form["nurse_name"], form["decline_reason"][:100])
+    return redirect("jobcard:waiting_jobcards")
+
+
+def handle_nurse_approval(request, nurse_department):
+    form = _read_form(request)
+    selected_job_card = _waiting_card(nurse_department, form["jobcard_id"])
 
     try:
-        # Validate UUID format
-        try:
-            jobcard_uuid = UUID(jobcard_id)
-        except (ValueError, AttributeError):
-            messages.error(request, "Invalid job card ID format.", extra_tags="jobcard")
-            return render(request, 'jobcard/jbb.html', {
-        'show_sidebar': True,  # Enable sidebar with hamburger menu
-        'form_data': form_data,
-                'is_nurse': True,
-                'is_technician': False,
-                'job_cards': waiting_jobcards,
-                'departments': departments_list,
-                'accessories': Accessories.objects.none(),
-                'selected_job_card': selected_job_card,
-                'user_signature_available': _has_saved_signature(request.user)
-            })
-
+        jobcard_uuid = _validate(form)
         with transaction.atomic():
-            # Get job card with lock for update
-            job_card = jobcard.objects.select_for_update().get(
-                id=jobcard_uuid,
-                status="Waiting Approval"
-            )
-
-            # Verify department permission
+            job_card = jobcard.objects.select_for_update().get(id=jobcard_uuid, status="Waiting Approval")
             if job_card.department != nurse_department:
-                messages.error(request, "You can only approve/decline job cards for your department.", extra_tags="jobcard")
-                return render(request, 'jobcard/jbb.html', {
-        'show_sidebar': True,  # Enable sidebar with hamburger menu
-        'form_data': form_data,
-                    'is_nurse': True,
-                    'is_technician': False,
-                    'job_cards': waiting_jobcards,
-                    'departments': departments_list,
-                    'accessories': Accessories.objects.none(),
-                    'selected_job_card': job_card,
-                    'user_signature_available': _has_saved_signature(request.user)
-                })
+                raise FormRejected("You can only approve/decline job cards for your department.", job_card)
+            _sign(request, job_card, form)
+            if "approve" in request.POST:
+                return _approve(request, job_card, form)
+            if "decline" in request.POST:
+                return _decline(request, job_card, form)
+            raise FormRejected("Invalid action requested.", job_card)
 
-            # Set nurse verification details
-            job_card.verified_by_nurse = request.user
-            job_card.nurse_name = nurse_name
-            job_card.nurse_signed_date = now()
-
-            # Handle signature
-            if use_auto_signature:
-                auto_signature = get_or_create_user_signature(request.user)
-                if auto_signature:
-                    job_card.verified_signature = auto_signature
-                else:
-                    messages.warning(request, "Auto-signature could not be generated. Using manual signature.", extra_tags="jobcard")
-                    job_card.verified_signature = nurse_signature_data
-            else:
-                job_card.verified_signature = nurse_signature_data
-
-            # Handle approval
-            if 'approve' in request.POST:
-                try:
-                    # Check if job card is linked to PPM schedule and validate
-                    if job_card.related_ppm_schedule:
-                        ppm_schedule = job_card.related_ppm_schedule
-
-                        # ✅ NEW: Additional validation for PPM schedule
-                        if ppm_schedule.status == 'completed':
-                            messages.error(
-                                request,
-                                f"Cannot approve: Linked PPM schedule for {ppm_schedule.scheduled_month.strftime('%B %Y')} "
-                                f"is already marked as completed.",
-                                extra_tags="jobcard"
-                            )
-                            return render(request, 'jobcard/jbb.html', {
-        'show_sidebar': True,  # Enable sidebar with hamburger menu
-        'form_data': form_data,
-                                'is_nurse': True,
-                                'is_technician': False,
-                                'job_cards': waiting_jobcards,
-                                'departments': departments_list,
-                                'accessories': Accessories.objects.none(),
-                                'selected_job_card': job_card,
-                                'user_signature_available': _has_saved_signature(request.user)
-                            })
-
-                        # Validate equipment still matches
-                        if ppm_schedule.equipment != job_card.equipment:
-                            messages.error(
-                                request,
-                                f"PPM schedule equipment mismatch. Schedule is for {ppm_schedule.equipment.description}, "
-                                f"job card is for {job_card.equipment.description}.",
-                                extra_tags="jobcard"
-                            )
-                            return render(request, 'jobcard/jbb.html', {
-        'show_sidebar': True,  # Enable sidebar with hamburger menu
-        'form_data': form_data,
-                                'is_nurse': True,
-                                'is_technician': False,
-                                'job_cards': waiting_jobcards,
-                                'departments': departments_list,
-                                'accessories': Accessories.objects.none(),
-                                'selected_job_card': job_card,
-                                'user_signature_available': _has_saved_signature(request.user)
-                            })
-
-                    # Deduct stock and update job card
-                    job_card.deduct_stock()
-                    job_card.status = "Approved"
-                    job_card.decline_reason = None
-                    job_card.save()
-
-                    # ✅ NEW: Update linked PPM schedule if exists
-                    ppm_updated = False
-                    if job_card.related_ppm_schedule:
-                        ppm_updated = job_card.update_ppm_status_if_applicable()
-
-                    # ✅ MODIFIED: Success message with PPM info
-                    success_message = (
-                        f"Job card #{job_card.id} approved successfully. "
-                        f"Total cost: KSh {job_card.get_total_cost():,.2f}. "
-                        f"Stock has been updated."
-                    )
-
-                    if ppm_updated:
-                        ppm_schedule = job_card.related_ppm_schedule
-                        success_message += (
-                            f" PPM schedule for {ppm_schedule.scheduled_month.strftime('%B %Y')} "
-                            f"has been marked as completed."
-                        )
-                        logger.info(
-                            f"✅ Job card #{job_card.id} approval completed PPM schedule "
-                            f"{ppm_schedule.id} ({ppm_schedule.scheduled_month.strftime('%B %Y')})"
-                        )
-                    elif job_card.action_taken == 'PPM' and not job_card.related_ppm_schedule:
-                        success_message += " (Manual PPM work - no schedule was linked)"
-                        logger.info(
-                            f"ℹ️ Job card #{job_card.id} was manual PPM (no linked schedule)"
-                        )
-                    elif job_card.action_taken == 'PPM' and job_card.related_ppm_schedule:
-                        # PPM schedule was linked but not updated (already completed)
-                        success_message += f" (PPM schedule was already completed)"
-
-                    messages.success(request, success_message, extra_tags="jobcard")
-
-                    # Log the approval with details
-                    logger.info(
-                        f"📋 Job card #{job_card.id} approved by {request.user.get_full_name()} ({nurse_name})\n"
-                        f"   Equipment: {job_card.equipment.description}\n"
-                        f"   Action: {job_card.action_taken}\n"
-                        f"   Total Cost: KSh {job_card.get_total_cost():,.2f}\n"
-                        f"   Department: {job_card.department.name}\n"
-                        f"   Workshop: {job_card.workshop.name}\n"
-                        f"   PPM Linked: {'Yes' if job_card.related_ppm_schedule else 'No'}"
-                    )
-
-                    return redirect('jobcard:approved_jobcards')
-
-                except ValidationError as e:
-                    messages.error(request, f"Cannot approve job card: {str(e)}", extra_tags="jobcard")
-                    logger.error(f"Validation error approving job card #{job_card.id}: {str(e)}")
-                    return render(request, 'jobcard/jbb.html', {
-        'show_sidebar': True,  # Enable sidebar with hamburger menu
-        'form_data': form_data,
-                        'is_nurse': True,
-                        'is_technician': False,
-                        'job_cards': waiting_jobcards,
-                        'departments': departments_list,
-                        'accessories': Accessories.objects.none(),
-                        'selected_job_card': job_card,
-                        'user_signature_available': _has_saved_signature(request.user)
-                    })
-
-            # Handle decline
-            elif 'decline' in request.POST:
-                if not decline_reason:
-                    messages.error(request, "Reason for decline is required.", extra_tags="jobcard")
-                    return render(request, 'jobcard/jbb.html', {
-        'show_sidebar': True,  # Enable sidebar with hamburger menu
-        'form_data': form_data,
-                        'is_nurse': True,
-                        'is_technician': False,
-                        'job_cards': waiting_jobcards,
-                        'departments': departments_list,
-                        'accessories': Accessories.objects.none(),
-                        'selected_job_card': job_card,
-                        'user_signature_available': _has_saved_signature(request.user)
-                    })
-
-                # ✅ NEW: Check if declining a PPM-linked job card
-                if job_card.related_ppm_schedule and job_card.action_taken == 'PPM':
-                    logger.warning(
-                        f"⚠️ Declining PPM-linked job card #{job_card.id}. "
-                        f"PPM schedule {job_card.related_ppm_schedule.id} remains pending."
-                    )
-
-                job_card.status = "Declined"
-                job_card.decline_reason = decline_reason
-                job_card.save()
-
-                messages.success(
-                    request,
-                    f"Job card #{job_card.id} declined successfully. No stock changes made.",
-                    extra_tags="jobcard"
-                )
-
-                # Log the decline
-                logger.info(
-                    f"❌ Job card #{job_card.id} declined by {request.user.get_full_name()} ({nurse_name})\n"
-                    f"   Reason: {decline_reason[:100]}..."
-                )
-
-                return redirect('jobcard:waiting_jobcards')
-
-            else:
-                # Neither approve nor decline button was pressed
-                messages.error(request, "Invalid action requested.", extra_tags="jobcard")
-                return render(request, 'jobcard/jbb.html', {
-        'show_sidebar': True,  # Enable sidebar with hamburger menu
-        'form_data': form_data,
-                    'is_nurse': True,
-                    'is_technician': False,
-                    'job_cards': waiting_jobcards,
-                    'departments': departments_list,
-                    'accessories': Accessories.objects.none(),
-                    'selected_job_card': job_card,
-                    'user_signature_available': _has_saved_signature(request.user)
-                })
-
+    except FormRejected as rejection:
+        messages.error(request, str(rejection), extra_tags="jobcard")
+        return _render_form(request, nurse_department, form, rejection.job_card or selected_job_card)
     except jobcard.DoesNotExist:
         messages.error(request,
-            "Job card not found, already processed, or you don't have permission to access it.",
-            extra_tags="jobcard"
-        )
-        logger.warning(f"Job card not found or inaccessible: {jobcard_id}")
-        return render(request, 'jobcard/jbb.html', {
-        'show_sidebar': True,  # Enable sidebar with hamburger menu
-        'form_data': form_data,
-            'is_nurse': True,
-            'is_technician': False,
-            'job_cards': waiting_jobcards,
-            'departments': departments_list,
-            'accessories': Accessories.objects.none(),
-            'selected_job_card': selected_job_card,
-            'user_signature_available': _has_saved_signature(request.user)
-        })
-
-    except Exception as e:
-        logger.error(f"Error in nurse approval/decline for jobcard_id {jobcard_id}: {str(e)}", exc_info=True)
-        messages.error(request, f"Error processing job card: {str(e)}", extra_tags="jobcard")
-        return render(request, 'jobcard/jbb.html', {
-        'show_sidebar': True,  # Enable sidebar with hamburger menu
-        'form_data': form_data,
-            'is_nurse': True,
-            'is_technician': False,
-            'job_cards': waiting_jobcards,
-            'departments': departments_list,
-            'accessories': Accessories.objects.none(),
-            'selected_job_card': selected_job_card,
-            'user_signature_available': _has_saved_signature(request.user)
-        })
+                       "Job card not found, already processed, or you don't have permission to access it.",
+                       extra_tags="jobcard")
+        logger.warning("Job card not found or inaccessible: %s", form["jobcard_id"])
+    except Exception as exc:
+        logger.error("Error in nurse approval/decline for jobcard_id %s: %s", form["jobcard_id"], exc,
+                     exc_info=True)
+        messages.error(request, f"Error processing job card: {exc}", extra_tags="jobcard")
+    return _render_form(request, nurse_department, form, selected_job_card)
