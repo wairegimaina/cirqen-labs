@@ -20,6 +20,7 @@ from reportlab.pdfgen import canvas as rl_canvas
 import logging
 from functools import partial
 from io import BytesIO
+from core.branding import contact_line
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +115,7 @@ class ManufacturerPDFTemplate(BaseDocTemplate):
         self.report_title = title
         self.report_subtitle = subtitle
         self.department_name = department_name
-        self.contact_info = contact_info or "Email: biomedical@hospital.com | Phone: +254-XXX-XXXX"
+        self.contact_info = contact_info or contact_line()
         self.page_width, self.page_height = pagesize
 
         # Get logo path
@@ -775,7 +776,7 @@ class ManufacturerPerformancePDFGenerator:
             title=self._get_report_title(),
             subtitle=self._get_report_subtitle(),
             department_name="Biomedical Engineering Department",
-            contact_info="Email: biomedical@hospital.com | Phone: +254-XXX-XXXX",
+            contact_info=contact_line(),
         )
 
         # Build story

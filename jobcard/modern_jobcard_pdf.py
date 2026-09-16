@@ -18,6 +18,7 @@ from datetime import datetime
 import base64
 from PIL import Image as PILImage
 import logging
+from core.branding import contact_line
 
 logger = logging.getLogger(__name__)
 
@@ -268,7 +269,7 @@ class ModernJobCardPDFGenerator:
         canvas.drawCentredString(
             width / 2,
             height - 2.7*cm,
-            "Email: biomedical@hospital.com | Phone: +254-XXX-XXXX | ISO 9001:2015"
+            contact_line("ISO 9001:2015")
         )
 
         # FOOTER

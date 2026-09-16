@@ -72,6 +72,9 @@ class CirqenConfig:
         "client": {
             "name": "Test Hospital Workshop",
             "id": None,  # None = auto-generate from MAC address on first run
+            # Printed in PDF headers (core/branding.py); left out when empty.
+            "email": "",
+            "phone": "",
         },
         # ===== MIRROR =====
         "mirror": {

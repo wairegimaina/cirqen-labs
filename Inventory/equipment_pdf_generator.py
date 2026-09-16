@@ -17,6 +17,7 @@ from reportlab.graphics.charts.legends import Legend
 from reportlab.pdfgen import canvas as rl_canvas
 from collections import Counter
 from django.db.models import Count, Q
+from core.branding import contact_line
 
 logger = logging.getLogger(__name__)
 
@@ -374,7 +375,7 @@ class EquipmentPDFGenerator:
         canvas.drawCentredString(
             width / 2,
             height - 2.7*cm,
-            "Email: biomedical@hospital.com | Phone: +254-XXX-XXXX | ISO/IEC 17025:2017"
+            contact_line("ISO/IEC 17025:2017")
         )
 
         # FOOTER

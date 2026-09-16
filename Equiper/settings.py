@@ -479,6 +479,10 @@ STORAGES = {
 }
 
 SITE_NAME = config.get("client.name", "Cirqen Desktop")
+REPORT_CONTACT = {
+    "email": config.get("client.email", ""),
+    "phone": config.get("client.phone", ""),
+}
 SITE_URL = "http://127.0.0.1:8000"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

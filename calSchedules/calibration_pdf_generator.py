@@ -17,6 +17,7 @@ from io import BytesIO
 import os
 from datetime import datetime
 import logging
+from core.branding import contact_line
 
 logger = logging.getLogger(__name__)
 
@@ -297,7 +298,7 @@ class ModernCalibrationPDFGenerator:
         canvas.drawCentredString(
             width / 2,
             height - 2.7*cm,
-            "Email: biomedical@hospital.com | Phone: +254-XXX-XXXX | ISO/IEC 17025:2017"
+            contact_line("ISO/IEC 17025:2017")
         )
 
         # FOOTER

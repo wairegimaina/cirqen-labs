@@ -52,6 +52,7 @@ from Inventory.models import Equipment, Workshop
 
 # sibling modules in this package
 from .helpers import calculate_manufacturer_performance, get_user_workshop_context
+from core.branding import contact_line
 
 
 @login_required
@@ -395,7 +396,7 @@ class ManufacturerPerformanceDocTemplate(BaseDocTemplate):
 
         # Contact info
         canvas.setFont("Helvetica", 7)
-        contact_text = "Email: calibration@btwelve.hospital | Phone: +254-XXX-XXXX | ISO/IEC 17025:2017"
+        contact_text = contact_line("ISO/IEC 17025:2017")
         canvas.drawCentredString(A4[0]/2, A4[1]-2.3*cm, contact_text)
 
     def draw_footer(self, canvas, doc):
@@ -541,7 +542,7 @@ class EquipmentListDocTemplate(BaseDocTemplate):
 
         # Contact info
         canvas.setFont("Helvetica", 7)
-        contact_text = "Email: calibration@btwelve.hospital | Phone: +254-XXX-XXXX | ISO/IEC 17025:2017"
+        contact_text = contact_line("ISO/IEC 17025:2017")
         canvas.drawCentredString(width/2, height-2.3*cm, contact_text)
 
     def draw_footer(self, canvas, doc):

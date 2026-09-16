@@ -15,6 +15,7 @@ from reportlab.lib.colors import HexColor, white, grey
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
 from reportlab.pdfgen import canvas as rl_canvas
+from core.branding import contact_line
 
 logger = logging.getLogger(__name__)
 
@@ -303,7 +304,7 @@ class ModernPDFReportBase:
         canvas.drawCentredString(
             width / 2,
             height - 2.7*cm,
-            "Email: biomedical@hospital.com | Phone: +254-XXX-XXXX | ISO/IEC 17025:2017"
+            contact_line("ISO/IEC 17025:2017")
         )
 
         # FOOTER
