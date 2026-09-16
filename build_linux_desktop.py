@@ -18,7 +18,7 @@ HOW TO USE
 WHAT THIS SCRIPT DOES
 ──────────────────────
   Step 1   Detect distro and check all required system dependencies
-  Step 2   Run bulid_backup.py  (full PyInstaller build)
+  Step 2   Run build.py  (full PyInstaller build)
   Step 3   Locate and copy the app icon from static/images/
   Step 4   Create start_cirqen.sh  (cross-distro launcher with all env flags)
   Step 5   Create the .desktop entry file  (app menu integration)
@@ -64,7 +64,7 @@ from datetime import datetime
 # ─────────────────────────────────────────────────────────────────────────────
 if platform.system() != "Linux":
     print("❌  This script is for Linux only.")
-    print("    On Windows run:  python bulid_backup.py")
+    print("    On Windows run:  python build.py")
     sys.exit(1)
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -113,7 +113,7 @@ INSTALL_DIR     = Path("/opt") / APP_NAME        # system-wide target
 
 DIST_DIR        = PROJECT_ROOT / "dist"
 DIST_APP        = DIST_DIR / APP_NAME            # dist/Cirqen
-BUILD_BACKUP    = PROJECT_ROOT / "bulid_backup.py"
+BUILD_BACKUP    = PROJECT_ROOT / "build.py"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Icon search order
@@ -330,7 +330,7 @@ def step_check_environment() -> bool:
     ok(f"Python {sys.version.split()[0]}")
 
     # Required project files
-    required_files = ["main.py", "manage.py", "bulid_backup.py", "requirements.txt"]
+    required_files = ["main.py", "manage.py", "build.py", "requirements.txt"]
     missing = [f for f in required_files if not (PROJECT_ROOT / f).exists()]
     if missing:
         fail(f"Missing required project files: {', '.join(missing)}")
@@ -338,12 +338,12 @@ def step_check_environment() -> bool:
         return False
     ok("All required project files present")
 
-    # PyInstaller (just a warning – bulid_backup.py will install it if absent)
+    # PyInstaller (just a warning – build.py will install it if absent)
     try:
         import PyInstaller as _pi
         ok(f"PyInstaller {_pi.__version__} already installed")
     except ImportError:
-        warn("PyInstaller not installed – bulid_backup.py will install it automatically")
+        warn("PyInstaller not installed – build.py will install it automatically")
 
     # Optional system tools
     for tool in ("upx", "appimagetool", "gtk-update-icon-cache", "convert", "rsvg-convert"):
@@ -362,11 +362,11 @@ def step_check_environment() -> bool:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Step 2 – Run the full PyInstaller build (bulid_backup.py)
+# Step 2 – Run the full PyInstaller build (build.py)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def step_run_pyinstaller_build() -> bool:
-    section("Step 2 – Running PyInstaller build  (bulid_backup.py)")
+    section("Step 2 – Running PyInstaller build  (build.py)")
 
     if ARGS.skip_pyinstaller:
         warn("--skip-pyinstaller: skipping PyInstaller build")
@@ -380,7 +380,7 @@ def step_run_pyinstaller_build() -> bool:
         return True
 
     if not BUILD_BACKUP.exists():
-        fail(f"bulid_backup.py not found at {BUILD_BACKUP}")
+        fail(f"build.py not found at {BUILD_BACKUP}")
         return False
 
     logger.info("  This can take 15–40 minutes for a large Django + PySide6 project.")
@@ -390,12 +390,12 @@ def step_run_pyinstaller_build() -> bool:
     if not run_cmd([sys.executable, str(BUILD_BACKUP)],
                    cwd=str(PROJECT_ROOT),
                    timeout=5400):       # 90-minute cap
-        fail("bulid_backup.py reported an error. Fix the errors above then re-run.")
+        fail("build.py reported an error. Fix the errors above then re-run.")
         return False
 
     if not DIST_APP.exists():
         fail(f"Expected dist output not found: {DIST_APP}")
-        fail("bulid_backup.py finished without creating the Cirqen folder.")
+        fail("build.py finished without creating the Cirqen folder.")
         return False
 
     files  = list(DIST_APP.rglob("*"))

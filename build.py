@@ -24,13 +24,12 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 
-
 # ============================
 # Logging Setup
 # ============================
 def setup_logging():
     """Setup enhanced logging"""
-    log_dir = Path(__file__).parent / "build_logs"
+    log_dir = Path(__file__).parent / 'build_logs'
     log_dir.mkdir(exist_ok=True)
 
     log_file = log_dir / f'build_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'
@@ -38,18 +37,20 @@ def setup_logging():
     # Configure logging
     logging.basicConfig(
         level=logging.DEBUG,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[logging.FileHandler(log_file), logging.StreamHandler(sys.stdout)],
+        format='%(asctime)s [%(levelname)s] %(message)s',
+        handlers=[
+            logging.FileHandler(log_file),
+            logging.StreamHandler(sys.stdout)
+        ]
     )
 
     logger = logging.getLogger(__name__)
-    logger.info("=" * 70)
+    logger.info("="*70)
     logger.info("CIRQEN BUILD SYSTEM - Fixed Runtime Embedding Edition")
     logger.info(f"Log file: {log_file}")
-    logger.info("=" * 70)
+    logger.info("="*70)
 
     return logger
-
 
 logger = setup_logging()
 
@@ -73,40 +74,27 @@ logger.info(f"Architecture: {platform.machine()}")
 
 # PostgreSQL Download URLs (multiple sources)
 POSTGRES_SOURCES = {
-    "windows": [
-        (
-            "EnterpriseDB",
-            "https://get.enterprisedb.com/postgresql/postgresql-16.1-1-windows-x64-binaries.zip",
-        ),
-        ("PostgreSQL.org Mirror", "https://sbp.enterprisedb.com/getfile.jsp?fileid=1258649"),
+    'windows': [
+        ('EnterpriseDB', 'https://get.enterprisedb.com/postgresql/postgresql-16.1-1-windows-x64-binaries.zip'),
+        ('PostgreSQL.org Mirror', 'https://sbp.enterprisedb.com/getfile.jsp?fileid=1258649'),
     ],
-    "linux": [
-        (
-            "PostgreSQL Official",
-            "https://ftp.postgresql.org/pub/binary/v16.1/linux/binaries/postgresql-16.1-linux-x64-binaries.tar.gz",
-        ),
-        ("System Copy", "system"),  # Fallback to system PostgreSQL
-    ],
+    'linux': [
+        ('PostgreSQL Official', 'https://ftp.postgresql.org/pub/binary/v16.1/linux/binaries/postgresql-16.1-linux-x64-binaries.tar.gz'),
+        ('System Copy', 'system'),  # Fallback to system PostgreSQL
+    ]
 }
 
 # Redis Download URLs
 REDIS_SOURCES = {
-    "windows": [
-        (
-            "Memurai (Redis Windows)",
-            "https://github.com/tporadowski/redis/releases/download/v5.0.14.1/Redis-x64-5.0.14.1.zip",
-        ),
-        (
-            "Microsoft Archive",
-            "https://github.com/microsoftarchive/redis/releases/download/win-3.2.100/Redis-x64-3.2.100.zip",
-        ),
+    'windows': [
+        ('Memurai (Redis Windows)', 'https://github.com/tporadowski/redis/releases/download/v5.0.14.1/Redis-x64-5.0.14.1.zip'),
+        ('Microsoft Archive', 'https://github.com/microsoftarchive/redis/releases/download/win-3.2.100/Redis-x64-3.2.100.zip'),
     ],
-    "linux": [
-        ("Redis.io", "https://download.redis.io/releases/redis-7.2.3.tar.gz"),
-        ("System Copy", "system"),
-    ],
+    'linux': [
+        ('Redis.io', 'https://download.redis.io/releases/redis-7.2.3.tar.gz'),
+        ('System Copy', 'system'),
+    ]
 }
-
 
 # ============================
 # Helper Functions
@@ -117,11 +105,9 @@ def print_banner(text):
     logger.info(f"  {text}")
     logger.info("=" * 70)
 
-
 def print_step(step_num, total, text):
     """Print build step"""
     logger.info(f"\n[{step_num}/{total}] {text}\n")
-
 
 def run_cmd(cmd, cwd=None, description="", timeout=300):
     """Run command with detailed logging (timeout in seconds)"""
@@ -138,7 +124,7 @@ def run_cmd(cmd, cwd=None, description="", timeout=300):
             check=True,
             capture_output=True,
             text=True,
-            timeout=timeout,  # Use parameter timeout (default 300s)
+            timeout=timeout  # Use parameter timeout (default 300s)
         )
 
         if result.stdout:
@@ -162,7 +148,6 @@ def run_cmd(cmd, cwd=None, description="", timeout=300):
         logger.error(f"❌ Unexpected error: {e}")
         return False
 
-
 def download_file(url, destination, description=""):
     """Download file with progress and retry"""
     logger.info(f"📥 Downloading: {Path(url).name}")
@@ -179,17 +164,17 @@ def download_file(url, destination, description=""):
             req = urllib.request.Request(
                 url,
                 headers={
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-                },
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                }
             )
 
             logger.info(f"Attempt {attempt + 1}/{max_retries}...")
 
             with urllib.request.urlopen(req, timeout=60) as response:
-                total_size = int(response.headers.get("content-length", 0))
+                total_size = int(response.headers.get('content-length', 0))
                 logger.info(f"File size: {total_size / (1024*1024):.1f} MB")
 
-                with open(destination, "wb") as f:
+                with open(destination, 'wb') as f:
                     downloaded = 0
                     chunk_size = 8192
 
@@ -204,9 +189,7 @@ def download_file(url, destination, description=""):
                         if total_size > 0:
                             percent = (downloaded / total_size) * 100
                             if downloaded % (1024 * 1024) == 0:  # Log every MB
-                                logger.info(
-                                    f"Progress: {percent:.1f}% ({downloaded / (1024*1024):.1f} MB)"
-                                )
+                                logger.info(f"Progress: {percent:.1f}% ({downloaded / (1024*1024):.1f} MB)")
 
             logger.info("✅ Download complete")
             return True
@@ -231,19 +214,63 @@ def download_file(url, destination, description=""):
     return False
 
 
+def verify_utilities_in_dist():
+    """
+    Verify that all utility scripts are present in dist
+    This is a safety check to ensure critical files weren't missed
+    """
+    print_banner("Verifying Utilities in Distribution")
+
+    dist_dir = DIST_DIR / "Cirqen"
+
+    required_utilities = {
+        'cleanup_cirqen.py': 'Cleanup utility (CRITICAL)',
+        'launch_cirqen.py': 'Launch script',
+        'Start_Cirqen.bat' if IS_WINDOWS else 'start_cirqen.sh': 'Platform launcher',
+    }
+
+    all_present = True
+
+    for util_file, description in required_utilities.items():
+        util_path = dist_dir / util_file
+
+        if util_path.exists():
+            size = util_path.stat().st_size
+            logger.info(f"✅ {util_file}")
+            logger.info(f"   {description}")
+            logger.info(f"   Size: {size:,} bytes")
+
+            # Verify it's not empty
+            if size < 100:
+                logger.warning(f"⚠️  {util_file} seems too small ({size} bytes)")
+                all_present = False
+        else:
+            logger.error(f"❌ MISSING: {util_file}")
+            logger.error(f"   {description}")
+            all_present = False
+
+    if all_present:
+        logger.info("✅ All utility scripts verified and present")
+        return True
+    else:
+        logger.error("❌ Some utility scripts are missing or invalid")
+        return False
+
+
+
 def extract_archive(archive_path, extract_to):
     """Extract zip or tar with logging"""
     logger.info(f"📦 Extracting: {Path(archive_path).name}")
     logger.info(f"To: {extract_to}")
 
     try:
-        if archive_path.suffix == ".zip":
-            with zipfile.ZipFile(archive_path, "r") as z:
+        if archive_path.suffix == '.zip':
+            with zipfile.ZipFile(archive_path, 'r') as z:
                 members = z.namelist()
                 logger.info(f"Archive contains {len(members)} files")
                 z.extractall(extract_to)
         else:
-            with tarfile.open(archive_path, "r:*") as t:
+            with tarfile.open(archive_path, 'r:*') as t:
                 members = t.getmembers()
                 logger.info(f"Archive contains {len(members)} files")
                 t.extractall(extract_to)
@@ -255,17 +282,16 @@ def extract_archive(archive_path, extract_to):
         logger.error(f"❌ Extraction failed: {e}")
         return False
 
-
 def find_settings_py():
     """Find Django settings.py with multiple strategies"""
     logger.info("🔍 Searching for Django settings.py...")
 
     # Strategy 1: Common locations
     common_locations = [
-        PROJECT_ROOT / "Equiper" / "settings.py",
-        PROJECT_ROOT / "config" / "settings.py",
-        PROJECT_ROOT / "settings" / "settings.py",
-        PROJECT_ROOT / "settings.py",
+        PROJECT_ROOT / 'Equiper' / 'settings.py',
+        PROJECT_ROOT / 'config' / 'settings.py',
+        PROJECT_ROOT / 'settings' / 'settings.py',
+        PROJECT_ROOT / 'settings.py',
     ]
 
     for location in common_locations:
@@ -275,12 +301,9 @@ def find_settings_py():
 
     # Strategy 2: Search for any settings.py
     logger.info("Searching project tree for settings.py...")
-    for settings_file in PROJECT_ROOT.rglob("settings.py"):
+    for settings_file in PROJECT_ROOT.rglob('settings.py'):
         # Exclude venv, build, dist directories
-        if any(
-            part in settings_file.parts
-            for part in [".venv", "venv", "build", "dist", "__pycache__"]
-        ):
+        if any(part in settings_file.parts for part in ['.venv', 'venv', 'build', 'dist', '__pycache__']):
             continue
 
         logger.info(f"✅ Found settings.py at: {settings_file.relative_to(PROJECT_ROOT)}")
@@ -289,8 +312,8 @@ def find_settings_py():
     # Strategy 3: Look for settings module
     logger.info("Checking for settings module...")
     for settings_dir in PROJECT_ROOT.iterdir():
-        if settings_dir.is_dir() and not settings_dir.name.startswith("."):
-            settings_file = settings_dir / "settings.py"
+        if settings_dir.is_dir() and not settings_dir.name.startswith('.'):
+            settings_file = settings_dir / 'settings.py'
             if settings_file.exists():
                 logger.info(f"✅ Found settings.py at: {settings_file.relative_to(PROJECT_ROOT)}")
                 return settings_file
@@ -298,7 +321,6 @@ def find_settings_py():
     logger.warning("⚠️ Django settings.py not found")
     logger.warning("This may cause issues during build")
     return None
-
 
 def find_django_apps():
     """Automatically discover all Django apps with detailed logging"""
@@ -309,20 +331,14 @@ def find_django_apps():
     # Method 1: Check for directories with apps.py or models.py
     logger.info("Method 1: Scanning for app directories...")
     for item in PROJECT_ROOT.iterdir():
-        if (
-            item.is_dir()
-            and not item.name.startswith(".")
-            and item.name not in ["build", "dist", "runtime", "__pycache__"]
-        ):
+        if item.is_dir() and not item.name.startswith('.') and item.name not in ['build', 'dist', 'runtime', '__pycache__']:
             # Check if it's a Django app
-            has_apps_py = (item / "apps.py").exists()
-            has_models_py = (item / "models.py").exists()
+            has_apps_py = (item / 'apps.py').exists()
+            has_models_py = (item / 'models.py').exists()
 
             if has_apps_py or has_models_py:
                 apps.append(item.name)
-                logger.info(
-                    f"  ✓ Found app: {item.name} (apps.py={has_apps_py}, models.py={has_models_py})"
-                )
+                logger.info(f"  ✓ Found app: {item.name} (apps.py={has_apps_py}, models.py={has_models_py})")
 
     # Method 2: Parse settings.py for INSTALLED_APPS
     logger.info("Method 2: Parsing settings.py for INSTALLED_APPS...")
@@ -330,23 +346,17 @@ def find_django_apps():
 
     if settings_file:
         try:
-            with open(settings_file, "r") as f:
+            with open(settings_file, 'r') as f:
                 content = f.read()
 
-            if "INSTALLED_APPS" in content:
+            if 'INSTALLED_APPS' in content:
                 import re
-
                 pattern = r"['\"]([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)['\"]"
                 matches = re.findall(pattern, content)
 
                 for match in matches:
                     # Check if it's a local app
-                    if "." not in match and match not in [
-                        "django",
-                        "rest_framework",
-                        "corsheaders",
-                        "celery",
-                    ]:
+                    if '.' not in match and match not in ['django', 'rest_framework', 'corsheaders', 'celery']:
                         app_dir = PROJECT_ROOT / match
                         if app_dir.exists() and match not in apps:
                             apps.append(match)
@@ -365,8 +375,6 @@ def find_django_apps():
         logger.warning("⚠️ No Django apps found! This seems wrong.")
 
     return apps
-
-
 def copy_system_postgresql():
     """
     Copy PostgreSQL from system installation (Linux) - COMPLETE FIXED VERSION
@@ -383,12 +391,12 @@ def copy_system_postgresql():
     logger.info("🔍 Searching for PostgreSQL installation...")
 
     possible_locations = [
-        Path("/usr/lib/postgresql"),  # Debian/Ubuntu standard
-        Path("/usr/pgsql-16"),  # RHEL/CentOS PostgreSQL 16
-        Path("/usr/pgsql-15"),  # RHEL/CentOS PostgreSQL 15
-        Path("/usr/pgsql-14"),  # RHEL/CentOS PostgreSQL 14
-        Path("/opt/postgresql"),  # Custom installations
-        Path("/usr/local/pgsql"),  # Source installations
+        Path("/usr/lib/postgresql"),      # Debian/Ubuntu standard
+        Path("/usr/pgsql-16"),             # RHEL/CentOS PostgreSQL 16
+        Path("/usr/pgsql-15"),             # RHEL/CentOS PostgreSQL 15
+        Path("/usr/pgsql-14"),             # RHEL/CentOS PostgreSQL 14
+        Path("/opt/postgresql"),           # Custom installations
+        Path("/usr/local/pgsql"),          # Source installations
     ]
 
     system_pg = None
@@ -463,7 +471,7 @@ def copy_system_postgresql():
     logger.info(f"  Target: {pg_bin}")
 
     # Critical binaries that MUST exist
-    critical_bins = ["postgres", "initdb", "pg_ctl", "psql"]
+    critical_bins = ['postgres', 'initdb', 'pg_ctl', 'psql']
     found_critical = []
 
     for item in src_bin.iterdir():
@@ -560,7 +568,7 @@ def copy_system_postgresql():
             logger.info(f"    Description: {description}")
 
             # Check if it has files
-            test_files = list(src_share.rglob("*.sql"))
+            test_files = list(src_share.rglob('*.sql'))
             if not test_files:
                 logger.warning(f"    ⚠️  Directory exists but has no SQL files, skipping...")
                 continue
@@ -644,7 +652,7 @@ def copy_system_postgresql():
     for dirname, description in critical_share_dirs:
         dir_path = pg_share / dirname
         if dir_path.exists():
-            file_count = len(list(dir_path.rglob("*")))
+            file_count = len(list(dir_path.rglob('*')))
             logger.info(f"    ✓ {dirname}/ - {description} ({file_count} items)")
         else:
             # Only extension/ is truly critical
@@ -655,7 +663,7 @@ def copy_system_postgresql():
                 logger.warning(f"    ⚠️  {dirname}/ - {description} (optional, not found)")
 
     # Count SQL files
-    sql_files = list(pg_share.rglob("*.sql"))
+    sql_files = list(pg_share.rglob('*.sql'))
     logger.info(f"  ✓ Found {len(sql_files)} SQL files total")
 
     # ========================================================================
@@ -696,7 +704,7 @@ def copy_system_postgresql():
         logger.warning(f"  ⚠️  lib/ directory: No files (may cause runtime issues)")
 
     # Final summary
-    logger.info("\n" + "=" * 70)
+    logger.info("\n" + "="*70)
     if all_checks_passed and not missing_files:
         logger.info("✅ PostgreSQL successfully copied from system")
         logger.info(f"📊 Summary:")
@@ -704,7 +712,7 @@ def copy_system_postgresql():
         logger.info(f"    • Libraries: {lib_count} files")
         logger.info(f"    • Share:     {share_count} files (including {len(sql_files)} SQL files)")
         logger.info(f"    • Total:     {bin_count + lib_count + share_count} files")
-        logger.info("=" * 70)
+        logger.info("="*70)
         return True
     else:
         logger.error("❌ PostgreSQL copy incomplete or has critical issues")
@@ -722,7 +730,7 @@ def copy_system_postgresql():
             logger.error(f"    • Missing critical directories: {', '.join(missing_dirs)}")
 
         # Only fail if truly critical items are missing
-        if "postgres.bki" in missing_files or "extension" in missing_dirs:
+        if 'postgres.bki' in missing_files or 'extension' in missing_dirs:
             logger.error("\n💡 Troubleshooting:")
             logger.error("    1. Ensure PostgreSQL is fully installed:")
             logger.error("       sudo apt-get install postgresql postgresql-contrib")
@@ -730,23 +738,20 @@ def copy_system_postgresql():
             logger.error("       dpkg -L postgresql-14 | grep share")
             logger.error("    3. Verify share files exist:")
             logger.error(f"       ls -la /usr/share/postgresql/{pg_version}/")
-            logger.error("=" * 70)
+            logger.error("="*70)
             return False
         else:
             logger.warning("\n⚠️  Some optional files missing, but PostgreSQL should work")
             logger.warning("    Missing items are not critical for basic operation")
-            logger.info("=" * 70)
+            logger.info("="*70)
             logger.info("✅ PostgreSQL successfully copied (with minor warnings)")
             logger.info(f"📊 Summary:")
             logger.info(f"    • Binaries:  {bin_count} files")
             logger.info(f"    • Libraries: {lib_count} files")
-            logger.info(
-                f"    • Share:     {share_count} files (including {len(sql_files)} SQL files)"
-            )
+            logger.info(f"    • Share:     {share_count} files (including {len(sql_files)} SQL files)")
             logger.info(f"    • Total:     {bin_count + lib_count + share_count} files")
-            logger.info("=" * 70)
+            logger.info("="*70)
             return True
-
 
 def fix_postgresql_run_permissions():
     """
@@ -799,7 +804,7 @@ def fix_postgresql_run_permissions():
     logger.info("  Applying chmod 1777 /var/run/postgresql …")
     chmod_ok = run_cmd(
         ["sudo", "chmod", "1777", str(run_dir)],
-        description="Make /var/run/postgresql world-writable (sticky bit)",
+        description="Make /var/run/postgresql world-writable (sticky bit)"
     )
 
     if chmod_ok:
@@ -816,8 +821,9 @@ def fix_postgresql_run_permissions():
     logger.info(f"  Writing systemd-tmpfiles rule → {tmpfiles_conf} …")
 
     write_ok = run_cmd(
-        ["sudo", "bash", "-c", f"echo 'd /var/run/postgresql 1777 root root -' > {tmpfiles_conf}"],
-        description="Persist /var/run/postgresql permissions across reboots",
+        ["sudo", "bash", "-c",
+         f"echo 'd /var/run/postgresql 1777 root root -' > {tmpfiles_conf}"],
+        description="Persist /var/run/postgresql permissions across reboots"
     )
 
     if write_ok:
@@ -827,9 +833,8 @@ def fix_postgresql_run_permissions():
     else:
         logger.warning("  ⚠️  Could not write tmpfiles rule — sudo may not be available")
         logger.warning("     To make the fix permanent, run once as root:")
-        logger.warning(
-            f"       sudo bash -c \"echo '{tmpfiles_line.strip()}'" f' > {tmpfiles_conf}"'
-        )
+        logger.warning(f"       sudo bash -c \"echo '{tmpfiles_line.strip()}'"
+                       f" > {tmpfiles_conf}\"")
 
     # ── Verify ────────────────────────────────────────────────────────────
     if run_dir.exists():
@@ -860,13 +865,13 @@ def setup_postgresql():
     pg_dir.mkdir(parents=True, exist_ok=True)
 
     # Try each source
-    platform_key = "windows" if IS_WINDOWS else "linux"
+    platform_key = 'windows' if IS_WINDOWS else 'linux'
     sources = POSTGRES_SOURCES.get(platform_key, [])
 
     for source_name, source_url in sources:
         logger.info(f"\n📥 Trying source: {source_name}")
 
-        if source_url == "system" and IS_LINUX:
+        if source_url == 'system' and IS_LINUX:
             if copy_system_postgresql():
                 # Fix /var/run/postgresql permissions so the embedded
                 # PostgreSQL process (running as a normal user) can create
@@ -922,7 +927,6 @@ def setup_postgresql():
     logger.error("❌ Failed to setup PostgreSQL from all sources")
     return False
 
-
 def setup_redis():
     """Setup Redis with multiple sources"""
     print_banner("Setting up Redis")
@@ -954,11 +958,11 @@ def setup_redis():
             return True
 
     # Download Redis
-    platform_key = "windows" if IS_WINDOWS else "linux"
+    platform_key = 'windows' if IS_WINDOWS else 'linux'
     sources = REDIS_SOURCES.get(platform_key, [])
 
     for source_name, source_url in sources:
-        if source_url == "system":
+        if source_url == 'system':
             continue
 
         logger.info(f"\n📥 Trying source: {source_name}")
@@ -992,7 +996,6 @@ def setup_redis():
     logger.warning("The application may have caching issues")
     return True  # Don't fail build
 
-
 def check_requirements():
     """Check requirements with detailed logging"""
     print_banner("Checking Requirements")
@@ -1005,8 +1008,8 @@ def check_requirements():
     logger.info(f"✅ Python version OK: {sys.version.split()[0]}")
 
     # Check files
-    required_files = ["manage.py", "main.py", "requirements.txt"]
-    optional_files = ["config.py", "celery.py"]
+    required_files = ['manage.py', 'main.py', 'requirements.txt']
+    optional_files = ['config.py', 'celery.py']
 
     logger.info("\nChecking required files:")
     for file in required_files:
@@ -1038,23 +1041,22 @@ def check_requirements():
 
     return True
 
-
 def verify_requirements():
     """Verify all required packages with detailed logging"""
     print_banner("Verifying Requirements")
 
     required_packages = {
-        "Django": "django",
-        "PySide6": "PySide6",
-        "PyInstaller": "PyInstaller",
-        "psycopg2": "psycopg2",
-        "Celery": "celery",
-        "Redis": "redis",
-        "Channels": "channels",
-        "DRF": "rest_framework",
-        "Plotly": "plotly",
-        "Pillow": "PIL",
-        "python-dotenv": "dotenv",
+        'Django': 'django',
+        'PySide6': 'PySide6',
+        'PyInstaller': 'PyInstaller',
+        'psycopg2': 'psycopg2',
+        'Celery': 'celery',
+        'Redis': 'redis',
+        'Channels': 'channels',
+        'DRF': 'rest_framework',
+        'Plotly': 'plotly',
+        'Pillow': 'PIL',
+        'python-dotenv': 'dotenv',
     }
 
     missing = []
@@ -1063,7 +1065,7 @@ def verify_requirements():
     for name, import_name in required_packages.items():
         try:
             module = __import__(import_name)
-            version = getattr(module, "__version__", "unknown")
+            version = getattr(module, '__version__', 'unknown')
             installed.append(name)
             logger.info(f"  ✓ {name} (version: {version})")
         except ImportError:
@@ -1080,7 +1082,6 @@ def verify_requirements():
 
     return True
 
-
 def get_project_folders():
     """Get all important project folders to include in the build"""
     print("🔍 Discovering project folders...")
@@ -1088,7 +1089,7 @@ def get_project_folders():
     folders = []
 
     # Essential folders
-    essential = ["templates", "static", "staticfiles", "media", "signatures", "locale", "fixtures"]
+    essential = ['templates', 'static', 'staticfiles', 'media', 'signatures','locale', 'fixtures']
 
     for folder in essential:
         folder_path = PROJECT_ROOT / folder
@@ -1098,13 +1099,12 @@ def get_project_folders():
 
     # Check for project package (usually cmms, config, etc.)
     for item in PROJECT_ROOT.iterdir():
-        if item.is_dir() and (item / "settings.py").exists():
+        if item.is_dir() and (item / 'settings.py').exists():
             folders.append(item.name)
             print(f"  ✓ Found project package: {item.name}")
 
     print(f"\n✅ Found {len(folders)} project folders")
     return folders
-
 
 def setup_config():
     """Setup configuration using config.py"""
@@ -1116,7 +1116,7 @@ def setup_config():
         from config import CirqenConfig
 
         # Create temporary data path for build
-        temp_data = PROJECT_ROOT / "build_temp_data"
+        temp_data = PROJECT_ROOT / 'build_temp_data'
         temp_data.mkdir(exist_ok=True)
 
         # Initialize config
@@ -1133,10 +1133,29 @@ def setup_config():
             for error in errors:
                 print(f"  • {error}")
 
+        # Hard stops (IMPROVEMENT_PLAN.md 3.3 / 3.4): an installer without its
+        # secrets cannot sync, and one with DEBUG on leaks stack traces.
+        missing = config.missing_secrets()
+        if missing:
+            print("❌ Refusing to build: missing secrets " + ", ".join(missing))
+            print("   Provide them via environment variables or the git-ignored .env file.")
+            return False
+        debug_env = os.getenv("DJANGO_DEBUG")
+        debug_on = (debug_env.strip().lower() in ("1", "true", "yes", "on")) if debug_env is not None \
+            else bool(config.get("app.debug"))
+        if debug_on:
+            print("❌ Refusing to build: DEBUG resolves true (set app.debug=false / DJANGO_DEBUG=0).")
+            return False
+
         # Export to .env for build process
-        env_path = PROJECT_ROOT / ".env.build"
+        env_path = PROJECT_ROOT / '.env.build'
         config.export_to_env_file(env_path)
         print(f"✅ Configuration exported to {env_path}")
+
+        # Secrets travel with the installer in provisioning.json (git-ignored,
+        # copied into dist/Cirqen by package_distribution), never in source.
+        config.export_provisioning(PROJECT_ROOT / 'provisioning.json')
+        print("✅ provisioning.json written (git-ignored)")
 
         # Clean up temp data
         shutil.rmtree(temp_data, ignore_errors=True)
@@ -1146,10 +1165,8 @@ def setup_config():
     except Exception as e:
         print(f"❌ Configuration setup failed: {e}")
         import traceback
-
         traceback.print_exc()
         return False
-
 
 def create_resources():
     """Create resources directory with icon"""
@@ -1162,11 +1179,11 @@ def create_resources():
         from PIL import Image, ImageDraw, ImageFont
 
         # Create 256x256 icon
-        img = Image.new("RGB", (256, 256), color="#1a1a2e")
+        img = Image.new('RGB', (256, 256), color='#1a1a2e')
         draw = ImageDraw.Draw(img)
 
         # Draw circle
-        draw.ellipse([48, 48, 208, 208], outline="#e94560", width=8, fill="#16213e")
+        draw.ellipse([48, 48, 208, 208], outline='#e94560', width=8, fill='#16213e')
 
         # Draw text
         try:
@@ -1174,14 +1191,14 @@ def create_resources():
         except:
             font = ImageFont.load_default()
 
-        draw.text((128, 128), "C", font=font, fill="#e94560", anchor="mm")
+        draw.text((128, 128), "C", font=font, fill='#e94560', anchor='mm')
 
         # Save
         if IS_WINDOWS:
-            img.save(RESOURCES_DIR / "icon.ico", format="ICO", sizes=[(256, 256)])
+            img.save(RESOURCES_DIR / 'icon.ico', format='ICO', sizes=[(256, 256)])
             print("✅ Created icon.ico")
 
-        img.save(RESOURCES_DIR / "icon.png", format="PNG")
+        img.save(RESOURCES_DIR / 'icon.png', format='PNG')
         print("✅ Created icon.png")
 
     except ImportError:
@@ -1189,7 +1206,6 @@ def create_resources():
         print("   Install with: pip install Pillow")
 
     return True
-
 
 def install_dependencies():
     """Install dependencies"""
@@ -1203,7 +1219,7 @@ def install_dependencies():
     result = subprocess.run(
         [sys.executable, "-m", "pip", "install", "-r", "requirements.txt"],
         capture_output=True,
-        text=True,
+        text=True
     )
 
     if result.returncode != 0:
@@ -1229,21 +1245,23 @@ def install_dependencies():
         pkg_name = package.split(">=")[0].split("==")[0]
         try:
             result = subprocess.run(
-                [sys.executable, "-m", "pip", "show", pkg_name], capture_output=True, text=True
+                [sys.executable, "-m", "pip", "show", pkg_name],
+                capture_output=True,
+                text=True
             )
             if result.returncode == 0:
                 print(f"  ✓ {pkg_name} installed")
             else:
                 print(f"  ⚠️ {pkg_name} missing, installing...")
                 subprocess.run(
-                    [sys.executable, "-m", "pip", "install", package], capture_output=True
+                    [sys.executable, "-m", "pip", "install", package],
+                    capture_output=True
                 )
         except Exception as e:
             print(f"  ⚠️ Could not verify {pkg_name}: {e}")
 
     print("\n✅ Dependencies installation complete")
     return True
-
 
 def verify_build():
     """
@@ -1298,7 +1316,7 @@ def verify_build():
         # Check share directory (critical!)
         pg_share = runtime_dir / "postgresql" / "share"
         if pg_share.exists():
-            share_files = list(pg_share.rglob("*"))
+            share_files = list(pg_share.rglob('*'))
             logger.info(f"    • share/ directory: {len(share_files)} files")
         else:
             logger.error(f"    ❌ share/ directory MISSING (CRITICAL!)")
@@ -1324,22 +1342,22 @@ def verify_build():
     logger.info("\n🔍 Verifying templates:")
 
     template_locations = [
-        dist_app / "templates",
-        dist_app / "_internal" / "templates",
+        dist_app / 'templates',
+        dist_app / '_internal' / 'templates',
     ]
 
     # Also check in Django apps
     django_apps = find_django_apps()
     for app in django_apps:
-        template_locations.append(dist_app / app / "templates")
-        template_locations.append(dist_app / "_internal" / app / "templates")
+        template_locations.append(dist_app / app / 'templates')
+        template_locations.append(dist_app / '_internal' / app / 'templates')
 
     templates_found = False
     total_templates = 0
 
     for tmpl_dir in template_locations:
         if tmpl_dir.exists():
-            html_files = list(tmpl_dir.rglob("*.html"))
+            html_files = list(tmpl_dir.rglob('*.html'))
             if html_files:
                 templates_found = True
                 total_templates += len(html_files)
@@ -1358,16 +1376,18 @@ def verify_build():
     logger.info("\n🔍 Verifying static files:")
 
     static_locations = [
-        dist_app / "static",
-        dist_app / "staticfiles",
-        dist_app / "_internal" / "static",
-        dist_app / "_internal" / "staticfiles",
+        dist_app / 'static',
+        dist_app / 'staticfiles',
+        dist_app / '_internal' / 'static',
+        dist_app / '_internal' / 'staticfiles',
     ]
+
+
 
     # Also check in Django apps
     for app in django_apps:
-        static_locations.append(dist_app / app / "static")
-        static_locations.append(dist_app / "_internal" / app / "static")
+        static_locations.append(dist_app / app / 'static')
+        static_locations.append(dist_app / '_internal' / app / 'static')
 
     static_found = False
     total_css = 0
@@ -1376,13 +1396,11 @@ def verify_build():
 
     for static_dir in static_locations:
         if static_dir.exists():
-            css = list(static_dir.rglob("*.css"))
-            js = list(static_dir.rglob("*.js"))
-            images = (
-                list(static_dir.rglob("*.png"))
-                + list(static_dir.rglob("*.jpg"))
-                + list(static_dir.rglob("*.svg"))
-            )
+            css = list(static_dir.rglob('*.css'))
+            js = list(static_dir.rglob('*.js'))
+            images = (list(static_dir.rglob('*.png')) +
+                     list(static_dir.rglob('*.jpg')) +
+                     list(static_dir.rglob('*.svg')))
 
             if css or js or images:
                 static_found = True
@@ -1407,9 +1425,9 @@ def verify_build():
     logger.info("\n🔍 Verifying utility scripts:")
 
     utilities = [
-        "cleanup_cirqen.py",
-        "launch_cirqen.py",
-        "Start_Cirqen.bat" if IS_WINDOWS else "start_cirqen.sh",
+        'cleanup_cirqen.py',
+        'launch_cirqen.py',
+        'Start_Cirqen.bat' if IS_WINDOWS else 'start_cirqen.sh',
     ]
 
     utils_ok = True
@@ -1427,7 +1445,7 @@ def verify_build():
     # ========================================================================
     logger.info("\n🔍 Verifying documentation:")
 
-    docs = ["README.txt", "QUICK_START.txt", "BUILD_INFO.txt"]
+    docs = ['README.txt', 'QUICK_START.txt', 'BUILD_INFO.txt']
     for doc in docs:
         doc_path = dist_app / doc
         if doc_path.exists():
@@ -1438,17 +1456,17 @@ def verify_build():
     # ========================================================================
     # 7. FINAL SUMMARY
     # ========================================================================
-    logger.info("\n" + "=" * 70)
+    logger.info("\n" + "="*70)
     logger.info("VERIFICATION SUMMARY")
-    logger.info("=" * 70)
+    logger.info("="*70)
 
     checks = {
-        "Executable": exe_path.exists(),
-        "PostgreSQL": pg_exe.exists(),
-        "PostgreSQL share/": (runtime_dir / "postgresql" / "share").exists(),
-        "Templates": templates_found,
-        "Static files": static_found,
-        "Utility scripts": utils_ok,
+        'Executable': exe_path.exists(),
+        'PostgreSQL': pg_exe.exists(),
+        'PostgreSQL share/': (runtime_dir / "postgresql" / "share").exists(),
+        'Templates': templates_found,
+        'Static files': static_found,
+        'Utility scripts': utils_ok,
     }
 
     all_passed = all(checks.values())
@@ -1457,7 +1475,7 @@ def verify_build():
         status = "✅ PASS" if passed else "❌ FAIL"
         logger.info(f"  {status}: {check_name}")
 
-    logger.info("=" * 70)
+    logger.info("="*70)
 
     if all_passed:
         logger.info("\n✅ ALL VERIFICATIONS PASSED")
@@ -1467,7 +1485,6 @@ def verify_build():
         logger.error("\n❌ SOME VERIFICATIONS FAILED")
         logger.error("   Please review errors above")
         return False
-
 
 def collect_static():
     """Collect static files"""
@@ -1479,6 +1496,44 @@ def collect_static():
     print("✅ Static files collected")
     return True
 
+
+def stamp_version_txt():
+    """
+    Read APP_VERSION from settings.py and write it to version.txt so the
+    AppUpdateService can find the running version without Django being set up.
+    This prevents the 0.0.0 fallback that caused infinite restart loops.
+    """
+    print_banner("Stamping version.txt from settings.APP_VERSION")
+
+    settings_file = find_settings_py()
+    if not settings_file:
+        logger.warning("⚠️  settings.py not found — version.txt will not be written")
+        return True   # non-fatal
+
+    import re
+    match = re.search(r"APP_VERSION\s*=\s*['\"]([^'\"]+)['\"]",
+                      settings_file.read_text(errors='replace'))
+    if not match:
+        logger.warning("⚠️  APP_VERSION not found in settings.py — skipping version.txt")
+        return True
+
+    version = match.group(1).strip()
+
+    # Write to project root AND dist so both source runs and frozen runs find it
+    for target in [
+        PROJECT_ROOT / 'version.txt',
+        DIST_DIR / 'Cirqen' / 'version.txt',
+        DIST_DIR / 'Cirqen' / '_internal' / 'version.txt',
+    ]:
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(version)
+            logger.info(f"  ✓ {target.relative_to(PROJECT_ROOT) if PROJECT_ROOT in target.parents else target}  →  {version}")
+        except Exception as exc:
+            logger.warning(f"  ⚠️  Could not write {target}: {exc}")
+
+    logger.info(f"✅ version.txt stamped: {version}")
+    return True
 
 def generate_spec():
     """
@@ -1494,17 +1549,9 @@ def generate_spec():
     # Find main project package
     main_package = None
     for folder in PROJECT_ROOT.iterdir():
-        if folder.is_dir() and (folder / "__init__.py").exists():
-            if folder.name not in [
-                "venv",
-                "env",
-                ".venv",
-                "node_modules",
-                "build",
-                "dist",
-                "__pycache__",
-            ]:
-                if (folder / "settings.py").exists() or (folder / "celery.py").exists():
+        if folder.is_dir() and (folder / '__init__.py').exists():
+            if folder.name not in ['venv', 'env', '.venv', 'node_modules', 'build', 'dist', '__pycache__']:
+                if (folder / 'settings.py').exists() or (folder / 'celery.py').exists():
                     main_package = folder.name
                     logger.info(f"  ✓ Found main package: {main_package}")
                     break
@@ -1518,9 +1565,9 @@ def generate_spec():
     # CRITICAL: COLLECT ALL DATA FILES
     # ========================================================================
 
-    logger.info("\n" + "=" * 70)
+    logger.info("\n" + "="*70)
     logger.info("COLLECTING ALL DATA FILES (TEMPLATES, STATIC, ETC.)")
-    logger.info("=" * 70)
+    logger.info("="*70)
 
     datas_collected = []
 
@@ -1529,43 +1576,56 @@ def generate_spec():
     # -----------------------------------------------------------------------
     logger.info("\n📋 Core files:")
     core_files = [
-        "manage.py",
-        "config.py",
-        "django_runner.py",
-        "main.py",  # Main application entry point
-        "update_manager.py",  # UPDATE MANAGER - Non-blocking updates with reconnection
-        "update_client.py",  # UPDATE CLIENT - Server communication
+        'manage.py',
+        'config.py',
+        'django_runner.py',
+        'main.py',             # Main application entry point
+        'update_manager.py',   # UPDATE MANAGER - Non-blocking updates with reconnection
+        'update_client.py'     # UPDATE CLIENT - Server communication
     ]
     for file in core_files:
         file_path = PROJECT_ROOT / file
         if file_path.exists():
-            datas_collected.append((str(file), "."))
+            datas_collected.append((str(file), '.'))
             logger.info(f"  ✓ {file}")
         else:
             # Warn if update files are missing
-            if "update" in file:
+            if 'update' in file:
                 logger.warning(f"  ⚠️  {file} not found - update functionality may not work")
+
+    # ── CRITICAL: bulider_tools package ──────────────────────────────────
+    # app_updates.py is a new file added after initial build — must be
+    # included explicitly or PyInstaller won't find it and the frozen app
+    # will crash with ImportError: cannot import name 'main'.
+    logger.info("\n📦 bulider_tools package:")
+    bulider_tools_path = PROJECT_ROOT / 'bulider_tools'
+    if bulider_tools_path.exists():
+        datas_collected.append((str(bulider_tools_path), 'bulider_tools'))
+        logger.info(f"  ✓ bulider_tools/ (full package including app_updates.py)")
+        # Log individual critical files
+        for bt_file in ['app.py', 'app_updates.py', 'runtime.py', 'services.py', 'ui.py', 'database.py', 'setup_ui.py']:
+            bt_path = bulider_tools_path / bt_file
+            if bt_path.exists():
+                logger.info(f"    ✓ {bt_file}")
+            else:
+                logger.warning(f"    ⚠️  {bt_file} MISSING")
+    else:
+        logger.error("  ❌ bulider_tools/ directory not found — build WILL fail")
 
     # -----------------------------------------------------------------------
     # 2. DJANGO APPS (complete directories with templates & static)
     # -----------------------------------------------------------------------
 
-    logger.info("\n📦 Builder tools modules:")
-    builder_tools_path = PROJECT_ROOT / "bulider_tools"
-    if builder_tools_path.exists():
-        datas_collected.append((str(builder_tools_path), "bulider_tools"))
-        logger.info(f"  ✓ bulider_tools/")
-
     logger.info("\n📦 Sync modules:")
-    sync_path = PROJECT_ROOT / "sync"
+    sync_path = PROJECT_ROOT / 'sync'
     if sync_path.exists():
-        datas_collected.append((str(sync_path), "sync"))
+        datas_collected.append((str(sync_path), 'sync'))
         logger.info(f"  ✓ sync/")
 
         # Check what's inside
-        has_mirror = (sync_path / "mirror.py").exists()
-        has_sync_agent = (sync_path / "sync_agent.py").exists()
-        has_soft_delete_handler = (sync_path / "soft_delete_handler.py").exists()
+        has_mirror = (sync_path / 'mirror.py').exists()
+        has_sync_agent = (sync_path / 'sync_agent.py').exists()
+        has_soft_delete_handler = (sync_path / 'soft_delete_handler.py').exists()
 
         if has_mirror:
             logger.info(f"    • mirror.py ✓")
@@ -1573,6 +1633,7 @@ def generate_spec():
             logger.info(f"    • sync_agent.py ✓")
         if has_soft_delete_handler:
             logger.info(f"    • soft_delete_handler.py ✓")
+
 
     logger.info("\n📦 Django apps:")
     for app in django_apps:
@@ -1582,9 +1643,9 @@ def generate_spec():
             logger.info(f"  ✓ {app}/")
 
             # Check what's inside
-            has_templates = (app_path / "templates").exists()
-            has_static = (app_path / "static").exists()
-            has_migrations = (app_path / "migrations").exists()
+            has_templates = (app_path / 'templates').exists()
+            has_static = (app_path / 'static').exists()
+            has_migrations = (app_path / 'migrations').exists()
 
             if has_templates:
                 logger.info(f"    • templates/")
@@ -1609,12 +1670,12 @@ def generate_spec():
     logger.info("\n📄 Project-level templates:")
 
     possible_template_dirs = [
-        PROJECT_ROOT / "templates",
-        PROJECT_ROOT / "template",
+        PROJECT_ROOT / 'templates',
+        PROJECT_ROOT / 'template',
     ]
 
     if main_package:
-        possible_template_dirs.append(PROJECT_ROOT / main_package / "templates")
+        possible_template_dirs.append(PROJECT_ROOT / main_package / 'templates')
 
     templates_found = False
     for tmpl_dir in possible_template_dirs:
@@ -1623,7 +1684,7 @@ def generate_spec():
             datas_collected.append((str(tmpl_dir), str(rel_path)))
 
             # Count templates
-            html_files = list(tmpl_dir.rglob("*.html"))
+            html_files = list(tmpl_dir.rglob('*.html'))
             logger.info(f"  ✓ {rel_path}/ ({len(html_files)} HTML files)")
 
             # Show subdirectories
@@ -1645,13 +1706,13 @@ def generate_spec():
     logger.info("\n🎨 Project-level static files:")
 
     possible_static_dirs = [
-        PROJECT_ROOT / "static",
-        PROJECT_ROOT / "staticfiles",
-        PROJECT_ROOT / "assets",
+        PROJECT_ROOT / 'static',
+        PROJECT_ROOT / 'staticfiles',
+        PROJECT_ROOT / 'assets',
     ]
 
     if main_package:
-        possible_static_dirs.append(PROJECT_ROOT / main_package / "static")
+        possible_static_dirs.append(PROJECT_ROOT / main_package / 'static')
 
     static_found = False
     for static_dir in possible_static_dirs:
@@ -1660,13 +1721,11 @@ def generate_spec():
             datas_collected.append((str(rel_path), str(rel_path)))
 
             # Count files by type
-            css_files = list(static_dir.rglob("*.css"))
-            js_files = list(static_dir.rglob("*.js"))
-            img_files = (
-                list(static_dir.rglob("*.png"))
-                + list(static_dir.rglob("*.jpg"))
-                + list(static_dir.rglob("*.svg"))
-            )
+            css_files = list(static_dir.rglob('*.css'))
+            js_files = list(static_dir.rglob('*.js'))
+            img_files = (list(static_dir.rglob('*.png')) +
+                        list(static_dir.rglob('*.jpg')) +
+                        list(static_dir.rglob('*.svg')))
 
             logger.info(f"  ✓ {rel_path}/")
             logger.info(f"    • {len(css_files)} CSS files")
@@ -1684,1129 +1743,933 @@ def generate_spec():
     # -----------------------------------------------------------------------
     logger.info("\n📁 Additional data directories:")
 
-    extra_folders = ["locale", "fixtures", "media", "docs"]
+    extra_folders = ['locale', 'fixtures', 'media', 'docs']
     for folder in extra_folders:
         folder_path = PROJECT_ROOT / folder
         if folder_path.exists():
             datas_collected.append((str(folder), folder))
-            item_count = len(list(folder_path.rglob("*")))
+            item_count = len(list(folder_path.rglob('*')))
             logger.info(f"  ✓ {folder}/ ({item_count} items)")
 
     # -----------------------------------------------------------------------
     # 7. RESOURCES
     # -----------------------------------------------------------------------
     logger.info("\n🎨 Resources:")
-    resources_dir = PROJECT_ROOT / "resources"
+    resources_dir = PROJECT_ROOT / 'resources'
     if resources_dir.exists():
-        for item in resources_dir.rglob("*"):
+        for item in resources_dir.rglob('*'):
             if item.is_file():
                 rel_path = item.relative_to(PROJECT_ROOT)
                 datas_collected.append((str(rel_path), str(rel_path.parent)))
 
-        resource_count = len([x for x in datas_collected if "resources" in x[0]])
+        resource_count = len([x for x in datas_collected if 'resources' in x[0]])
         logger.info(f"  ✓ resources/ ({resource_count} files)")
 
     # ========================================================================
     # SUMMARY OF DATA COLLECTION
     # ========================================================================
-    logger.info("\n" + "=" * 70)
+    logger.info("\n" + "="*70)
     logger.info(f"📊 DATA COLLECTION SUMMARY")
-    logger.info("=" * 70)
+    logger.info("="*70)
     logger.info(f"Total data entries: {len(datas_collected)}")
     logger.info("")
 
     # Count by category
-    templates_count = sum(1 for x in datas_collected if "template" in x[0].lower())
-    static_count = sum(1 for x in datas_collected if "static" in x[0].lower())
+    templates_count = sum(1 for x in datas_collected if 'template' in x[0].lower())
+    static_count = sum(1 for x in datas_collected if 'static' in x[0].lower())
     apps_count = len(django_apps)
 
     logger.info(f"  • Django apps: {apps_count}")
     logger.info(f"  • Template entries: {templates_count}")
     logger.info(f"  • Static entries: {static_count}")
-    logger.info(
-        f"  • Other data: {len(datas_collected) - templates_count - static_count - apps_count}"
-    )
+    logger.info(f"  • Other data: {len(datas_collected) - templates_count - static_count - apps_count}")
 
     # ========================================================================
     # HIDDEN IMPORTS (COMPREHENSIVE - COMPLETE VERSION)
     # ========================================================================
     hidden_imports = [
-        # ===== DJANGO CORE =====
-        "django",
-        "django.contrib.admin",
-        "django.contrib.admin.templatetags",
-        "django.contrib.admin.templatetags.admin_list",
-        "django.contrib.admin.templatetags.admin_modify",
-        "django.contrib.admin.templatetags.admin_urls",
-        "django.contrib.admin.templatetags.base",
-        "django.contrib.admin.templatetags.log",
-        "django.contrib.auth",
-        "django.contrib.auth.backends",
-        "django.contrib.auth.hashers",
-        "django.contrib.auth.middleware",
-        "django.contrib.auth.context_processors",
-        "django.contrib.contenttypes",
-        "django.contrib.contenttypes.forms",
-        "django.contrib.sessions",
-        "django.contrib.sessions.backends",
-        "django.contrib.sessions.backends.db",
-        "django.contrib.sessions.backends.cache",
-        "django.contrib.sessions.backends.file",
-        "django.contrib.sessions.backends.cached_db",
-        "django.contrib.sessions.middleware",
-        "django.contrib.messages",
-        "django.contrib.messages.middleware",
-        "django.contrib.messages.context_processors",
-        "django.contrib.messages.storage",
-        "django.contrib.messages.storage.base",
-        "django.contrib.messages.storage.cookie",
-        "django.contrib.messages.storage.fallback",
-        "django.contrib.messages.storage.session",
-        "django.contrib.staticfiles",
-        "django.contrib.staticfiles.finders",
-        "django.contrib.staticfiles.storage",
-        "django.contrib.humanize",
-        "django.core",
-        "django.core.management",
-        "django.core.management.commands",
-        "django.core.management.commands.runserver",
-        "django.core.management.commands.migrate",
-        "django.core.management.commands.makemigrations",
-        "django.core.management.commands.collectstatic",
-        "django.core.management.commands.check",
-        "django.core.management.commands.shell",
-        "django.core.wsgi",
-        "django.core.asgi",
-        "django.core.handlers",
-        "django.core.handlers.wsgi",
-        "django.core.handlers.asgi",
-        "django.core.cache",
-        "django.core.cache.backends",
-        "django.core.cache.backends.base",
-        "django.core.cache.backends.db",
-        "django.core.cache.backends.dummy",
-        "django.core.cache.backends.filebased",
-        "django.core.cache.backends.locmem",
-        "django.core.cache.backends.memcached",
-        "django.core.cache.backends.redis",
-        "django.core.mail",
-        "django.core.mail.backends",
-        "django.core.mail.backends.smtp",
-        "django.core.mail.backends.console",
-        "django.core.mail.backends.filebased",
-        "django.core.mail.backends.locmem",
-        "django.core.mail.backends.dummy",
-        "django.middleware",
-        "django.middleware.cache",
-        "django.middleware.clickjacking",
-        "django.middleware.common",
-        "django.middleware.csrf",
-        "django.middleware.gzip",
-        "django.middleware.http",
-        "django.middleware.locale",
-        "django.middleware.security",
-        "django.template",
-        "django.template.loaders",
-        "django.template.loaders.filesystem",
-        "django.template.loaders.app_directories",
-        "django.template.loaders.cached",
-        "django.template.backends",
-        "django.template.backends.django",
-        "django.template.backends.jinja2",
-        "django.template.context_processors",
-        "django.template.defaultfilters",
-        "django.template.defaulttags",
-        "django.template.response",
-        "django.template.loader",
-        "django.template.engine",
-        "django.templatetags",
-        "django.templatetags.i18n",
-        "django.templatetags.l10n",
-        "django.templatetags.tz",
-        "django.templatetags.cache",
-        "django.templatetags.static",
-        "django.forms",
-        "django.forms.fields",
-        "django.forms.widgets",
-        "django.forms.models",
-        "django.forms.formsets",
-        "django.forms.boundfield",
-        "django.forms.utils",
-        "django.forms.renderers",
-        "django.shortcuts",
-        "django.views",
-        "django.views.generic",
-        "django.views.generic.base",
-        "django.views.generic.detail",
-        "django.views.generic.list",
-        "django.views.generic.edit",
-        "django.views.generic.dates",
-        "django.views.decorators",
-        "django.views.decorators.cache",
-        "django.views.decorators.csrf",
-        "django.views.decorators.http",
-        "django.urls",
-        "django.urls.resolvers",
-        "django.urls.converters",
-        "django.urls.exceptions",
-        "django.http",
-        "django.http.request",
-        "django.http.response",
-        "django.http.multipartparser",
-        "django.utils",
-        "django.utils.functional",
-        "django.utils.decorators",
-        "django.utils.deprecation",
-        "django.utils.encoding",
-        "django.utils.html",
-        "django.utils.http",
-        "django.utils.timezone",
-        "django.utils.translation",
-        "django.utils.dateformat",
-        "django.utils.text",
-        "django.utils.safestring",
-        "django.utils.datastructures",
-        "django.utils.regex_helper",
-        "django.conf",
-        "django.conf.urls",
-        "django.conf.urls.static",
-        "psutil",
-        # ===== BUILDER TOOLS MODULE =====
-        "bulider_tools",
-        "bulider_tools.runtime",
-        "bulider_tools.app",
-        "bulider_tools.services",
-        "bulider_tools.ui",
-        "bulider_tools.setup_ui",
-        "bulider_tools.database",
-        # ===== SYNC MODULE =====
-        "sync",
-        "sync.sync_agent",
-        "sync.mirror",
-        "sync.soft_delete_handler",
-        "sync.startup_warmup",
-        "sync.config",
-        # ===== UPDATE SYSTEM =====
-        "update_manager",  # Update manager with reconnection support
-        "update_client",  # Update client for server communication
-        # ===== DATABASE =====
-        "django.db.backends.postgresql",
-        "django.db.backends.postgresql.base",
-        "django.db.backends.postgresql.features",
-        "django.db.backends.postgresql.operations",
-        "django.db.backends.postgresql.schema",
-        "django.db.backends.postgresql.introspection",
-        "django.db.backends.postgresql.creation",
-        "django.db.backends.postgresql.client",
-        "psycopg2",
-        "psycopg2._psycopg",
-        "psycopg2.extensions",
-        "psycopg2.extras",
-        "psycopg2.pool",
-        "psycopg2.sql",
-        "psycopg2.tz",
-        "psycopg2.errorcodes",
-        # ===== REST FRAMEWORK =====
-        "rest_framework",
-        "rest_framework.views",
-        "rest_framework.viewsets",
-        "rest_framework.serializers",
-        "rest_framework.parsers",
-        "rest_framework.parsers.json",
-        "rest_framework.parsers.multipart",
-        "rest_framework.parsers.formparser",
-        "rest_framework.renderers",
-        "rest_framework.renderers.json",
-        "rest_framework.renderers.browsable",
-        "rest_framework.renderers.template",
-        "rest_framework.authentication",
-        "rest_framework.permissions",
-        "rest_framework.decorators",
-        "rest_framework.response",
-        "rest_framework.status",
-        "rest_framework.fields",
-        "rest_framework.relations",
-        "rest_framework.exceptions",
-        "rest_framework.filters",
-        "rest_framework.pagination",
-        "rest_framework.routers",
-        "rest_framework.metadata",
-        "rest_framework.schemas",
-        "rest_framework.settings",
-        "rest_framework.utils",
-        # ===== CHANNELS & WEBSOCKETS =====
-        "channels",
-        "channels.layers",
-        "channels.routing",
-        "channels.consumer",
-        "channels.generic",
-        "channels.generic.websocket",
-        "channels.generic.http",
-        "channels.db",
-        "channels.sessions",
-        "channels.auth",
-        "channels.middleware",
-        "channels.security",
-        "channels.handler",
-        "channels_redis",
-        "channels_redis.core",
-        "channels_redis.pubsub",
-        "daphne",
-        "daphne.server",
-        "daphne.cli",
-        "daphne.endpoints",
-        "daphne.http_protocol",
-        "daphne.ws_protocol",
-        # ===== REDIS & DJANGO-REDIS =====
-        "redis",
-        "redis.client",
-        "redis.connection",
-        "redis.exceptions",
-        "redis.sentinel",
-        "django_redis",
-        "django_redis.cache",
-        "django_redis.client",
-        "django_redis.client.default",
-        "django_redis.compressors",
-        "django_redis.compressors.identity",
-        "django_redis.compressors.zlib",
-        "django_redis.serializers",
-        "django_redis.serializers.json",
-        "django_redis.serializers.msgpack",
-        "django_redis.serializers.pickle",
-        # ========= networkx====
-        "networkx",
-        "pytz",
-        # ===== CELERY COMPLETE STACK =====
-        # CORE
-        "celery",
-        "celery.local",
-        "celery.datastructures",
-        "celery.five",
-        "celery._state",
-        "celery.exceptions",
-        "celery.app",
-        "celery.app.base",
-        "celery.app.task",
-        "celery.app.defaults",
-        "celery.app.control",
-        "celery.app.registry",
-        "celery.app.routes",
-        "celery.app.utils",
-        "celery.app.annotations",
-        "celery.app.autoretry",
-        "celery.app.builtins",
-        "celery.app.log",
-        "celery.app.amqp",
-        "celery.contrib.django",
-        "celery.app.events",
-        "sqlalchemy",
-        # BACKENDS
-        "celery.backends",
-        "celery.backends.base",
-        "celery.backends.redis",
-        "celery.backends.database",
-        "celery.backends.cache",
-        "celery.backends.asynchronous",
-        "celery.backends.filesystem",
-        "celery.backends.rpc",
-        # BIN
-        "celery.bin",
-        "celery.bin.base",
-        "celery.bin.celery",
-        "celery.bin.worker",
-        "celery.bin.beat",
-        "celery.bin.events",
-        "celery.bin.control",
-        # BOOTSTEPS
-        "celery.bootsteps",
-        # CANVAS
-        "celery.canvas",
-        # CONCURRENCY
-        "celery.concurrency",
-        "celery.concurrency.prefork",
-        "celery.concurrency.solo",
-        "celery.concurrency.base",
-        "celery.concurrency.thread",
-        # CONTRIB
-        "celery.contrib",
-        "celery.contrib.abortable",
-        # EVENTS
-        "celery.events",
-        "celery.events.state",
-        "celery.events.receiver",
-        "celery.events.snapshot",
-        # FIXUPS (CRITICAL FOR DJANGO)
-        "celery.fixups",
-        "celery.fixups.django",
-        # LOADERS
-        "celery.loaders",
-        "celery.loaders.app",
-        "celery.loaders.base",
-        "celery.loaders.default",
-        # PLATFORMS
-        "celery.platforms",
-        # RESULT
-        "celery.result",
-        # SCHEDULES
-        "celery.schedules",
-        # SECURITY
-        "celery.security",
-        "celery.security.certificate",
-        "celery.security.key",
-        "celery.security.serialization",
-        # SIGNALS
-        "celery.signals",
-        # TASK
-        "celery.task",
-        "celery.task.base",
-        "celery.task.trace",
-        "aiohttp",
-        # UTILS (WHERE ORIGINAL ERROR OCCURRED)
-        "celery.utils",
-        "celery.utils.abstract",
-        "celery.utils.collections",
-        "celery.utils.debug",
-        "celery.utils.deprecated",
-        "celery.utils.dispatch",
-        "celery.utils.dispatch.saferef",
-        "celery.utils.dispatch.signal",
-        "celery.utils.encoding",
-        "celery.utils.functional",
-        "celery.utils.graph",
-        "celery.utils.imports",
-        "celery.utils.iso8601",
-        "celery.utils.log",
-        "celery.utils.nodenames",
-        "celery.utils.objects",
-        "celery.utils.saferepr",
-        "celery.utils.serialization",
-        "celery.utils.sysinfo",
-        "celery.utils.term",
-        "celery.utils.text",
-        "celery.utils.threads",
-        "celery.utils.time",
-        "celery.contrib.django.task",
-        # WORKER
-        "celery.worker",
-        "celery.worker.control",
-        "celery.worker.consumer",
-        "celery.worker.consumer.consumer",
-        "celery.worker.consumer.connection",
-        "celery.worker.consumer.mingle",
-        "celery.worker.consumer.gossip",
-        "celery.worker.consumer.heart",
-        "celery.worker.consumer.tasks",
-        "celery.worker.strategy",
-        "celery.worker.state",
-        "celery.worker.autoscale",
-        "celery.worker.autoreload",
-        "celery.worker.heartbeat",
-        "celery.worker.loops",
-        "celery.worker.pidbox",
-        "celery.worker.request",
-        "celery.worker.components",
-        # ===== DJANGO-CELERY-BEAT =====
-        "django_celery_beat",
-        "django_celery_beat.admin",
-        "django_celery_beat.apps",
-        "django_celery_beat.clockedschedule",
-        "django_celery_beat.managers",
-        "django_celery_beat.migrations",
-        "django_celery_beat.models",
-        "django_celery_beat.schedulers",
-        "django_celery_beat.utils",
-        "django_celery_beat.tzcrontab",
-        # ===== KOMBU (CELERY MESSAGING) =====
-        "kombu",
-        "kombu.common",
-        "kombu.mixins",
-        "kombu.simple",
-        "kombu.clocks",
-        "kombu.pidbox",
-        "kombu.asynchronous",
-        "kombu.asynchronous.hub",
-        "kombu.asynchronous.semaphore",
-        "kombu.asynchronous.timer",
-        "kombu.transport",
-        "kombu.transport.base",
-        "kombu.transport.redis",
-        "kombu.transport.pyamqp",
-        "kombu.transport.memory",
-        "kombu.transport.virtual",
-        "kombu.transport.virtual.base",
-        "kombu.transport.virtual.exchange",
-        "kombu.serialization",
-        "kombu.compression",
-        "kombu.utils",
-        "kombu.utils.encoding",
-        "kombu.utils.json",
-        "kombu.utils.objects",
-        "kombu.utils.functional",
-        "kombu.entity",
-        "kombu.message",
-        "kombu.connection",
-        "kombu.resource",
-        "kombu.abstract",
-        "kombu.exceptions",
-        "kombu.log",
-        "kombu.pools",
-        # ===== BILLIARD (CELERY MULTIPROCESSING) =====
-        "billiard",
-        "billiard.pool",
-        "billiard.process",
-        "billiard.context",
-        "billiard.exceptions",
-        "billiard.einfo",
-        "billiard.connection",
-        "billiard.forking",
-        "billiard.queues",
-        "billiard.synchronize",
-        "billiard.util",
-        # ===== AMQP =====
-        "amqp",
-        "amqp.connection",
-        "amqp.channel",
-        "amqp.exceptions",
-        "amqp.method_framing",
-        "amqp.serialization",
-        "amqp.abstract_channel",
-        "amqp.basic_message",
-        "amqp.protocol",
-        # ===== VINE (PROMISES) =====
-        "vine",
-        "vine.abstract",
-        "vine.promises",
-        "vine.synchronization",
-        # ===== PYSIDE6 (QT) =====
-        "PySide6",
-        "PySide6.QtCore",
-        "PySide6.QtGui",
-        "PySide6.QtWidgets",
-        "PySide6.QtWebEngineWidgets",
-        "PySide6.QtWebEngineCore",
-        "PySide6.QtWebChannel",
-        "PySide6.QtNetwork",
-        "PySide6.QtPrintSupport",
-        # ===== PLOTLY & DASH =====
-        "plotly",
-        "plotly.graph_objs",
-        "plotly.graph_objects",
-        "plotly.express",
-        "plotly.io",
-        "plotly.subplots",
-        "plotly.figure_factory",
-        "plotly.colors",
-        "plotly.data",
-        "dash",
-        "dash.dependencies",
-        "dash.exceptions",
-        "dash.development",
-        "dash.resources",
-        "dash_bootstrap_components",
-        "dash_bootstrap_components.themes",
-        "django_plotly_dash",
-        "django_plotly_dash.apps",
-        "django_plotly_dash.middleware",
-        "django_plotly_dash.finders",
-        "django_plotly_dash.models",
-        "django_plotly_dash.views",
-        "django_plotly_dash.util",
-        "dpd_components",
-        "django_plotly_dash.urls",
-        # ===== NUMPY (CRITICAL FOR MATPLOTLIB & SCIENTIFIC COMPUTING) =====
-        "numpy",
-        "numpy.core",
-        "numpy.core._multiarray_umath",
-        "numpy.core.multiarray",
-        "numpy.core.numeric",
-        "numpy.core.umath",
-        "numpy.core.defchararray",
-        "numpy.core._dtype",
-        "numpy.core._methods",
-        "numpy.core.arrayprint",
-        "numpy.core.fromnumeric",
-        "numpy.core.shape_base",
-        "numpy.core._internal",
-        "numpy.core._string_helpers",
-        "numpy.core._type_aliases",
-        "numpy.core._ufunc_config",
-        "numpy.core.numerictypes",
-        "numpy.core.records",
-        "numpy.core.memmap",
-        "numpy.core.function_base",
-        "numpy.core.machar",
-        "numpy.core.getlimits",
-        "numpy.core.einsumfunc",
-        "numpy.fft",
-        "numpy.fft.helper",
-        "numpy.linalg",
-        "numpy.linalg.linalg",
-        "numpy.random",
-        "numpy.random._common",
-        "numpy.random._generator",
-        "numpy.random._mt19937",
-        "numpy.random._pcg64",
-        "numpy.random._philox",
-        "numpy.random._sfc64",
-        "numpy.random.bit_generator",
-        "numpy.random.mtrand",
-        "numpy.lib",
-        "numpy.lib.format",
-        "numpy.lib.mixins",
-        "numpy.lib.scimath",
-        "numpy.lib.stride_tricks",
-        "numpy.lib.npyio",
-        "numpy.lib.financial",
-        "numpy.lib.arraysetops",
-        "numpy.lib.arrayterator",
-        "numpy.lib.arraypad",
-        "numpy.lib._iotools",
-        "numpy.ma",
-        "numpy.ma.core",
-        "numpy.ma.extras",
-        "numpy.matrixlib",
-        "numpy.matrixlib.defmatrix",
-        "numpy.polynomial",
-        "numpy.polynomial.polynomial",
-        "numpy.polynomial.chebyshev",
-        "numpy.polynomial.legendre",
-        "numpy.polynomial.hermite",
-        "numpy.polynomial.hermite_e",
-        "numpy.polynomial.laguerre",
-        # ===== MATPLOTLIB =====
-        "matplotlib",
-        "matplotlib.pyplot",
-        "matplotlib.backends",
-        "matplotlib.backends.backend_agg",
-        "matplotlib.backends.backend_pdf",
-        "matplotlib.figure",
-        "matplotlib.axes",
-        "matplotlib.lines",
-        "matplotlib.patches",
-        "matplotlib.colors",
-        "matplotlib.cm",
-        "matplotlib.font_manager",
-        "matplotlib.ticker",
-        "matplotlib.legend",
-        "matplotlib.artist",
-        "matplotlib.cbook",
-        "matplotlib.path",
-        "matplotlib.transforms",
-        "matplotlib.collections",
-        "matplotlib.image",
-        "matplotlib.text",
-        "matplotlib.axis",
-        "matplotlib.scale",
-        "matplotlib.spines",
-        # ===== OPENPYXL (EXCEL) =====
-        "openpyxl",
-        "openpyxl.styles",
-        "openpyxl.utils",
-        "openpyxl.worksheet",
-        "openpyxl.workbook",
-        "openpyxl.chart",
-        "openpyxl.drawing",
-        "openpyxl.formatting",
-        "openpyxl.formula",
-        "openpyxl.packaging",
-        "openpyxl.reader",
-        "openpyxl.writer",
-        "openpyxl.xml",
-        # ===== DOCX/DOCXTPL (WORD) =====
-        "docxtpl",
-        "docx",
-        "docx.shared",
-        "docx.oxml",
-        "docx.parts",
-        "docx.document",
-        "docx.section",
-        "docx.styles",
-        "docx.table",
-        "docx.text",
-        "docx.enum",
-        # ===== PDF =====
-        "reportlab",
-        "reportlab.pdfgen",
-        "reportlab.pdfgen.canvas",
-        "reportlab.lib",
-        "reportlab.lib.pagesizes",
-        "reportlab.lib.styles",
-        "reportlab.lib.units",
-        "reportlab.lib.colors",
-        "reportlab.lib.enums",
-        "reportlab.platypus",
-        "reportlab.platypus.doctemplate",
-        "reportlab.platypus.frames",
-        "reportlab.platypus.paragraph",
-        "reportlab.platypus.tables",
-        "reportlab.platypus.flowables",
-        "reportlab.graphics",
-        "reportlab.graphics.shapes",
-        "reportlab.graphics.charts",
-        "PyPDF2",
-        "PyPDF2.generic",
-        "PyPDF2.pdf",
-        "PyPDF2.filters",
-        "PyPDF2.utils",
-        # ===== IMAGE PROCESSING =====
-        "PIL",
-        "PIL.Image",
-        "PIL.ImageDraw",
-        "PIL.ImageFont",
-        "PIL.ImageFilter",
-        "PIL.ImageEnhance",
-        # ===== UTILITIES =====
-        "qrcode",
-        "qrcode.image",
-        "qrcode.image.svg",
-        "qrcode.image.pure",
-        "qrcode.image.pil",
-        "colorlog",
-        "colorlog.formatter",
-        "dateutil",
-        "dateutil.parser",
-        "dateutil.tz",
-        "dateutil.relativedelta",
-        "dateutil.rrule",
-        "pytz",
-        "requests",
-        "requests.adapters",
-        "requests.auth",
-        "requests.cookies",
-        "requests.exceptions",
-        "requests.models",
-        "requests.sessions",
-        "urllib3",
-        "urllib3.util",
-        "urllib3.util.retry",
-        "urllib3.util.ssl_",
-        "urllib3.connection",
-        "urllib3.connectionpool",
-        "urllib3.poolmanager",
-        "validators",
-        "tqdm",
-        "tqdm.auto",
-        "cryptography",
-        "cryptography.fernet",
-        "cryptography.hazmat",
-        "cryptography.hazmat.backends",
-        "cryptography.hazmat.primitives",
-        "shortuuid",
-        # ===== CONFIG & ENV =====
-        "dotenv",
-        "environ",
-        "decouple",
-        # ===== CORS =====
-        "corsheaders",
-        "corsheaders.middleware",
-        "corsheaders.conf",
-        "corsheaders.defaults",
-        "corsheaders.signals",
-        # ===== DJANGO EXTENSIONS =====
-        "django_extensions",
-        # ===== DEBUG TOOLBAR (COMPLETE) =====
-        "debug_toolbar",
-        "debug_toolbar.middleware",
-        "debug_toolbar.panels",
-        "debug_toolbar.panels.alerts",
-        "debug_toolbar.panels.cache",
-        "debug_toolbar.panels.headers",
-        "debug_toolbar.panels.history",
-        "debug_toolbar.panels.logging",
-        "debug_toolbar.panels.profiling",
-        "debug_toolbar.panels.redirects",
-        "debug_toolbar.panels.request",
-        "debug_toolbar.panels.settings",
-        "debug_toolbar.panels.signals",
-        "debug_toolbar.panels.sql",
-        "debug_toolbar.panels.staticfiles",
-        "debug_toolbar.panels.templates",
-        "debug_toolbar.panels.timer",
-        "debug_toolbar.panels.versions",
-        "debug_toolbar.panels.community",
-        "debug_toolbar.toolbar",
-        "debug_toolbar.utils",
-        "debug_toolbar.forms",
-        "debug_toolbar.decorators",
-        "debug_toolbar.checks",
-        "debug_toolbar.views",
-        "debug_toolbar.models",
-        "debug_toolbar.apps",
-        "debug_toolbar.store",
-        "debug_toolbar._stubs",
-        # ===== CHARTJS =====
-        "chartjs",
-        # ===== KAFKA/REDPANDA =====
-        "kafka",
-        "kafka.errors",
-        "kafka.producer",
-        "kafka.producer.future",
-        "kafka.consumer",
-        "kafka.consumer.fetcher",
-        "kafka.consumer.group_coordinator",
-        "kafka.consumer.subscription_state",
-        "kafka.admin",
-        "kafka.cluster",
-        "kafka.conn",
-        "kafka.metrics",
-        "kafka.partitioner",
-        "kafka.protocol",
-        "kafka.serializer",
-        # ===== MULTIPROCESSING & ASYNC =====
-        "multiprocessing",
-        "multiprocessing.process",
-        "multiprocessing.pool",
-        "multiprocessing.managers",
-        "multiprocessing.queues",
-        "multiprocessing.synchronize",
-        "multiprocessing.connection",
-        "multiprocessing.context",
-        "asyncio",
-        "asyncio.events",
-        "asyncio.tasks",
-        "asyncio.futures",
-        "asyncio.locks",
-        "asyncio.queues",
-        "asyncio.streams",
-        "asyncio.subprocess",
-        "concurrent",
-        "concurrent.futures",
-        "concurrent.futures.thread",
-        "concurrent.futures.process",
-        # ===== JINJA2 & TEMPLATING =====
-        "jinja2",
-        "jinja2.ext",
-        "jinja2.filters",
-        "jinja2.loaders",
-        "jinja2.runtime",
-        "jinja2.utils",
-        # ===== STANDARD LIBRARY =====
-        "uuid",
-        "decimal",
-        "datetime",
-        "json",
-        "pickle",
-        "sqlite3",
-        "ssl",
-        "hashlib",
-        "hmac",
-        "signal",
-        "logging",
-        "logging.handlers",
-        "email",
-        "email.mime",
-        "email.mime.text",
-        "email.mime.multipart",
-        "email.mime.base",
-        "email.mime.image",
-        "mimetypes",
-        "tempfile",
-        "shutil",
-        "io",
-        "os",
-        "sys",
-        "pathlib",
-        "collections",
-        "collections.abc",
-        "itertools",
-        "functools",
-        "re",
-        "string",
-        "copy",
-        "base64",
-        "binascii",
-        "weakref",
-        "types",
-        "inspect",
-        "traceback",
-        "warnings",
-        "contextlib",
-        "threading",
-        "queue",
-        "atexit",
-        "gc",
-        "importlib",
-        "importlib.metadata",
-        "importlib.resources",
-        "pkgutil",
-        "modulefinder",
-        # ===== PKG_RESOURCES / SETUPTOOLS (fixes appdirs ImportError at startup) =====
-        "pkg_resources",
-        "pkg_resources.extern",
-        "pkg_resources.py2_warn",
-        "pkg_resources._vendor",
-        "pkg_resources._vendor.jaraco",
-        "pkg_resources._vendor.jaraco.text",
-        "pkg_resources._vendor.more_itertools",
-        "pkg_resources._vendor.platformdirs",
-        "appdirs",
-        "platformdirs",
-        "jaraco",
-        "jaraco.text",
-        "more_itertools",
-        "setuptools",
-        "setuptools.dist",
-        # ===== ASGIREF =====
-        "asgiref",
-        "asgiref.sync",
-        "asgiref.local",
-        "asgiref.timeout",
-        # ===== ATTRS =====
-        "attr",
-        "attrs",
-        # ===== AUTOBAHN =====
-        "autobahn",
-        "autobahn.twisted",
-        "autobahn.asyncio",
-        # ===== AUTOMAT =====
-        "automat",
-        # ===== AIOHAPPYEYEBALLS =====
-        "aiohappyeyeballs",
-        # ===== AIOSIGNAL =====
-        "aiosignal",
-        # ===== ANYIO =====
-        "anyio",
-        # ===== BLINKER =====
-        "blinker",
-        # ===== CBOR2 =====
-        "cbor2",
-        # ===== CERTIFI =====
-        "certifi",
-        # ===== CFFI =====
-        "cffi",
-        "_cffi_backend",
-        # ===== CHARSET_NORMALIZER =====
-        "charset_normalizer",
-        # ===== CLICK =====
-        "click",
-        # ===== CONSTANTLY =====
-        "constantly",
-        # ===== CONTOURPY =====
-        "contourpy",
-        # ===== CRON_DESCRIPTOR =====
-        "cron_descriptor",
-        # ===== CYCLER =====
-        "cycler",
-        # ===== DJANGO_TIMEZONE_FIELD =====
-        "timezone_field",
-        # ===== ET_XMLFILE =====
-        "et_xmlfile",
-        # ===== FASTAPI =====
-        "fastapi",
-        "fastapi.routing",
-        "fastapi.middleware",
-        "fastapi.staticfiles",
-        "fastapi.responses",
-        "fastapi.requests",
-        "fastapi.encoders",
-        "fastapi.exceptions",
-        "fastapi.security",
-        # ===== FLASK =====
-        "flask",
-        "flask.json",
-        "flask.views",
-        "flask.testing",
-        # ===== FONTTOOLS =====
-        "fonttools",
-        # ===== FROZENLIST =====
-        "frozenlist",
-        # ===== H11 =====
-        "h11",
-        # ===== HTTPCORE =====
-        "httpcore",
-        # ===== HTTPTOOLS =====
-        "httptools",
-        # ===== HTTPX =====
-        "httpx",
-        # ===== HYPERLINK =====
-        "hyperlink",
-        # ===== IDNA =====
-        "idna",
-        # ===== IMPORTLIB_METADATA =====
-        "importlib_metadata",
-        # ===== INCREMENTAL =====
-        "incremental",
-        # ===== ITSDANGEROUS =====
-        "itsdangerous",
-        # ===== JANUS =====
-        "janus",
-        # ===== KIWISOLVER =====
-        "kiwisolver",
-        # ===== LXML =====
-        "lxml",
-        "lxml.etree",
-        "lxml.html",
-        "lxml.objectify",
-        # ===== MARKUPSAFE =====
-        "markupsafe",
-        # ===== MSGPACK =====
-        "msgpack",
-        # ===== MULTIDICT =====
-        "multidict",
-        # ===== NARWHALS =====
-        "narwhals",
-        # ===== NEST_ASYNCIO =====
-        "nest_asyncio",
-        # ===== OPENSSL (pyOpenSSL) =====
-        "OpenSSL",
-        "OpenSSL.SSL",
-        "OpenSSL.crypto",
-        # ===== PACKAGING =====
-        "packaging",
-        "packaging.version",
-        "packaging.requirements",
-        "packaging.specifiers",
-        # ===== PANDAS =====
-        "pandas",
-        "pandas.core",
-        "pandas.io",
-        "pandas.plotting",
-        # ===== PROMPT_TOOLKIT =====
-        "prompt_toolkit",
-        # ===== PROPCACHE =====
-        "propcache",
-        # ===== PY_UBJSON =====
-        "ubjson",
-        # ===== PYCPARSER =====
-        "pycparser",
-        # ===== PYDANTIC =====
-        "pydantic",
-        "pydantic.v1",
-        "pydantic_core",
-        # ===== PYGMENTS =====
-        "pygments",
-        "pygments.lexers",
-        "pygments.formatters",
-        # ===== PYPARSING =====
-        "pyparsing",
-        # ===== PYTHON_CRONTAB =====
-        "crontab",
-        # ===== PYTHON_MULTIPART =====
-        "multipart",
-        # ===== RETRYING =====
-        "retrying",
-        # ===== SERVICE_IDENTITY =====
-        "service_identity",
-        # ===== SIX =====
-        "six",
-        # ===== SQLPARSE =====
-        "sqlparse",
-        # ===== STARLETTE =====
-        "starlette",
-        "starlette.routing",
-        "starlette.middleware",
-        "starlette.staticfiles",
-        "starlette.responses",
-        "starlette.requests",
-        "starlette.applications",
-        "starlette.exceptions",
-        "starlette.background",
-        # ===== TWISTED =====
-        "twisted",
-        "twisted.internet",
-        "twisted.internet.protocol",
-        "twisted.internet.defer",
-        "twisted.internet.reactor",
-        # ===== TXAIO =====
-        "txaio",
-        # ===== TYPING_EXTENSIONS =====
-        "typing_extensions",
-        # ===== TZDATA / TZLOCAL =====
-        "tzdata",
-        "tzlocal",
-        # ===== UJSON =====
-        "ujson",
-        # ===== UVICORN =====
-        "uvicorn",
-        "uvicorn.main",
-        "uvicorn.config",
-        "uvicorn.server",
-        "uvicorn.loops",
-        "uvicorn.loops.asyncio",
-        "uvicorn.loops.uvloop",
-        "uvicorn.protocols",
-        "uvicorn.protocols.http",
-        "uvicorn.protocols.websockets",
-        "uvicorn.lifespan",
-        "uvicorn.lifespan.on",
-        # ===== UVLOOP =====
-        "uvloop",
-        # ===== WATCHFILES =====
-        "watchfiles",
-        # ===== WCWIDTH =====
-        "wcwidth",
-        # ===== WEBSOCKETS =====
-        "websockets",
-        "websockets.client",
-        "websockets.server",
-        "websockets.exceptions",
-        # ===== WERKZEUG (Flask dependency) =====
-        "werkzeug",
-        "werkzeug.routing",
-        "werkzeug.middleware",
-        "werkzeug.serving",
-        "werkzeug.exceptions",
-        "werkzeug.utils",
-        # ===== YAML (PyYAML) =====
-        "yaml",
-        # ===== YARL =====
-        "yarl",
-        # ===== ZIPP =====
-        "zipp",
-        # ===== ZIPSTREAM =====
-        "zipstream",
-        # ===== ZOPE =====
-        "zope",
-        "zope.interface",
-        # ===== REMAINING VENV PACKAGES =====
-        "altgraph",
-        "annotated_doc",
-        "annotated_types",
-        "click_didyoumean",
-        "click_plugins",
-        "click_repl",
-        "iniconfig",
-        "pluggy",
-        "shiboken6",
-        "typing_inspection",
-    ]
+    # ===== DJANGO CORE =====
+    'django',
+    'django.contrib.admin',
+    'django.contrib.admin.templatetags',
+    'django.contrib.admin.templatetags.admin_list',
+    'django.contrib.admin.templatetags.admin_modify',
+    'django.contrib.admin.templatetags.admin_urls',
+    'django.contrib.admin.templatetags.base',
+    'django.contrib.admin.templatetags.log',
+    'django.contrib.auth',
+    'django.contrib.auth.backends',
+    'django.contrib.auth.hashers',
+    'django.contrib.auth.middleware',
+    'django.contrib.auth.context_processors',
+    'django.contrib.contenttypes',
+    'django.contrib.contenttypes.forms',
+    'django.contrib.sessions',
+    'django.contrib.sessions.backends',
+    'django.contrib.sessions.backends.db',
+    'django.contrib.sessions.backends.cache',
+    'django.contrib.sessions.backends.file',
+    'django.contrib.sessions.backends.cached_db',
+    'django.contrib.sessions.middleware',
+    'django.contrib.messages',
+    'django.contrib.messages.middleware',
+    'django.contrib.messages.context_processors',
+    'django.contrib.messages.storage',
+    'django.contrib.messages.storage.base',
+    'django.contrib.messages.storage.cookie',
+    'django.contrib.messages.storage.fallback',
+    'django.contrib.messages.storage.session',
+    'django.contrib.staticfiles',
+    'django.contrib.staticfiles.finders',
+    'django.contrib.staticfiles.storage',
+    'django.contrib.humanize',
+    'django.core',
+    'django.core.management',
+    'django.core.management.commands',
+    'django.core.management.commands.runserver',
+    'django.core.management.commands.migrate',
+    'django.core.management.commands.makemigrations',
+    'django.core.management.commands.collectstatic',
+    'django.core.management.commands.check',
+    'django.core.management.commands.shell',
+    'django.core.wsgi',
+    'django.core.asgi',
+    'django.core.handlers',
+    'django.core.handlers.wsgi',
+    'django.core.handlers.asgi',
+    'django.core.cache',
+    'django.core.cache.backends',
+    'django.core.cache.backends.base',
+    'django.core.cache.backends.db',
+    'django.core.cache.backends.dummy',
+    'django.core.cache.backends.filebased',
+    'django.core.cache.backends.locmem',
+    'django.core.cache.backends.memcached',
+    'django.core.cache.backends.redis',
+    'django.core.mail',
+    'django.core.mail.backends',
+    'django.core.mail.backends.smtp',
+    'django.core.mail.backends.console',
+    'django.core.mail.backends.filebased',
+    'django.core.mail.backends.locmem',
+    'django.core.mail.backends.dummy',
+    'django.middleware',
+    'django.middleware.cache',
+    'django.middleware.clickjacking',
+    'django.middleware.common',
+    'django.middleware.csrf',
+    'django.middleware.gzip',
+    'django.middleware.http',
+    'django.middleware.locale',
+    'django.middleware.security',
+    'django.template',
+    'django.template.loaders',
+    'django.template.loaders.filesystem',
+    'django.template.loaders.app_directories',
+    'django.template.loaders.cached',
+    'django.template.backends',
+    'django.template.backends.django',
+    'django.template.backends.jinja2',
+    'django.template.context_processors',
+    'django.template.defaultfilters',
+    'django.template.defaulttags',
+    'django.template.response',
+    'django.template.loader',
+    'django.template.engine',
+    'django.templatetags',
+    'django.templatetags.i18n',
+    'django.templatetags.l10n',
+    'django.templatetags.tz',
+    'django.templatetags.cache',
+    'django.templatetags.static',
+    'django.forms',
+    'django.forms.fields',
+    'django.forms.widgets',
+    'django.forms.models',
+    'django.forms.formsets',
+    'django.forms.boundfield',
+    'django.forms.utils',
+    'django.forms.renderers',
+    'django.shortcuts',
+    'django.views',
+    'django.views.generic',
+    'django.views.generic.base',
+    'django.views.generic.detail',
+    'django.views.generic.list',
+    'django.views.generic.edit',
+    'django.views.generic.dates',
+    'django.views.decorators',
+    'django.views.decorators.cache',
+    'django.views.decorators.csrf',
+    'django.views.decorators.http',
+    'django.urls',
+    'django.urls.resolvers',
+    'django.urls.converters',
+    'django.urls.exceptions',
+    'django.http',
+    'django.http.request',
+    'django.http.response',
+    'django.http.multipartparser',
+    'django.utils',
+    'django.utils.functional',
+    'django.utils.decorators',
+    'django.utils.deprecation',
+    'django.utils.encoding',
+    'django.utils.html',
+    'django.utils.http',
+    'django.utils.timezone',
+    'django.utils.translation',
+    'django.utils.dateformat',
+    'django.utils.text',
+    'django.utils.safestring',
+    'django.utils.datastructures',
+    'django.utils.regex_helper',
+    'django.conf',
+    'django.conf.urls',
+    'django.conf.urls.static',
+    'psutil'
+
+    # ===== SYNC MODULE =====
+    'sync',
+    'sync.sync_agent',
+    'sync.mirror',
+    'sync.soft_delete_handler',
+
+    # ===== BULIDER_TOOLS PACKAGE (CRITICAL) =====
+    'bulider_tools',
+    'bulider_tools.app',
+    'bulider_tools.app_updates',   # NEW: AppUpdateService - must be explicit
+    'bulider_tools.runtime',
+    'bulider_tools.services',
+    'bulider_tools.ui',
+    'bulider_tools.database',
+    'bulider_tools.setup_ui',
+
+    # ===== UPDATE SYSTEM =====
+    'update_manager',       # Update manager with reconnection support
+    'update_client',        # Update client for server communication
+
+    # ===== DATABASE =====
+    'django.db.backends.postgresql',
+    'django.db.backends.postgresql.base',
+    'django.db.backends.postgresql.features',
+    'django.db.backends.postgresql.operations',
+    'django.db.backends.postgresql.schema',
+    'django.db.backends.postgresql.introspection',
+    'django.db.backends.postgresql.creation',
+    'django.db.backends.postgresql.client',
+    'psycopg2',
+    'psycopg2._psycopg',
+    'psycopg2.extensions',
+    'psycopg2.extras',
+    'psycopg2.pool',
+    'psycopg2.sql',
+    'psycopg2.tz',
+    'psycopg2.errorcodes',
+
+    # ===== REST FRAMEWORK =====
+    'rest_framework',
+    'rest_framework.views',
+    'rest_framework.viewsets',
+    'rest_framework.serializers',
+    'rest_framework.parsers',
+    'rest_framework.parsers.json',
+    'rest_framework.parsers.multipart',
+    'rest_framework.parsers.formparser',
+    'rest_framework.renderers',
+    'rest_framework.renderers.json',
+    'rest_framework.renderers.browsable',
+    'rest_framework.renderers.template',
+    'rest_framework.authentication',
+    'rest_framework.permissions',
+    'rest_framework.decorators',
+    'rest_framework.response',
+    'rest_framework.status',
+    'rest_framework.fields',
+    'rest_framework.relations',
+    'rest_framework.exceptions',
+    'rest_framework.filters',
+    'rest_framework.pagination',
+    'rest_framework.routers',
+    'rest_framework.metadata',
+    'rest_framework.schemas',
+    'rest_framework.settings',
+    'rest_framework.utils',
+
+    # ===== CHANNELS & WEBSOCKETS =====
+    'channels',
+    'channels.layers',
+    'channels.routing',
+    'channels.consumer',
+    'channels.generic',
+    'channels.generic.websocket',
+    'channels.generic.http',
+    'channels.db',
+    'channels.sessions',
+    'channels.auth',
+    'channels.middleware',
+    'channels.security',
+    'channels.handler',
+    'channels_redis',
+    'channels_redis.core',
+    'channels_redis.pubsub',
+    'daphne',
+    'daphne.server',
+    'daphne.cli',
+    'daphne.endpoints',
+    'daphne.http_protocol',
+    'daphne.ws_protocol',
+
+    # ===== REDIS & DJANGO-REDIS =====
+    'redis',
+    'redis.client',
+    'redis.connection',
+    'redis.exceptions',
+    'redis.sentinel',
+    'django_redis',
+    'django_redis.cache',
+    'django_redis.client',
+    'django_redis.client.default',
+    'django_redis.compressors',
+    'django_redis.compressors.identity',
+    'django_redis.compressors.zlib',
+    'django_redis.serializers',
+    'django_redis.serializers.json',
+    'django_redis.serializers.msgpack',
+    'django_redis.serializers.pickle',
+
+    #========= networkx====
+    'networkx',
+
+    'pytz',
+    # ===== CELERY COMPLETE STACK =====
+    # CORE
+    'celery',
+    'celery.local',
+    'celery.datastructures',
+    'celery.five',
+    'celery._state',
+    'celery.exceptions',
+    'celery.app',
+    'celery.app.base',
+    'celery.app.task',
+    'celery.app.defaults',
+    'celery.app.control',
+    'celery.app.registry',
+    'celery.app.routes',
+    'celery.app.utils',
+    'celery.app.annotations',
+    'celery.app.autoretry',
+    'celery.app.builtins',
+    'celery.app.log',
+    'celery.app.amqp',
+    'celery.contrib.django',
+    'celery.app.events',
+    'sqlalchemy',
+    # BACKENDS
+    'celery.backends',
+    'celery.backends.base',
+    'celery.backends.redis',
+    'celery.backends.database',
+    'celery.backends.cache',
+    'celery.backends.asynchronous',
+    'celery.backends.filesystem',
+    'celery.backends.rpc',
+
+    # BIN
+    'celery.bin',
+    'celery.bin.base',
+    'celery.bin.celery',
+    'celery.bin.worker',
+    'celery.bin.beat',
+    'celery.bin.events',
+    'celery.bin.control',
+
+    # BOOTSTEPS
+    'celery.bootsteps',
+
+    # CANVAS
+    'celery.canvas',
+
+    # CONCURRENCY
+    'celery.concurrency',
+    'celery.concurrency.prefork',
+    'celery.concurrency.solo',
+    'celery.concurrency.base',
+    'celery.concurrency.thread',
+
+    # CONTRIB
+    'celery.contrib',
+    'celery.contrib.abortable',
+
+    # EVENTS
+    'celery.events',
+    'celery.events.state',
+    'celery.events.receiver',
+    'celery.events.snapshot',
+
+    # FIXUPS (CRITICAL FOR DJANGO)
+    'celery.fixups',
+    'celery.fixups.django',
+
+    # LOADERS
+    'celery.loaders',
+    'celery.loaders.app',
+    'celery.loaders.base',
+    'celery.loaders.default',
+
+    # PLATFORMS
+    'celery.platforms',
+
+    # RESULT
+    'celery.result',
+
+    # SCHEDULES
+    'celery.schedules',
+
+    # SECURITY
+    'celery.security',
+    'celery.security.certificate',
+    'celery.security.key',
+    'celery.security.serialization',
+
+    # SIGNALS
+    'celery.signals',
+
+    # TASK
+    'celery.task',
+    'celery.task.base',
+    'celery.task.trace',
+
+    'aiohttp',
+    # UTILS (WHERE ORIGINAL ERROR OCCURRED)
+    'celery.utils',
+    'celery.utils.abstract',
+    'celery.utils.collections',
+    'celery.utils.debug',
+    'celery.utils.deprecated',
+    'celery.utils.dispatch',
+    'celery.utils.dispatch.saferef',
+    'celery.utils.dispatch.signal',
+    'celery.utils.encoding',
+    'celery.utils.functional',
+    'celery.utils.graph',
+    'celery.utils.imports',
+    'celery.utils.iso8601',
+    'celery.utils.log',
+    'celery.utils.nodenames',
+    'celery.utils.objects',
+    'celery.utils.saferepr',
+    'celery.utils.serialization',
+    'celery.utils.sysinfo',
+    'celery.utils.term',
+    'celery.utils.text',
+    'celery.utils.threads',
+    'celery.utils.time',
+    'celery.contrib.django.task',
+
+
+    # WORKER
+    'celery.worker',
+    'celery.worker.control',
+    'celery.worker.consumer',
+    'celery.worker.consumer.consumer',
+    'celery.worker.consumer.connection',
+    'celery.worker.consumer.mingle',
+    'celery.worker.consumer.gossip',
+    'celery.worker.consumer.heart',
+    'celery.worker.consumer.tasks',
+    'celery.worker.strategy',
+    'celery.worker.state',
+    'celery.worker.autoscale',
+    'celery.worker.autoreload',
+    'celery.worker.heartbeat',
+    'celery.worker.loops',
+    'celery.worker.pidbox',
+    'celery.worker.request',
+    'celery.worker.components',
+
+    # ===== DJANGO-CELERY-BEAT =====
+    'django_celery_beat',
+    'django_celery_beat.admin',
+    'django_celery_beat.apps',
+    'django_celery_beat.clockedschedule',
+    'django_celery_beat.managers',
+    'django_celery_beat.migrations',
+    'django_celery_beat.models',
+    'django_celery_beat.schedulers',
+    'django_celery_beat.utils',
+    'django_celery_beat.tzcrontab',
+
+    # ===== KOMBU (CELERY MESSAGING) =====
+    'kombu',
+    'kombu.common',
+    'kombu.mixins',
+    'kombu.simple',
+    'kombu.clocks',
+    'kombu.pidbox',
+    'kombu.asynchronous',
+    'kombu.asynchronous.hub',
+    'kombu.asynchronous.semaphore',
+    'kombu.asynchronous.timer',
+    'kombu.transport',
+    'kombu.transport.base',
+    'kombu.transport.redis',
+    'kombu.transport.pyamqp',
+    'kombu.transport.memory',
+    'kombu.transport.virtual',
+    'kombu.transport.virtual.base',
+    'kombu.transport.virtual.exchange',
+    'kombu.serialization',
+    'kombu.compression',
+    'kombu.utils',
+    'kombu.utils.encoding',
+    'kombu.utils.json',
+    'kombu.utils.objects',
+    'kombu.utils.functional',
+    'kombu.entity',
+    'kombu.message',
+    'kombu.connection',
+    'kombu.resource',
+    'kombu.abstract',
+    'kombu.exceptions',
+    'kombu.log',
+    'kombu.pools',
+
+    # ===== BILLIARD (CELERY MULTIPROCESSING) =====
+    'billiard',
+    'billiard.pool',
+    'billiard.process',
+    'billiard.context',
+    'billiard.exceptions',
+    'billiard.einfo',
+    'billiard.connection',
+    'billiard.forking',
+    'billiard.queues',
+    'billiard.synchronize',
+    'billiard.util',
+
+    # ===== AMQP =====
+    'amqp',
+    'amqp.connection',
+    'amqp.channel',
+    'amqp.exceptions',
+    'amqp.method_framing',
+    'amqp.serialization',
+    'amqp.abstract_channel',
+    'amqp.basic_message',
+    'amqp.protocol',
+
+    # ===== VINE (PROMISES) =====
+    'vine',
+    'vine.abstract',
+    'vine.promises',
+    'vine.synchronization',
+
+    # ===== PYSIDE6 (QT) =====
+    'PySide6',
+    'PySide6.QtCore',
+    'PySide6.QtGui',
+    'PySide6.QtWidgets',
+    'PySide6.QtWebEngineWidgets',
+    'PySide6.QtWebEngineCore',
+    'PySide6.QtWebChannel',
+    'PySide6.QtNetwork',
+    'PySide6.QtPrintSupport',
+
+    # ===== PLOTLY & DASH =====
+    'plotly',
+    'plotly.graph_objs',
+    'plotly.graph_objects',
+    'plotly.express',
+    'plotly.io',
+    'plotly.subplots',
+    'plotly.figure_factory',
+    'plotly.colors',
+    'plotly.data',
+    'dash',
+    'dash.dependencies',
+    'dash.exceptions',
+    'dash.development',
+    'dash.resources',
+    'dash_bootstrap_components',
+    'dash_bootstrap_components.themes',
+    'django_plotly_dash',
+    'django_plotly_dash.apps',
+    'django_plotly_dash.middleware',
+    'django_plotly_dash.finders',
+    'django_plotly_dash.models',
+    'django_plotly_dash.views',
+    'django_plotly_dash.util',
+    'dpd_components',
+    'django_plotly_dash.urls',
+
+    # ===== NUMPY (CRITICAL FOR MATPLOTLIB & SCIENTIFIC COMPUTING) =====
+    'numpy',
+    'numpy.core',
+    'numpy.core._multiarray_umath',
+    'numpy.core.multiarray',
+    'numpy.core.numeric',
+    'numpy.core.umath',
+    'numpy.core.defchararray',
+    'numpy.core._dtype',
+    'numpy.core._methods',
+    'numpy.core.arrayprint',
+    'numpy.core.fromnumeric',
+    'numpy.core.shape_base',
+    'numpy.core._internal',
+    'numpy.core._string_helpers',
+    'numpy.core._type_aliases',
+    'numpy.core._ufunc_config',
+    'numpy.core.numerictypes',
+    'numpy.core.records',
+    'numpy.core.memmap',
+    'numpy.core.function_base',
+    'numpy.core.machar',
+    'numpy.core.getlimits',
+    'numpy.core.einsumfunc',
+    'numpy.fft',
+    'numpy.fft.helper',
+    'numpy.linalg',
+    'numpy.linalg.linalg',
+    'numpy.random',
+    'numpy.random._common',
+    'numpy.random._generator',
+    'numpy.random._mt19937',
+    'numpy.random._pcg64',
+    'numpy.random._philox',
+    'numpy.random._sfc64',
+    'numpy.random.bit_generator',
+    'numpy.random.mtrand',
+    'numpy.lib',
+    'numpy.lib.format',
+    'numpy.lib.mixins',
+    'numpy.lib.scimath',
+    'numpy.lib.stride_tricks',
+    'numpy.lib.npyio',
+    'numpy.lib.financial',
+    'numpy.lib.arraysetops',
+    'numpy.lib.arrayterator',
+    'numpy.lib.arraypad',
+    'numpy.lib._iotools',
+    'numpy.ma',
+    'numpy.ma.core',
+    'numpy.ma.extras',
+    'numpy.matrixlib',
+    'numpy.matrixlib.defmatrix',
+    'numpy.polynomial',
+    'numpy.polynomial.polynomial',
+    'numpy.polynomial.chebyshev',
+    'numpy.polynomial.legendre',
+    'numpy.polynomial.hermite',
+    'numpy.polynomial.hermite_e',
+    'numpy.polynomial.laguerre',
+
+    # ===== MATPLOTLIB =====
+    'matplotlib',
+    'matplotlib.pyplot',
+    'matplotlib.backends',
+    'matplotlib.backends.backend_agg',
+    'matplotlib.backends.backend_pdf',
+    'matplotlib.figure',
+    'matplotlib.axes',
+    'matplotlib.lines',
+    'matplotlib.patches',
+    'matplotlib.colors',
+    'matplotlib.cm',
+    'matplotlib.font_manager',
+    'matplotlib.ticker',
+    'matplotlib.legend',
+    'matplotlib.artist',
+    'matplotlib.cbook',
+    'matplotlib.path',
+    'matplotlib.transforms',
+    'matplotlib.collections',
+    'matplotlib.image',
+    'matplotlib.text',
+    'matplotlib.axis',
+    'matplotlib.scale',
+    'matplotlib.spines',
+
+    # ===== OPENPYXL (EXCEL) =====
+    'openpyxl',
+    'openpyxl.styles',
+    'openpyxl.utils',
+    'openpyxl.worksheet',
+    'openpyxl.workbook',
+    'openpyxl.chart',
+    'openpyxl.drawing',
+    'openpyxl.formatting',
+    'openpyxl.formula',
+    'openpyxl.packaging',
+    'openpyxl.reader',
+    'openpyxl.writer',
+    'openpyxl.xml',
+
+    # ===== DOCX/DOCXTPL (WORD) =====
+    'docxtpl',
+    'docx',
+    'docx.shared',
+    'docx.oxml',
+    'docx.parts',
+    'docx.document',
+    'docx.section',
+    'docx.styles',
+    'docx.table',
+    'docx.text',
+    'docx.enum',
+
+    # ===== PDF =====
+    'reportlab',
+    'reportlab.pdfgen',
+    'reportlab.pdfgen.canvas',
+    'reportlab.lib',
+    'reportlab.lib.pagesizes',
+    'reportlab.lib.styles',
+    'reportlab.lib.units',
+    'reportlab.lib.colors',
+    'reportlab.lib.enums',
+    'reportlab.platypus',
+    'reportlab.platypus.doctemplate',
+    'reportlab.platypus.frames',
+    'reportlab.platypus.paragraph',
+    'reportlab.platypus.tables',
+    'reportlab.platypus.flowables',
+    'reportlab.graphics',
+    'reportlab.graphics.shapes',
+    'reportlab.graphics.charts',
+    'PyPDF2',
+    'PyPDF2.generic',
+    'PyPDF2.pdf',
+    'PyPDF2.filters',
+    'PyPDF2.utils',
+
+    # ===== IMAGE PROCESSING =====
+    'PIL',
+    'PIL.Image',
+    'PIL.ImageDraw',
+    'PIL.ImageFont',
+    'PIL.ImageFilter',
+    'PIL.ImageEnhance',
+
+    # ===== UTILITIES =====
+    'qrcode',
+    'qrcode.image',
+    'qrcode.image.svg',
+    'qrcode.image.pure',
+    'qrcode.image.pil',
+    'colorlog',
+    'colorlog.formatter',
+    'dateutil',
+    'dateutil.parser',
+    'dateutil.tz',
+    'dateutil.relativedelta',
+    'dateutil.rrule',
+    'pytz',
+    'requests',
+    'requests.adapters',
+    'requests.auth',
+    'requests.cookies',
+    'requests.exceptions',
+    'requests.models',
+    'requests.sessions',
+    'urllib3',
+    'urllib3.util',
+    'urllib3.util.retry',
+    'urllib3.util.ssl_',
+    'urllib3.connection',
+    'urllib3.connectionpool',
+    'urllib3.poolmanager',
+    'validators',
+    'tqdm',
+    'tqdm.auto',
+    'cryptography',
+    'cryptography.fernet',
+    'cryptography.hazmat',
+    'cryptography.hazmat.backends',
+    'cryptography.hazmat.primitives',
+    'shortuuid',
+
+    # ===== CONFIG & ENV =====
+    'dotenv',
+    'environ',
+    'decouple',
+
+    # ===== CORS =====
+    'corsheaders',
+    'corsheaders.middleware',
+    'corsheaders.conf',
+    'corsheaders.defaults',
+    'corsheaders.signals',
+
+    # ===== DJANGO EXTENSIONS =====
+    'django_extensions',
+
+    # ===== DEBUG TOOLBAR (COMPLETE) =====
+    'debug_toolbar',
+    'debug_toolbar.middleware',
+    'debug_toolbar.panels',
+    'debug_toolbar.panels.alerts',
+    'debug_toolbar.panels.cache',
+    'debug_toolbar.panels.headers',
+    'debug_toolbar.panels.history',
+    'debug_toolbar.panels.logging',
+    'debug_toolbar.panels.profiling',
+    'debug_toolbar.panels.redirects',
+    'debug_toolbar.panels.request',
+    'debug_toolbar.panels.settings',
+    'debug_toolbar.panels.signals',
+    'debug_toolbar.panels.sql',
+    'debug_toolbar.panels.staticfiles',
+    'debug_toolbar.panels.templates',
+    'debug_toolbar.panels.timer',
+    'debug_toolbar.panels.versions',
+    'debug_toolbar.panels.community',
+    'debug_toolbar.toolbar',
+    'debug_toolbar.utils',
+    'debug_toolbar.forms',
+    'debug_toolbar.decorators',
+    'debug_toolbar.checks',
+    'debug_toolbar.views',
+    'debug_toolbar.models',
+    'debug_toolbar.apps',
+    'debug_toolbar.store',
+    'debug_toolbar._stubs',
+
+    # ===== CHARTJS =====
+    'chartjs',
+
+    # ===== KAFKA/REDPANDA =====
+    'kafka',
+    'kafka.errors',
+    'kafka.producer',
+    'kafka.producer.future',
+    'kafka.consumer',
+    'kafka.consumer.fetcher',
+    'kafka.consumer.group_coordinator',
+    'kafka.consumer.subscription_state',
+    'kafka.admin',
+    'kafka.cluster',
+    'kafka.conn',
+    'kafka.metrics',
+    'kafka.partitioner',
+    'kafka.protocol',
+    'kafka.serializer',
+
+    # ===== MULTIPROCESSING & ASYNC =====
+    'multiprocessing',
+    'multiprocessing.process',
+    'multiprocessing.pool',
+    'multiprocessing.managers',
+    'multiprocessing.queues',
+    'multiprocessing.synchronize',
+    'multiprocessing.connection',
+    'multiprocessing.context',
+    'asyncio',
+    'asyncio.events',
+    'asyncio.tasks',
+    'asyncio.futures',
+    'asyncio.locks',
+    'asyncio.queues',
+    'asyncio.streams',
+    'asyncio.subprocess',
+    'concurrent',
+    'concurrent.futures',
+    'concurrent.futures.thread',
+    'concurrent.futures.process',
+
+    # ===== JINJA2 & TEMPLATING =====
+    'jinja2',
+    'jinja2.ext',
+    'jinja2.filters',
+    'jinja2.loaders',
+    'jinja2.runtime',
+    'jinja2.utils',
+
+    # ===== STANDARD LIBRARY =====
+    'uuid',
+    'decimal',
+    'datetime',
+    'json',
+    'pickle',
+    'sqlite3',
+    'ssl',
+    'hashlib',
+    'hmac',
+    'signal',
+    'logging',
+    'logging.handlers',
+    'email',
+    'email.mime',
+    'email.mime.text',
+    'email.mime.multipart',
+    'email.mime.base',
+    'email.mime.image',
+    'mimetypes',
+    'tempfile',
+    'shutil',
+    'io',
+    'os',
+    'sys',
+    'pathlib',
+    'collections',
+    'collections.abc',
+    'itertools',
+    'functools',
+    're',
+    'string',
+    'copy',
+    'base64',
+    'binascii',
+    'weakref',
+    'types',
+    'inspect',
+    'traceback',
+    'warnings',
+    'contextlib',
+    'threading',
+    'queue',
+    'atexit',
+    'gc',
+    'importlib',
+    'importlib.metadata',
+    'importlib.resources',
+    'pkgutil',
+    'modulefinder',
+]
+
 
     # Add timezone support
     if sys.version_info < (3, 9):
-        hidden_imports.append("backports.zoneinfo")
+        hidden_imports.append('backports.zoneinfo')
     else:
-        hidden_imports.append("zoneinfo")
+        hidden_imports.append('zoneinfo')
 
     # Add discovered Django apps
     for app in django_apps:
-        hidden_imports.extend(
-            [
-                f"{app}",
-                f"{app}.apps",
-                f"{app}.models",
-                f"{app}.views",
-                f"{app}.urls",
-                f"{app}.admin",
-            ]
-        )
+        hidden_imports.extend([
+            f'{app}',
+            f'{app}.apps',
+            f'{app}.models',
+            f'{app}.views',
+            f'{app}.urls',
+            f'{app}.admin',
+        ])
 
     # Add main package
     if main_package:
-        hidden_imports.extend(
-            [
-                f"{main_package}",
-                f"{main_package}.settings",
-                f"{main_package}.urls",
-                f"{main_package}.wsgi",
-            ]
-        )
+        hidden_imports.extend([
+            f'{main_package}',
+            f'{main_package}.settings',
+            f'{main_package}.urls',
+            f'{main_package}.wsgi',
+        ])
 
     # ========================================================================
     # GENERATE SPEC FILE CONTENT
     # ========================================================================
 
-    spec_content = '''# -*- mode: python ; coding: utf-8 -*-
+    spec_content = f'''# -*- mode: python ; coding: utf-8 -*-
 """
 Cirqen Desktop - Complete PyInstaller Spec (Auto-Generated)
 INCLUDES: Django + Celery + PySide6 + All Dependencies + NumPy + Templates + Static
@@ -2829,217 +2692,13 @@ IS_MAC = sys.platform == 'darwin'
 # ============================================================================
 
 # All data files (templates, static, apps, resources)
-datas = ___DATAS___
+datas = {repr(datas_collected)}
 
 # ============================================================================
 # HIDDEN IMPORTS - COMPLETE LIST
 # ============================================================================
 
-hiddenimports = ___HIDDEN___
-
-# ============================================================================
-# LINUX XCB / QT PLATFORM PLUGIN BINARY COLLECTION
-# Collects all xcb-related shared libraries required by the Qt xcb platform
-# plugin.  Without these, the app crashes on any Linux distro that does not
-# have libxcb-cursor0 etc. pre-installed (Ubuntu 24.04+, Ubuntu 26.04, etc.)
-# ============================================================================
-
-def _collect_linux_xcb_binaries():
-    """
-    Return (src, dest_dir) tuples for PyInstaller binaries=[] covering every
-    xcb/xkb shared library that Qt's xcb platform plugin needs at runtime,
-    plus the Qt xcb platform plugin itself.
-
-    Works on ALL Linux distros — Ubuntu/Debian (x86_64, aarch64, armhf),
-    Fedora/RHEL/CentOS, openSUSE/SLES, Arch/Manjaro, Gentoo, Alpine, etc.
-    Uses ldconfig as the primary resolver (universal) with glob fallback.
-
-    Libraries targeted
-    ------------------
-    libxcb-cursor      libxcb-icccm       libxcb-image
-    libxcb-keysyms     libxcb-randr       libxcb-render-util
-    libxcb-shape       libxcb-xinerama    libxcb-xkb
-    libxkbcommon-x11   libxkbcommon       libxcb
-    libxcb-util        libxcb-render      libxcb-sync
-    libxcb-xfixes      libxcb-shm         libxcb-dri2
-    libxcb-dri3        libxcb-present     libxcb-glx
-    """
-    import glob as _glob
-    import subprocess as _sp
-
-    # Canonical soname prefixes to collect.
-    # These match Qt6/PySide6's runtime dlopen() calls on every distro.
-    XCB_LIBS = [
-        "libxcb-cursor",
-        "libxcb-icccm",
-        "libxcb-image",
-        "libxcb-keysyms",
-        "libxcb-randr",
-        "libxcb-render-util",
-        "libxcb-render",
-        "libxcb-shape",
-        "libxcb-shm",
-        "libxcb-sync",
-        "libxcb-xfixes",
-        "libxcb-xinerama",
-        "libxcb-xkb",
-        "libxcb-dri2",
-        "libxcb-dri3",
-        "libxcb-present",
-        "libxcb-glx",
-        "libxcb-util",
-        "libxcb",           # core xcb — must come after the extensions
-        "libxkbcommon-x11",
-        "libxkbcommon",
-    ]
-
-    seen_real = set()   # track by realpath to avoid duplicate symlink chains
-    collected = []
-
-    def _add(path: str, dest: str = ".") -> None:
-        """Resolve symlinks, deduplicate, add both the symlink and the real file."""
-        try:
-            real = os.path.realpath(path)
-            if not os.path.isfile(real):
-                return
-            if real in seen_real:
-                return
-            seen_real.add(real)
-            # Add the real file (versioned, e.g. libxcb-cursor.so.0.0.0)
-            collected.append((real, dest))
-            # Also add the unversioned symlink if it differs — some loaders
-            # need the exact soname symlink present in the bundle directory.
-            if path != real and os.path.islink(path):
-                collected.append((path, dest))
-        except Exception:
-            pass
-
-    # ── PASS 1: ldconfig -p  (works on Debian, Fedora, Arch, openSUSE, Alpine)
-    # ldconfig output format:  "    libname.so.N (libc6,...) => /full/path"
-    # This is the most reliable cross-distro resolver because ldconfig always
-    # knows the canonical path regardless of multilib/multiarch layout.
-    ldconfig_map = {}   # lib_prefix -> resolved path
-    try:
-        result = _sp.run(
-            ["ldconfig", "-p"], capture_output=True, text=True, timeout=15
-        )
-        for line in result.stdout.splitlines():
-            if "=>" not in line:
-                continue
-            parts = line.split("=>")
-            lib_path = parts[-1].strip()
-            lib_name = parts[0].strip().split()[0]  # "libxcb-cursor.so.0"
-            for prefix in XCB_LIBS:
-                if lib_name.startswith(prefix + ".so") or lib_name == prefix + ".so":
-                    # Keep the longest (most specific) match per prefix
-                    if prefix not in ldconfig_map:
-                        ldconfig_map[prefix] = lib_path
-                    break
-        for lib_path in ldconfig_map.values():
-            _add(lib_path)
-    except Exception:
-        pass   # ldconfig absent (Alpine musl, custom chroots) — fall through
-
-    # ── PASS 2: glob across all known multiarch/multilib paths
-    # Covers distros where ldconfig cache may be stale or absent.
-    # Ordered from most-common to least-common.
-    ARCH_LIBDIRS = [
-        # Debian / Ubuntu multiarch
-        "/usr/lib/x86_64-linux-gnu",
-        "/usr/lib/aarch64-linux-gnu",
-        "/usr/lib/arm-linux-gnueabihf",
-        "/usr/lib/armhf-linux-gnu",
-        "/usr/lib/i386-linux-gnu",
-        "/usr/lib/riscv64-linux-gnu",
-        # Fedora / RHEL / CentOS Stream / AlmaLinux / Rocky
-        "/usr/lib64",
-        "/usr/lib",
-        # openSUSE / SLES
-        "/usr/lib64",
-        "/usr/lib/x86_64",
-        # Arch / Manjaro
-        "/usr/lib",
-        # Gentoo / Funtoo
-        "/usr/lib64",
-        "/usr/lib",
-        # Alpine (musl)
-        "/usr/lib",
-        "/lib",
-        # Generic fallbacks
-        "/usr/local/lib",
-        "/usr/local/lib64",
-    ]
-    libdir = ""  # initialise so NameError can't occur if list is somehow empty
-    for libdir in ARCH_LIBDIRS:
-        if not os.path.isdir(libdir):
-            continue
-        for prefix in XCB_LIBS:
-            for path in _glob.glob(f"{libdir}/{prefix}.so*"):
-                _add(path)
-
-    # ── PASS 3: Qt xcb platform plugin + its sibling xcb libs
-    # PySide6 ships a private copy of libqxcb.so; bundle it explicitly so it
-    # is always present in the frozen app regardless of host layout.
-    try:
-        import PySide6 as _pyside6
-        _pyside6_root = Path(_pyside6.__file__).parent
-
-        # Possible plugin locations across PySide6 versions
-        _plugin_roots = [
-            _pyside6_root / "Qt" / "plugins",
-            _pyside6_root / "Qt6" / "plugins",
-            _pyside6_root / "plugins",
-        ]
-        for _pr in _plugin_roots:
-            _platforms = _pr / "platforms"
-            if _platforms.is_dir():
-                for _so in _platforms.glob("libqxcb*.so*"):
-                    _add(str(_so), "PySide6/Qt/plugins/platforms")
-                # Also grab xcb-related plugins in other Qt plugin dirs
-                for _subdir in ("xcbglintegrations", "platformthemes",
-                                "imageformats", "iconengines"):
-                    _sub = _pr / _subdir
-                    if _sub.is_dir():
-                        for _so in _sub.glob("*.so*"):
-                            _add(str(_so), f"PySide6/Qt/plugins/{_subdir}")
-                break
-
-        # PySide6 also ships its own xcb/xkb libs under Qt/lib/ on some builds
-        for _qt_lib in (_pyside6_root / "Qt" / "lib", _pyside6_root / "Qt6" / "lib"):
-            if _qt_lib.is_dir():
-                for prefix in XCB_LIBS:
-                    for _so in _qt_lib.glob(f"{prefix}.so*"):
-                        _add(str(_so))
-
-    except Exception:
-        pass
-
-    # ── PASS 4: Wayland-related libs (needed on hybrid Wayland/X11 sessions)
-    WAYLAND_LIBS = [
-        "libwayland-client",
-        "libwayland-cursor",
-        "libwayland-egl",
-        "libwayland-server",
-        "libEGL",
-        "libGL",
-    ]
-    try:
-        result2 = _sp.run(
-            ["ldconfig", "-p"], capture_output=True, text=True, timeout=10
-        )
-        for line in result2.stdout.splitlines():
-            if "=>" not in line:
-                continue
-            lib_path2 = line.split("=>")[-1].strip()
-            lib_name2 = line.strip().split()[0]
-            for wl in WAYLAND_LIBS:
-                if lib_name2.startswith(wl + ".so"):
-                    _add(lib_path2)
-                    break
-    except Exception:
-        pass
-
-    return collected
+hiddenimports = {repr(hidden_imports)}
 
 # ============================================================================
 # PYINSTALLER CONFIGURATION
@@ -3047,12 +2706,12 @@ def _collect_linux_xcb_binaries():
 
 a = Analysis(
     ['main.py'],
-    pathex=['___PROJECT_ROOT___'],
-    binaries=_collect_linux_xcb_binaries() if IS_LINUX else [],
+    pathex=['{str(PROJECT_ROOT)}'],
+    binaries=[],
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
-    hooksconfig={},
+    hooksconfig={{}},
     runtime_hooks=[],
     excludes=[
         'tkinter',
@@ -3072,28 +2731,6 @@ a = Analysis(
 )
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
-
-# ── Strip GCC runtime libs from the bundle ───────────────────────────
-# libstdc++.so.6 and libgcc_s.so.1 bundled by PyInstaller are built
-# against an older toolchain than Ubuntu 24.04+/26.04+ system libs.
-# Keeping them causes embedded child processes (postgres, redis) to
-# fail with GLIBCXX_3.4.30 not found because those processes load
-# system ICU/OpenSSL which requires the newer system libstdc++.
-# The Cirqen Python process itself does not need them bundled because
-# Python finds its own libstdc++ via RPATH, not LD_LIBRARY_PATH.
-_GCC_RUNTIME_EXCLUDE = {
-    'libstdc++.so.6',
-    'libgcc_s.so.1',
-    'libgomp.so.1',        # OpenMP — also GCC runtime, same issue
-}
-a.binaries = [
-    (name, src, kind)
-    for (name, src, kind) in a.binaries
-    if not any(
-        name == exc or name.startswith(exc + '.')
-        for exc in _GCC_RUNTIME_EXCLUDE
-    )
-]
 
 exe = EXE(
     pyz,
@@ -3134,10 +2771,10 @@ if IS_MAC:
         name='Cirqen.app',
         icon='resources/icon.icns' if Path('resources/icon.icns').exists() else None,
         bundle_identifier='com.cirqen.desktop',
-        info_plist={
+        info_plist={{
             'NSHighResolutionCapable': 'True',
             'LSBackgroundOnly': 'False',
-        },
+        }},
     )
 
 # ============================================================================
@@ -3148,10 +2785,10 @@ print("\\n" + "="*80)
 print("BUILD CONFIGURATION SUMMARY")
 print("="*80)
 print(f"Platform: {{'Windows' if IS_WINDOWS else 'Linux' if IS_LINUX else 'macOS' if IS_MAC else 'Unknown'}}")
-print(f"\\nDjango Apps: ___APPS_COUNT___")
-___MAIN_PACKAGE_PRINT___
-print(f"Data Files: {len(datas)}")
-print(f"Hidden Imports: {len(hiddenimports)}")
+print(f"\\nDjango Apps: {len({repr(django_apps)})}")
+{f'print(f"Main Package: {main_package}")' if main_package else ''}
+print(f"Data Files: {{len(datas)}}")
+print(f"Hidden Imports: {{len(hiddenimports)}}")
 print("\\nCritical Components:")
 print("  ✅ django_runner.py")
 print("  ✅ Templates (project + apps)")
@@ -3170,66 +2807,13 @@ print("  ✅ All discovered Django apps")
 print("\\n" + "="*80)
 '''
 
-    # Inject build-time values into spec (placeholders replaced here so the
-    # spec string itself is a plain ''' string with no f-string evaluation)
-    main_pkg_print = f'print(f"Main Package: {main_package}")' if main_package else ''
-    spec_content = (
-        spec_content
-        .replace('___DATAS___', repr(datas_collected))
-        .replace('___HIDDEN___', repr(hidden_imports))
-        .replace('___PROJECT_ROOT___', str(PROJECT_ROOT))
-        .replace('___APPS_COUNT___', str(len(django_apps)))
-        .replace('___MAIN_PACKAGE_PRINT___', main_pkg_print)
-    )
-
-    # Write runtime hook to suppress pkg_resources InvalidVersion crash
-    rthook_content = (
-        "# rthook_fix_pkgresources.py\n"
-        "# Patches pkg_resources to skip dist-info with invalid version strings.\n"
-        "def _patch_pkg_resources():\n"
-        "    try:\n"
-        "        import pkg_resources\n"
-        "        from pkg_resources.extern.packaging.version import InvalidVersion\n"
-        "        _orig_add = pkg_resources.WorkingSet.add_entry\n"
-        "        def _safe_add_entry(self, entry):\n"
-        "            try:\n"
-        "                _orig_add(self, entry)\n"
-        "            except InvalidVersion:\n"
-        "                pass\n"
-        "        pkg_resources.WorkingSet.add_entry = _safe_add_entry\n"
-        "        _orig_find = pkg_resources.find_on_path\n"
-        "        def _safe_find_on_path(importer, path_item, only=False):\n"
-        "            try:\n"
-        "                yield from _orig_find(importer, path_item, only=only)\n"
-        "            except InvalidVersion:\n"
-        "                return\n"
-        "        pkg_resources.find_on_path = _safe_find_on_path\n"
-        "    except Exception:\n"
-        "        pass\n"
-        "_patch_pkg_resources()\n"
-    )
-    rthook_file = PROJECT_ROOT / "rthook_fix_pkgresources.py"
-    rthook_file.write_text(rthook_content)
-
-    # Wire the runtime hook into the spec
-    spec_content = spec_content.replace(
-        "runtime_hooks=[],",
-        "runtime_hooks=[r'" + str(PROJECT_ROOT) + "/rthook_fix_pkgresources.py'],",
-    )
-
-    # Remove pandas from excludes (it is in hiddenimports)
-    spec_content = spec_content.replace(
-        "        'pandas',\n",
-        "",
-    )
-
     # Write spec file
     spec_file = PROJECT_ROOT / "cirqen.spec"
     spec_file.write_text(spec_content)
 
-    logger.info("\n" + "=" * 70)
+    logger.info("\n" + "="*70)
     logger.info("✅ SPEC FILE GENERATED SUCCESSFULLY")
-    logger.info("=" * 70)
+    logger.info("="*70)
     logger.info(f"📄 File: {spec_file}")
     logger.info(f"📊 Statistics:")
     logger.info(f"   • {len(datas_collected)} data file entries")
@@ -3238,10 +2822,9 @@ print("\\n" + "="*80)
     logger.info(f"\n✅ Templates: INCLUDED")
     logger.info(f"✅ Static files: INCLUDED")
     logger.info(f"✅ All apps: INCLUDED")
-    logger.info("=" * 70)
+    logger.info("="*70)
 
     return True
-
 
 def copy_runtime_to_dist():
     """
@@ -3270,8 +2853,8 @@ def copy_runtime_to_dist():
         shutil.copytree(src_pg, dest_pg, symlinks=False)
 
         # Count files
-        file_count = sum(1 for _ in dest_pg.rglob("*") if _.is_file())
-        size_mb = sum(f.stat().st_size for f in dest_pg.rglob("*") if f.is_file()) / (1024 * 1024)
+        file_count = sum(1 for _ in dest_pg.rglob('*') if _.is_file())
+        size_mb = sum(f.stat().st_size for f in dest_pg.rglob('*') if f.is_file()) / (1024*1024)
 
         logger.info(f"  ✅ Copied {file_count} files ({size_mb:.1f} MB)")
         copied_items.append(f"PostgreSQL ({file_count} files, {size_mb:.1f} MB)")
@@ -3305,10 +2888,8 @@ def copy_runtime_to_dist():
         shutil.copytree(src_redis, dest_redis, symlinks=False)
 
         # Count files
-        file_count = sum(1 for _ in dest_redis.rglob("*") if _.is_file())
-        size_mb = sum(f.stat().st_size for f in dest_redis.rglob("*") if f.is_file()) / (
-            1024 * 1024
-        )
+        file_count = sum(1 for _ in dest_redis.rglob('*') if _.is_file())
+        size_mb = sum(f.stat().st_size for f in dest_redis.rglob('*') if f.is_file()) / (1024*1024)
 
         logger.info(f"  ✅ Copied {file_count} files ({size_mb:.1f} MB)")
         copied_items.append(f"Redis ({file_count} files, {size_mb:.1f} MB)")
@@ -3316,7 +2897,7 @@ def copy_runtime_to_dist():
         # Make binaries executable on Linux
         if IS_LINUX:
             for bin_file in dest_redis.rglob("*"):
-                if bin_file.is_file() and "redis" in bin_file.name:
+                if bin_file.is_file() and 'redis' in bin_file.name:
                     try:
                         bin_file.chmod(0o755)
                     except:
@@ -3353,41 +2934,24 @@ def copy_runtime_to_dist():
     print("\n✅ Runtime directories successfully copied to dist")
     return True
 
-
 def build_executable():
     """Build with PyInstaller"""
     print_banner("Building Executable")
 
-    # Clean build artifacts.
-    # IMPORTANT: DIST_DIR may be a Docker bind-mount, so we cannot rmtree the
-    # directory itself (OSError: [Errno 16] Device or resource busy).
-    # Instead, delete only the *contents* of each directory.
-    def _clear_dir(p: Path):
-        if not p.exists():
-            return
-        try:
-            shutil.rmtree(p)          # works on native builds
-        except OSError:
-            # Fallback: remove contents one by one (Docker bind-mount case)
-            for child in p.iterdir():
-                if child.is_dir():
-                    shutil.rmtree(child, ignore_errors=True)
-                else:
-                    child.unlink(missing_ok=True)
-
-    _clear_dir(BUILD_DIR)
-    _clear_dir(DIST_DIR)
+    # Clean
+    if BUILD_DIR.exists():
+        shutil.rmtree(BUILD_DIR)
+    if DIST_DIR.exists():
+        shutil.rmtree(DIST_DIR)
 
     print("🔨 Building with PyInstaller (this takes several minutes)...")
     print("   ⏱️  Timeout: 30 minutes (for large Django projects)")
     print("   Please be patient...")
 
     # Use extended timeout for PyInstaller (30 minutes for large projects)
-    if not run_cmd(
-        [sys.executable, "-m", "PyInstaller", "cirqen.spec", "--clean", "--noconfirm"], timeout=1800
-    ):
+    if not run_cmd([sys.executable, "-m", "PyInstaller", "cirqen.spec", "--clean", "--noconfirm"], timeout=1800):
         print("❌ Build failed")
-        print("\n💡 If build timed out, edit bulid_backup.py line ~2761:")
+        print("\n💡 If build timed out, raise the PyInstaller timeout in build.py (build_executable):")
         print("   Change timeout=1800 to timeout=3600 (60 minutes)")
         return False
 
@@ -3399,16 +2963,15 @@ def build_executable():
     print(f"✅ Build complete: {dist_app}")
 
     # CRITICAL: Copy runtime directories after PyInstaller
-    print("\n" + "=" * 70)
+    print("\n" + "="*70)
     print("IMPORTANT: Now copying runtime directories...")
-    print("=" * 70)
+    print("="*70)
 
     if not copy_runtime_to_dist():
         print("❌ Failed to copy runtime directories")
         return False
 
     return True
-
 
 def create_launchers():
     """Create launcher scripts"""
@@ -3444,15 +3007,36 @@ if sys.platform != "win32":
     env.setdefault("QTWEBENGINE_DISABLE_SANDBOX", "1")
     env.setdefault("QT_LOGGING_RULES", "*.debug=false;qt.webenginecontext.info=false")
 
-print("🚀 Starting Cirqen...")
-subprocess.run([str(exe)], env=env)
+# Production mode: keep the terminal clean. Cirqen's own startup chatter
+# (config loading, service checks, Qt/Chromium diagnostics) is redirected
+# to a log file instead of the console -- nothing is lost, it just is not
+# printed to whatever terminal happened to launch this script.
+if sys.platform == "win32":
+    log_dir = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "Cirqen" / "logs"
+else:
+    log_dir = Path.home() / ".local" / "share" / "cirqen" / "logs"
+log_dir.mkdir(parents=True, exist_ok=True)
+log_path = log_dir / "launcher.log"
+
+# Keep this bounded -- it captures everything printed during the run, so
+# left unchecked it would grow forever across restarts.
+try:
+    if log_path.exists() and log_path.stat().st_size > 20 * 1024 * 1024:
+        backup = log_path.with_suffix(".log.1")
+        backup.unlink(missing_ok=True)
+        log_path.rename(backup)
+except OSError:
+    pass
+
+with open(log_path, "a", buffering=1) as log_file:
+    subprocess.run([str(exe)], env=env, stdout=log_file, stderr=log_file)
 '''
     (dist_dir / "launch_cirqen.py").write_text(launcher_content)
     print("✅ Created launch_cirqen.py")
 
     if IS_WINDOWS:
         launcher = dist_dir / "Start_Cirqen.bat"
-        launcher.write_text("""@echo off
+        launcher.write_text('''@echo off
 echo Starting Cirqen Desktop Application...
 python launch_cirqen.py
 if errorlevel 1 (
@@ -3460,176 +3044,22 @@ if errorlevel 1 (
     echo Failed to start Cirqen!
     pause
 )
-""")
+''')
         print("✅ Created Start_Cirqen.bat")
 
     elif IS_LINUX:
         launcher = dist_dir / "start_cirqen.sh"
-        launcher.write_text("""\
+        launcher.write_text('''\
 #!/bin/bash
 # ============================================================
 # Cirqen Desktop Launcher Script
-# Fixed for Linux (all versions) - QtWebEngine + PostgreSQL fix
+# Fixed for Linux (Ubuntu/Debian) - QtWebEngine + PostgreSQL fix
 # ============================================================
 cd "$(dirname "$0")"
 
 APP_NAME="Cirqen"
 SETUP_FLAG="$HOME/.local/share/cirqen/.pg_perms_ok"
 PG_RUN_DIR="/var/run/postgresql"
-
-# ── Qt xcb platform plugin dependency check ─────────────────────────────────
-# Qt's xcb backend needs several libxcb-* / libxkbcommon libs that are NOT
-# pre-installed on many distros (Ubuntu 22.04+, Fedora 38+, openSUSE Leap 15.5+).
-# We detect the distro's package manager and install the correct package names
-# once per machine.  The flag file prevents the check running on every launch.
-XCB_FLAG="$HOME/.local/share/cirqen/.xcb_deps_ok"
-
-check_xcb_deps() {
-    [ -f "$XCB_FLAG" ] && return 0
-
-    # ── Detect distro family ─────────────────────────────────────────────────
-    detect_pm() {
-        # Returns: apt | dnf | yum | zypper | pacman | emerge | apk | unknown
-        command -v apt-get  &>/dev/null && echo apt     && return
-        command -v dnf      &>/dev/null && echo dnf     && return
-        command -v yum      &>/dev/null && echo yum     && return
-        command -v zypper   &>/dev/null && echo zypper  && return
-        command -v pacman   &>/dev/null && echo pacman  && return
-        command -v emerge   &>/dev/null && echo emerge  && return
-        command -v apk      &>/dev/null && echo apk     && return
-        echo unknown
-    }
-
-    # ── Check if a shared library is loadable ────────────────────────────────
-    # We use ldconfig -p rather than dpkg/rpm because it works on every distro.
-    lib_present() {
-        # $1 = soname prefix, e.g. "libxcb-cursor"
-        ldconfig -p 2>/dev/null | grep -q "^[[:space:]]*$1\\.so"
-    }
-
-    # ── Libraries to verify (soname prefixes) ───────────────────────────────
-    XCB_SONAMES="libxcb-cursor libxcb-icccm libxcb-image libxcb-keysyms \
-libxcb-randr libxcb-render-util libxcb-shape libxcb-xinerama \
-libxcb-xkb libxkbcommon-x11"
-
-    MISSING_SONAMES=""
-    for lib in $XCB_SONAMES; do
-        lib_present "$lib" || MISSING_SONAMES="$MISSING_SONAMES $lib"
-    done
-
-    if [ -z "$MISSING_SONAMES" ]; then
-        mkdir -p "$(dirname "$XCB_FLAG")"
-        touch "$XCB_FLAG"
-        return 0
-    fi
-
-    PM=$(detect_pm)
-    echo ""
-    echo "┌──────────────────────────────────────────────────────────────────┐"
-    echo "│  Cirqen — Installing missing Qt display libraries (one-time)     │"
-    echo "└──────────────────────────────────────────────────────────────────┘"
-    echo "  Missing: $MISSING_SONAMES"
-    echo "  Package manager: $PM"
-    echo ""
-
-    INSTALL_OK=0
-
-    case "$PM" in
-
-      # ── Debian / Ubuntu / Linux Mint / Pop!_OS / Kali ───────────────────
-      apt)
-        PKGS="libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
-libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 \
-libxcb-xkb1 libxkbcommon-x11-0"
-        if command -v pkexec &>/dev/null; then
-            pkexec apt-get install -y $PKGS && INSTALL_OK=1
-        elif command -v sudo &>/dev/null; then
-            sudo apt-get install -y $PKGS && INSTALL_OK=1
-        fi
-        ;;
-
-      # ── Fedora / RHEL 8+ / CentOS Stream / AlmaLinux / Rocky ───────────
-      dnf)
-        PKGS="xcb-util-cursor xcb-util-icccm xcb-util-image xcb-util-keysyms \
-xcb-util-renderutil xcb-util libxkbcommon-x11"
-        if command -v sudo &>/dev/null; then
-            sudo dnf install -y $PKGS && INSTALL_OK=1
-        fi
-        ;;
-
-      # ── CentOS 7 / RHEL 7 (yum) ─────────────────────────────────────────
-      yum)
-        PKGS="xcb-util xcb-util-image xcb-util-keysyms xcb-util-renderutil \
-xcb-util-icccm xcb-util-cursor libxkbcommon-x11"
-        if command -v sudo &>/dev/null; then
-            sudo yum install -y $PKGS && INSTALL_OK=1
-        fi
-        ;;
-
-      # ── openSUSE Leap / Tumbleweed / SLES ───────────────────────────────
-      zypper)
-        PKGS="libxcb-cursor0 xcb-util-icccm xcb-util-image xcb-util-keysyms \
-xcb-util-renderutil xcb-util libxkbcommon-x11-0"
-        if command -v sudo &>/dev/null; then
-            sudo zypper install -y $PKGS && INSTALL_OK=1
-        fi
-        ;;
-
-      # ── Arch / Manjaro / EndeavourOS / Garuda ───────────────────────────
-      pacman)
-        PKGS="xcb-util-cursor xcb-util-icccm xcb-util-image xcb-util-keysyms \
-xcb-util-renderutil xcb-util libxkbcommon"
-        if command -v sudo &>/dev/null; then
-            sudo pacman -S --noconfirm --needed $PKGS && INSTALL_OK=1
-        fi
-        ;;
-
-      # ── Gentoo / Funtoo ──────────────────────────────────────────────────
-      emerge)
-        PKGS="x11-libs/xcb-util-cursor x11-libs/xcb-util-icccm \
-x11-libs/xcb-util-image x11-libs/xcb-util-keysyms \
-x11-libs/xcb-util-renderutil x11-libs/xcb-util \
-x11-libs/libxkbcommon"
-        if command -v sudo &>/dev/null; then
-            sudo emerge --ask=n $PKGS && INSTALL_OK=1
-        fi
-        ;;
-
-      # ── Alpine Linux (musl) ──────────────────────────────────────────────
-      apk)
-        PKGS="xcb-util-cursor xcb-util-icccm xcb-util-image xcb-util-keysyms \
-xcb-util-renderutil xcb-util libxkbcommon"
-        if command -v sudo &>/dev/null; then
-            sudo apk add $PKGS && INSTALL_OK=1
-        elif [ "$(id -u)" = "0" ]; then
-            apk add $PKGS && INSTALL_OK=1
-        fi
-        ;;
-
-      # ── Unknown ──────────────────────────────────────────────────────────
-      *)
-        echo "⚠️   Unknown package manager."
-        echo "    Please install the following libraries for your distro:"
-        echo "    $XCB_SONAMES"
-        echo "    Then run Cirqen again."
-        echo ""
-        echo "    Cirqen will try to start anyway using its bundled copies."
-        INSTALL_OK=2   # 2 = skipped, not failed
-        ;;
-    esac
-
-    if [ "$INSTALL_OK" -ge 1 ]; then
-        # Re-run ldconfig so the new libs are in the cache
-        command -v sudo &>/dev/null && sudo ldconfig 2>/dev/null || ldconfig 2>/dev/null || true
-        mkdir -p "$(dirname "$XCB_FLAG")"
-        touch "$XCB_FLAG"
-        echo "✅  Qt display libraries ready."
-    else
-        echo "⚠️   Could not install libraries automatically."
-        echo "    Cirqen will try to start using its bundled copies."
-    fi
-}
-check_xcb_deps
 
 # ── PostgreSQL run-directory permission fix ──────────────────
 # /var/run/postgresql is owned by the system 'postgres' user (mode 2775).
@@ -3705,57 +3135,14 @@ export QT_LOGGING_RULES="*.debug=false;qt.webenginecontext.info=false"
 
 # ── Run setup if needed, then launch ────────────────────────
 fix_pg_permissions
-
-# ── GLIBC / libstdc++ compatibility fix ─────────────────────
-# PyInstaller bundles its own libstdc++.so.6 and libgcc_s.so.1
-# inside _internal/.  These are older than the system copies on
-# Ubuntu 24.04+ / 26.04+ and cause system binaries (postgres,
-# redis-server) to fail with "GLIBCXX_3.4.30 not found" because
-# those binaries link against newer system ICU / OpenSSL libs
-# that require a newer libstdc++.
-#
-# Fix: remove _internal/ from LD_LIBRARY_PATH for child processes
-# that are not our Python code.  The Cirqen binary itself still
-# finds its own _internal/ because PyInstaller sets RPATH, not
-# LD_LIBRARY_PATH, for its own Python modules.
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-INTERNAL_DIR="$SCRIPT_DIR/_internal"
-
-# Strip _internal/ from LD_LIBRARY_PATH so postgres/redis use
-# the system libstdc++ / libgcc_s instead of the bundled ones.
-if [ -n "$LD_LIBRARY_PATH" ]; then
-    CLEAN_LD=""
-    IFS=: read -ra _LD_PARTS <<< "$LD_LIBRARY_PATH"
-    for _part in "${_LD_PARTS[@]}"; do
-        [ "$_part" = "$INTERNAL_DIR" ] && continue
-        CLEAN_LD="${CLEAN_LD:+$CLEAN_LD:}$_part"
-    done
-    export LD_LIBRARY_PATH="$CLEAN_LD"
-fi
-
-# Ensure postgres/redis inherit the *system* libstdc++ first.
-# We prepend /usr/lib/x86_64-linux-gnu (and the multiarch fallback)
-# before any remaining entries so that even if _internal/ appears
-# via another mechanism, the system copy wins for those binaries.
-SYS_STDCXX_DIR=""
-for _d in /usr/lib/x86_64-linux-gnu /usr/lib/aarch64-linux-gnu \
-          /usr/lib/arm-linux-gnueabihf /usr/lib64 /usr/lib; do
-    if [ -f "$_d/libstdc++.so.6" ]; then
-        SYS_STDCXX_DIR="$_d"
-        break
-    fi
-done
-[ -n "$SYS_STDCXX_DIR" ] && \
-    export LD_LIBRARY_PATH="${SYS_STDCXX_DIR}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-
-echo "🚀  Starting Cirqen ${APP_NAME}..."
 python3 launch_cirqen.py
-""")
+''')
         launcher.chmod(0o755)
         print("✅ Created start_cirqen.sh")
 
+        # ── One-time install helper (clients run this once after extracting) ──
         install_sh = dist_dir / "install.sh"
-        install_sh.write_text("""\
+        install_sh.write_text('''\
 #!/bin/bash
 # ============================================================
 # Cirqen — First-time installation helper
@@ -3769,45 +3156,14 @@ echo "║        Cirqen — First-time Setup                ║"
 echo "╚══════════════════════════════════════════════════╝"
 echo ""
 echo "This script will:"
-echo "  1. Install required Qt display libraries (xcb)"
-echo "  2. Allow Cirqen's database to start without errors"
-echo "  3. Make the changes permanent (survive reboots)"
-echo "  4. Create a desktop shortcut for Cirqen"
+echo "  1. Allow Cirqen's database to start without errors"
+echo "  2. Make the change permanent (survives reboots)"
+echo "  3. Create a desktop shortcut for Cirqen"
 echo ""
 echo "You will be asked for your system password once."
 echo ""
 read -rp "Press ENTER to continue, or Ctrl+C to cancel..."
 echo ""
-
-# ── Install Qt xcb platform plugin dependencies ──────────
-echo "→  Installing Qt display libraries..."
-PM_INSTALL_OK=0
-if command -v apt-get &>/dev/null; then
-    APT_PKGS="libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0"
-    sudo apt-get install -y $APT_PKGS && PM_INSTALL_OK=1
-elif command -v dnf &>/dev/null; then
-    sudo dnf install -y xcb-util-cursor xcb-util-icccm xcb-util-image xcb-util-keysyms xcb-util-renderutil xcb-util libxkbcommon-x11 && PM_INSTALL_OK=1
-elif command -v yum &>/dev/null; then
-    sudo yum install -y xcb-util xcb-util-image xcb-util-keysyms xcb-util-renderutil xcb-util-icccm xcb-util-cursor libxkbcommon-x11 && PM_INSTALL_OK=1
-elif command -v zypper &>/dev/null; then
-    sudo zypper install -y libxcb-cursor0 xcb-util-icccm xcb-util-image xcb-util-keysyms xcb-util-renderutil xcb-util libxkbcommon-x11-0 && PM_INSTALL_OK=1
-elif command -v pacman &>/dev/null; then
-    sudo pacman -S --noconfirm --needed xcb-util-cursor xcb-util-icccm xcb-util-image xcb-util-keysyms xcb-util-renderutil xcb-util libxkbcommon && PM_INSTALL_OK=1
-elif command -v apk &>/dev/null; then
-    sudo apk add xcb-util-cursor xcb-util-icccm xcb-util-image xcb-util-keysyms xcb-util-renderutil xcb-util libxkbcommon && PM_INSTALL_OK=1
-else
-    echo "   Unknown package manager — install libxcb-cursor/icccm/image/keysyms/randr/render-util/shape/xinerama/xkb and libxkbcommon-x11 for your distro."
-fi
-if [ "$PM_INSTALL_OK" -eq 1 ]; then
-    echo "   Qt display libraries installed."
-    sudo ldconfig 2>/dev/null || true
-    XCB_FLAG="$HOME/.local/share/cirqen/.xcb_deps_ok"
-    mkdir -p "$(dirname \"$XCB_FLAG\")"
-    touch "$XCB_FLAG"
-else
-    echo "   Qt libraries could not be installed — Cirqen will use bundled copies."
-fi
-fi
 
 # ── Fix PostgreSQL run directory permissions ─────────────
 echo "→  Configuring database permissions..."
@@ -3855,13 +3211,13 @@ echo "║             on your Desktop, or run:             ║"
 echo "║             ./start_cirqen.sh                   ║"
 echo "╚══════════════════════════════════════════════════╝"
 echo ""
-""")
+''')
         install_sh.chmod(0o755)
         print("✅ Created install.sh")
 
         # Desktop file (for developer use / direct Exec path)
         desktop = dist_dir / "Cirqen.desktop"
-        desktop.write_text(f"""[Desktop Entry]
+        desktop.write_text(f'''[Desktop Entry]
 Version=1.0
 Type=Application
 Name=Cirqen
@@ -3870,12 +3226,11 @@ Exec={dist_dir.absolute()}/start_cirqen.sh
 Icon={dist_dir.absolute()}/resources/icon.png
 Terminal=false
 Categories=Office;Database;
-""")
+''')
         desktop.chmod(0o755)
         print("✅ Created Cirqen.desktop")
 
     return True
-
 
 def create_readme():
     """Create documentation"""
@@ -3892,7 +3247,7 @@ def create_readme():
         start_instruction = "Run: ./start_cirqen.sh"
         data_location = "~/.local/share/cirqen/"
 
-    readme = f"""
+    readme = f'''
 ╔══════════════════════════════════════════════════════════════════════╗
 ║              CIRQEN DESKTOP APPLICATION                              ║
 ║         Calibration & Maintenance Management System                  ║
@@ -4016,7 +3371,7 @@ For help, contact:
 ══════════════════════════════════════════════════════════════════════
 
 © 2024 B12 Technologies - All Rights Reserved
-"""
+'''
 
     (dist_dir / "README.txt").write_text(readme)
     print("✅ Created README.txt")
@@ -4027,7 +3382,7 @@ For help, contact:
     else:
         quickstart_start = "Run: ./start_cirqen.sh"
 
-    quickstart = f"""
+    quickstart = f'''
 ╔══════════════════════════════════════════════════════════════════════╗
 ║                        QUICK START GUIDE                             ║
 ╚══════════════════════════════════════════════════════════════════════╝
@@ -4061,13 +3416,12 @@ That's it! 🎉
 • Syncs automatically when online
 
 ══════════════════════════════════════════════════════════════════════
-"""
+'''
 
     (dist_dir / "QUICK_START.txt").write_text(quickstart)
     print("✅ Created QUICK_START.txt")
 
     return True
-
 
 def package_distribution():
     """Create distribution archive"""
@@ -4075,8 +3429,15 @@ def package_distribution():
 
     dist_dir = DIST_DIR / "Cirqen"
 
+    provisioning = PROJECT_ROOT / 'provisioning.json'
+    if provisioning.exists():
+        shutil.copy2(provisioning, dist_dir / 'provisioning.json')
+        print("✅ provisioning.json included in the distribution")
+    else:
+        print("⚠️ provisioning.json not found; clients will need secrets supplied separately")
+
     # Calculate size
-    total_size = sum(f.stat().st_size for f in dist_dir.rglob("*") if f.is_file())
+    total_size = sum(f.stat().st_size for f in dist_dir.rglob('*') if f.is_file())
     print(f"📊 Total size: {total_size / (1024*1024):.1f} MB")
 
     # Create archive
@@ -4086,18 +3447,17 @@ def package_distribution():
     print(f"📦 Creating archive: {archive_name}...")
 
     if IS_WINDOWS:
-        shutil.make_archive(str(DIST_DIR / archive_name), "zip", DIST_DIR, "Cirqen")
+        shutil.make_archive(str(DIST_DIR / archive_name), 'zip', DIST_DIR, 'Cirqen')
         archive_file = DIST_DIR / f"{archive_name}.zip"
     else:
-        shutil.make_archive(str(DIST_DIR / archive_name), "gztar", DIST_DIR, "Cirqen")
+        shutil.make_archive(str(DIST_DIR / archive_name), 'gztar', DIST_DIR, 'Cirqen')
         archive_file = DIST_DIR / f"{archive_name}.tar.gz"
 
-    archive_size = archive_file.stat().st_size / (1024 * 1024)
+    archive_size = archive_file.stat().st_size / (1024*1024)
     print(f"✅ Created: {archive_file.name}")
     print(f"📊 Archive size: {archive_size:.1f} MB")
 
     return True
-
 
 def create_build_info():
     """Create build information file"""
@@ -4110,10 +3470,9 @@ def create_build_info():
     project_folders = get_project_folders()
 
     import datetime
-
     build_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    build_info = f"""
+    build_info = f'''
 ╔══════════════════════════════════════════════════════════════════════╗
 ║                         BUILD INFORMATION                            ║
 ╚══════════════════════════════════════════════════════════════════════╝
@@ -4128,19 +3487,19 @@ Architecture: {platform.machine()}
 📦 INCLUDED COMPONENTS
 
 Django Apps ({len(django_apps)}):
-"""
+'''
 
     for app in sorted(django_apps):
         build_info += f"  ✓ {app}\n"
 
-    build_info += f"""
+    build_info += f'''
 Project Folders ({len(project_folders)}):
-"""
+'''
 
     for folder in sorted(project_folders):
         build_info += f"  ✓ {folder}\n"
 
-    build_info += """
+    build_info += '''
 Runtime Components:
   ✓ PostgreSQL (embedded)
   ✓ Redis (embedded)
@@ -4174,7 +3533,7 @@ Runtime Components:
 • PostgreSQL and Redis properly embedded
 
 ══════════════════════════════════════════════════════════════════════
-"""
+'''
 
     (dist_dir / "BUILD_INFO.txt").write_text(build_info)
     print(f"✅ Created BUILD_INFO.txt")
@@ -4194,9 +3553,9 @@ def copy_utilities_to_dist():
     dist_dir = DIST_DIR / "Cirqen"
 
     utilities = [
-        ("cleanup_cirqen.py", "Enhanced cleanup utility (CRITICAL)"),
-        ("launch_cirqen.py", "Application launcher"),
-        ("sync_agent.env.example", "Sync agent environment template"),
+        ('cleanup_cirqen.py', 'Enhanced cleanup utility (CRITICAL)'),
+        ('launch_cirqen.py', 'Application launcher'),
+        ('sync_agent.env.example', 'Sync agent environment template'),
     ]
 
     copied_count = 0
@@ -4224,11 +3583,11 @@ def copy_utilities_to_dist():
             logger.warning(f"⚠️  Source not found: {util_file}")
 
             # Create launch_cirqen.py if it doesn't exist
-            if util_file == "launch_cirqen.py":
+            if util_file == 'launch_cirqen.py':
                 logger.info(f"Creating {util_file}...")
                 create_launch_script(dest)
                 copied_count += 1
-            elif util_file == "sync_agent.env.example":
+            elif util_file == 'sync_agent.env.example':
                 # Auto-generate the env template pointing to Render HQ
                 logger.info(f"Auto-generating {util_file}...")
                 env_template = (
@@ -4272,7 +3631,6 @@ def copy_utilities_to_dist():
     return True
 
 
-
 def create_launch_script(dest_path):
     """
     Create a simple launch script if it doesn't exist
@@ -4288,10 +3646,235 @@ import os
 from pathlib import Path
 
 
+
+# ============================================================================
+# CODE DIRECTORY CREATION FOR UPDATE SYSTEM
+# ============================================================================
+
+def create_code_directory(internal_dir: Path, django_apps: list) -> bool:
+    """
+    Create 'code' directory containing all Django apps and backend code
+
+    This enables the update system to target only backend code,
+    leaving frontend, lib, and user data untouched.
+
+    Args:
+        internal_dir: Path to _internal directory
+        django_apps: List of Django app names
+
+    Returns:
+        True if successful
+    """
+    import hashlib
+
+    logger.info("")
+    logger.info("="*70)
+    logger.info("CREATING CODE DIRECTORY FOR UPDATE SYSTEM")
+    logger.info("="*70)
+
+    try:
+        internal_dir = Path(internal_dir)
+        backend_dir = internal_dir / "backend"
+        code_dir = internal_dir / "code"
+
+        if not internal_dir.exists():
+            logger.error(f"❌ _internal directory not found: {internal_dir}")
+            return False
+
+        # Check if we have a backend directory
+        if not backend_dir.exists():
+            logger.warning(f"⚠️  Backend directory not found")
+            logger.info("   Looking for Django apps in _internal root...")
+            backend_dir = internal_dir
+
+        # Create code directory
+        if code_dir.exists():
+            logger.info(f"Removing existing code directory...")
+            shutil.rmtree(code_dir)
+
+        code_dir.mkdir(exist_ok=True)
+        logger.info(f"📁 Created code directory: {code_dir}")
+
+        # Items to include
+        items_to_include = []
+
+        # 1. All Django apps
+        logger.info("")
+        logger.info("Scanning for Django apps:")
+        for app_name in django_apps:
+            app_path = backend_dir / app_name
+            if app_path.exists() and app_path.is_dir():
+                items_to_include.append((app_path, app_name))
+                logger.info(f"   ✓ {app_name}")
+            else:
+                app_path = internal_dir / app_name
+                if app_path.exists() and app_path.is_dir():
+                    items_to_include.append((app_path, app_name))
+                    logger.info(f"   ✓ {app_name} (from root)")
+
+        # 2. Django management files
+        logger.info("")
+        logger.info("Scanning for management files:")
+        management_files = ['manage.py', 'config.py', 'settings.py', 'urls.py',
+                          'wsgi.py', 'asgi.py', 'django_runner.py']
+
+        for filename in management_files:
+            filepath = backend_dir / filename
+            if not filepath.exists():
+                filepath = internal_dir / filename
+
+            if filepath.exists():
+                items_to_include.append((filepath, filename))
+                logger.info(f"   ✓ {filename}")
+
+        # 3. Django directories
+        logger.info("")
+        logger.info("Scanning for Django directories:")
+        django_dirs = ['core', 'utils', 'shared', 'common', 'api', 'apps', 'sync']
+
+        for dirname in django_dirs:
+            dirpath = backend_dir / dirname
+            if not dirpath.exists():
+                dirpath = internal_dir / dirname
+
+            if dirpath.exists() and dirpath.is_dir():
+                if (dirpath / '__init__.py').exists() or \
+                   (dirpath / 'models.py').exists() or \
+                   (dirpath / 'views.py').exists():
+                    items_to_include.append((dirpath, dirname))
+                    logger.info(f"   ✓ {dirname}")
+
+        # 4. Copy items
+        logger.info("")
+        logger.info("Copying items to code directory...")
+        copied_count = 0
+
+        for src_path, item_name in items_to_include:
+            dst_path = code_dir / item_name
+
+            try:
+                if src_path.is_dir():
+                    if dst_path.exists():
+                        shutil.rmtree(dst_path)
+                    shutil.copytree(
+                        src_path, dst_path,
+                        ignore=shutil.ignore_patterns('__pycache__', '*.pyc', '.git')
+                    )
+                else:
+                    shutil.copy2(src_path, dst_path)
+                copied_count += 1
+            except Exception as e:
+                logger.error(f"   ❌ Failed to copy {item_name}: {e}")
+
+        logger.info(f"✅ Copied {copied_count} items")
+
+        # 5. Create documentation
+        readme = f"""# Code Directory
+
+This directory contains all Django apps and backend code.
+
+## Purpose
+The update system targets ONLY this directory for backend code updates.
+
+## Structure
+- {len([i for i in items_to_include if i[0].is_dir()])} Django apps
+- Management files (manage.py, settings.py, etc.)
+- Update configuration
+
+## Updates
+When updates are available:
+1. Only files in this directory are compared
+2. Automatic backup created before changes
+3. Changes verified with SHA-256 checksums
+4. Automatic rollback on failure
+
+Created: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+
+© 2024 B12 Technologies
+"""
+        (code_dir / "README.txt").write_text(readme)
+
+        # 6. Create config
+        config = {
+            "created": datetime.now().isoformat(),
+            "django_apps": django_apps,
+            "total_items": copied_count,
+            "update_enabled": True,
+            "update_server_url": "https://hq-server-dgs6.onrender.com/api/updates"
+        }
+        (code_dir / ".update_config.json").write_text(json.dumps(config, indent=2))
+
+        # 7. Calculate checksums
+        checksums = {}
+        for file_path in code_dir.rglob("*"):
+            if file_path.is_file() and not file_path.name.startswith('.'):
+                try:
+                    rel_path = str(file_path.relative_to(code_dir))
+                    sha256 = hashlib.sha256()
+                    with open(file_path, 'rb') as f:
+                        while chunk := f.read(8192):
+                            sha256.update(chunk)
+                    checksums[rel_path] = sha256.hexdigest()
+                except:
+                    pass
+
+        (code_dir / ".checksums.json").write_text(json.dumps(checksums, indent=2))
+        logger.info(f"   ✓ Created checksums for {len(checksums)} files")
+
+        # Summary
+        logger.info("")
+        logger.info("="*70)
+        logger.info("CODE DIRECTORY SUMMARY")
+        logger.info("="*70)
+        logger.info(f"Location: {code_dir}")
+        logger.info(f"Django Apps: {len(django_apps)}")
+        logger.info(f"Items Copied: {copied_count}")
+        logger.info(f"Files Checksummed: {len(checksums)}")
+        logger.info(f"Update Ready: Yes")
+        logger.info("="*70)
+
+        return True
+
+    except Exception as e:
+        logger.error(f"❌ Error: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return False
+
+
+def create_code_directory_step():
+    """Build step for code directory creation"""
+    print_banner("Creating Code Directory for Update System")
+
+    try:
+        dist_dir = DIST_DIR / "Cirqen"
+        internal_dir = dist_dir / "_internal"
+
+        if not internal_dir.exists():
+            logger.error(f"_internal not found: {internal_dir}")
+            return False
+
+        django_apps = find_django_apps()
+        success = create_code_directory(internal_dir, django_apps)
+
+        if success:
+            logger.info("")
+            logger.info("✅ CODE DIRECTORY CREATED SUCCESSFULLY")
+            logger.info("Update system enabled!")
+
+        return success
+
+    except Exception as e:
+        logger.error(f"Failed: {e}")
+        return False
+
+
+
 def main():
     """Launch the Cirqen application"""
     script_dir = Path(__file__).parent
 
+    # Determine executable name
     if sys.platform == "win32":
         exe_name = "Cirqen.exe"
     else:
@@ -4299,12 +3882,14 @@ def main():
 
     exe_path = script_dir / exe_name
 
+    # Check if executable exists
     if not exe_path.exists():
         print(f"❌ Error: {exe_name} not found!")
         print(f"   Expected at: {exe_path}")
         input("Press Enter to exit...")
         return 1
 
+    # Launch the application
     print(f"🚀 Starting Cirqen...")
     print(f"   Executable: {exe_path}")
     print()
@@ -4332,6 +3917,7 @@ if __name__ == "__main__":
 
     dest_path.write_text(launcher_content)
 
+    # Make executable on Linux/Mac
     if not IS_WINDOWS:
         dest_path.chmod(0o755)
 
@@ -4652,745 +4238,21 @@ def create_code_directory_step():
         logger.error(f"Failed: {e}")
         return False
 
-
-# ============================
-# Docker Build (GLIBC compat)
-# ============================
-
-DOCKERFILE_CONTENT = """\
-# Build on Ubuntu 20.04 (GLIBC 2.31) so the final binary runs on any Linux
-# with GLIBC >= 2.31 (Ubuntu 20.04, 22.04, 24.04, 26.04, Debian 11+, etc.)
-FROM ubuntu:20.04
-
-ENV DEBIAN_FRONTEND=noninteractive
-ENV TZ=UTC
-
-# Configure apt for slow/flaky connections
-RUN echo 'Acquire::Retries "10";' > /etc/apt/apt.conf.d/99retries \\
- && echo 'Acquire::http::Timeout "120";' >> /etc/apt/apt.conf.d/99retries \\
- && echo 'Acquire::https::Timeout "120";' >> /etc/apt/apt.conf.d/99retries \\
- && echo 'Acquire::Queue-Mode "access";' >> /etc/apt/apt.conf.d/99retries
-
-RUN apt-get update
-
-# Prerequisites + deadsnakes PPA for Python 3.9
-# (Ubuntu 20.04 ships Python 3.8 but numpy>=1.26 requires Python 3.9+)
-RUN apt-get install -y --fix-missing ca-certificates curl gnupg software-properties-common
-RUN add-apt-repository ppa:deadsnakes/ppa -y && apt-get update
-
-# Python 3.9 + dev headers
-RUN apt-get install -y --fix-missing python3.9 python3.9-dev python3.9-distutils
-RUN curl -sS https://bootstrap.pypa.io/pip/3.9/get-pip.py | python3.9
-RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 1
-
-# Build tools
-RUN apt-get install -y --fix-missing gcc g++ make binutils
-
-# PostgreSQL
-RUN apt-get install -y --fix-missing postgresql postgresql-contrib libpq-dev
-
-# Redis
-RUN apt-get install -y --fix-missing redis-server
-
-# UPX (optional)
-RUN apt-get install -y --fix-missing upx-ucl || true
-
-# Upgrade pip and install PyInstaller under Python 3.9
-RUN python3.9 -m pip install --upgrade pip
-RUN python3.9 -m pip install pyinstaller
-
-WORKDIR /build
-COPY . .
-
-# Install project dependencies under Python 3.9
-# numpy wheel is installed first separately so pip resolves the correct
-# manylinux wheel for Python 3.9 before processing the rest of requirements
-RUN if [ -f requirements.txt ]; then \\
-      python3.9 -m pip install --upgrade pip && \\
-      python3.9 -m pip install "numpy>=1.26" && \\
-      python3.9 -m pip install -r requirements.txt; \\
-    fi
-
-# Run the build script under Python 3.9
-CMD ["python3.9", "build_backup.py"]
-"""
-
-
-def _ubuntu2004_image_cached(docker_cmd):
-    """
-    Return True if ubuntu:20.04 is already present in the local Docker image
-    cache — meaning we can build without pulling from Docker Hub.
-    """
-    try:
-        result = subprocess.run(
-            docker_cmd + ["images", "-q", "ubuntu:20.04"],
-            capture_output=True,
-            text=True,
-            timeout=15,
-        )
-        return bool(result.stdout.strip())
-    except Exception:
-        return False
-
-
-def _pull_ubuntu2004(docker_cmd):
-    """
-    Try to pull ubuntu:20.04 from Docker Hub.
-    Returns True on success, False on network failure.
-    """
-    import time
-
-    logger.info("   Pulling ubuntu:20.04 from Docker Hub…")
-    for attempt in range(1, 4):
-        result = subprocess.run(
-            docker_cmd + ["pull", "ubuntu:20.04"], capture_output=True, text=True, timeout=300
-        )
-        if result.returncode == 0:
-            logger.info("   ✅ ubuntu:20.04 pulled successfully")
-            return True
-        logger.warning(f"   ⚠️  Pull attempt {attempt}/3 failed")
-        if attempt < 3:
-            time.sleep(10)
-
-    logger.error("   ❌ Could not pull ubuntu:20.04 — Docker Hub unreachable")
-    logger.error("      The image must be loaded manually:")
-    logger.error("      On a machine WITH internet:")
-    logger.error("        sudo docker pull ubuntu:20.04")
-    logger.error("        sudo docker save ubuntu:20.04 | gzip > ubuntu2004.tar.gz")
-    logger.error("      Copy ubuntu2004.tar.gz to this machine, then:")
-    logger.error("        sudo docker load < ubuntu2004.tar.gz")
-    logger.error("      Then re-run: python3 build_backup.py --docker")
-    return False
-
-
-def write_dockerfile():
-    """Write the Dockerfile to the project root."""
-    dockerfile_path = PROJECT_ROOT / "Dockerfile.cirqen_build"
-    dockerfile_path.write_text(DOCKERFILE_CONTENT)
-    logger.info(f"✅ Dockerfile written: {dockerfile_path}")
-    return dockerfile_path
-
-
-def _docker_is_running_without_sudo():
-    """Return True if docker info works WITHOUT sudo (user is in docker group)."""
-    try:
-        result = subprocess.run(["docker", "info"], capture_output=True, text=True, timeout=15)
-        return result.returncode == 0
-    except Exception:
-        return False
-
-
-def _docker_is_running():
-    """
-    Return True if Docker daemon is up and responsive.
-
-    Tries without sudo first (works if user is in docker group).
-    Falls back to sudo (works even if user is not in docker group yet).
-    """
-    # Try without sudo — works if user is already in docker group
-    try:
-        result = subprocess.run(["docker", "info"], capture_output=True, text=True, timeout=15)
-        if result.returncode == 0:
-            return True
-    except Exception:
-        pass
-
-    # Fall back to sudo — works regardless of group membership
-    try:
-        result = subprocess.run(
-            ["sudo", "docker", "info"], capture_output=True, text=True, timeout=15
-        )
-        if result.returncode == 0:
-            logger.debug("   (docker info required sudo — user not yet in docker group)")
-            return True
-    except Exception:
-        pass
-
-    return False
-
-
-def _docker_binary_exists():
-    """Return True if the docker binary is on PATH."""
-    return shutil.which("docker") is not None
-
-
-def _wait_for_apt_lock(timeout_seconds=180):
-    """
-    Wait until the apt lock is free.
-    Other apt processes (unattended-upgrades, snapd, etc.) hold the lock
-    briefly on boot — just wait them out rather than forcing removal.
-    """
-    import time
-
-    lock_files = [
-        "/var/lib/apt/lists/lock",
-        "/var/lib/dpkg/lock-frontend",
-        "/var/lib/dpkg/lock",
-        "/var/cache/apt/archives/lock",
-    ]
-
-    logger.info("⏳ Waiting for apt lock to be released…")
-    deadline = time.time() + timeout_seconds
-
-    while time.time() < deadline:
-        locked = False
-        for lock_file in lock_files:
-            try:
-                result = subprocess.run(
-                    ["sudo", "fuser", lock_file], capture_output=True, timeout=5
-                )
-                if result.returncode == 0:
-                    locked = True
-                    logger.info(f"   Lock held on {lock_file}, waiting…")
-                    break
-            except Exception:
-                pass
-
-        if not locked:
-            logger.info("✅ apt lock is free")
-            return True
-
-        time.sleep(5)
-
-    logger.warning("⚠️  apt lock still held after timeout — proceeding anyway")
-    return True
-
-
-def _apt_install_with_retry(packages, max_retries=5, timeout=600):
-    """
-    Install apt packages with aggressive retry logic for flaky/slow connections.
-
-    Strategies used in order:
-      1. Normal install
-      2. --fix-missing  (skip unresolvable packages, install what we can)
-      3. Individual package installs (isolate which package is failing)
-      4. apt-get -f install  (fix broken dependencies)
-    """
-    import time
-
-    logger.info(f"   Packages: {', '.join(packages)}")
-    logger.info(f"   Max retries: {max_retries}  |  Timeout per attempt: {timeout}s")
-
-    # ── Attempt 1–3: full install with retries ──────────────────────────
-    for attempt in range(1, max_retries + 1):
-        logger.info(f"\n   Attempt {attempt}/{max_retries}…")
-
-        result = subprocess.run(
-            [
-                "sudo",
-                "apt-get",
-                "install",
-                "-y",
-                "-o",
-                "Acquire::Retries=5",
-                "-o",
-                "Acquire::http::Timeout=120",
-                "-o",
-                "Acquire::https::Timeout=120",
-                "--fix-missing",
-            ]
-            + packages,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-
-        if result.returncode == 0:
-            logger.info(f"   ✅ Installed successfully on attempt {attempt}")
-            return True
-
-        logger.warning(f"   ⚠️  Attempt {attempt} failed (exit {result.returncode})")
-        # Log just the error lines so output stays readable
-        err_lines = [l for l in result.stderr.splitlines() if l.startswith("E:")]
-        for line in err_lines[:5]:
-            logger.warning(f"      {line}")
-
-        if attempt < max_retries:
-            wait = attempt * 10  # 10s, 20s, 30s… back-off
-            logger.info(f"   Waiting {wait}s before next attempt…")
-            time.sleep(wait)
-
-    # ── Attempt: install each package individually ──────────────────────
-    logger.warning("\n   Full install failed after all retries.")
-    logger.info("   Trying to install each package individually…")
-
-    installed = []
-    failed = []
-
-    for pkg in packages:
-        logger.info(f"   Installing {pkg}…")
-        ok = False
-        for attempt in range(1, 4):
-            result = subprocess.run(
-                [
-                    "sudo",
-                    "apt-get",
-                    "install",
-                    "-y",
-                    "-o",
-                    "Acquire::Retries=5",
-                    "-o",
-                    "Acquire::http::Timeout=120",
-                    "-o",
-                    "Acquire::https::Timeout=120",
-                    "--fix-missing",
-                    pkg,
-                ],
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-            )
-            if result.returncode == 0:
-                installed.append(pkg)
-                logger.info(f"   ✅ {pkg} installed")
-                ok = True
-                break
-            else:
-                logger.warning(f"   ⚠️  {pkg} attempt {attempt}/3 failed")
-                import time as t
-
-                t.sleep(attempt * 5)
-
-        if not ok:
-            failed.append(pkg)
-            logger.error(f"   ❌ {pkg} could not be installed")
-
-    # ── Fix any broken deps from partial installs ───────────────────────
-    if installed:
-        logger.info("\n   Running apt-get -f install to fix any broken dependencies…")
-        subprocess.run(["sudo", "apt-get", "-f", "install", "-y"], capture_output=True, timeout=300)
-
-    if failed:
-        logger.error(f"\n   Failed packages: {', '.join(failed)}")
-        # Only hard-fail if docker.io itself failed — compose/pigz are optional
-        if "docker.io" in failed or "containerd" in failed:
-            return False
-        logger.warning("   Non-critical packages failed — continuing anyway")
-
-    return True
-
-
-def _install_docker_linux():
-    """
-    Install Docker on Ubuntu/Debian, handling flaky/slow network connections.
-
-    The build machine has internet but with connection resets and low speed
-    (~52 B/s observed). Strategy:
-      - Increase apt timeouts and retries
-      - Use --fix-missing so one bad package doesn't block everything
-      - Retry each package individually if bulk install fails
-      - Only hard-fail if docker.io or containerd can't be installed
-        (docker-compose-v2, pigz, ubuntu-fan are optional extras)
-    """
-    import time
-
-    logger.info("📦 Installing Docker (flaky-network-safe method)…")
-
-    # ── 1. Kill any stuck apt processes and wait for lock ───────────────
-    logger.info("\n[Docker Install 1/5] Clearing apt state…")
-
-    # Kill any hung apt/dpkg processes (unattended-upgrades etc.)
-    subprocess.run(
-        ["sudo", "killall", "-q", "unattended-upgrades"], capture_output=True, timeout=10
-    )
-    subprocess.run(["sudo", "killall", "-q", "apt-get"], capture_output=True, timeout=10)
-    time.sleep(2)
-    _wait_for_apt_lock()
-
-    # ── 2. apt-get update with retries ──────────────────────────────────
-    logger.info("\n[Docker Install 2/5] Updating package cache (with retries)…")
-
-    update_ok = False
-    for attempt in range(1, 4):
-        logger.info(f"   apt-get update attempt {attempt}/3…")
-        result = subprocess.run(
-            [
-                "sudo",
-                "apt-get",
-                "update",
-                "-o",
-                "Acquire::Retries=5",
-                "-o",
-                "Acquire::http::Timeout=120",
-                "-o",
-                "Acquire::https::Timeout=120",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=300,
-        )
-        if result.returncode == 0:
-            logger.info("   ✅ apt-get update succeeded")
-            update_ok = True
-            break
-        logger.warning(f"   ⚠️  apt-get update attempt {attempt} failed")
-        time.sleep(attempt * 10)
-
-    if not update_ok:
-        logger.warning("   apt-get update failed all retries — using existing cache")
-
-    # ── 3. Remove old conflicting packages ──────────────────────────────
-    logger.info("\n[Docker Install 3/5] Removing old Docker packages if present…")
-    old_packages = ["docker", "docker-engine", "docker-compose"]
-    # Run non-fatal — these likely aren't installed
-    subprocess.run(
-        ["sudo", "apt-get", "remove", "-y"] + old_packages, capture_output=True, timeout=60
-    )
-
-    # ── 4. Install Docker packages with retry logic ──────────────────────
-    logger.info("\n[Docker Install 4/5] Installing Docker packages…")
-    logger.info("   Using increased timeouts and --fix-missing for flaky network")
-
-    # Split into critical (must have) and optional (nice to have)
-    critical_packages = ["docker.io", "containerd", "runc"]
-    optional_packages = ["docker-compose-v2", "pigz", "bridge-utils"]
-
-    logger.info("   Installing critical packages…")
-    if not _apt_install_with_retry(critical_packages, max_retries=5, timeout=600):
-        logger.error("❌ Could not install core Docker packages after all retries")
-        logger.error("")
-        logger.error("   Your connection keeps resetting mid-download.")
-        logger.error("   Try these manual steps:")
-        logger.error("")
-        logger.error("   1. Download individual .deb files separately:")
-        logger.error("      sudo apt-get install -y --fix-missing docker.io")
-        logger.error("      sudo apt-get install -y --fix-missing containerd")
-        logger.error("")
-        logger.error("   2. Or wait for a better network connection and retry:")
-        logger.error("      python3 build_backup.py --docker")
-        return False
-
-    logger.info("\n   Installing optional packages (failures here are non-fatal)…")
-    _apt_install_with_retry(optional_packages, max_retries=3, timeout=600)
-
-    # ── 5. Enable Docker and verify ─────────────────────────────────────
-    logger.info("\n[Docker Install 5/5] Enabling Docker service…")
-
-    run_cmd(
-        ["sudo", "systemctl", "enable", "--now", "docker"],
-        description="Enable and start Docker service",
-        timeout=30,
-    )
-
-    # Give daemon a moment to start
-    time.sleep(3)
-
-    ver = subprocess.run(["docker", "--version"], capture_output=True, text=True, timeout=10)
-    if ver.returncode == 0:
-        logger.info(f"✅ Docker installed successfully: {ver.stdout.strip()}")
-        return True
-
-    logger.warning("⚠️  docker --version failed — daemon may still be starting")
-    logger.info("   Waiting 10s for daemon to fully start…")
-    time.sleep(10)
-
-    ver = subprocess.run(["docker", "--version"], capture_output=True, text=True, timeout=10)
-    if ver.returncode == 0:
-        logger.info(f"✅ Docker ready: {ver.stdout.strip()}")
-        return True
-
-    logger.error("❌ Docker installed but not responding")
-    logger.error("   Try: sudo systemctl start docker")
-    return False
-
-
-def _install_docker_mac():
-    """
-    On macOS, Docker Desktop is a GUI app — we can't silently install it.
-    Guide the developer to the download page instead.
-    """
-    logger.error("❌ Docker is not installed on this Mac.")
-    logger.error("   Download Docker Desktop for Mac:")
-    logger.error("   https://www.docker.com/products/docker-desktop/")
-    logger.error("   Install it, start it, then re-run this build script.")
-    return False
-
-
-def _start_docker_daemon():
-    """Try to start the Docker daemon (Linux only) and wait until it responds."""
-    import time
-
-    logger.info("🔄 Attempting to start Docker daemon…")
-
-    started = False
-
-    # systemd (Ubuntu 20.04+, Debian, Fedora, etc.)
-    if run_cmd(
-        ["sudo", "systemctl", "start", "docker"], description="systemctl start docker", timeout=30
-    ):
-        logger.info("✅ Docker daemon start command accepted via systemctl")
-        started = True
-
-    # SysV init fallback (older distros)
-    if not started:
-        if run_cmd(
-            ["sudo", "service", "docker", "start"], description="service docker start", timeout=30
-        ):
-            logger.info("✅ Docker daemon start command accepted via service")
-            started = True
-
-    if not started:
-        logger.error("❌ Could not start Docker daemon automatically")
-        logger.error("   Try manually: sudo systemctl start docker")
-        return False
-
-    # Wait for the daemon to fully initialise — it takes a few seconds
-    # after systemctl reports success before docker info responds
-    logger.info("⏳ Waiting for Docker daemon to finish starting…")
-    for wait in range(1, 11):  # poll up to 10 times, 2s apart = 20s max
-        time.sleep(2)
-        if _docker_is_running():
-            logger.info(f"✅ Docker daemon is ready (took ~{wait * 2}s)")
-            return True
-        logger.info(f"   Still starting… ({wait * 2}s elapsed)")
-
-    logger.error("❌ Docker daemon did not become ready within 20s")
-    logger.error("   Check status with: sudo systemctl status docker")
-    logger.error("   Check logs with:   sudo journalctl -u docker --no-pager -n 30")
-    return False
-
-
-def _add_user_to_docker_group():
-    """
-    Add the current user to the docker group so sudo isn't needed for
-    future sessions. Also activates the group for the current process
-    using the 'sg' command so the build can continue without logging out.
-    """
-    user = os.getenv("USER") or os.getenv("LOGNAME")
-    if not user or user == "root":
-        return
-
-    try:
-        run_cmd(
-            ["sudo", "usermod", "-aG", "docker", user],
-            description=f"Add {user} to docker group",
-            timeout=15,
-        )
-        logger.info(f"✅ Added {user} to docker group")
-        logger.info("   Group is active for this session via sudo fallback.")
-        logger.info("   After the build, log out and back in to use docker without sudo.")
-    except Exception:
-        pass
-
-
-def ensure_docker():
-    """
-    Make sure Docker is installed AND the daemon is running.
-
-    Flow:
-        1. Binary exists?  No  → install it (Linux) or guide user (Mac)
-        2. Daemon running? No  → try to start it (Linux only)
-        3. Final check    — confirm 'docker info' succeeds
-
-    Returns True if Docker is ready to use, False otherwise.
-    """
-    print_banner("Checking Docker Availability")
-
-    # ── Step 1: Is the docker binary present? ──────────────────────────
-    if not _docker_binary_exists():
-        logger.warning("⚠️  Docker binary not found on PATH")
-
-        if IS_LINUX:
-            if not _install_docker_linux():
-                return False
-            _add_user_to_docker_group()
-        elif IS_MAC:
-            return _install_docker_mac()
-        else:
-            logger.error("❌ Automatic Docker install is not supported on Windows.")
-            logger.error(
-                "   Install Docker Desktop: https://www.docker.com/products/docker-desktop/"
-            )
-            return False
-    else:
-        logger.info("✅ Docker binary found")
-
-    # ── Step 2: Is the daemon running? ─────────────────────────────────
-    if not _docker_is_running():
-        logger.warning("⚠️  Docker daemon is not running")
-
-        if IS_LINUX:
-            if not _start_docker_daemon():
-                return False
-        else:
-            logger.error("❌ Docker Desktop is not running.")
-            logger.error("   Please start Docker Desktop and try again.")
-            return False
-
-    # ── Step 3: Final confirmation ──────────────────────────────────────
-    if _docker_is_running():
-        logger.info("✅ Docker is installed and running — ready to build")
-        return True
-
-    logger.error("❌ Docker still not responding after install/start attempts")
-    return False
-
-
-def build_in_docker():
-    """
-    Build the Cirqen executable inside an Ubuntu 20.04 Docker container.
-
-    Ubuntu 20.04 ships with GLIBC 2.31, which is the lowest common denominator
-    for most modern Linux distros.  A binary built here will run unchanged on:
-
-        Ubuntu 20.04  (GLIBC 2.31)  ← build baseline
-        Ubuntu 22.04  (GLIBC 2.35)
-        Ubuntu 24.04  (GLIBC 2.39)
-        Ubuntu 26.04  (GLIBC 2.43)
-        Debian 11/12, Fedora 34+, etc.
-
-    It will NOT run on Ubuntu 18.04 (GLIBC 2.27) or older — change the base
-    image to ubuntu:18.04 if you need that.
-    """
-    print_banner("Docker Build (GLIBC 2.31 — Ubuntu 20.04 baseline)")
-
-    # 1. Pre-flight — install Docker if missing, start daemon if stopped
-    if IS_WINDOWS:
-        logger.error("❌ Docker builds are not supported on Windows hosts.")
-        logger.error("   Use WSL2 + Docker Desktop or build on a Linux machine.")
-        return False
-
-    if not ensure_docker():
-        return False
-
-    # 2. Write Dockerfile
-    dockerfile_path = write_dockerfile()
-    image_tag = "cirqen-builder:ubuntu20"
-
-    # Determine whether to use sudo for docker commands
-    # (needed if user is not yet in the docker group)
-    use_sudo = not _docker_is_running_without_sudo()
-    docker_cmd = ["sudo", "docker"] if use_sudo else ["docker"]
-    if use_sudo:
-        logger.info("   ℹ️  Running docker commands with sudo (user not in docker group yet)")
-
-    # 2b. Ensure ubuntu:20.04 base image is available locally
-    # Docker Hub may be unreachable on this network — check cache first
-    logger.info("\n🔍 Checking for ubuntu:20.04 base image in local cache…")
-    if _ubuntu2004_image_cached(docker_cmd):
-        logger.info("   ✅ ubuntu:20.04 already cached — no pull needed")
-    else:
-        logger.info("   Not cached — attempting pull from Docker Hub…")
-        if not _pull_ubuntu2004(docker_cmd):
-            return False
-        logger.info("   ✅ ubuntu:20.04 ready")
-
-    # 3. Build the Docker image
-    logger.info(f"\n🐳 Building Docker image: {image_tag}")
-    logger.info("   Base: ubuntu:20.04  |  GLIBC: 2.31")
-    logger.info("   This may take several minutes on first run (image download + apt).\n")
-
-    build_ok = run_cmd(
-        docker_cmd
-        + [
-            "build",
-            "--network=host",  # use host network so apt can reach mirrors
-            "-f",
-            str(dockerfile_path),
-            "-t",
-            image_tag,
-            str(PROJECT_ROOT),
-        ],
-        description="Build Ubuntu 20.04 builder image",
-        timeout=10800,  # 3 hours — slow connections need more time
-    )
-
-    if not build_ok:
-        logger.error("❌ Docker image build failed")
-        return False
-
-    # 4. Run the build inside the container, mounting dist/ back out
-    dist_host = DIST_DIR
-    dist_host.mkdir(parents=True, exist_ok=True)
-
-    logger.info(f"\n🐳 Running build inside container…")
-    logger.info(f"   Output will land in: {dist_host}\n")
-
-    run_ok = run_cmd(
-        docker_cmd
-        + [
-            "run",
-            "--rm",
-            "-v",
-            f"{PROJECT_ROOT}:/build",
-            "-v",
-            f"{dist_host}:/build/dist",
-            image_tag,
-        ],
-        description="Run PyInstaller inside Ubuntu 20.04 container",
-        timeout=3600,  # 60 min — full build can be slow
-    )
-
-    if not run_ok:
-        sudo_prefix = "sudo " if use_sudo else ""
-        logger.error("❌ Build inside Docker container failed")
-        logger.error(
-            f"💡 Debug interactively: {sudo_prefix}docker run --rm -it "
-            f"-v $(pwd):/build {image_tag} bash"
-        )
-        return False
-
-    # 5. Verify output landed on the host
-    dist_app = dist_host / "Cirqen"
-    if dist_app.exists():
-        logger.info(f"\n✅ Docker build succeeded!")
-        logger.info(f"   Distribution ready at: {dist_app}")
-        logger.info(f"   GLIBC requirement: >= 2.31  (built on Ubuntu 20.04)")
-    else:
-        logger.warning(f"⚠️  Container finished but {dist_app} not found.")
-        logger.warning("   Check the container logs above for errors.")
-
-    # 6. Optionally remove the Dockerfile we generated
-    try:
-        dockerfile_path.unlink()
-    except Exception:
-        pass
-
-    return run_ok
-
-
 def main():
     """Main build orchestrator"""
 
     # ------------------------------------------------------------------ #
     # CLI argument parsing                                               #
     # ------------------------------------------------------------------ #
+    # The build runs natively on the machine it targets. The old --docker
+    # (Ubuntu 20.04 / Python 3.9) mode was removed: Python 3.9 cannot run
+    # Django 5.2 and the mode crashed before building. See git history of
+    # build_backup.py if a glibc-compatible container build is reinstated.
     parser = argparse.ArgumentParser(
         description="Cirqen Desktop Build System",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  python build_backup.py               # Normal build on current machine
-  python build_backup.py --docker      # Build inside Ubuntu 20.04 container
-                                       # (produces GLIBC-2.31-compatible binary
-                                       #  that runs on Ubuntu 20/22/24/26.04)
-""",
+        epilog="Usage: python build.py",
     )
-    parser.add_argument(
-        "--docker",
-        action="store_true",
-        help=(
-            "Build inside an Ubuntu 20.04 Docker container so the output "
-            "binary is compatible with any Linux running GLIBC >= 2.31. "
-            "Requires Docker to be installed and running."
-        ),
-    )
-    args = parser.parse_args()
-
-    # ------------------------------------------------------------------ #
-    # Docker path                                                         #
-    # ------------------------------------------------------------------ #
-    if args.docker:
-        print("\n" + "=" * 70)
-        print(" " * 15 + "CIRQEN DESKTOP BUILD SYSTEM")
-        print(" " * 15 + "Docker / GLIBC-Compat Mode")
-        print("=" * 70)
-        print("  Strategy : build inside Ubuntu 20.04  →  GLIBC 2.31 baseline")
-        print("  Runs on  : Ubuntu 20/22/24/26.04, Debian 11/12, Fedora 34+, …")
-        print("=" * 70 + "\n")
-
-        success = build_in_docker()
-        return 0 if success else 1
+    parser.parse_args()
 
     # ------------------------------------------------------------------ #
     # Native path (original behaviour)                                   #
@@ -5416,6 +4278,7 @@ Examples:
         ("Install Dependencies", install_dependencies),
         ("Verify Installation", verify_requirements),
         ("Collect Static Files", collect_static),
+        ("Stamp version.txt", stamp_version_txt),
         ("Generate Spec File", generate_spec),
         ("Build Executable + Copy Runtime", build_executable),
         ("Copy Utility Scripts", copy_utilities_to_dist),

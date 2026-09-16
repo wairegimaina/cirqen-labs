@@ -330,12 +330,12 @@ def provide_recommendations():
 Based on the diagnostics above, here are the likely issues:
 
 1. IF PostgreSQL binaries are missing:
-   → Re-run the build script: python bulid_backup.py
+   → Re-run the build script: python build.py
    → Ensure runtime/postgresql/ is properly copied to dist/
 
 2. IF share/ directory is missing:
    → This is CRITICAL - PostgreSQL cannot initialize without it
-   → Check build_backup.py copy_system_postgresql() function
+   → Check build.py copy_system_postgresql() function
    → Ensure /usr/share/postgresql files are copied
 
 3. IF ports are in use:

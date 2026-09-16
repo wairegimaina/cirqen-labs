@@ -21,7 +21,7 @@ log) and by `validate_config()`.
 
 ### How installers get their secrets
 
-`bulid_V1.py` reads the secrets from the build machine's environment or its
+`build.py` reads the secrets from the build machine's environment or its
 git-ignored `.env`, **refuses to build** if any is missing or if DEBUG resolves
 true, writes `provisioning.json` (git-ignored, mode 600) and copies it into
 `dist/Cirqen/`. Treat a built installer as containing credentials.

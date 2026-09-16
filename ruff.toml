@@ -8,8 +8,6 @@ target-version = "py312"
 extend-exclude = [
     "venv", "dist", "build", "runtime", "Archives", "node_modules",
     "*/migrations/*",
-    # Duplicate build scripts, to be collapsed into build_backup.py (plan section 7).
-    "bulid_V1.py", "builder/bulid_backup.py",
 ]
 
 [lint]
