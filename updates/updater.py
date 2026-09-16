@@ -579,7 +579,16 @@ class Updater:
         self._emit("preflight", {"message": "Preflight checks passed."})
 
     def _backup_database(self):
-        """#3 — snapshot SQLite DB files so a bad migration can be rolled back."""
+        """#3 — snapshot the local database so a bad migration can be rolled back.
+
+        SQLite files are copied; the local PostgreSQL database ("default") is
+        pg_dumped (updates/db_snapshot.py). The shared HQ database is never
+        snapshotted here: it is migrated under the HQ lock, not per machine.
+        A PostgreSQL snapshot that cannot be taken stops the update before
+        anything is applied.
+        """
+        from updates import db_snapshot
+
         self._db_backups = []
         for alias, cfg in (getattr(settings, "DATABASES", {}) or {}).items():
             engine = cfg.get("ENGINE", "")
@@ -589,6 +598,10 @@ class Updater:
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(name, dest)
                 self._db_backups.append((alias, str(name), str(dest)))
+            elif alias == "default" and "postgresql" in engine:
+                self._emit("backing_up", {"message": "Snapshotting local database…"})
+                dest = db_snapshot.dump(cfg, self.backup_dir / "__db__" / f"{alias}.pgdump")
+                self._db_backups.append((alias, name, str(dest)))
         if self._db_backups:
             self._emit("backing_up", {"message": f"Backed up {len(self._db_backups)} database file(s)."})
 
@@ -889,6 +902,8 @@ def _restore_from_backup(backup_dir: Path):
     # #3 — DB snapshots taken before migrating, keyed by alias.
     db_root = backup_dir / "__db__"
     if db_root.is_dir():
+        from updates import db_snapshot
+
         for alias, cfg in (getattr(settings, "DATABASES", {}) or {}).items():
             snap = db_root / f"{alias}.sqlite3"
             name = cfg.get("NAME", "")
@@ -897,6 +912,13 @@ def _restore_from_backup(backup_dir: Path):
                     shutil.copy2(snap, name)
                 except OSError as exc:
                     logger.error("DB restore failed for %s: %s", alias, exc)
+            pg_snap = db_root / f"{alias}.pgdump"
+            if pg_snap.exists():
+                try:
+                    db_snapshot.restore(cfg, pg_snap)
+                except db_snapshot.SnapshotError as exc:
+                    logger.error("PostgreSQL restore failed for %s (snapshot kept at %s): %s",
+                                 alias, pg_snap, exc)
 
 
 def rollback(version: str, progress_queue: Optional[queue.Queue] = None) -> bool:
