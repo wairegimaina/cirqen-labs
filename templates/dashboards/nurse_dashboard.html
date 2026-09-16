@@ -103,7 +103,7 @@
 {% endblock %}
 
 {% block extra_js %}
-  <script src="{% static 'js/chart.min.js' %}"></script>
+  <script src="{% static 'js/chart.umd.min.js' %}"></script>
   <script src="{% static 'dashboards/cmms-dashboard.js' %}"></script>
   {{ equipment_status|json_script:"equipment-status-data" }}
   {{ jobcard_status|json_script:"jobcard-status-data" }}

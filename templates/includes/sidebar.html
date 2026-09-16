@@ -1,10 +1,5 @@
 {% load static %}
 
-{% block extra_css %}
-<link rel="stylesheet" href="{% static 'css/select2.min.css' %}" />
-<link rel="stylesheet" href="{% static 'css/flatpickr.min.css' %}" />
-{% endblock %}
-
 <aside class="equiper-sidebar{% if request.user.userprofile.sidebar_collapsed %} sidebar-collapsed{% endif %}"
   id="equiperSidebar" aria-label="Main navigation"
   data-sidebar-collapsed="{% if request.user.userprofile.sidebar_collapsed %}true{% else %}false{% endif %}">

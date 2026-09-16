@@ -261,7 +261,7 @@
 {% endblock %}
 
 {% block extra_js %}
-  <script src="{% static 'js/chart.min.js' %}"></script>
+  <script src="{% static 'js/chart.umd.min.js' %}"></script>
   <script src="{% static 'dashboards/cmms-dashboard.js' %}"></script>
   {{ jobcard_status|json_script:"jobcard-status-data" }}
   {{ ppm_monthly_labels|json_script:"ppm-monthly-labels-data" }}
