@@ -2,6 +2,7 @@
 import logging
 
 from django.shortcuts import render, redirect, get_object_or_404
+from users.control import role_required
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse
@@ -17,15 +18,12 @@ logger = logging.getLogger(__name__)
 
 
 @login_required
+@role_required('HOD', redirect_to='partstools:accessories_dashboard', message='Only HOD can directly edit accessories.')
 def edit_accessory(request, pk):
     """Edit an existing accessory — HOD only."""
     profile = request.user.userprofile
     accessory = get_object_or_404(Accessories, pk=pk)
 
-    if profile.role != 'HOD':
-        logger.warning(f"Unauthorized edit_accessory attempt by {request.user.username} (role={profile.role})")
-        messages.error(request, 'Only HOD can directly edit accessories.')
-        return redirect('partstools:accessories_dashboard')
 
     if request.method != 'POST':
         return redirect('partstools:accessories_dashboard')
@@ -91,11 +89,10 @@ def edit_accessory(request, pk):
 
 
 @login_required
+@role_required('HOD', json=True, message='Unauthorized')
 def get_accessory(request, pk):
     """Return accessory data as JSON for the edit modal — HOD only."""
     profile = request.user.userprofile
-    if profile.role != 'HOD':
-        return JsonResponse({'error': 'Unauthorized'}, status=403)
 
     try:
         accessory = get_object_or_404(Accessories, pk=pk)
@@ -115,16 +112,13 @@ def get_accessory(request, pk):
 
 
 @login_required
+@role_required('HOD', redirect_to='partstools:accessories_dashboard', message='Only HOD can directly delete accessories.')
 def delete_accessory(request, pk):
     """Soft-delete an accessory — HOD only."""
     profile = request.user.userprofile
     accessory = get_object_or_404(Accessories, pk=pk)
     display = f"{accessory.name.name if accessory.name else 'Unnamed'} for {accessory.equipment_description.name if accessory.equipment_description else 'Unknown Equipment'}"
 
-    if profile.role != 'HOD':
-        logger.warning(f"Unauthorized delete_accessory by {request.user.username} (role={profile.role})")
-        messages.error(request, "Only HOD can directly delete accessories.")
-        return redirect('partstools:accessories_dashboard')
 
     try:
         accessory.pending_delete = True
@@ -206,11 +200,10 @@ def ajax_add_manufacturer(request):
 
 @login_required
 @require_POST
+@role_required('HOD', json=True, message='Only HOD can delete accessory names.')
 def delete_accessory_name(request, name_id):
     """Soft-delete an accessory name — HOD only."""
     profile = request.user.userprofile
-    if profile.role != 'HOD':
-        return JsonResponse({'error': 'Only HOD can delete accessory names.'}, status=403)
 
     try:
         accessory_name = get_object_or_404(Accessoriesname, id=name_id)
@@ -231,11 +224,10 @@ def delete_accessory_name(request, name_id):
 
 @login_required
 @require_POST
+@role_required('HOD', json=True, message='Only HOD can delete manufacturers.')
 def delete_accessory_manufacturer(request, manufacturer_id):
     """Soft-delete an accessory manufacturer — HOD only."""
     profile = request.user.userprofile
-    if profile.role != 'HOD':
-        return JsonResponse({'error': 'Only HOD can delete manufacturers.'}, status=403)
 
     try:
         manufacturer = get_object_or_404(AccessoriesManufacturer, id=manufacturer_id)

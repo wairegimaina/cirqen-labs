@@ -6,6 +6,7 @@ import logging
 import os
 
 from django.conf import settings
+from users.control import role_required
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import Q, Count, Case, When, IntegerField
@@ -419,13 +420,11 @@ def export_inventory_summary_to_pdf(request):
 
 
 @login_required
+@role_required('HOD', redirect_to='inventory', message="Only Heads of Department can perform bulk exports.")
 def bulk_export_departments_pdf(request):
     """Generate separate PDF reports for each department in a workshop"""
     profile = request.user.userprofile
 
-    if profile.role != 'HOD':
-        messages.error(request, "Only Heads of Department can perform bulk exports.")
-        return redirect('inventory')
 
     workshop_id = request.GET.get('workshop')
     if not workshop_id:

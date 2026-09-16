@@ -6,6 +6,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from django.shortcuts import render, redirect
+from users.control import role_required
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import logout
 from django.contrib import messages
@@ -214,10 +215,9 @@ def Dashboard(request):
 
 
 @login_required
+@role_required('NIC', message='Only In-Charges can access this page.')
 def nic_dashboard(request):
     profile = request.user.userprofile
-    if profile.role != "NIC":
-        raise PermissionDenied("Only In-Charges can access this page.")
     department = profile.department
     equipments = Equipment.objects.filter(department=department, active_status=True)
     jobcards = jobcard.objects.filter(equipment__department=department)

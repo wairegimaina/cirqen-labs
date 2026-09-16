@@ -13,6 +13,7 @@ intentionally not wired to any URL (matching the original behaviour).
 import logging
 
 from django.apps import apps
+from users.control import role_required
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
@@ -381,6 +382,7 @@ def _delete_department_simple_UNUSED(request, dept_id):
 
 @login_required
 @require_http_methods(["POST"])
+@role_required('HOD', redirect_to='create_department', message="Only Heads of Department can transfer departments between workshops.")
 def transfer_department(request, dept_id):
     """Transfer a department to another workshop"""
     profile = request.user.userprofile
@@ -388,9 +390,6 @@ def transfer_department(request, dept_id):
     current_workshop = department.workshop
 
     # Permission checks - only HODs can transfer departments
-    if profile.role != 'HOD':
-        messages.error(request, "Only Heads of Department can transfer departments between workshops.")
-        return redirect('create_department')
 
     target_workshop_id = request.POST.get('target_workshop')
 

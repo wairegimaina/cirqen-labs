@@ -3,6 +3,7 @@ from locale import D_T_FMT
 from uuid import UUID
 import zipfile
 from django.utils.timezone import now
+from users.control import role_required
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.http import FileResponse, HttpResponse, JsonResponse
@@ -49,11 +50,9 @@ from .helpers import get_filtered_jobcards, get_last_week_range, get_user_contex
 
 
 @login_required
+@role_required('NIC', 'Tech', redirect_to='jobcard:create_job_card', message='Access denied or profile incomplete.', extra_tags='jobcard')
 def waiting_jobcards(request):
     profile, department, workshop, role = get_user_context(request)
-    if not profile or role not in ['NIC', 'Tech']:
-        messages.error(request, "Access denied or profile incomplete.", extra_tags="jobcard")
-        return redirect('jobcard:create_job_card')
 
     search_query = request.GET.get('search', '').strip()
 
@@ -186,11 +185,9 @@ def approved_jobcards(request):
 
 
 @login_required
+@role_required('NIC', 'Tech', 'HOD', redirect_to='jobcard:create_job_card', message='Access denied or profile incomplete.')
 def declined_jobcards(request):
     profile, department, workshop, role = get_user_context(request)
-    if not profile or role not in ['NIC', 'Tech', 'HOD']:
-        messages.error(request, "Access denied or profile incomplete.")
-        return redirect('jobcard:create_job_card')
 
     search_query = request.GET.get('search', '').strip()
 
@@ -240,11 +237,9 @@ def declined_jobcards(request):
 
 
 @login_required
+@role_required('HOD', redirect_to='jobcard:create_job_card', message='Access denied. Only HODs can view workshop job cards.')
 def hod_workshop_jobcards(request, workshop_id):
     profile, _, _, role = get_user_context(request)
-    if not profile or role != 'HOD':
-        messages.error(request, "Access denied. Only HODs can view workshop job cards.")
-        return redirect('jobcard:create_job_card')
 
     workshop = get_object_or_404(Workshop, id=workshop_id)
     status_filter = request.GET.get('status_filter', 'Waiting Approval')
@@ -338,15 +333,13 @@ def hod_workshop_jobcards(request, workshop_id):
 
 
 @login_required
+@role_required('HOD', redirect_to='jobcard:create_job_card', message='Access denied. Only HODs can view this page.')
 def hod_calibration_work_on_equipment(request, workshop_id):
     """
     Separate view for regular workshop HODs to see calibration center work
     performed on their department's equipment
     """
     profile, _, _, role = get_user_context(request)
-    if not profile or role != 'HOD':
-        messages.error(request, "Access denied. Only HODs can view this page.")
-        return redirect('jobcard:create_job_card')
 
     workshop = get_object_or_404(Workshop, id=workshop_id)
 

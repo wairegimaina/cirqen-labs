@@ -8,6 +8,7 @@ import logging
 from collections import Counter
 
 from django.contrib import messages
+from users.control import role_required
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import Q, Count, Case, When, IntegerField
@@ -324,13 +325,11 @@ def inventory(request):
 
 
 @login_required
+@role_required('HOD', redirect_to='inventory', message="Access denied. Only Heads of Department can view other workshops.")
 def inventory_for_hod(request, workshop_id):
     """HOD-specific view for viewing equipment in a specific workshop"""
     profile = request.user.userprofile
 
-    if profile.role != 'HOD':
-        messages.error(request, "Access denied. Only Heads of Department can view other workshops.")
-        return redirect('inventory')
 
     # Get the target workshop
     target_workshop = get_object_or_404(Workshop, id=workshop_id, active_status=True)

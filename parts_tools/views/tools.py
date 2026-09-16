@@ -2,6 +2,7 @@
 import logging
 
 from django.http import Http404
+from users.control import role_required
 from django.shortcuts import render, redirect, get_object_or_404
 from core.scoping import get_for_user_or_404
 from django.contrib.auth.decorators import login_required
@@ -18,14 +19,11 @@ logger = logging.getLogger(__name__)
 
 
 @login_required
+@role_required('Tech', redirect_to='partstools:accessories_dashboard', message='Only Tech users can add tools.')
 def add_tool(request):
     """Add a new tool — only Tech users."""
     profile = request.user.userprofile
 
-    if profile.role != 'Tech':
-        logger.warning(f"Unauthorized add_tool attempt by {request.user.username} (role={profile.role})")
-        messages.error(request, 'Only Tech users can add tools.')
-        return redirect('partstools:accessories_dashboard')
 
     if request.method != 'POST':
         return redirect('partstools:accessories_dashboard')
@@ -251,11 +249,10 @@ def ajax_add_tool_manufacturer(request):
 
 @login_required
 @require_POST
+@role_required('Tech', json=True, message='Only Tech users can delete tool names.')
 def delete_tool_name(request, name_id):
     """Soft-delete a tool name — Tech users only."""
     profile = request.user.userprofile
-    if profile.role != 'Tech':
-        return JsonResponse({'error': 'Only Tech users can delete tool names.'}, status=403)
 
     try:
         tool_name = get_object_or_404(Toolname, id=name_id)
@@ -276,11 +273,10 @@ def delete_tool_name(request, name_id):
 
 @login_required
 @require_POST
+@role_required('Tech', json=True, message='Only Tech users can delete manufacturers.')
 def delete_tool_manufacturer(request, manufacturer_id):
     """Soft-delete a tool manufacturer — Tech users only."""
     profile = request.user.userprofile
-    if profile.role != 'Tech':
-        return JsonResponse({'error': 'Only Tech users can delete manufacturers.'}, status=403)
 
     try:
         manufacturer = get_object_or_404(ToolsManufacturer, id=manufacturer_id)
