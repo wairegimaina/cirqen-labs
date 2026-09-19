@@ -116,6 +116,9 @@ UPDATE_SYSTEM = {
     "enabled": True,
     "server_url": config.get("update.server_url"),
     "api_key": config.get("update.api_key"),
+    # Ed25519 trust anchor for update packages AND the fleet endpoint document
+    # (endpoint_sync.py). Empty = unsigned mode; see config.py.
+    "public_key": config.get("update.public_key", ""),
     "check_interval_hours": config.get("update.check_interval_hours", 24),
     "auto_apply_updates": config.get("update.auto_apply", True),
     "components": {

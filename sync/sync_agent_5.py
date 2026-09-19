@@ -59,15 +59,14 @@ class ParentRecoveryMixin(SmartDeleteMixin):
 
         try:
             # Query HQ database directly for the missing parent
-            hq_config = {
-                "host": os.getenv(
-                    "POSTGRES_HQ_HOST", "dpg-d7rk2sa8qa3s73diimb0-a.ohio-postgres.render.com"
-                ),
-                "port": int(os.getenv("POSTGRES_HQ_PORT", "5432")),
-                "dbname": os.getenv("POSTGRES_HQ_DB", "b12technologies"),
-                "user": os.getenv("POSTGRES_HQ_USER", "b12technologies"),
-                "password": os.getenv("POSTGRES_HQ_PASSWORD", ""),
-            }
+            # Same settings the rest of the agent uses (config.json / env). No
+            # fallback host: a stale default once pointed this at a decommissioned
+            # database and failed quietly.
+            hq_config = dict((getattr(self, "config", None) or {}).get("hq_db") or {})
+            hq_config.pop("enabled", None)
+            if not hq_config.get("host"):
+                LOG.error("HQ database host is not configured (hq_db.host); cannot fetch parent")
+                return False
 
             # Connect to HQ database
             import psycopg2

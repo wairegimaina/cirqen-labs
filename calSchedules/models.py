@@ -347,13 +347,15 @@ class CalibrationSchedule(models.Model):
 
     @property
     def due_date(self):
-        """Returns the last day of the scheduled month as the official due date."""
-        from calendar import monthrange
+        """The last day of the scheduled month — the official due date.
 
-        if not self.scheduled_month:
-            return None
-        last_day = monthrange(self.scheduled_month.year, self.scheduled_month.month)[1]
-        return self.scheduled_month.replace(day=last_day)
+        A calibration is due within a month, so the whole month is available to
+        schedule the visit. Shared with every other due-date calculation via
+        ``calSchedules.grouping.month_end``.
+        """
+        from calSchedules.grouping import month_end
+
+        return month_end(self.scheduled_month)
 
     @property
     def is_overdue(self):

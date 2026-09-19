@@ -90,7 +90,7 @@ class Updater:
 
         # Remote download from Render HQ:
         updater = Updater(
-            package_url="https://cirqen-hq.onrender.com/api/updates/download/1.0.1/",
+            package_url="https://updates.example.com/api/updates/download/1.0.1/",
             version="1.0.1",
             progress_queue=progress_q,
             download_headers={"X-Api-Key": "your-key"},

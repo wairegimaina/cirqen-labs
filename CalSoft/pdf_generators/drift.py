@@ -41,6 +41,7 @@ logger = logging.getLogger(__name__)
 # sibling modules in this package
 from .signatures import SignatureImageLoader
 from .watermark import _LogoWatermarkCanvas
+from CalSoft.utils import grade_drift
 
 
 
@@ -109,7 +110,15 @@ class DriftMixin:
                     key = (param_name, sub_name)
                     if key not in grouped:
                         grouped[key] = []
+                    # The tolerance travels with the reading because a drift
+                    # rate can only be graded as a fraction of it.
+                    tolerance = None
+                    if r.sub_parameter and r.sub_parameter.tolerance is not None:
+                        tolerance = r.sub_parameter.tolerance
+                    elif r.parameter and r.parameter.tolerance is not None:
+                        tolerance = r.parameter.tolerance
                     grouped[key].append({
+                        'tolerance':            tolerance,
                         'session_id':           str(sess.id),
                         'session_date':         sess.timestamp,
                         'session_cert':         cert_num,
@@ -161,15 +170,17 @@ class DriftMixin:
         else:
             direction = 'Decreasing \u25bc'
 
-        yearly = abs(drift_rate_per_year)
-        if yearly < 0.1:
-            stability = 'Excellent'
-        elif yearly < 0.5:
-            stability = 'Good'
-        elif yearly < 1.0:
-            stability = 'Fair'
-        else:
-            stability = 'Poor'
+        # Grade as a fraction of this parameter's own tolerance. The previous
+        # thresholds (0.1 / 0.5 / 1.0 per year) were absolute, so the same
+        # grade was applied to mmHg, mV, degrees C and mL/min alike — and that
+        # grade drove the printed interval recommendation below.
+        tolerance = next(
+            (r.get('tolerance') for r in readings if r.get('tolerance') is not None),
+            None,
+        )
+        stability, stability_advice, tolerance_fraction = grade_drift(
+            drift_rate_per_year, tolerance
+        )
 
         mean_y = sum_y / n
         ss_tot = sum((y - mean_y) ** 2 for y in errors)
@@ -209,6 +220,9 @@ class DriftMixin:
             'total_drift':         total_drift,
             'direction':           direction,
             'stability':           stability,
+            'stability_advice':    stability_advice,
+            'tolerance':           tolerance,
+            'tolerance_fraction':  tolerance_fraction,
             'r_squared':           r_squared,
             'uncertainty_trend':   unc_trend,
             'avg_uncertainty':     avg_unc,
@@ -325,28 +339,42 @@ class DriftMixin:
         total_sessions = max(m['n_sessions'] for m in all_metrics)
         earliest       = min(m['first_date'] for m in all_metrics)
         latest         = max(m['last_date']  for m in all_metrics)
-        avg_yearly     = sum(abs(m['drift_rate_per_year']) for m in all_metrics) / len(all_metrics)
         total_fails    = sum(m['fail_count']  for m in all_metrics)
         total_readings = sum(m['n_sessions']  for m in all_metrics)
 
-        stab_scores = {'Excellent': 4, 'Good': 3, 'Fair': 2, 'Poor': 1}
-        avg_score   = sum(stab_scores.get(m['stability'], 2) for m in all_metrics) / len(all_metrics)
-        if avg_score >= 3.5:
-            ovr_label, ovr_bg, ovr_tc = 'Excellent', DC['pass_bg'], DC['pass_text']
-        elif avg_score >= 2.5:
-            ovr_label, ovr_bg, ovr_tc = 'Good',      DC['pass_bg'], DC['pass_text']
-        elif avg_score >= 1.5:
-            ovr_label, ovr_bg, ovr_tc = 'Fair',       DC['warn_bg'], DC['warn_text']
-        else:
-            ovr_label, ovr_bg, ovr_tc = 'Poor',       DC['fail_bg'], DC['fail_text']
+        # Drift is summarised as a fraction of tolerance, which is
+        # dimensionless and therefore comparable across parameters. Averaging
+        # absolute rates in different units — as this did — produces a number
+        # with no meaning.
+        graded = [m for m in all_metrics if m.get('tolerance_fraction') is not None]
+        worst = max(graded, key=lambda m: m['tolerance_fraction']) if graded else None
 
-        recommendation = (
-            "Calibration interval is appropriate. Continue standard schedule."
-            if avg_yearly < 0.5 else
-            "Consider shortening calibration interval — drift rate is elevated."
-            if avg_yearly < 1.0 else
-            "Shorten calibration interval urgently — high drift rate detected."
-        )
+        if worst is not None:
+            worst_pct = float(worst['tolerance_fraction']) * 100
+            summary_value = f"{worst_pct:.0f}% of tol"
+        else:
+            summary_value = "\u2014"
+
+        # The overall grade is the worst parameter's, not an average: one
+        # parameter drifting toward its limit is the thing worth surfacing, and
+        # averaging hides it.
+        GRADE_STYLE = {
+            'Very stable': (DC['pass_bg'], DC['pass_text']),
+            'Normal':      (DC['pass_bg'], DC['pass_text']),
+            'Drifting':    (DC['warn_bg'], DC['warn_text']),
+            'Urgent':      (DC['fail_bg'], DC['fail_text']),
+            'Ungraded':    (DC['label_bg'], DC['warn_text']),
+        }
+        ovr_label = worst['stability'] if worst is not None else 'Ungraded'
+        ovr_bg, ovr_tc = GRADE_STYLE.get(ovr_label, (DC['label_bg'], DC['warn_text']))
+
+        if worst is not None:
+            recommendation = worst['stability_advice']
+        else:
+            recommendation = (
+                "No tolerance on record for these parameters, so the drift rate "
+                "cannot be graded and no interval change is recommended."
+            )
 
         lbl_s  = ParagraphStyle('_sl', fontSize=7, fontName='Helvetica-Bold',
                                 textColor=HexColor('#64748b'), alignment=TA_CENTER)
@@ -361,14 +389,14 @@ class DriftMixin:
         strip_w = 6.9 * inch / 6
         strip_top = [
             Paragraph('SESSIONS', lbl_s), Paragraph('PARAMETERS', lbl_s),
-            Paragraph('FAIL HISTORY', lbl_s), Paragraph('AVG DRIFT/YEAR', lbl_s),
+            Paragraph('FAIL HISTORY', lbl_s), Paragraph('WORST DRIFT', lbl_s),
             Paragraph('OVERALL STABILITY', lbl_s), Paragraph('DATE RANGE', lbl_s),
         ]
         strip_bot = [
             Paragraph(str(total_sessions), val_s),
             Paragraph(str(len(all_metrics)), val_s),
             Paragraph(f"{total_fails} / {total_readings}", fval_s),
-            Paragraph(f"{avg_yearly:.5f}", val_s),
+            Paragraph(summary_value, val_s),
             Paragraph(ovr_label, oval_s),
             Paragraph(f"{earliest.strftime('%d %b %y')} \u2192 {latest.strftime('%d %b %y')}", val_s),
         ]
@@ -390,12 +418,7 @@ class DriftMixin:
         elements.append(Spacer(1, 3))
 
         # Recommendation bar
-        rec_bg = (DC['fail_bg'] if avg_yearly >= 1.0
-                  else DC['warn_bg'] if avg_yearly >= 0.5
-                  else DC['pass_bg'])
-        rec_tc = (DC['fail_text'] if avg_yearly >= 1.0
-                  else DC['warn_text'] if avg_yearly >= 0.5
-                  else DC['pass_text'])
+        rec_bg, rec_tc = ovr_bg, ovr_tc
         rec_s  = ParagraphStyle('_rec', fontSize=8, fontName='Helvetica-Bold',
                                 textColor=rec_tc, alignment=TA_LEFT)
         rec_tbl = Table(
@@ -456,10 +479,11 @@ class DriftMixin:
             'Stable':             (DC['pass_text'], HexColor('#f0fdf4')),
         }
         stab_colors = {
-            'Excellent': (DC['pass_text'], DC['pass_bg']),
-            'Good':      (DC['pass_text'], DC['pass_bg']),
-            'Fair':      (DC['warn_text'], DC['warn_bg']),
-            'Poor':      (DC['fail_text'], DC['fail_bg']),
+            'Very stable': (DC['pass_text'], DC['pass_bg']),
+            'Normal':      (DC['pass_text'], DC['pass_bg']),
+            'Drifting':    (DC['warn_text'], DC['warn_bg']),
+            'Urgent':      (DC['fail_text'], DC['fail_bg']),
+            'Ungraded':    (DC['warn_text'], DC['label_bg']),
         }
 
         for i, m in enumerate(all_metrics, start=1):
@@ -495,7 +519,11 @@ class DriftMixin:
                 badge(lst_lbl,        lst_tc, lst_bg),
                 badge(fh_lbl,         fh_tc,  fh_bg),
                 cell(f"{m['last_error']:+.5f}\n\u00b1{m['last_uncertainty']:.5f}"),
-                cell(f"{m['drift_rate_per_year']:+.5f}"),
+                cell(
+                    f"{m['drift_rate_per_year']:+.5f}"
+                    + (f"\n({float(m['tolerance_fraction']) * 100:.0f}% of tol)"
+                       if m.get('tolerance_fraction') is not None else "")
+                ),
                 badge(m['direction'],  d_tc,   d_bg),
                 badge(m['stability'],  s_tc,   s_bg),
                 cell(f"{m['r_squared']:.3f}"),
@@ -524,7 +552,10 @@ class DriftMixin:
         elements.append(Paragraph(
             "Last Status = most recent reading pass/fail per parameter  |  "
             "Fail History = failed readings across all sessions  |  "
-            "Drift/Year = linear regression rate  |  "
+            "Drift/Year = linear regression rate, with its size as a percentage "
+            "of that parameter's tolerance  |  "
+            "Stability = graded on that percentage, so parameters in different "
+            "units are comparable  |  "
             "R\u00b2 = regression fit confidence (1.000 = perfect)",
             ParagraphStyle('_leg', fontSize=6.5, fontName='Helvetica',
                            textColor=HexColor('#94a3b8'), leading=9)

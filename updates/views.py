@@ -7,7 +7,7 @@ Configure in settings.py:
 
     UPDATE_SYSTEM = {
         'enabled': True,
-        'server_url': 'https://cirqen-hq.onrender.com',  # your Render URL
+        'server_url': 'https://updates.example.com',  # your update server
         'api_key': os.environ.get('HQ_API_KEY', ''),      # from Render env vars
         'check_interval_hours': 24,
         'auto_apply_updates': False,

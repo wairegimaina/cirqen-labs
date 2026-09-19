@@ -324,7 +324,12 @@ class ServiceManager(QObject):
                 # Expose globally so the UI "Check Now" button can poke it
                 _rt.update_manager_instance = self._update_manager
 
-                logger.info("✅ Update manager started — polling https://cirqen-hq.onrender.com")
+                try:
+                    from config import resolve_endpoints
+                    _hq = resolve_endpoints(DATA_PATH)["update.server_url"]
+                    logger.info("✅ Update manager started — polling %s (from %s)", _hq[0], _hq[1])
+                except Exception:
+                    logger.info("✅ Update manager started")
             except Exception as _um_exc:
                 logger.warning("⚠️  Update manager failed to start: %s", _um_exc)
                 logger.warning("   App will continue without automatic update checks")

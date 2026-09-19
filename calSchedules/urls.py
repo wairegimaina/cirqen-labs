@@ -36,5 +36,9 @@ urlpatterns = [
     path('calibration/auto-advance/', views.trigger_auto_advance_calibrations, name='trigger_auto_advance_calibrations'),
     path('calibration/normalize/', views.trigger_normalize_schedules, name='trigger_normalize_schedules'),
     path('pending/', views.pending_calibrations, name='pending_calibrations'),
+
+    # Group view: the estate as the scheduler sees it, plus targeted regrouping.
+    path('groups/', views.schedule_groups, name='schedule_groups'),
+    path('groups/regroup/', views.regroup_schedules, name='regroup_schedules'),
     path('trigger-smart-reorganize/', views.trigger_smart_reorganize, name='trigger_smart_reorganize'),
 ]

@@ -60,6 +60,8 @@ class AgentInitMixin(SmartDeleteMixin):
             config = load_agent_config(data_path)
 
         self.config = config
+        # Where config.json and endpoints.json live; the endpoint poll needs it.
+        self.data_path = Path(data_path) if data_path else Path.home() / ".cmms"
         self.api_url = self.config["api_url"].rstrip("/")
 
         # ============================================================

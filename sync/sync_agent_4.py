@@ -31,6 +31,18 @@ class NetworkLoopsMixin(SmartDeleteMixin):
             """
             import requests as _rq
             backoff = 1.0
+            online = self._check_hq_online_once(retries, _rq, backoff)
+            # A move adopted from the update server is on probation: sustained
+            # failure of the new address reverts it without anyone on site.
+            try:
+                import endpoint_sync
+
+                endpoint_sync.note_health(self.data_path, online)
+            except Exception:  # noqa: BLE001 - never let this break the check
+                pass
+            return online
+
+    def _check_hq_online_once(self, retries, _rq, backoff):
             for attempt in range(retries + 1):
                 try:
                     response = requests.get(f"{self.api_url}/health", timeout=5 + attempt * 5)
@@ -97,6 +109,42 @@ class NetworkLoopsMixin(SmartDeleteMixin):
                 LOG.warning("Unreadable download cursor %r — keeping checkpoint %s", next_since, last_ts)
                 return last_ts
 
+    def note_hq_rejected_key(self, status: int, where: str):
+            """Say plainly that HQ refused this client's key, and why it matters.
+
+            Without this a rejected key looks like any other failed request, and
+            the most likely cause — HQ was moved to a host that does not carry
+            the client keys — is invisible. Rate-limited to once every 10
+            minutes so a 5-second loop cannot flood the log.
+            """
+            now = time.time()
+            last = getattr(self, "_last_key_rejection_log", 0)
+            if now - last < 600:
+                return
+            self._last_key_rejection_log = now
+
+            adopted = ""
+            try:
+                import endpoint_sync
+
+                state = endpoint_sync.describe(self.data_path)
+                if state.get("adopted"):
+                    adopted = (
+                        f" This machine recently followed an HQ move to "
+                        f"{state['adopted'].get('sync.api_url')} (adopted {state.get('adopted_at')})."
+                    )
+            except Exception:  # noqa: BLE001
+                pass
+
+            LOG.error(
+                "🔑 HQ rejected this client's sync key (HTTP %s on %s at %s).%s "
+                "Sync will not work until the key is accepted. If HQ was moved to a new "
+                "host, its sync_api_keys table must move with it, or this client must be "
+                "re-issued a key (POST /api/admin/generate_api_key with replace=true). "
+                "Local work is unaffected and will upload once the key is valid.",
+                status, where, self.api_url, adopted,
+            )
+
     def download_updates(self):
             """
             ENHANCED: Download updates from HQ with cross-workshop transfer support
@@ -115,6 +163,10 @@ class NetworkLoopsMixin(SmartDeleteMixin):
                 # forever. HQ's gunicorn timeout is 120s.
                 r = requests.get(url, params=params, headers=headers, timeout=(10, 90))
 
+                if r.status_code in (401, 403):
+                    self.note_hq_rejected_key(r.status_code, "download")
+                    return
+
                 if r.status_code != 200:
                     LOG.warning(f"❌ Download returned status {r.status_code}: {r.text}")
                     return
@@ -129,7 +181,12 @@ class NetworkLoopsMixin(SmartDeleteMixin):
                         if checkpoint != last_ts:
                             self.set_last_download_time(checkpoint)
                     LOG.debug(f"📭 No new updates available from HQ")
+                    # Lets download_loop stretch its interval while nothing is
+                    # happening; any real update below snaps it back.
                     return
+
+                # Something arrived: keep the download loop at its fast interval.
+                self._download_saw_changes = True
 
                 # === Enhanced logging with transfer detection ===
                 status_updates = [u for u in updates if u.get("operation") in ["activate", "deactivate"]]

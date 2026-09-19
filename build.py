@@ -3590,21 +3590,22 @@ def copy_utilities_to_dist():
             elif util_file == 'sync_agent.env.example':
                 # Auto-generate the env template pointing to Render HQ
                 logger.info(f"Auto-generating {util_file}...")
+                from config import HQ_ENDPOINT_DEFAULTS as _hq  # the one place addresses live
                 env_template = (
                     "# ============================================================\n"
                     "# CIRQEN SYNC AGENT — Site Configuration\n"
                     "# Rename this file to .env and fill in your values\n"
                     "# ============================================================\n\n"
-                    "# HQ Server (Render)\n"
-                    "SYNC_API_URL=https://hq-server-dgs6.onrender.com/api/sync\n"
-                    "HQ_UPDATE_URL=https://hq-server-dgs6.onrender.com/api/updates\n\n"
+                    "# HQ servers. Sync and updates are two different services.\n"
+                    f"SYNC_API_URL={_hq['sync.api_url']}\n"
+                    f"HQ_SERVER_URL={_hq['update.server_url']}\n\n"
                     "# Auth token - get this from your HQ administrator\n"
                     "SYNC_AUTH_TOKEN=your_auth_token_here\n\n"
-                    "# HQ PostgreSQL (Render)\n"
-                    "POSTGRES_HQ_HOST=dpg-d7rk2sa8qa3s73diimb0-a.ohio-postgres.render.com\n"
-                    "POSTGRES_HQ_PORT=5432\n"
-                    "POSTGRES_HQ_DB=cirqen_hq\n"
-                    "POSTGRES_HQ_USER=cirqen_hq\n"
+                    "# HQ PostgreSQL\n"
+                    f"POSTGRES_HQ_HOST={_hq['hq_db.host']}\n"
+                    f"POSTGRES_HQ_PORT={_hq['hq_db.port']}\n"
+                    f"POSTGRES_HQ_DB={_hq['hq_db.database']}\n"
+                    f"POSTGRES_HQ_USER={_hq['hq_db.user']}\n"
                     "POSTGRES_HQ_PASSWORD=your_hq_db_password_here\n\n"
                     "# Local PostgreSQL (this site's database)\n"
                     "POSTGRES_LOCAL_HOST=127.0.0.1\n"
@@ -3795,12 +3796,14 @@ Created: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
         (code_dir / "README.txt").write_text(readme)
 
         # 6. Create config
+        from config import HQ_ENDPOINT_DEFAULTS as _hq
+        _update_base = _hq["update.server_url"]
         config = {
             "created": datetime.now().isoformat(),
             "django_apps": django_apps,
             "total_items": copied_count,
             "update_enabled": True,
-            "update_server_url": "https://hq-server-dgs6.onrender.com/api/updates"
+            "update_server_url": _update_base + "/api/updates"
         }
         (code_dir / ".update_config.json").write_text(json.dumps(config, indent=2))
 
@@ -4164,12 +4167,14 @@ Created: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
         (code_dir / "README.txt").write_text(readme)
 
         # 6. Create config
+        from config import HQ_ENDPOINT_DEFAULTS as _hq
+        _update_base = _hq["update.server_url"]
         config = {
             "created": datetime.now().isoformat(),
             "django_apps": django_apps,
             "total_items": copied_count,
             "update_enabled": True,
-            "update_server_url": "https://hq-server-dgs6.onrender.com/api/updates",
+            "update_server_url": _update_base + "/api/updates",
         }
         (code_dir / ".update_config.json").write_text(json.dumps(config, indent=2))
 

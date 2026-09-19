@@ -1944,8 +1944,8 @@ def main():
 
     parser.add_argument(
         "--hq-host",
-        default=os.getenv("POSTGRES_HQ_HOST", "127.0.0.1"),
-        help="HQ database host"
+        default=os.getenv("POSTGRES_HQ_HOST", ""),
+        help="HQ database host (or POSTGRES_HQ_HOST)"
     )
 
     parser.add_argument(
@@ -1957,14 +1957,14 @@ def main():
 
     parser.add_argument(
         "--hq-db",
-        default=os.getenv("POSTGRES_HQ_DB", "b12technologies"),
-        help="HQ database name"
+        default=os.getenv("POSTGRES_HQ_DB", ""),
+        help="HQ database name (or POSTGRES_HQ_DB)"
     )
 
     parser.add_argument(
         "--hq-user",
-        default=os.getenv("POSTGRES_HQ_USER", "b12technologies"),
-        help="HQ database user"
+        default=os.getenv("POSTGRES_HQ_USER", ""),
+        help="HQ database user (or POSTGRES_HQ_USER)"
     )
 
     parser.add_argument(
@@ -2012,8 +2012,8 @@ def main():
 
     parser.add_argument(
         "--api-url",
-        default=os.getenv("SYNC_API_URL", "https://hq-server-dgs6.onrender.com/api/sync"),
-        help="HQ API URL"
+        default=os.getenv("SYNC_API_URL", ""),
+        help="HQ API URL (or SYNC_API_URL)"
     )
 
     parser.add_argument(
@@ -2037,6 +2037,15 @@ def main():
     )
 
     args = parser.parse_args()
+
+    missing = [flag for flag, value in (
+        ("--hq-host / POSTGRES_HQ_HOST", args.hq_host),
+        ("--hq-db / POSTGRES_HQ_DB", args.hq_db),
+        ("--hq-user / POSTGRES_HQ_USER", args.hq_user),
+        ("--api-url / SYNC_API_URL", args.api_url),
+    ) if not value]
+    if missing:
+        parser.error("no built-in HQ address; set: " + ", ".join(missing))
 
     # Parse tables
     tables = [t.strip() for t in args.tables.split(",") if t.strip()]

@@ -38,6 +38,37 @@ Useful switches:
 | `SENTRY_DSN` | Send errors from Django and the sync agent to Sentry |
 | `CIRQEN_QUERY_BUDGET` | Log requests that run more queries than this (default 100 in debug) |
 
+## Where HQ is hosted
+
+The HQ addresses and the HQ database host are written in **one place**:
+`HQ_ENDPOINT_DEFAULTS` at the top of `config.py`. Nothing else in the code names
+a host, and `core/tests/test_hq_endpoints.py` fails if one appears elsewhere.
+Sync and updates are two different services, so they are two settings.
+
+| Setting | Environment variable | Meaning |
+|---|---|---|
+| `sync.api_url` | `SYNC_API_URL` | Sync and certificate API (ends in `/api/sync`) |
+| `update.server_url` | `HQ_SERVER_URL` | Update server (a bare address, no `/api/...`) |
+| `hq_db.host` `.port` `.database` `.user` `.sslmode` | `POSTGRES_HQ_HOST` `_PORT` `_DB` `_USER`, `POSTGRES_SSLMODE` | HQ database |
+
+Each is resolved in this order: environment variable, then `config.json`, then
+`provisioning.json`, then the default. This works in the packaged app as well as
+in development. A shipped default is **not** written to `config.json`, so:
+
+- **Move every machine to a new HQ:** change `HQ_ENDPOINT_DEFAULTS` and ship a
+  build. Machines follow on their next start. A `config.json` written by an
+  older build is migrated once (a copy is kept as `config.json.pre-endpoints`).
+- **Point one machine, or a group, elsewhere:** set the environment variable, or
+  put the address in that machine's `provisioning.json`, or edit `config.json`.
+  A value set on purpose stays until it is removed.
+- **See what a machine is using and why:** `python -c "from config import
+  resolve_endpoints as r; print(r('<data dir>'))"` prints each value and the
+  layer it came from (`env`, `config.json`, `provisioning`, `default`).
+
+`validate_config()` rejects a bad address by name (plain `http` outside
+localhost, a sync address without `/api/sync`, an update address with an API
+path, a database host with a scheme).
+
 ## Development
 
 ```bash

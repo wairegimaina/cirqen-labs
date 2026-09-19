@@ -1,0 +1,228 @@
+{% extends 'base.html' %}
+
+{% block title %}HQ Connection — Equiper{% endblock %}
+
+{% block page_title %}HQ Connection{% endblock %}
+
+{% block extra_css %}
+<style>
+/* HQ connection: built on the shared page-head / section-card components */
+.hqc-grid { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+.hqc-field { display: grid; gap: .35rem; }
+.hqc-field label { font-weight: 600; font-size: .9rem; }
+.hqc-field input, .hqc-field select {
+  padding: .55rem .7rem; border: 1px solid var(--input-border, var(--border-color));
+  border-radius: var(--radius-sm); background: var(--input-bg, var(--bg-card));
+  color: var(--text-primary, inherit);
+  font-family: inherit; font-size: .95rem; width: 100%;
+}
+.hqc-field input:focus, .hqc-field select:focus {
+  outline: none;
+  border-color: var(--input-focus-border, var(--border-strong));
+  box-shadow: var(--input-focus-shadow, 0 0 0 3px rgba(11, 107, 203, .25));
+}
+.hqc-field input[readonly] { opacity: .65; cursor: not-allowed; }
+.hqc-help { font-size: .82rem; color: var(--text-muted); }
+.hqc-source {
+  display: inline-flex; align-items: center; gap: .35rem;
+  font-size: .78rem; padding: .15rem .5rem; border-radius: 999px;
+  border: 1px solid var(--border-color); white-space: nowrap;
+}
+.hqc-source.is-default { opacity: .7; }
+.hqc-source.is-pinned { border-color: var(--warning-color, #b26a00); color: var(--warning-color, #b26a00); }
+.hqc-source.is-env { border-color: var(--info-color, #0b6bcb); color: var(--info-color, #0b6bcb); }
+.hqc-actions { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
+.hqc-result { display: grid; gap: .45rem; margin-top: .75rem; }
+.hqc-result-row { display: flex; gap: .5rem; align-items: baseline; font-size: .9rem; }
+.hqc-dot { width: .6rem; height: .6rem; border-radius: 50%; background: #999; flex: 0 0 auto; }
+.hqc-dot.ok { background: var(--success-color, #1a7f37); }
+.hqc-dot.bad { background: var(--danger-color, #c1121f); }
+.hqc-note { font-size: .86rem; color: var(--text-muted); margin-top: .4rem; }
+@media (min-width: 720px) { .hqc-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="hqc-page">
+
+  <div class="page-head">
+    <h1 class="page-heading">HQ connection</h1>
+    <p class="hqc-help">
+      Where this desktop looks for HQ. Sync and updates are two different
+      servers. Leave a box empty to follow the address shipped with the
+      application — that way a future release can move this machine for you.
+    </p>
+  </div>
+
+  {% if config_errors %}
+    <div class="alert alert-error" role="alert">
+      <strong>These settings are not usable as they stand:</strong>
+      <ul>{% for error in config_errors %}<li>{{ error }}</li>{% endfor %}</ul>
+    </div>
+  {% endif %}
+
+  <form method="post" action="{% url 'core:hq_connection_save' %}">
+    {% csrf_token %}
+
+    {% for group_name, fields in groups %}
+    <div class="section-card">
+      <div class="section-card-head">
+        <h2 class="section-card-title">{{ group_name }}</h2>
+      </div>
+      <div class="section-card-body">
+        <div class="hqc-grid">
+          {% for field in fields %}
+          <div class="hqc-field">
+            <label for="id_{{ field.key }}">
+              {{ field.label }}
+              {% if field.source == 'env' %}
+                <span class="hqc-source is-env" title="{{ field.source_label }}">{{ field.env_var }}</span>
+              {% elif field.is_default %}
+                <span class="hqc-source is-default" title="{{ field.source_label }}">shipped default</span>
+              {% else %}
+                <span class="hqc-source is-pinned" title="{{ field.source_label }}">{{ field.source }}</span>
+              {% endif %}
+            </label>
+
+            {% if field.choices %}
+              <select id="id_{{ field.key }}" name="{{ field.key }}" {% if field.locked %}disabled{% endif %}>
+                {% for choice in field.choices %}
+                  <option value="{{ choice }}" {% if choice == field.value %}selected{% endif %}>{{ choice }}</option>
+                {% endfor %}
+              </select>
+            {% else %}
+              <input type="text" id="id_{{ field.key }}" name="{{ field.key }}"
+                     value="{% if not field.is_default %}{{ field.value }}{% endif %}"
+                     placeholder="{{ field.default }}"
+                     autocomplete="off" spellcheck="false"
+                     {% if field.locked %}readonly{% endif %}>
+            {% endif %}
+
+            {% if field.help %}<span class="hqc-help">{{ field.help }}</span>{% endif %}
+            {% if field.locked %}
+              <span class="hqc-help">
+                Set by the environment variable <code>{{ field.env_var }}</code>, which wins over
+                anything saved here. Change it where that variable is set.
+              </span>
+            {% elif field.is_default %}
+              <span class="hqc-help">Currently <code>{{ field.value }}</code> (shipped default).</span>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+
+    <div class="section-card">
+      <div class="section-card-body">
+        <div class="hqc-actions">
+          <button type="submit" class="btn btn-primary">Save</button>
+          <button type="button" class="btn" id="hqc-test">Test connection</button>
+        </div>
+        <p class="hqc-note">
+          Saving writes to <code>{{ data_path }}</code>. <strong>Restart the application</strong>
+          for the sync agent and the update checker to use a new address.
+        </p>
+        <div class="hqc-result" id="hqc-result" role="status" aria-live="polite" hidden></div>
+      </div>
+    </div>
+  </form>
+
+  {% if remote.adopted %}
+  <div class="section-card">
+    <div class="section-card-head">
+      <h2 class="section-card-title">Sent by the update server</h2>
+    </div>
+    <div class="section-card-body">
+      <p class="hqc-help">
+        The update server told this machine that HQ moved, and the new address
+        was verified and tested before being used. Anything you set above still
+        wins over this.
+      </p>
+      <ul>
+        {% for key, value in remote.adopted.items %}
+          <li><code>{{ key }}</code> → <code>{{ value }}</code></li>
+        {% endfor %}
+      </ul>
+      <p class="hqc-note">Adopted {{ remote.adopted_at }}.</p>
+      {% if remote.failures_since_adopt %}
+        <p class="hqc-note">
+          {{ remote.failures_since_adopt }} consecutive health check failure(s) since.
+          Sustained failure restores the previous address automatically.
+        </p>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if any_overridden %}
+  <div class="section-card">
+    <div class="section-card-head">
+      <h2 class="section-card-title">Follow the shipped default again</h2>
+    </div>
+    <div class="section-card-body">
+      <p class="hqc-help">
+        This machine has at least one address pinned locally, so a release that
+        moves HQ will not move this machine. Clearing the pins restores that.
+      </p>
+      <form method="post" action="{% url 'core:hq_connection_reset' %}"
+            onsubmit="return confirm('Clear every locally pinned HQ address on this machine?');">
+        {% csrf_token %}
+        <button type="submit" class="btn">Clear local overrides</button>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+
+<script>
+(function () {
+  var button = document.getElementById('hqc-test');
+  var output = document.getElementById('hqc-result');
+  if (!button || !output) { return; }
+
+  var LABELS = { sync: 'Sync API', update: 'Update server', database: 'HQ database' };
+
+  button.addEventListener('click', function () {
+    button.disabled = true;
+    var original = button.textContent;
+    button.textContent = 'Testing…';
+    output.hidden = false;
+    output.textContent = 'Contacting the configured servers…';
+
+    var token = document.querySelector('input[name=csrfmiddlewaretoken]');
+    fetch('{% url "core:hq_connection_test" %}', {
+      method: 'POST',
+      headers: { 'X-CSRFToken': token ? token.value : '' },
+      credentials: 'same-origin'
+    })
+      .then(function (response) { return response.json(); })
+      .then(function (data) {
+        output.textContent = '';
+        Object.keys(LABELS).forEach(function (name) {
+          var result = (data.results || {})[name];
+          if (!result) { return; }
+          var row = document.createElement('div');
+          row.className = 'hqc-result-row';
+          var dot = document.createElement('span');
+          dot.className = 'hqc-dot ' + (result.ok ? 'ok' : 'bad');
+          var text = document.createElement('span');
+          text.textContent = LABELS[name] + ': ' + result.detail;
+          row.appendChild(dot);
+          row.appendChild(text);
+          output.appendChild(row);
+        });
+      })
+      .catch(function (error) {
+        output.textContent = 'Could not run the test: ' + error;
+      })
+      .finally(function () {
+        button.disabled = false;
+        button.textContent = original;
+      });
+  });
+})();
+</script>
+{% endblock %}

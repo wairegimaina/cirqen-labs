@@ -127,6 +127,42 @@ def lock_all_completed_schedules():
     return result
 
 
+# ── Deliberate regrouping ────────────────────────────────────────────────────
+#
+# `instant_grouping_alignment` enforces "equipment never jump between months
+# within a group". That is right for accidental drift — one device scheduled
+# apart from its group gets pulled back — but it makes a deliberate group move
+# impossible: moving the first member snaps it back to where the rest still
+# are, so the move can never get started.
+#
+# A regroup sets this flag for the duration of the operation. The aligner
+# stands down, the whole selection moves together, and the group is internally
+# consistent again by the time the flag clears. It is thread-local so a
+# concurrent request is unaffected.
+
+import threading
+
+_alignment_state = threading.local()
+
+
+def alignment_suppressed():
+    """True while a deliberate regroup is in progress on this thread."""
+    return getattr(_alignment_state, "suppressed", False)
+
+
+class suppress_alignment:
+    """Context manager: pause group alignment for a deliberate move."""
+
+    def __enter__(self):
+        self._previous = alignment_suppressed()
+        _alignment_state.suppressed = True
+        return self
+
+    def __exit__(self, *exc_info):
+        _alignment_state.suppressed = self._previous
+        return False
+
+
 def get_group_scheduled_month(equipment, planning_logic='department'):
     """
     Get the month where this equipment's group is ALREADY scheduled.
@@ -149,6 +185,7 @@ def get_group_scheduled_month(equipment, planning_logic='department'):
         existing_group = CalibrationSchedule.objects.filter(
             equipment__department_id=dept_id,
             equipment__active_status=True,
+            active_status=True,          # canonical: deleted schedules are not members
             status__in=['pending', 'pushed'],
             scheduled_month__gte=today  # Only future or current schedules
         ).values('scheduled_month').annotate(
@@ -173,6 +210,7 @@ def get_group_scheduled_month(equipment, planning_logic='department'):
         existing_group = CalibrationSchedule.objects.filter(
             equipment__description_id=desc_id,
             equipment__active_status=True,
+            active_status=True,          # canonical: deleted schedules are not members
             status__in=['pending', 'pushed'],
             scheduled_month__gte=today  # Only future or current schedules
         ).values('scheduled_month').annotate(
@@ -245,7 +283,10 @@ def find_group_members(equipment, scheduled_month, planning_logic='department'):
     """
     return grouping.group_members_qs(
         equipment, scheduled_month, planning_logic,
-        require_equipment_active=True, require_schedule_active=False,
+        # Canonical rule: both must be active (see grouping.group_members_qs).
+        # This previously ignored the schedule flag, so a soft-deleted
+        # schedule stayed a group member and blocked completion forever.
+        require_equipment_active=True, require_schedule_active=True,
     )
 
 

@@ -5,6 +5,12 @@ from django.shortcuts import render
 from users.control import hod_required
 
 from .models import AuditLog
+from .timeline import (
+    MERGE_WINDOW,
+    SOURCE_CHOICES,
+    build_timeline,
+    counts,
+)
 
 
 @login_required
@@ -12,18 +18,21 @@ from .models import AuditLog
 def audit_log_list(request):
     """Read-only audit trail viewer — HOD only.
 
-    AuditLog rows are written by Inventory transfer/reactivation flows and
-    the sync agents; this is the first UI surface for that data.
+    Shows both trails the system writes. ``AuditLog`` records row-level changes
+    from the Inventory flows and the sync agents; ``CalibrationAuditLog``
+    records what people did in the calibration module — who approved a session,
+    completed a schedule, edited a procedure. The second was being written from
+    five places and displayed nowhere, so this page showed table names and row
+    ids while the readable half of the audit trail sat unread.
     """
-    entries = AuditLog.objects.all()
-
+    source = request.GET.get("source", "").strip()
     table_name = request.GET.get("table_name", "").strip()
-    if table_name:
-        entries = entries.filter(table_name__icontains=table_name)
-
     operation = request.GET.get("operation", "").strip()
-    if operation:
-        entries = entries.filter(operation=operation)
+    search = request.GET.get("q", "").strip()
+
+    entries = build_timeline(
+        source=source, table_name=table_name, operation=operation, search=search
+    )
 
     paginator = Paginator(entries, 50)
     page_obj = paginator.get_page(request.GET.get("page"))
@@ -34,7 +43,12 @@ def audit_log_list(request):
         {
             "page_obj": page_obj,
             "operation_choices": AuditLog.OPERATION_CHOICES,
+            "source_choices": SOURCE_CHOICES,
+            "selected_source": source,
             "selected_table_name": table_name,
             "selected_operation": operation,
+            "search": search,
+            "totals": counts(),
+            "merge_window": MERGE_WINDOW,
         },
     )

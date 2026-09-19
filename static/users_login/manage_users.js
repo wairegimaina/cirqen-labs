@@ -364,11 +364,12 @@ function createUserCard(user) {
                     </span>
                     <span class="detail-value">${escapeHTML(user.employeeId)}</span>
                 </div>
-                <div class="detail-row">
+                <div class="detail-row detail-row--wide">
                     <span class="detail-label">
                         <i class="fas fa-envelope"></i> Email
                     </span>
-                    <span class="detail-value">${escapeHTML(user.email)}</span>
+                    <span class="detail-value detail-value--email"
+                          title="${escapeHTML(user.email)}">${escapeHTML(user.email)}</span>
                 </div>
                 <div class="detail-row">
                     <span class="detail-label">

@@ -280,6 +280,7 @@ def procedure_edit(request, pk):
                         request, f'Procedure "{procedure.name}" updated successfully.')
                     return redirect('calibration:procedure_detail', pk=procedure.pk)
             except Exception as e:
+                logger.exception("%s failed: %s", "procedure_edit", e)
                 messages.error(request, f'Error updating procedure: {str(e)}')
         else:
             messages.error(request, 'Please correct the errors in the form.')

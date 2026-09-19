@@ -1,18 +1,23 @@
 """CalSoft.pdf_generators — signature image loading and signature diagnostics."""
+
 import base64
 import calendar
 import io
 import os
 from datetime import datetime, timedelta
 from decimal import Decimal
+
 try:
     from zoneinfo import ZoneInfo
-    EAT = ZoneInfo('Africa/Nairobi')
+
+    EAT = ZoneInfo("Africa/Nairobi")
 except ImportError:
     import pytz
-    EAT = pytz.timezone('Africa/Nairobi')
+
+    EAT = pytz.timezone("Africa/Nairobi")
 import matplotlib
-matplotlib.use('Agg')
+
+matplotlib.use("Agg")
 import logging
 import matplotlib.pyplot as plt
 import numpy as np
@@ -34,7 +39,21 @@ from reportlab.lib.units import cm, inch, mm
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 from reportlab.pdfgen import canvas as rl_canvas
-from reportlab.platypus import BaseDocTemplate, CondPageBreak, Frame, Image, KeepTogether, PageBreak, PageTemplate, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import (
+    BaseDocTemplate,
+    CondPageBreak,
+    Frame,
+    Image,
+    KeepTogether,
+    PageBreak,
+    PageTemplate,
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    Table,
+    TableStyle,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -50,7 +69,7 @@ class SignatureImageLoader:
     """
 
     @staticmethod
-    def load_signature(user, width=2.5*inch, height=0.8*inch):
+    def load_signature(user, width=2.5 * inch, height=0.8 * inch):
         """
         Load signature image for a user with multiple fallback methods.
         PRIORITY ORDER:
@@ -71,7 +90,7 @@ class SignatureImageLoader:
         logger.info(f"[SIGNATURE] Loading signature for: {user.username}")
 
         # Check if user has signature
-        if not hasattr(user, 'signature'):
+        if not hasattr(user, "signature"):
             logger.warning(f"[SIGNATURE] User {user.username} has no 'signature' attribute")
             return None, "User has no signature object"
 
@@ -82,10 +101,12 @@ class SignatureImageLoader:
             return None, f"Error accessing signature: {e}"
 
         # PRIORITY 1: Try base64 signature data (PREFERRED for PyInstaller apps)
-        if hasattr(signature, 'signature_data') and signature.signature_data:
+        if hasattr(signature, "signature_data") and signature.signature_data:
             logger.info(f"[SIGNATURE] Found base64 signature data")
             try:
-                img = SignatureImageLoader._load_from_base64(signature.signature_data, width, height)
+                img = SignatureImageLoader._load_from_base64(
+                    signature.signature_data, width, height
+                )
                 if img:
                     logger.info(f"[SIGNATURE] ✓ Successfully loaded from base64 database")
                     return img, "Loaded from base64 database field"
@@ -126,7 +147,7 @@ class SignatureImageLoader:
         if not default_storage.exists(image_field.name):
             raise FileNotFoundError(f"File not in storage: {image_field.name}")
 
-        with default_storage.open(image_field.name, 'rb') as img_file:
+        with default_storage.open(image_field.name, "rb") as img_file:
             img_data = img_file.read()
 
         if len(img_data) == 0:
@@ -179,9 +200,11 @@ class SignatureImageLoader:
         for y in range(height):
             for x in range(width):
                 r, g, b, a = data[x, y]
-                if (abs(r - bg_r) <= tolerance and
-                        abs(g - bg_g) <= tolerance and
-                        abs(b - bg_b) <= tolerance):
+                if (
+                    abs(r - bg_r) <= tolerance
+                    and abs(g - bg_g) <= tolerance
+                    and abs(b - bg_b) <= tolerance
+                ):
                     data[x, y] = (r, g, b, 0)  # fully transparent
 
         return img
@@ -192,7 +215,7 @@ class SignatureImageLoader:
         buf = io.BytesIO()
         pil_img.save(buf, format="PNG")
         buf.seek(0)
-        return Image(ImageReader(buf), width=width, height=height)
+        return Image(buf, width=width, height=height)
 
     @staticmethod
     def _load_from_base64(base64_data, width, height):
@@ -200,8 +223,8 @@ class SignatureImageLoader:
         logger.debug(f"[SIGNATURE] Method 0: Base64 decoding")
 
         # Remove data URI prefix if present
-        if 'base64,' in base64_data:
-            base64_str = base64_data.split('base64,')[1]
+        if "base64," in base64_data:
+            base64_str = base64_data.split("base64,")[1]
         else:
             base64_str = base64_data
 
@@ -226,7 +249,7 @@ class SignatureImageLoader:
         """Method 2: Load signature using direct file path (FileSystemStorage)."""
         logger.debug(f"[SIGNATURE] Method 2: Direct file path")
 
-        if not hasattr(image_field, 'path'):
+        if not hasattr(image_field, "path"):
             raise AttributeError("Image field has no 'path' attribute")
 
         file_path = image_field.path
@@ -249,7 +272,7 @@ class SignatureImageLoader:
         """Method 3: Load signature using MEDIA_ROOT path construction."""
         logger.debug(f"[SIGNATURE] Method 3: MEDIA_ROOT path")
 
-        media_root = getattr(settings, 'MEDIA_ROOT', None)
+        media_root = getattr(settings, "MEDIA_ROOT", None)
         if not media_root:
             raise ValueError("MEDIA_ROOT not configured")
 
@@ -277,10 +300,10 @@ class SignatureImageLoader:
         img_data = None
 
         if default_storage.exists(image_field.name):
-            with default_storage.open(image_field.name, 'rb') as f:
+            with default_storage.open(image_field.name, "rb") as f:
                 img_data = f.read()
-        elif hasattr(image_field, 'path') and os.path.exists(image_field.path):
-            with open(image_field.path, 'rb') as f:
+        elif hasattr(image_field, "path") and os.path.exists(image_field.path):
+            with open(image_field.path, "rb") as f:
                 img_data = f.read()
         else:
             raise FileNotFoundError("Image file not accessible")
@@ -289,7 +312,9 @@ class SignatureImageLoader:
             raise ValueError("Image data is empty")
 
         pil_img = PILImage.open(io.BytesIO(img_data))
-        logger.debug(f"[SIGNATURE] PIL: format={pil_img.format}, mode={pil_img.mode}, size={pil_img.size}")
+        logger.debug(
+            f"[SIGNATURE] PIL: format={pil_img.format}, mode={pil_img.mode}, size={pil_img.size}"
+        )
 
         pil_img = SignatureImageLoader._remove_background(pil_img)
         return SignatureImageLoader._pil_to_reportlab(pil_img, width, height)
@@ -299,13 +324,13 @@ class SignatureImageLoader:
         """Get user's full name with title."""
         try:
             # Try userprofile.get_full_name() first
-            if hasattr(user, 'userprofile') and hasattr(user.userprofile, 'get_full_name'):
+            if hasattr(user, "userprofile") and hasattr(user.userprofile, "get_full_name"):
                 full_name = user.userprofile.get_full_name()
                 if full_name:
                     return full_name
 
             # Try user.get_full_name()
-            if hasattr(user, 'get_full_name'):
+            if hasattr(user, "get_full_name"):
                 full_name = user.get_full_name()
                 if full_name:
                     return full_name
@@ -334,12 +359,13 @@ def verify_user_signature_before_pdf(user):
         return False, "No user provided"
 
     # Check if user has signature
-    if not hasattr(user, 'signature'):
+    if not hasattr(user, "signature"):
         return False, f"User {user.username} does not have a signature object"
 
     try:
         signature = user.signature
     except Exception as e:
+        logger.warning("[SIGNATURE] Could not access signature for %s: %s", user, e)
         return False, f"Error accessing signature: {str(e)}"
 
     if not signature.has_signature():
@@ -366,7 +392,7 @@ def diagnose_signature_issue(user):
 
     # Check 1: Does user have signature attribute?
     print("1. Checking signature attribute...")
-    if hasattr(user, 'signature'):
+    if hasattr(user, "signature"):
         print("   ✓ User has 'signature' attribute")
         try:
             sig = user.signature
@@ -384,15 +410,15 @@ def diagnose_signature_issue(user):
 
     # Check 2: Does signature have image field?
     print("\n2. Checking signature_image field...")
-    if hasattr(sig, 'signature_image'):
+    if hasattr(sig, "signature_image"):
         print("   ✓ Signature has 'signature_image' field")
         if sig.signature_image:
             print(f"   ✓ signature_image is not empty")
             print(f"   - Field name: {sig.signature_image.name}")
             print(f"   - Field size: {sig.signature_image.size} bytes")
-            if hasattr(sig.signature_image, 'path'):
+            if hasattr(sig.signature_image, "path"):
                 print(f"   - Field path: {sig.signature_image.path}")
-            if hasattr(sig.signature_image, 'url'):
+            if hasattr(sig.signature_image, "url"):
                 try:
                     print(f"   - Field URL: {sig.signature_image.url}")
                 except:
@@ -409,13 +435,14 @@ def diagnose_signature_issue(user):
     print("\n3. Checking file in storage...")
     try:
         from django.core.files.storage import default_storage
+
         if default_storage.exists(sig.signature_image.name):
             print(f"   ✓ File EXISTS in storage: {sig.signature_image.name}")
             print(f"   - Storage location: {default_storage.location}")
 
             # Try to read file
             try:
-                with default_storage.open(sig.signature_image.name, 'rb') as f:
+                with default_storage.open(sig.signature_image.name, "rb") as f:
                     data = f.read()
                     print(f"   ✓ File is READABLE: {len(data)} bytes")
             except Exception as e:
@@ -425,7 +452,7 @@ def diagnose_signature_issue(user):
             print(f"   - Storage location: {default_storage.location}")
 
             # Check if file exists in filesystem
-            if hasattr(sig.signature_image, 'path'):
+            if hasattr(sig.signature_image, "path"):
                 full_path = sig.signature_image.path
                 print(f"   - Checking filesystem path: {full_path}")
                 if os.path.exists(full_path):
@@ -439,7 +466,8 @@ def diagnose_signature_issue(user):
     print("\n4. Testing image loading with PIL...")
     try:
         from PIL import Image as PILImage
-        if hasattr(sig.signature_image, 'path') and os.path.exists(sig.signature_image.path):
+
+        if hasattr(sig.signature_image, "path") and os.path.exists(sig.signature_image.path):
             img = PILImage.open(sig.signature_image.path)
             print(f"   ✓ PIL can open image")
             print(f"   - Format: {img.format}")
@@ -454,8 +482,9 @@ def diagnose_signature_issue(user):
     print("\n5. Testing ReportLab ImageReader...")
     try:
         from reportlab.lib.utils import ImageReader
+
         if default_storage.exists(sig.signature_image.name):
-            with default_storage.open(sig.signature_image.name, 'rb') as img_file:
+            with default_storage.open(sig.signature_image.name, "rb") as img_file:
                 img_data = io.BytesIO(img_file.read())
                 img_data.seek(0)
                 img_reader = ImageReader(img_data)
@@ -490,7 +519,7 @@ def diagnose_signature(user):
     print(f"{'='*70}\n")
 
     # Check signature object
-    if not hasattr(user, 'signature'):
+    if not hasattr(user, "signature"):
         print("❌ User has no 'signature' attribute")
         print("   Fix: Create UserSignature object")
         print("\n   from users.models import UserSignature")
@@ -524,7 +553,7 @@ def diagnose_signature(user):
         print(f"✓ File exists in storage")
         file_exists = True
         try:
-            with default_storage.open(sig.signature_image.name, 'rb') as f:
+            with default_storage.open(sig.signature_image.name, "rb") as f:
                 size = len(f.read())
                 print(f"  - Size: {size} bytes")
         except Exception as e:
@@ -533,7 +562,7 @@ def diagnose_signature(user):
         print(f"❌ File NOT in storage: {sig.signature_image.name}")
 
     # Check file path
-    if hasattr(sig.signature_image, 'path'):
+    if hasattr(sig.signature_image, "path"):
         path = sig.signature_image.path
         if os.path.exists(path):
             print(f"✓ File exists at path: {path}")
@@ -561,7 +590,9 @@ def diagnose_signature(user):
             print("  >>> from django.core.files import File")
             print(f"  >>> user = User.objects.get(username='{user.username}')")
             print("  >>> with open('/path/to/signature.png', 'rb') as f:")
-            print(f"  >>>     user.signature.signature_image.save('signature_{user.username}.png', File(f), save=True)")
+            print(
+                f"  >>>     user.signature.signature_image.save('signature_{user.username}.png', File(f), save=True)"
+            )
         else:
             print("\n  RECOMMENDED ACTION:")
             print("  1. Check file permissions (should be readable)")

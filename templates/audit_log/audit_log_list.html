@@ -5,18 +5,43 @@
 {% block page_title %}Audit Log{% endblock %}
 
 {% block content %}
-<div class="card mb-4">
+
+<div class="card mb-3">
   <div class="card-body">
+    <div class="d-flex flex-wrap gap-4 mb-3">
+      <div>
+        <div class="small text-muted text-uppercase">Calibration activity</div>
+        <div class="fs-5 fw-semibold">{{ totals.calibration }}</div>
+      </div>
+      <div>
+        <div class="small text-muted text-uppercase">System &amp; sync changes</div>
+        <div class="fs-5 fw-semibold">{{ totals.system }}</div>
+      </div>
+    </div>
+
     <form method="get" class="row g-3 align-items-end">
-      <div class="col-md">
-        <label for="filter_table_name" class="form-label small text-muted">Table</label>
+      <div class="col-md-3">
+        <label for="filter_source" class="form-label small text-muted">Activity</label>
+        <select id="filter_source" name="source" class="form-control">
+          {% for value, label in source_choices %}
+          <option value="{{ value }}" {% if selected_source == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label for="filter_q" class="form-label small text-muted">Search calibration activity</label>
+        <input type="text" id="filter_q" name="q" class="form-control"
+               value="{{ search }}" placeholder="e.g. approved, procedure">
+      </div>
+      <div class="col-md-3">
+        <label for="filter_table_name" class="form-label small text-muted">Table (system only)</label>
         <input type="text" id="filter_table_name" name="table_name" class="form-control"
                value="{{ selected_table_name }}" placeholder="e.g. Inventory_equipment">
       </div>
-      <div class="col-md">
-        <label for="filter_operation" class="form-label small text-muted">Operation</label>
+      <div class="col-md-2">
+        <label for="filter_operation" class="form-label small text-muted">Operation (system only)</label>
         <select id="filter_operation" name="operation" class="form-control">
-          <option value="">All operations</option>
+          <option value="">All</option>
           {% for value, label in operation_choices %}
           <option value="{{ value }}" {% if selected_operation == value %}selected{% endif %}>{{ label }}</option>
           {% endfor %}
@@ -27,56 +52,47 @@
         <a href="{% url 'audit_log:list' %}" class="btn btn-secondary">Reset</a>
       </div>
     </form>
+
+    {% if selected_table_name or selected_operation %}
+    <p class="small text-muted mt-2 mb-0">
+      Table and operation apply to system changes only, so calibration activity
+      is not shown while either is set.
+    </p>
+    {% endif %}
   </div>
 </div>
 
 <div class="card">
   <div class="table-responsive">
-    <table class="table table-hover mb-0">
+    <table class="table table-hover mb-0 align-middle">
       <thead>
         <tr>
           <th>Time</th>
-          <th>Table</th>
-          <th>Operation</th>
-          <th>Row ID</th>
-          <th>Source</th>
+          <th>Activity</th>
+          <th>Who</th>
+          <th>Action</th>
+          <th>Subject</th>
           <th>Details</th>
         </tr>
       </thead>
       <tbody>
         {% for entry in page_obj %}
         <tr>
-          <td class="text-nowrap"><small>{{ entry.received_at|date:"d M Y, H:i" }}</small></td>
-          <td><code class="small">{{ entry.table_name }}</code></td>
+          <td class="text-nowrap"><small>{{ entry.when|date:"d M Y, H:i" }}</small></td>
           <td>
-            {% if entry.operation == 'c' %}<span class="badge bg-success">{{ entry.get_operation_display }}</span>
-            {% elif entry.operation == 'd' %}<span class="badge bg-danger">{{ entry.get_operation_display }}</span>
-            {% elif entry.operation == 's' %}<span class="badge bg-danger">{{ entry.get_operation_display }}</span>
-            {% elif entry.operation == 'u' %}<span class="badge bg-info">{{ entry.get_operation_display }}</span>
-            {% elif entry.operation == 't' %}<span class="badge bg-warning">{{ entry.get_operation_display }}</span>
-            {% elif entry.operation == 'r' %}<span class="badge bg-success">{{ entry.get_operation_display }}</span>
-            {% else %}<span class="badge bg-secondary">{{ entry.get_operation_display }}</span>
-            {% endif %}
+            <span class="badge {% if entry.source == 'calibration' %}bg-info{% else %}bg-secondary{% endif %}">
+              {{ entry.source_label }}
+            </span>
           </td>
-          <td><small class="text-muted">{{ entry.row_id }}</small></td>
-          <td><small>{{ entry.source }}</small></td>
-          <td>
-            {% if entry.metadata %}
-            <details>
-              <summary class="small text-primary" style="cursor:pointer;">View metadata</summary>
-              <pre class="small mb-0 mt-2">{{ entry.metadata }}</pre>
-            </details>
-            {% elif entry.changed_fields %}
-            <small class="text-muted">Changed: {{ entry.changed_fields|join:", " }}</small>
-            {% else %}
-            <small class="text-muted">—</small>
-            {% endif %}
-          </td>
+          <td><small>{{ entry.actor }}</small></td>
+          <td><small>{{ entry.action }}</small></td>
+          <td><small>{{ entry.subject|default:"—" }}</small></td>
+          <td><small class="text-muted">{{ entry.detail|default:"—" }}</small></td>
         </tr>
         {% empty %}
         <tr>
-          <td colspan="6">
-            {% include 'includes/empty_state.html' with icon="fa-clipboard-list" title="No audit entries found" message="Try adjusting the table or operation filter." %}
+          <td colspan="6" class="text-center text-muted py-4">
+            No audit records match these filters.
           </td>
         </tr>
         {% endfor %}
@@ -84,20 +100,30 @@
     </table>
   </div>
 
-  {% if page_obj.paginator.num_pages > 1 %}
-  <div class="card-body d-flex justify-content-center gap-2">
-    {% if page_obj.has_previous %}
-    <a class="btn btn-sm btn-outline-secondary" href="?page={{ page_obj.previous_page_number }}&table_name={{ selected_table_name }}&operation={{ selected_operation }}">
-      <i class="fas fa-chevron-left"></i> Previous
-    </a>
-    {% endif %}
-    <span class="btn btn-sm btn-primary disabled">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
-    {% if page_obj.has_next %}
-    <a class="btn btn-sm btn-outline-secondary" href="?page={{ page_obj.next_page_number }}&table_name={{ selected_table_name }}&operation={{ selected_operation }}">
-      Next <i class="fas fa-chevron-right"></i>
-    </a>
-    {% endif %}
+  {% if page_obj.has_other_pages %}
+  <div class="card-footer d-flex justify-content-between align-items-center">
+    <small class="text-muted">
+      Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+      &middot; {{ page_obj.paginator.count }} record{{ page_obj.paginator.count|pluralize }}
+    </small>
+    <div class="btn-group">
+      {% if page_obj.has_previous %}
+      <a class="btn btn-sm btn-outline-secondary"
+         href="?page={{ page_obj.previous_page_number }}&source={{ selected_source }}&q={{ search }}&table_name={{ selected_table_name }}&operation={{ selected_operation }}">Previous</a>
+      {% endif %}
+      {% if page_obj.has_next %}
+      <a class="btn btn-sm btn-outline-secondary"
+         href="?page={{ page_obj.next_page_number }}&source={{ selected_source }}&q={{ search }}&table_name={{ selected_table_name }}&operation={{ selected_operation }}">Next</a>
+      {% endif %}
+    </div>
   </div>
   {% endif %}
 </div>
+
+<p class="small text-muted mt-2">
+  The two trails live in separate tables and are read in place, so this view
+  shows the most recent {{ merge_window }} records from each before merging.
+  Narrow with the filters above to look further back.
+</p>
+
 {% endblock %}

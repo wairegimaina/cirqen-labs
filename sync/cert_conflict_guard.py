@@ -38,6 +38,35 @@ SESSION_TABLE = 'public."CalSoft_calibrationsession"'
 class CertConflictGuardMixin:
     """Periodically detects and repairs cross-DB certificate_number clashes."""
 
+    @staticmethod
+    def _cert_guard_record_reissue(cur, session_id, *, superseded, reissued_as):
+        """Write an audit entry for a certificate that changed number.
+
+        Best effort: a repair must not be abandoned because the audit table is
+        unavailable, but the failure is logged rather than swallowed so a
+        missing trail is visible.
+        """
+        try:
+            cur.execute(
+                'INSERT INTO public."CalSoft_calibrationauditlog" '
+                '(id, action, description, timestamp, session_id, active_status) '
+                "VALUES (gen_random_uuid(), %s, %s, %s, %s, TRUE)",
+                (
+                    "certificate_reissued",
+                    f"Certificate {superseded} was reallocated at HQ; this session "
+                    f"was reissued as {reissued_as}. Any document printed as "
+                    f"{superseded} for this session is superseded.",
+                    now_utc(),
+                    session_id,
+                ),
+            )
+        except Exception as exc:
+            LOG.error(
+                "   cert_conflict_guard: could not record the reissue of %s → %s "
+                "for session %s: %s",
+                superseded, reissued_as, session_id, exc,
+            )
+
     def _cert_guard_hq_conn(self):
         """Short-lived, read-only connection to HQ used for conflict detection only."""
         hq_config = dict(self.config["hq_db"])
@@ -148,15 +177,39 @@ class CertConflictGuardMixin:
                             (cert_num, now_utc(), hq_id),
                         )
 
-                    # 3) Re-assign the orphan its own, non-conflicting number.
+                    # 3) Give the orphan its own number.
+                    #
+                    # This is a REISSUE, not a silent renumber. The orphan may
+                    # already have had a certificate printed and filed under
+                    # `cert_num`; quietly moving it to another number would
+                    # leave the filed document and the record disagreeing, with
+                    # nothing but a log line to show it happened.
+                    #
+                    # So the superseded number is recorded on the row and an
+                    # audit entry is written. A certificate that was issued and
+                    # then superseded is a normal, documentable event; one that
+                    # changed number with no trace is not.
+                    superseded_note = (
+                        f"Certificate {cert_num} was allocated to another session "
+                        f"at HQ. This session has been reissued as {candidate}. "
+                        f"Any document already printed as {cert_num} for this "
+                        f"session is superseded and must be withdrawn."
+                    )
                     cur.execute(
-                        f"UPDATE {SESSION_TABLE} SET certificate_number = %s, updated_at = %s WHERE id = %s",
-                        (candidate, now_utc(), orphan_id),
+                        f"UPDATE {SESSION_TABLE} "
+                        f"SET certificate_number = %s, updated_at = %s, "
+                        f"    notes = COALESCE(NULLIF(notes, '') || E'\n\n', '') || %s "
+                        f"WHERE id = %s",
+                        (candidate, now_utc(), superseded_note, orphan_id),
+                    )
+                    self._cert_guard_record_reissue(
+                        cur, orphan_id, superseded=cert_num, reissued_as=candidate
                     )
 
                     LOG.warning(
-                        "   ✅ cert_conflict_guard: %s stays with %s…, orphan %s… reassigned → %s",
-                        cert_num, hq_id[:8], orphan_id[:8], candidate,
+                        "   ⚠️  cert_conflict_guard: %s stays with %s…; orphan %s… REISSUED "
+                        "%s → %s (superseded, recorded on the session)",
+                        cert_num, hq_id[:8], orphan_id[:8], cert_num, candidate,
                     )
                     fixed += 1
 
@@ -195,7 +248,14 @@ class CertConflictGuardMixin:
         )
 
         # Give the agent time to finish its initial sync before the first check.
-        for _ in range(60):
+        # Jittered, not a flat 60s: this loop opens a direct connection to the
+        # HQ database, and a site that powers on its desktops together would
+        # otherwise have all of them connect in the same second. Spreading the
+        # first check over several minutes turns a spike into a trickle, which
+        # is what lets the fleet grow without the pooler refusing connections.
+        import random
+
+        for _ in range(int(random.uniform(60, 300))):
             if self.stop_event.is_set():
                 return
             time.sleep(1)

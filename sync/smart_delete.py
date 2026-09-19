@@ -53,7 +53,7 @@ class SmartDeleteMixin:
                     f"""
                     SELECT
                         id,
-                        to_jsonb(t.*) as row_data,
+                        to_jsonb(t.*) || jsonb_build_object('source_updated_at', t.updated_at) as row_data,
                         updated_at,
                         pending_delete,
                         active_status
@@ -369,7 +369,7 @@ class SmartDeleteMixin:
                         f"""
                         SELECT
                             id,
-                            to_jsonb(t.*) as row_data,
+                            to_jsonb(t.*) || jsonb_build_object('source_updated_at', t.updated_at) as row_data,
                             updated_at,
                             active_status,
                             pending_delete

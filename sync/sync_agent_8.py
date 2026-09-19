@@ -253,6 +253,13 @@ class LifecycleMixin(SmartDeleteMixin):
                  "Drift reconciler thread (self-heals stranded rows)")
             )
 
+            self._thread_specs.append(
+                # Learns from the (fixed-address) update server that the sync HQ
+                # has moved. Independent of the sync HQ being reachable.
+                ("EndpointSyncThread", self.endpoint_sync_loop,
+                 "HQ endpoint check thread (follows a sync-HQ move)")
+            )
+
             self._named_threads = {}
             self._thread_restart_counts = {name: 0 for name, _, _ in self._thread_specs}
             self._thread_last_restart_time = {}

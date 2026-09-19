@@ -103,17 +103,6 @@
         </a>
       </li>
 
-      <!-- Check Updates -->
-      <li class="menu-entry" role="none">
-        <a href="{% url 'updates:dashboard' %}"
-          class="menu-link {% if 'updates' in request.path %}active-link{% endif %}" role="menuitem">
-          <div class="link-icon" aria-hidden="true">
-            <i class="fas fa-cloud-download-alt"></i>
-          </div>
-          <span class="link-label">Check Updates</span>
-        </a>
-      </li>
-
       <!-- Audit Log -->
       <li class="menu-entry" role="none">
         <a href="{% url 'audit_log:list' %}"
@@ -139,6 +128,42 @@
 
     {% endif %}
     {# ── END HOD BLOCK ── #}
+
+    {# ══════════════════════════════════════════════════════ #}
+    {# ║  SYSTEM BLOCK — staff only, matching the view guard ║ #}
+    {# ══════════════════════════════════════════════════════ #}
+    {% if request.user.is_staff %}
+
+      <li class="menu-section-header" role="none">
+        <span class="section-label">System</span>
+      </li>
+
+      <!-- HQ Connection -->
+      <li class="menu-entry" role="none">
+        <a href="{% url 'core:hq_connection' %}"
+          class="menu-link {% if request.resolver_match.url_name == 'hq_connection' %}active-link{% endif %}"
+          role="menuitem">
+          <div class="link-icon" aria-hidden="true">
+            <i class="fas fa-network-wired"></i>
+          </div>
+          <span class="link-label">HQ Connection</span>
+        </a>
+      </li>
+
+      <!-- Application updates -->
+      <li class="menu-entry" role="none">
+        <a href="{% url 'updates:dashboard' %}"
+          class="menu-link {% if '/updates/' in request.path %}active-link{% endif %}"
+          role="menuitem">
+          <div class="link-icon" aria-hidden="true">
+            <i class="fas fa-cloud-download-alt"></i>
+          </div>
+          <span class="link-label">Updates</span>
+        </a>
+      </li>
+
+    {% endif %}
+    {# ── END SYSTEM BLOCK ── #}
 
     <!-- ╔═══════════════════════════════════════════════════════╗ -->
     <!-- ║  MAINTENANCE BLOCK                                    ║ -->

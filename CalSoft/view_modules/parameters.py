@@ -200,6 +200,7 @@ def standard_delete(request, pk):
                 standard.delete()
                 return JsonResponse({"success": True})
         except Exception as e:
+            logger.exception("%s failed: %s", "standard_delete", e)
             return JsonResponse({"success": False, "error": str(e)}, status=400)
 
     return JsonResponse({"success": False, "error": "Invalid request method."}, status=405)
@@ -297,6 +298,7 @@ def parameter_delete(request, pk):
                 parameter.delete()
                 return JsonResponse({"success": True})
         except Exception as e:
+            logger.exception("%s failed: %s", "parameter_delete", e)
             return JsonResponse({"success": False, "error": str(e)}, status=400)
 
     return JsonResponse({"success": False, "error": "Invalid request method."}, status=405)

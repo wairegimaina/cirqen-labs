@@ -312,6 +312,20 @@ function populateRepairModal(data) {
   setupDownloadButtons(equipment.id, data);
 }
 
+// --- START A FILE DOWNLOAD ---
+// Every export here is an attachment. window.open() is not an option: the
+// desktop shell is a QWebEngineView, which drops window.open/target="_blank"
+// silently, so the button looked dead. A hidden iframe starts the download in
+// both the shell and a plain browser without leaving the page.
+function startDownload(url) {
+  const frame = document.createElement('iframe');
+  frame.style.display = 'none';
+  frame.src = url;
+  document.body.appendChild(frame);
+  setTimeout(() => frame.remove(), 60000);
+}
+window.startDownload = startDownload;
+
 // --- SETUP DOWNLOAD BUTTONS ---
 function setupDownloadButtons(equipmentId, data) {
   const downloadAllBtn = document.getElementById('downloadAllHistory');
@@ -320,13 +334,13 @@ function setupDownloadButtons(equipmentId, data) {
 
   if (downloadAllBtn) {
     downloadAllBtn.onclick = () => {
-      window.open(`/machineReports/equipment/${equipmentId}/export/`, '_blank');
+      startDownload(`/machineReports/equipment/${equipmentId}/export/`);
     };
   }
 
   if (downloadRepairsBtn) {
     downloadRepairsBtn.onclick = () => {
-      window.open(`/machineReports/equipment/${equipmentId}/export/`, '_blank');
+      startDownload(`/machineReports/equipment/${equipmentId}/export/`);
     };
   }
 
@@ -337,7 +351,7 @@ function setupDownloadButtons(equipmentId, data) {
         data.calibration_certificates.forEach((cert, index) => {
           // Stagger the downloads slightly to avoid browser blocking
           setTimeout(() => {
-            window.open(`/calibration/sessions/${cert.id}/certificate/comprehensive/`, '_blank');
+            startDownload(`/calibration/sessions/${cert.id}/certificate/comprehensive/`);
           }, index * 100);
         });
       } else {
@@ -588,5 +602,5 @@ function exportEquipmentList() {
   if (category) params.set('category', category);
   if (search) params.set('search', search);
   const url = `/machineReports/export-equipment-category-detailed-pdf/?${params.toString()}`;
-  window.open(url, '_blank');
+  startDownload(url);
 }

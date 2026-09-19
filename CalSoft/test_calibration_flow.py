@@ -61,25 +61,74 @@ class CalibrationReviewFlowTests(TestCase):
         self.client.force_login(user)
         return self.client.post(reverse("calibration:approve_calibration_session_ajax", args=[self.session.pk]))
 
-    def test_online_approval_issues_a_certificate_number(self):
+    def test_approval_never_allocates_a_number_locally(self):
+        """Plan item B1: certificate numbers are allocated by HQ only.
+
+        This test previously asserted the opposite — that approval with HQ
+        reachable minted a BNH- number locally. It did, from this site's own
+        maximum, in this site's own database, because writes never route to HQ.
+        With several field sites two could allocate the same number and collide
+        on sync, which is the "BNH-0093 problem" that
+        ``sync/cert_conflict_guard.py`` was written to repair.
+
+        Approval now queues the request whether or not HQ is reachable, so
+        there is one allocator.
+        """
         with mock.patch("requests.get", return_value=HQ_UP):
             response = self.approve(self.reviewer)
+
         self.assertEqual(response.status_code, 200, response.content)
         self.session.refresh_from_db()
-        self.assertEqual(self.session.status, "approved")
-        self.assertTrue(self.session.certificate_number.startswith("BNH-"))
+        self.assertEqual(self.session.status, "approved_pending_certificate")
+        self.assertIsNone(self.session.certificate_number)
         self.assertEqual(self.session.approved_by, self.reviewer)
-        self.schedule.refresh_from_db()
-        self.assertEqual(self.schedule.status, "completed")
+        self.assertTrue(
+            PendingCertificate.objects.filter(
+                session=self.session, sync_status="pending"
+            ).exists()
+        )
 
-    def test_offline_approval_queues_the_certificate(self):
+    def test_approval_queues_the_certificate_request(self):
         with mock.patch("requests.get", side_effect=requests.ConnectionError("offline")):
             response = self.approve(self.reviewer)
-        self.assertEqual(response.json()["mode"], "offline")
+
+        self.assertEqual(response.json()["mode"], "pending_hq_allocation")
         self.session.refresh_from_db()
         self.assertEqual(self.session.status, "approved_pending_certificate")
         self.assertIsNone(self.session.certificate_number)
         self.assertTrue(PendingCertificate.objects.filter(session=self.session, sync_status="pending").exists())
+
+    def test_approval_behaves_identically_whether_hq_is_reachable(self):
+        """One path, so reachability cannot change what a number means."""
+        with mock.patch("requests.get", return_value=HQ_UP):
+            up = self.approve(self.reviewer).json()
+
+        self.session.status = "pending_review"
+        self.session.certificate_number = None
+        self.session.save()
+        PendingCertificate.objects.filter(session=self.session).delete()
+
+        with mock.patch("requests.get", side_effect=requests.ConnectionError("offline")):
+            down = self.approve(self.reviewer).json()
+
+        self.assertEqual(up["mode"], down["mode"])
+        self.assertEqual(up["status"], down["status"])
+        self.assertEqual(up["certificate_number"], down["certificate_number"])
+
+    def test_a_session_awaiting_a_number_is_not_given_an_invented_one(self):
+        """The generator used to mint one, or print BNH-TEMP-0000."""
+        from CalSoft.pdf_generators.certificate import BtwelveHospitalCertificateGenerator
+
+        with mock.patch("requests.get", return_value=HQ_UP):
+            self.approve(self.reviewer)
+        self.session.refresh_from_db()
+
+        gen = BtwelveHospitalCertificateGenerator(self.session)
+        self.assertIsNone(gen.certificate_number)
+        self.assertTrue(gen.is_pending_number)
+        self.assertTrue(gen.reference_number.startswith("PENDING-"))
+        self.session.refresh_from_db()
+        self.assertIsNone(self.session.certificate_number, "the generator must not save a number")
 
     def test_only_reviewers_can_approve(self):
         for user in (self.maintenance_tech, self.nic):

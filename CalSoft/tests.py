@@ -79,13 +79,26 @@ class TestCertificateGenerationAndSessions:
         self.user = User.objects.create_user("tester", password="pass")
         self.procedure = CalibrationProcedure.objects.create(name="MultiSessionProc", created_by=self.user)
 
-    def test_certificate_number_increments(self):
-        # First session
-        CalibrationSession.objects.create(procedure=self.procedure, performed_by=self.user,
-                                          certificate_number=CalibrationSession.generate_certificate_number())
-        # Second should increment
-        cert2 = CalibrationSession.generate_certificate_number()
-        assert cert2.endswith("0002")
+    def test_certificate_number_format_increments(self):
+        """The numbering format, via its pure helper.
+
+        This used to call ``CalibrationSession.generate_certificate_number()``,
+        which allocated from the local database. That path is gone: HQ is the
+        only allocator (plan item B1). What remains testable here is the
+        format, which HQ's allocator mirrors.
+        """
+        from calSchedules.grouping import next_certificate_number
+
+        assert next_certificate_number(None) == "BNH-0001"
+        assert next_certificate_number("BNH-0001") == "BNH-0002"
+        assert next_certificate_number("BNH-0092").endswith("0093")
+
+    def test_a_session_can_be_created_without_a_certificate_number(self):
+        """Approval leaves the number absent until HQ issues one."""
+        session = CalibrationSession.objects.create(
+            procedure=self.procedure, performed_by=self.user
+        )
+        assert session.certificate_number is None
 
     def test_multiple_sessions_success_rate_and_recent(self):
         CalibrationSession.objects.create(procedure=self.procedure, performed_by=self.user, overall_pass=True)
@@ -136,16 +149,12 @@ class TestHistoricalDataStorage:
         views._store_historical_data(self.session)
 
 
-@pytest.mark.django_db
-class TestLinearityAnalysis:
-    def test_calculate_linearity_analysis_with_mock(self):
-        reading_mock = MagicMock()
-        reading_mock.set_value.value = Decimal("1.0")
-        reading_mock.mean = Decimal("1.1")
-        with patch("CalSoft.views.TrendAnalysis.calculate_linear_regression", return_value=(1, 0)):
-            result = views._calculate_linearity_analysis({"param1": [reading_mock, reading_mock]})
-            assert "param1" in result
-            assert "slope" in result["param1"]
+# The linearity test that lived here mocked out
+# `TrendAnalysis.calculate_linear_regression` — a method that did not exist —
+# so it passed while the feature had never worked. The regression is real now
+# and is covered against hand-computed values in
+# `CalSoft/test_drift_and_linearity.py::LinearityAnalysisTests`, which asserts
+# slope, intercept and the largest residual rather than mocking them away.
 
 
 @pytest.mark.django_db

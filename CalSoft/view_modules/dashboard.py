@@ -19,6 +19,8 @@ from CalSoft.models import (
 )
 
 User = get_user_model()
+from calSchedules.grouping import is_overdue, month_end
+
 logger = logging.getLogger(__name__)
 
 
@@ -51,6 +53,7 @@ def generate_greeting(user_first_name):
 
         return random.choice(messages_list)
     except Exception:
+        logger.debug("Greeting fallback used: %s", e)
         return f"Hello, {user_first_name}!"
 
 
@@ -83,11 +86,10 @@ def api_dashboard_metrics(request):
         for schedule in CalibrationSchedule.objects.filter(
             status__in=["pending", "pushed"], equipment__active_status=True
         ):
-            if schedule.scheduled_month:
-                last_day = schedule.scheduled_month + timezone.timedelta(days=32)
-                last_day = last_day.replace(day=1) - timezone.timedelta(days=1)
-                if last_day < current_date:
-                    overdue_count += 1
+            if schedule.scheduled_month and is_overdue(
+                month_end(schedule.scheduled_month), current_date
+            ):
+                overdue_count += 1
 
         in_progress_count = CalibrationSchedule.objects.filter(
             status="in_progress", equipment__active_status=True
@@ -170,6 +172,7 @@ def api_dashboard_metrics(request):
             }
         )
     except Exception as e:
+        logger.exception("%s failed: %s", "api_dashboard_metrics", e)
         return JsonResponse({"success": False, "error": str(e)}, status=500)
 
 
@@ -212,11 +215,10 @@ def _calibration_dashboard_data(current_date):
     for schedule in CalibrationSchedule.objects.filter(
         status__in=["pending", "pushed"], equipment__active_status=True
     ):
-        if schedule.scheduled_month:
-            next_month = schedule.scheduled_month.replace(day=28) + timezone.timedelta(days=4)
-            last_day = next_month - timezone.timedelta(days=next_month.day)
-            if last_day < current_date:
-                overdue_count += 1
+        if schedule.scheduled_month and is_overdue(
+            month_end(schedule.scheduled_month), current_date
+        ):
+            overdue_count += 1
 
     # ── Session-based counts ───────────────────────────────────────────────
     APPROVED_STATUSES = ["approved", "approved_pending_certificate"]

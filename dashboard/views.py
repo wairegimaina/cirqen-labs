@@ -1,7 +1,8 @@
 import json
 import logging
 import random
-from calendar import monthrange
+
+from calSchedules.grouping import is_overdue, month_end
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -19,6 +20,7 @@ from django.utils import timezone
 from Inventory.models import Equipment, Department
 from workshop.models import Workshop
 from jobcard.models import jobcard
+from CalSoft.models import CalibrationSession
 from ppms.models import PPMSchedule
 from parts_tools.models import Tools, Accessories
 from reporthub.models import Report
@@ -110,8 +112,7 @@ def _ppm_summary(workshop, today):
     ):
         if not scheduled_month:
             continue
-        last_day = monthrange(scheduled_month.year, scheduled_month.month)[1]
-        if scheduled_month.replace(day=last_day) < today:
+        if is_overdue(month_end(scheduled_month), today):
             overdue += 1
         elif scheduled_month > today.replace(day=1):
             upcoming += 1
@@ -381,6 +382,82 @@ def _hod_workshop_stats(workshop):
         "is_calibration_center": workshop.category == "calibration_center",
         "ppm_monthly_breakdown": workshop_monthly,
     }
+
+    # Calibration coverage for this workshop's estate.
+    #
+    # The HOD needs to see certificates where the equipment lives, not only in
+    # the calibration centre's own card: a certificate belongs to a device in a
+    # ward, and "how much of this workshop is certified?" is a question about
+    # the workshop, not about the centre that issued the paperwork.
+    workshop_serials = list(
+        Equipment.objects
+        .filter(department__workshop=workshop, active_status=True)
+        .exclude(serial_number="")
+        .values_list("serial_number", flat=True)
+    )
+    sessions = CalibrationSession.objects.filter(
+        device_serial__in=workshop_serials, active_status=True
+    )
+    certified = (
+        sessions.filter(status="approved")
+        .exclude(certificate_number__isnull=True)
+        .exclude(certificate_number="")
+    )
+    info["certificates_count"] = certified.count()
+    info["certified_equipment_count"] = (
+        certified.order_by().values("device_serial").distinct().count()
+    )
+    info["awaiting_certificate_count"] = sessions.filter(
+        status="approved_pending_certificate"
+    ).count()
+    info["calibrations_count"] = sessions.count()
+
+    # PPM state, so the card says what is outstanding rather than only a total.
+    info["ppms_completed_count"] = ppm_schedules.filter(status="completed").count()
+    info["ppms_pending_count"] = ppm_schedules.exclude(status="completed").count()
+
+    # Calibration coverage per department.
+    #
+    # A workshop total answers "are we broadly covered"; it cannot answer "which
+    # ward is behind", which is the question that leads to an action. Serial
+    # numbers are the only link between a session and its device, so the map is
+    # built once here rather than per department.
+    certified_serials = set(
+        certified.order_by().values_list("device_serial", flat=True)
+    )
+    pending_serials = set(
+        sessions.filter(status="approved_pending_certificate")
+        .order_by()
+        .values_list("device_serial", flat=True)
+    )
+
+    departments = []
+    dept_rows = (
+        Equipment.objects
+        .filter(department__workshop=workshop, active_status=True)
+        .values("department__id", "department__name", "serial_number")
+    )
+    grouped = {}
+    for row in dept_rows:
+        key = (str(row["department__id"]), row["department__name"] or "Unassigned")
+        grouped.setdefault(key, []).append(row["serial_number"] or "")
+
+    for (dept_id, dept_name), serials in sorted(grouped.items(), key=lambda kv: kv[0][1]):
+        total = len(serials)
+        certified_here = sum(1 for s in serials if s and s in certified_serials)
+        pending_here = sum(1 for s in serials if s and s in pending_serials)
+        departments.append({
+            "id": dept_id,
+            "name": dept_name,
+            "equipment_count": total,
+            "certified_count": certified_here,
+            "awaiting_count": pending_here,
+            "uncertified_count": total - certified_here,
+            "percent": round(certified_here / total * 100) if total else 0,
+        })
+
+    # Least covered first: that is where the work is.
+    info["departments"] = sorted(departments, key=lambda d: (d["percent"], d["name"]))
     if workshop.category != "calibration_center":
         info["calibration_work_count"] = jobcard.objects.filter(
             department__workshop=workshop, workshop__category="calibration_center"
@@ -397,7 +474,7 @@ def hod_dashboard(request):
     except UserProfile.DoesNotExist:
         return redirect("custom_login")
 
-    workshops = Workshop.objects.all()
+    workshops = list(Workshop.objects.all())
     context = {
         "workshops": workshops,
         "workshop_data": {},
@@ -420,6 +497,9 @@ def hod_dashboard(request):
         for key, count in stats["info"]["ppm_monthly_breakdown"].items():
             total_monthly_breakdown[key] = total_monthly_breakdown.get(key, 0) + count
         context["workshop_data"][workshop.id] = stats["info"]
+        # Attached so the template can read `workshop.stats.equipment_count`
+        # instead of scanning workshop_data for its own row inside every stat.
+        workshop.stats = stats["info"]
 
     context["totals"] = {
         "total_equipment": sum(

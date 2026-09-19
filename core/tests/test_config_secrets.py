@@ -7,7 +7,8 @@ from unittest import mock
 
 from django.test import SimpleTestCase
 
-from config import CirqenConfig  # sync/config.py, the copy Django loads
+import config
+from config import CirqenConfig
 
 SECRET_ENV = ("SYNC_AUTH_TOKEN", "HQ_API_KEY", "POSTGRES_HQ_PASSWORD", "CIRQEN_PROVISIONING_FILE")
 
@@ -20,6 +21,13 @@ class ConfigSecretsTests(SimpleTestCase):
         patcher = mock.patch.dict(os.environ, {k: "" for k in SECRET_ENV})
         patcher.start()
         self.addCleanup(patcher.stop)
+        # A developer's real provisioning.json sits beside config.py (git-ignored)
+        # and is a lookup fallback; without this the tests read live secrets.
+        isolate = mock.patch.object(
+            config, "_provisioning_candidates_for", lambda data_path: [Path(data_path) / "provisioning.json"]
+        )
+        isolate.start()
+        self.addCleanup(isolate.stop)
 
     def load(self):
         with mock.patch("builtins.print"):

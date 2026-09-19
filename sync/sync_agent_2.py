@@ -484,7 +484,7 @@ class SchemaAndChangeDetectionMixin(SmartDeleteMixin):
                         f"""
                             SELECT
                                 id,
-                                to_jsonb(t.*) as row_data,
+                                to_jsonb(t.*) || jsonb_build_object('source_updated_at', t.updated_at) as row_data,
                                 updated_at,
                                 active_status,
                                 pending_delete
@@ -640,7 +640,7 @@ class SchemaAndChangeDetectionMixin(SmartDeleteMixin):
                 query = f"""
                         SELECT
                             id,
-                            to_jsonb(t.*) as row_data,
+                            to_jsonb(t.*) || jsonb_build_object('source_updated_at', t.updated_at) as row_data,
                             updated_at,
                             created_at
                             {', pending_delete' if has_pending_delete else ''}

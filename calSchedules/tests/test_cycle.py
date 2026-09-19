@@ -92,11 +92,17 @@ class CertCompleteRescheduleCycleTests(NoSyncMixin, TestCase):
         # generation_source marks it as PPM-auto-created (protected source)
         self.assertEqual(nxt.generation_source, "signal")
 
-    def test_certificate_number_is_sequential_and_pure(self):
-        # generate_certificate_number now delegates to the pure helper
-        self.assertEqual(CalibrationSession.generate_certificate_number(), "BNH-0001")
-        self._approve_with_certificate()  # persists BNH-0001
-        self.assertEqual(CalibrationSession.generate_certificate_number(), "BNH-0002")
+    def test_certificate_number_format_is_sequential_and_pure(self):
+        """The format helper. Allocation itself belongs to HQ (plan item B1).
+
+        ``CalibrationSession.generate_certificate_number()`` allocated from the
+        local database and has been removed; two field sites could otherwise
+        allocate the same number from their own maxima.
+        """
+        from calSchedules.grouping import next_certificate_number
+
+        self.assertEqual(next_certificate_number(None), "BNH-0001")
+        self.assertEqual(next_certificate_number("BNH-0001"), "BNH-0002")
 
 
 class DateBasedGroupsByDepartmentTests(NoSyncMixin, TestCase):

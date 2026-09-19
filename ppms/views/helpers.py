@@ -114,6 +114,33 @@ def get_user_access_context(request):
                     'can_schedule': True
                 }
 
+            # An HOD is attached to neither a workshop nor a department, so both
+            # branches above miss and the user used to fall through to a None
+            # context — which sent the head of department to the login page.
+            # Fall back to whichever workshop they picked elsewhere in the app,
+            # otherwise the first one, so the module opens and the workshop
+            # filter takes it from there.
+            hod_workshop = None
+            selected_id = (request.session.get('selected_workshop_id')
+                           or request.session.get('workshop_id'))
+            if selected_id:
+                hod_workshop = Workshop.objects.filter(id=selected_id).first()
+            if hod_workshop is None:
+                hod_workshop = Workshop.objects.order_by('name').first()
+            if hod_workshop:
+                return {
+                    'access_type': 'workshop',
+                    'workshop_id': hod_workshop.id,
+                    'department_id': None,
+                    'workshop': hod_workshop,
+                    'department': None,
+                    'role': role,
+                    'level': level,
+                    'can_manage_all_departments': True,
+                    'can_edit': True,
+                    'can_schedule': True
+                }
+
         workshop_id = request.session.get('workshop_id')
         if workshop_id:
             try:

@@ -35,7 +35,7 @@ Usage (in sync_agent.py startup)
     from data_checker_client import DataCheckerClient
 
     checker = DataCheckerClient(
-        hq_url=self.server_url,          # e.g. "https://hq-server.onrender.com"
+        hq_url=self.server_url,          # e.g. "https://hq.example.com"
         api_key=self.api_key,
         client_id=self.client_id,
         local_pool=self.pool,            # psycopg2 connection pool
@@ -218,7 +218,7 @@ class DataCheckerClient:
     Parameters
     ----------
     hq_url:
-        Base URL of the HQ server, e.g. ``"https://hq-server.onrender.com"``.
+        Base URL of the HQ server, e.g. ``"https://hq.example.com"``.
     api_key:
         API key used for all requests (sent as ``X-API-Key`` header).
     client_id:

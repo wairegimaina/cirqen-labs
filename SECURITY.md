@@ -96,5 +96,29 @@ Each client now authenticates with its own key, bound to its client_id on HQ
    `API_KEYS_JSON` and rotate `SYNC_AUTH_TOKEN`. Rotate `HQ_ENROLLMENT_CODES`
    after each rollout.
 
+## Moving HQ to a new host
+
+Addresses take care of themselves: set `FLEET_SYNC_API_URL` on the update
+server and every desktop follows within `FLEET_POLL_SECONDS` (see
+`review/09_HQ_CONNECTION_CONFIG.pdf` §20). **Client keys do not.** They live in
+HQ's `sync_api_keys` table, hashed and bound to a `client_id`, so a new host
+with an empty table rejects every desktop with 401 and sync stops, even though
+the address is correct.
+
+So, in order:
+
+1. Stand up the new host and **copy `sync_api_keys` to it** before announcing
+   the move. This is the whole step — the stored values are hashes, and the
+   tokens the desktops already hold keep working.
+2. Set `FLEET_SYNC_API_URL` to the new host and keep the old one in
+   `FLEET_SYNC_FALLBACKS` until the fleet has moved.
+3. Watch `/api/updates/machines/` until desktops report in from the new host.
+4. Remove the fallback and retire the old host.
+
+If the table cannot be copied, each desktop must be re-issued a key
+(`POST /api/admin/generate_api_key` with `"replace": true`) — 500 calls, so
+copying the table is strongly preferred. A desktop whose key is rejected says
+so explicitly in its log, naming the move if it recently followed one.
+
 Lost or compromised client: `POST /api/admin/revoke_api_key {"device_id": …}`,
 then re-issue with `generate_api_key` and `"replace": true`.

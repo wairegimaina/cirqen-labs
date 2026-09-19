@@ -308,24 +308,16 @@ def approve_calibration_session_ajax(request, pk):
     try:
         session = get_object_or_404(CalibrationSession, pk=pk, status="pending_review")
 
-        def is_hq_online():
-            try:
-                import requests
-                from django.conf import settings
-
-                sync_url = getattr(settings, "SYNC_API_URL", "http://192.168.10.50:5000")
-                response = requests.get(f"{sync_url}/api/sync/health", timeout=5)
-                return response.status_code == 200
-            except Exception:
-                return False
-
         def get_machine_identifier():
             try:
                 mac_int = uuid.getnode()
                 mac_hex = ":".join(f"{(mac_int >> ele) & 0xff:02x}" for ele in range(40, -1, -8))
                 mac_hash = hashlib.sha1(mac_hex.encode()).hexdigest()[:12]
                 return f"mac-{mac_hash}"
-            except Exception:
+            except Exception as exc:
+                # A random id still identifies this machine within a run; the
+                # MAC lookup failing is worth a trace, not a failure.
+                logger.debug("Machine identifier fallback: %s", exc)
                 return f"machine-{str(uuid.uuid4())[:8]}"
 
         with transaction.atomic():
@@ -342,81 +334,61 @@ def approve_calibration_session_ajax(request, pk):
 
             now = timezone.now()
 
-            if is_hq_online():
-                try:
-                    certificate_number = CalibrationSession.generate_certificate_number()
-                    if not certificate_number:
-                        raise ValueError("Certificate number generation failed")
+            # Certificate numbers are allocated by the HQ server only.
+            #
+            # This branch used to check whether HQ was reachable and, if so,
+            # allocate a number locally with `generate_certificate_number()` —
+            # which reads the LOCAL maximum under a local lock. Writes never
+            # route to HQ (see Equiper/db_router.db_for_write), so that number
+            # came from this site's own sequence while HQ allocated from its
+            # own. With several field sites, two at the same local maximum
+            # allocate the same BNH-NNNN; each succeeds locally because the
+            # unique constraint is per-database, and they collide on sync.
+            #
+            # That is the "BNH-0093 problem" that sync/cert_conflict_guard.py
+            # exists to repair. Approval now always queues a PendingCertificate
+            # and lets HQ allocate, which is what the offline path already did
+            # correctly — so there is one allocator and nothing to reconcile.
+            locked_session.status = "approved_pending_certificate"
+            locked_session.approved_by = request.user
+            locked_session.approved_at = now
+            locked_session.certificate_number = None
+            locked_session.updated_at = now
+            locked_session.save()
 
-                    locked_session.certificate_number = certificate_number
-                    locked_session.status = "approved"
-                    locked_session.approved_by = request.user
-                    locked_session.approved_at = now
-                    locked_session.updated_at = now
-                    locked_session.save()
+            machine_id = get_machine_identifier()
+            pending_cert, _ = PendingCertificate.objects.get_or_create(
+                session=locked_session,
+                defaults={
+                    "machine_id": machine_id,
+                    "sync_status": "pending",
+                    "created_at": now,
+                    "updated_at": now,
+                },
+            )
 
-                    _mark_schedule_for_session_approval(locked_session.schedule, "completed", now)
+            _mark_schedule_for_session_approval(locked_session.schedule, "pushed", now)
 
-                    PendingCertificate.objects.filter(
-                        session=locked_session, sync_status="pending"
-                    ).update(sync_status="completed", processed_at=now, updated_at=now)
+            logger.info(
+                "Session %s approved; certificate number requested from HQ",
+                locked_session.id,
+            )
 
-                    logger.info(f"Session {locked_session.id} approved online")
-
-                    return JsonResponse(
-                        {
-                            "success": True,
-                            "certificate_number": certificate_number,
-                            "mode": "online",
-                            "session_id": str(locked_session.id),
-                            "status": "approved",
-                            "updated_at": now.isoformat(),
-                        }
-                    )
-
-                except Exception as cert_error:
-                    logger.error(f"Certificate generation error: {cert_error}", exc_info=True)
-                    return JsonResponse(
-                        {
-                            "success": False,
-                            "error": f"Failed to generate certificate: {str(cert_error)}",
-                        },
-                        status=500,
-                    )
-
-            else:
-                locked_session.status = "approved_pending_certificate"
-                locked_session.approved_by = request.user
-                locked_session.approved_at = now
-                locked_session.certificate_number = None
-                locked_session.updated_at = now
-                locked_session.save()
-
-                machine_id = get_machine_identifier()
-                pending_cert = PendingCertificate.objects.create(
-                    session=locked_session,
-                    machine_id=machine_id,
-                    sync_status="pending",
-                    created_at=now,
-                    updated_at=now,
-                )
-
-                _mark_schedule_for_session_approval(locked_session.schedule, "pushed", now)
-
-                logger.info(f"Session {locked_session.id} approved offline")
-
-                return JsonResponse(
-                    {
-                        "success": True,
-                        "certificate_number": None,
-                        "mode": "offline",
-                        "session_id": str(locked_session.id),
-                        "status": "approved_pending_certificate",
-                        "pending_cert_id": str(pending_cert.id),
-                        "updated_at": now.isoformat(),
-                        "message": "Approved offline. Certificate will be generated when connection is restored.",
-                    }
-                )
+            return JsonResponse(
+                {
+                    "success": True,
+                    "certificate_number": None,
+                    "mode": "pending_hq_allocation",
+                    "session_id": str(locked_session.id),
+                    "status": "approved_pending_certificate",
+                    "pending_cert_id": str(pending_cert.id),
+                    "updated_at": now.isoformat(),
+                    "message": (
+                        "Approved. The certificate number is allocated by the HQ "
+                        "server and will appear once it has been issued."
+                    ),
+                }
+            )
 
     except CalibrationSession.DoesNotExist:
         return JsonResponse(

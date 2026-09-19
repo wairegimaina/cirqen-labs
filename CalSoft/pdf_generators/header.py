@@ -90,13 +90,23 @@ class HeaderMixin:
         if not logo_drawn:
             # Fallback: draw a rounded rectangle containing the lab's initials
             # Derive initials from LABORATORY_INFO if available, else use 'KNH'
+            # The configured organisation name, not a hardcoded one. This
+            # previously fell back to a specific hospital's name without
+            # logging, so a misconfigured deployment silently printed another
+            # organisation's initials on its certificates.
             try:
                 from .pdf_config import PDFConfiguration
-                lab_name = PDFConfiguration.LABORATORY_INFO.get('name', 'KNH CALIBRATION LABORATORY')
-            except Exception:
-                lab_name = 'KNH CALIBRATION LABORATORY'
+                lab_name = PDFConfiguration.LABORATORY_INFO.get('name') or organisation_name()
+            except Exception as exc:
+                logger.warning(
+                    "[HEADER] Could not read laboratory name from PDFConfiguration "
+                    "(%s); using the configured organisation name instead.", exc
+                )
+                lab_name = organisation_name()
 
-            initials = ''.join(w[0] for w in lab_name.split() if w[0].isupper())[:3] or 'KNH'
+            initials = ''.join(w[0] for w in lab_name.split() if w[0].isupper())[:3]
+            if not initials:
+                initials = (lab_name.strip()[:3] or 'CAL').upper()
 
             # Outer rounded box
             canvas.setStrokeColor(HexColor('#1e40af'))
@@ -191,8 +201,10 @@ class HeaderMixin:
                     candidates.append(os.path.join(str(settings.BASE_DIR), explicit))
                 if hasattr(settings, 'STATIC_ROOT') and settings.STATIC_ROOT:
                     candidates.append(os.path.join(settings.STATIC_ROOT, explicit))
-        except Exception:
-            pass
+        except Exception as exc:
+            # Not fatal: the next candidate source is tried below. Logged at
+            # debug so a missing logo can be traced without noise in normal runs.
+            logger.debug("[HEADER] Explicit logo path unusable: %s", exc)
 
         # ── 2. STATIC_ROOT ────────────────────────────────────────────────────
         if hasattr(settings, 'STATIC_ROOT') and settings.STATIC_ROOT:
@@ -253,10 +265,10 @@ class HeaderMixin:
                                     candidates += list(result)
                                 else:
                                     candidates.append(result)
-                        except Exception:
-                            pass
-        except Exception:
-            pass
+                        except Exception as exc:
+                            logger.debug("[HEADER] Static finder %s failed: %s", finder, exc)
+        except Exception as exc:
+            logger.debug("[HEADER] Static finders unavailable: %s", exc)
 
         # ── 7. CWD fallback ───────────────────────────────────────────────────
         cwd = os.getcwd()
@@ -338,8 +350,10 @@ class HeaderMixin:
             elements.append(declined_detail_table)
             elements.append(Spacer(1, 15))
 
-        if self.is_failed_report:
-            # Failed report title
+        if self.conformity_failed:
+            # The document is a failure report whenever conformity failed, not
+            # only when the failure rate clears 40%. The rate still tunes the
+            # wording below, but it no longer decides the verdict.
             title_table = Table([
                 [Paragraph("CALIBRATION FAILURE REPORT", self.styles['FailedTitle'])]
             ], colWidths=[6.9*inch])
@@ -356,7 +370,19 @@ class HeaderMixin:
             elements.append(title_table)
 
             # Add failure warning
-            warning_text = f"⚠️ DEVICE FAILED CALIBRATION - {self.failure_stats['overall_failure_rate']:.1%} failure rate exceeds acceptable limits"
+            failed = self.failure_stats['failed_readings']
+            total = self.failure_stats['total_readings']
+            if self.is_failed_report:
+                warning_text = (
+                    f"DEVICE FAILED CALIBRATION - {failed} of {total} readings "
+                    f"outside tolerance ({self.failure_stats['overall_failure_rate']:.1%}); "
+                    f"remove from service and repair"
+                )
+            else:
+                warning_text = (
+                    f"DEVICE FAILED CALIBRATION - {failed} of {total} readings "
+                    f"outside tolerance ({self.failure_stats['overall_failure_rate']:.1%})"
+                )
             warning_table = Table([
                 [Paragraph(warning_text, self.styles['FailureWarning'])]
             ], colWidths=[6.9*inch])
@@ -397,7 +423,12 @@ class HeaderMixin:
             ]
             bg_color = HexColor('#fecaca')   # light red to visually distinguish
         else:
-            cert_number = str(self.certificate_number) if self.certificate_number else "N/A"
+            # A pending document shows its reference, not "N/A": the number
+            # is not missing, it has not been issued yet.
+            cert_number = (
+                str(self.certificate_number) if self.certificate_number
+                else (str(self.reference_number) if getattr(self, "reference_number", None) else "N/A")
+            )
             cert_data = [
                 [
                     Paragraph("Certificate Number:", self.styles['CertNumberText']),

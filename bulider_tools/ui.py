@@ -272,6 +272,7 @@ class MainWindow(QMainWindow):
         self.web_view.loadFinished.connect(self.on_load_finished)
 
         self.setup_download_handler()
+        self.setup_new_window_handler()
 
         # Add web view
         main_layout.addWidget(self.web_view)
@@ -812,16 +813,12 @@ class MainWindow(QMainWindow):
                 self._apply_sync_status(hq_online, pending, last_sync)
             else:
                 # ── Layer 3: HTTP ping — run in background thread ──────────
-                hq_url = 'https://cirqen-hq.onrender.com'
-                config_file = DATA_PATH / 'config.json'
-                if config_file.exists():
-                    cfg = _read_json(config_file)
-                    hq_url = (
-                        cfg.get('hq_server_url') or
-                        cfg.get('server_url') or
-                        cfg.get('hq_url') or
-                        hq_url
-                    )
+                # Resolved the same way the updater resolves it (env, then
+                # config.json, then provisioning, then the shipped default).
+                # This used to read top-level keys that config.json never has,
+                # so it always pinged a hardcoded host.
+                from config import resolve_endpoints
+                hq_url = resolve_endpoints(DATA_PATH)['update.server_url'][0]
                 _pending  = pending
                 _last     = last_sync
 
@@ -887,6 +884,24 @@ class MainWindow(QMainWindow):
             self.sync_online_label.setToolTip(tip)
         except Exception as e:
             logger.debug(f"Sync indicator apply error: {e}")
+
+    def setup_new_window_handler(self):
+        """Load target="_blank" / window.open() requests in the main view.
+
+        QWebEngineView has no default window for these, so without this they
+        are dropped without a trace and the link or button looks dead. There is
+        one window in this app, so the request is handled in place; when it is
+        an attachment, downloadRequested picks it up and nothing navigates.
+        """
+        try:
+            self.web_view.page().newWindowRequested.connect(
+                lambda request: self.web_view.setUrl(request.requestedUrl())
+            )
+            logger.info("✅ New-window handler configured")
+        except AttributeError:
+            # newWindowRequested landed in Qt 6.2; older builds keep the old
+            # behaviour rather than crashing at startup.
+            logger.warning("newWindowRequested unavailable; _blank links will not open")
 
     def setup_download_handler(self):
         """Set up download handling for the web view"""

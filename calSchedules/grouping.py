@@ -22,7 +22,8 @@ documented divergences that are intentionally left for a later decision.
 Design rule: everything above :func:`group_members_qs` is pure (no ORM, no
 side effects) and unit-tested with ``SimpleTestCase``.
 """
-from datetime import date
+from calendar import monthrange
+from datetime import date, datetime
 
 from dateutil.relativedelta import relativedelta
 
@@ -178,10 +179,15 @@ def completion_stats(total, completed):
 def next_certificate_number(last_cert, prefix="BNH-"):
     """Next sequential certificate number given the current highest one.
 
-    Pure form of ``CalSoft.models.CalibrationSession.generate_certificate_number``
-    (the caller still runs the ``select_for_update`` query to obtain
-    ``last_cert``). ``last_cert`` may be ``None``/empty for the first certificate.
-    Unparseable suffixes reset the sequence to 0 → ``0001``.
+    The numbering **format**, not an allocator. Certificate numbers are
+    allocated by the HQ server only; the local allocation path that used to
+    call this (``CalibrationSession.generate_certificate_number``) has been
+    removed, because two field sites allocating from their own local maxima
+    produced duplicate numbers that collided on sync.
+
+    This remains the one pure, tested definition of the format, which HQ's
+    allocator mirrors. ``last_cert`` may be ``None``/empty for the first
+    certificate. Unparseable suffixes reset the sequence to 0 → ``0001``.
     """
     if last_cert:
         try:
@@ -193,24 +199,112 @@ def next_certificate_number(last_cert, prefix="BNH-"):
     return f"{prefix}{last_seq + 1:04d}"
 
 
+# ── Due dates ────────────────────────────────────────────────────────────────
+#
+# A calibration is due within a MONTH, not on a particular day of it.
+#
+# Anchoring the due date to the same day of the month as the last calibration
+# made the schedule brittle: a device calibrated on the 3rd was "overdue" from
+# the 4th, even though the workshop had the rest of the month to reach it, and
+# moving a visit a few days later pushed every subsequent due date with it.
+#
+# Taking the last day of the month instead gives the workshop the whole month
+# to schedule the visit without the device counting as overdue, and keeps the
+# anniversary stable: 31 March + 12 months is 31 March, not 30 March, because
+# the month rather than the day is what carries forward.
+#
+# Four ad-hoc versions of this calculation existed across the codebase — two in
+# the CalSoft dashboard, one in the certificate sections, one in the main
+# dashboard — each written slightly differently. This is the shared one.
+
+def month_end(value):
+    """The last day of the month ``value`` falls in.
+
+    Accepts a ``date`` or ``datetime``; returns a ``date``. Handles month
+    lengths and leap years via the calendar, so February 2028 gives the 29th.
+    """
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        value = value.date()
+    last = monthrange(value.year, value.month)[1]
+    return value.replace(day=last)
+
+
+def next_due_date(last_calibrated, interval_months=12):
+    """When a calibration performed on ``last_calibrated`` next falls due.
+
+    The result is the **last day** of the month ``interval_months`` after the
+    calibration, so the whole of that month is available to schedule the visit.
+
+    ``relativedelta`` is used rather than a day count: 12 months is not 360
+    days, and adding ``30 * months`` — as one caller did — drifts the due date
+    about five days earlier every year, so a yearly calibration slides into the
+    previous month after six cycles.
+    """
+    if last_calibrated is None:
+        return None
+    if isinstance(last_calibrated, datetime):
+        last_calibrated = last_calibrated.date()
+    months = int(interval_months or 12)
+    return month_end(last_calibrated + relativedelta(months=months))
+
+
+def is_overdue(due_date, today=None):
+    """True when ``due_date`` has passed.
+
+    A device is overdue only after the last day of its due month, which is the
+    point of anchoring due dates there.
+    """
+    if due_date is None:
+        return False
+    today = today or date.today()
+    if isinstance(due_date, datetime):
+        due_date = due_date.date()
+    return due_date < today
+
+
+def days_until_due(due_date, today=None):
+    """Days remaining until ``due_date``; negative once overdue."""
+    if due_date is None:
+        return None
+    today = today or date.today()
+    if isinstance(due_date, datetime):
+        due_date = due_date.date()
+    return (due_date - today).days
+
+
 # ── ORM query builder (the ONLY DB-touching function here) ────────────────────
 
 def group_members_qs(equipment, scheduled_month, planning_logic, *,
-                     require_equipment_active, require_schedule_active,
+                     require_equipment_active=True, require_schedule_active=True,
                      statuses=None, select_related=("equipment",)):
     """Return the ``CalibrationSchedule`` queryset for a group in one month.
 
-    The historical implementations differed in their filters, so the flags are
-    **required** (no defaults) to force each caller to state exactly what it
-    wants — reproducing its prior behaviour:
+    **One definition of group membership: both the equipment and the schedule
+    must be active.**
 
-      * ``tasks._get_group_members``      → require_schedule_active=True,
-                                            require_equipment_active=False
-      * ``instant.find_group_members``    → require_equipment_active=True,
-                                            require_schedule_active=False
+    The two callers used to disagree, and the disagreement was the reason
+    auto-rescheduling stopped firing:
 
-    ``statuses`` optionally restricts ``status__in`` (neither of the two legacy
-    member-listers filtered on status, so they pass ``None``).
+      * ``instant.find_group_members`` required the equipment active and
+        ignored the schedule flag, so a **soft-deleted schedule** still counted
+        as a member and the group could never reach "all completed";
+      * ``tasks._get_group_members`` required the schedule active and ignored
+        the equipment flag, so a **retired device** held the group open forever.
+
+    Either way the group never completed, so the next period was never created
+    and the schedule silently stopped advancing. ``SCHEDULING_NOTES.md``
+    recorded this as the most likely source of "scheduling doesn't make sense"
+    symptoms and left the canonical choice for a decision; the decision is the
+    strictest reading, which is what the locker already used.
+
+    The flags remain for the rare caller that genuinely needs a wider view
+    (reporting on retired equipment, for instance), but they now default to the
+    canonical rule so a new caller cannot reintroduce the divergence by
+    omission.
+
+    ``statuses`` optionally restricts ``status__in``.
     """
     from .models import CalibrationSchedule  # local import: avoids import cycles
 
