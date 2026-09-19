@@ -425,7 +425,7 @@ class CirqenConfig:
             # the fleet redirect (endpoint_sync.py) refuses to act at all.
             # Deliberately not something HQ can set remotely; a server that
             # could choose its own verification key is not verified.
-            "public_key": "",
+            "public_key": "cIa1UoY7prue5F4cr7sNw2vwv8AK+G/Ea4hBYbL/Hz4=",
             "check_interval_hours": 24,
             "auto_apply": False,
             "require_confirmation": True,

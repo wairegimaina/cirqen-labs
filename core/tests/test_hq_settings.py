@@ -4,6 +4,7 @@ Both drive core.hq_settings, so these cover the behaviour an administrator
 depends on: seeing where a value came from, being stopped before saving a bad
 address, and being able to hand a machine back to the shipped defaults.
 """
+import base64
 import io
 import json
 import os
@@ -21,7 +22,7 @@ from core import hq_settings
 
 from accounts.models import CustomUser
 
-CLEARED = list(config.HQ_ENDPOINT_ENV.values()) + [
+CLEARED = list(config.HQ_ENDPOINT_ENV.values()) + list(config.PLAIN_ENV.values()) + [
     config.ENDPOINTS_FROM_CONFIG_VAR, "CIRQEN_PROVISIONING_FILE",
     "SYNC_AUTH_TOKEN", "HQ_API_KEY", "POSTGRES_HQ_PASSWORD",
 ]
@@ -329,11 +330,18 @@ class SigningKeyTests(HQSettingsBase):
 
     KEY = "ZmFrZS1wdWJsaWMta2V5LWZvci10ZXN0cw=="
 
-    def test_it_is_empty_by_default_so_signing_is_off(self):
-        self.assertEqual(self.load().get("update.public_key"), "")
+    def test_the_build_ships_a_trust_anchor(self):
+        """C-3: the shipped build carries the fleet's public key, so packages
+        are verified and HQ address changes can be followed out of the box."""
+        key = self.load().get("update.public_key")
+        self.assertTrue(key, "the build ships no UPDATE_PUBLIC_KEY — signing is off")
+        self.assertEqual(len(base64.b64decode(key)), 32, "not a 32-byte Ed25519 key")
 
-    def test_validate_config_says_signing_is_off(self):
-        ok, errors = self.load().validate_config()
+    def test_a_build_without_a_key_is_reported_as_unsafe(self):
+        with mock.patch.dict(
+            CirqenConfig.DEFAULT_CONFIG["update"], {"public_key": ""}, clear=False
+        ):
+            ok, errors = self.load().validate_config()
         self.assertTrue(any("public_key" in e for e in errors), errors)
 
     def test_the_environment_sets_it_in_production_mode(self):

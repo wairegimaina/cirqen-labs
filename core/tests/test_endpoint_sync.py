@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, override_settings
 
 import config
 import endpoint_sync
@@ -64,6 +64,12 @@ class EndpointSyncBase(SimpleTestCase):
         key = mock.patch.dict(os.environ, {"UPDATE_PUBLIC_KEY": self.public_b64})
         key.start()
         self.addCleanup(key.stop)
+        # The build now ships a real UPDATE_PUBLIC_KEY, and _public_key() reads
+        # settings before the environment, so the throwaway test key has to go
+        # there or every document would be checked against the fleet's real key.
+        trust = override_settings(UPDATE_SYSTEM={"public_key": self.public_b64})
+        trust.enable()
+        self.addCleanup(trust.disable)
 
     # ── helpers ──────────────────────────────────────────────────────────────
 
@@ -313,7 +319,7 @@ class ServerDocumentTests(SimpleTestCase):
 
         payload = server_endpoints.signed_response()
         self.assertTrue(payload["signed"])
-        with mock.patch.dict(os.environ, {"UPDATE_PUBLIC_KEY": self.public_b64}):
+        with override_settings(UPDATE_SYSTEM={"public_key": self.public_b64}):
             document, why = endpoint_sync.verify_document(payload)
         self.assertIsNotNone(document, why)
         self.assertEqual(document["endpoints"]["sync.api_url"], NEW_SYNC)

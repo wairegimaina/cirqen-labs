@@ -1,11 +1,16 @@
 """Update apply and rollback on disk (IMPROVEMENT_PLAN.md section 6).
 
-Builds a real package (manifest + files + a deletion), applies it to a scratch
-install directory, and checks the result, the automatic rollback when the
-post-update health check fails, and a manual rollback afterwards.
-Migrations and HQ reporting are stubbed; the PostgreSQL snapshot has its own
-test in updates/tests_pg.
+Builds a real, SIGNED package (manifest + signature + files + a deletion),
+applies it to a scratch install directory, and checks the result, the
+automatic rollback when the post-update health check fails, and a manual
+rollback afterwards. Migrations and HQ reporting are stubbed; the PostgreSQL
+snapshot has its own test in updates/tests_pg.
+
+Packages are signed here with a throwaway key because the shipped build now
+carries a real UPDATE_PUBLIC_KEY, so an unsigned package is refused — which is
+the point of signing, and is covered by its own test below.
 """
+import base64
 import hashlib
 import json
 import queue
@@ -14,13 +19,28 @@ import zipfile
 from pathlib import Path
 from unittest import mock
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, override_settings
 
 from updates import updater
 
 
 def _sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def _throwaway_keypair():
+    """A signing key for tests only; never the one the fleet trusts."""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    private = Ed25519PrivateKey.generate()
+    public_b64 = base64.b64encode(
+        private.public_key().public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+    ).decode()
+    return private, public_b64
 
 
 class UpdaterFlowTests(SimpleTestCase):
@@ -53,6 +73,11 @@ class UpdaterFlowTests(SimpleTestCase):
             patcher.start()
             self.addCleanup(patcher.stop)
 
+        self.private, self.public_b64 = _throwaway_keypair()
+        signing = override_settings(UPDATE_SYSTEM={"public_key": self.public_b64})
+        signing.enable()
+        self.addCleanup(signing.disable)
+
         self.package = root / "update-1.6.0.zip"
         new_page, new_module = b"new page", b"NEW = True\n"
         manifest = {
@@ -63,8 +88,10 @@ class UpdaterFlowTests(SimpleTestCase):
             ],
             "deletions": ["legacy.py"],
         }
+        manifest_bytes = json.dumps(manifest).encode()
         with zipfile.ZipFile(self.package, "w") as zf:
-            zf.writestr("manifest.json", json.dumps(manifest))
+            zf.writestr("manifest.json", manifest_bytes)
+            zf.writestr("manifest.sig", base64.b64encode(self.private.sign(manifest_bytes)).decode())
             zf.writestr("files/templates/page.html", new_page)
             zf.writestr("files/core/new_module.py", new_module)
 
@@ -96,5 +123,29 @@ class UpdaterFlowTests(SimpleTestCase):
     def test_tampered_package_is_refused_before_touching_files(self):
         with zipfile.ZipFile(self.package, "a") as zf:
             zf.writestr("files/templates/page.html", b"tampered")  # checksum no longer matches
+        self._run(healthy=True)
+        self._assert_original()
+
+    def test_unsigned_package_is_refused(self):
+        """The whole point of C-3: once a key is configured, an unsigned
+        package must not be applied, however well-formed it is."""
+        with zipfile.ZipFile(self.package, "r") as src:
+            entries = {n: src.read(n) for n in src.namelist() if n != "manifest.sig"}
+        with zipfile.ZipFile(self.package, "w") as zf:
+            for name, data in entries.items():
+                zf.writestr(name, data)
+        self._run(healthy=True)
+        self._assert_original()
+
+    def test_package_signed_by_another_key_is_refused(self):
+        """A package from a server that is not ours — the fleet-takeover case."""
+        attacker, _ = _throwaway_keypair()
+        with zipfile.ZipFile(self.package, "r") as src:
+            entries = {n: src.read(n) for n in src.namelist()}
+        entries["manifest.sig"] = base64.b64encode(
+            attacker.sign(entries["manifest.json"])).decode().encode()
+        with zipfile.ZipFile(self.package, "w") as zf:
+            for name, data in entries.items():
+                zf.writestr(name, data)
         self._run(healthy=True)
         self._assert_original()
