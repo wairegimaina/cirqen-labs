@@ -40,7 +40,7 @@ services:
       # Only a fallback: _read_version() prefers hq_server/version.txt, which is
       # the file that actually decides whether a new package gets built.
       - key: APP_VERSION
-        value: "1.5.1"          # Keep in sync with hq_server/version.txt
+        value: "1.5.2"          # Keep in sync with hq_server/version.txt
 
       # ── Persistent state (machine registry + migration lock) ──────────────
       - key: HQ_STATE_DB
