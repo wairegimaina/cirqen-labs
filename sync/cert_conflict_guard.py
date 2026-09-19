@@ -32,6 +32,17 @@ from psycopg2.extras import RealDictCursor
 
 from .agent_prelude import LOG, now_utc
 
+# config.HQ_ENDPOINT_DEFAULTS names the database "database"; psycopg2 wants
+# "dbname". Only these fields can arrive from the update server — a password
+# never travels in that document, so it always comes from local config.
+HQ_DB_REMOTE_FIELDS = {
+    "hq_db.host": "host",
+    "hq_db.port": "port",
+    "hq_db.database": "dbname",
+    "hq_db.user": "user",
+    "hq_db.sslmode": "sslmode",
+}
+
 SESSION_TABLE = 'public."CalSoft_calibrationsession"'
 
 
@@ -71,6 +82,28 @@ class CertConflictGuardMixin:
         """Short-lived, read-only connection to HQ used for conflict detection only."""
         hq_config = dict(self.config["hq_db"])
         hq_config.pop("enabled", None)
+
+        # Resolve at connection time, not from the snapshot taken at start-up,
+        # so a database move adopted from the update server lands without
+        # waiting for a restart — matching how the sync address already
+        # behaves. Falls back to the start-up copy if anything goes wrong.
+        try:
+            from config import resolve_endpoints
+
+            resolved = resolve_endpoints(self.data_path)
+            for key, field in HQ_DB_REMOTE_FIELDS.items():
+                value, source = resolved.get(key, (None, None))
+                # ONLY a value the update server actually sent. Applying any
+                # other layer here would overwrite the settings this agent
+                # started with using a freshly-resolved default, which is a
+                # different thing entirely and not what a fleet move means.
+                if source == "remote":
+                    hq_config[field] = value
+        except (ImportError, OSError, ValueError, AttributeError) as exc:
+            # Narrow on purpose: a broad except here hid a real programming
+            # error behind a silent fall back to the start-up settings.
+            LOG.warning("Using start-up HQ database settings (%s)", exc)
+
         hq_config.setdefault("sslmode", os.getenv("POSTGRES_SSLMODE", "require"))
         conn = psycopg2.connect(**hq_config, connect_timeout=15)
         conn.autocommit = True

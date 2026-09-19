@@ -390,3 +390,56 @@ class LiveSwitchTests(SimpleTestCase):
     def test_a_trailing_slash_is_normalised(self):
         self.apply({"sync.api_url": NEW_SYNC + "/"})
         self.assertEqual(self.agent.api_url, NEW_SYNC)
+
+
+class DatabaseMoveTests(EndpointSyncBase):
+    """A database move adopted from the update server must land the same way a
+    server move does — at connection time, not on restart."""
+
+    def _guard(self, startup_cfg):
+        from sync.cert_conflict_guard import CertConflictGuardMixin
+
+        class FakeAgent:
+            config = {"hq_db": startup_cfg}
+
+        agent = FakeAgent()
+        agent.data_path = self.data
+        captured = {}
+
+        def fake_connect(**kwargs):
+            captured.update(kwargs)
+            return mock.Mock(autocommit=False)
+
+        with mock.patch("sync.cert_conflict_guard.psycopg2.connect", side_effect=fake_connect):
+            CertConflictGuardMixin._cert_guard_hq_conn(agent)
+        return captured
+
+    STARTUP = {
+        "host": "old-db.example.com", "port": 5432, "dbname": "postgres",
+        "user": "postgres.old", "password": "secret", "sslmode": "require",
+        "enabled": True,
+    }
+
+    def test_without_a_remote_move_the_startup_settings_are_used(self):
+        used = self._guard(dict(self.STARTUP))
+        self.assertEqual(used["host"], "old-db.example.com")
+        self.assertEqual(used["password"], "secret")
+        self.assertNotIn("enabled", used)
+
+    def test_an_adopted_database_move_is_used_without_a_restart(self):
+        self.run_cycle(self.response(self.document(endpoints={
+            "hq_db.host": "new-db.example.com",
+            "hq_db.database": "postgres",
+            "hq_db.user": "postgres.new",
+        })))
+        used = self._guard(dict(self.STARTUP))
+        self.assertEqual(used["host"], "new-db.example.com")
+        self.assertEqual(used["user"], "postgres.new")
+        self.assertEqual(used["dbname"], "postgres")
+
+    def test_the_password_always_comes_from_local_config(self):
+        """It is never carried in the fleet document, which is unauthenticated."""
+        self.run_cycle(self.response(self.document(endpoints={
+            "hq_db.host": "new-db.example.com"})))
+        used = self._guard(dict(self.STARTUP))
+        self.assertEqual(used["password"], "secret")
