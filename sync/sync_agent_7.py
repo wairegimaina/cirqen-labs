@@ -42,6 +42,34 @@ DOWNLOAD_IDLE_MAX_INTERVAL = int(os.getenv("SYNC_DOWNLOAD_IDLE_MAX", "120"))
 
 class DownloadCertHeartbeatMixin(SmartDeleteMixin):
     """Download loop, certificate sync, SSE/Redis notify listeners, and heartbeat."""
+    def _apply_new_sync_url(self, adopted: dict):
+            """Point the running loops at a newly adopted sync address.
+
+            Every network loop builds its URL from self.api_url at call time, so
+            reassigning it here takes effect on the next iteration — seconds,
+            not whenever the machine next restarts. That matters: a fleet move
+            is only finished when the old host can be switched off, and a
+            hospital desktop may run for weeks between restarts.
+
+            The mirror is the exception: it was handed api_url when it was
+            constructed and keeps its own copy until the agent restarts. It runs
+            every 24h and its database connection is unaffected by a server
+            move, so it is left to pick the change up on restart.
+            """
+            new_url = (adopted.get("sync.api_url") or "").rstrip("/")
+            if not new_url or new_url == self.api_url:
+                return
+
+            previous = self.api_url
+            self.api_url = new_url
+            self.hq_base_url = (
+                new_url.split("/api/")[0] if "/api/" in new_url else new_url
+            )
+            LOG.warning(
+                "🧭 Sync address switched live: %s -> %s (mirror follows on restart)",
+                previous, new_url,
+            )
+
     def endpoint_sync_loop(self):
             """Ask the update server whether the sync HQ has moved.
 
@@ -75,9 +103,10 @@ class DownloadCertHeartbeatMixin(SmartDeleteMixin):
                     result = endpoint_sync.fetch_and_apply(self.data_path, update_url)
                     if result.get("changed"):
                         LOG.warning(
-                            "🧭 HQ addresses changed by the update server: %s — "
-                            "restart to apply everywhere", result.get("adopted"),
+                            "🧭 HQ addresses changed by the update server: %s",
+                            result.get("adopted"),
                         )
+                        self._apply_new_sync_url(result.get("adopted") or {})
                     else:
                         LOG.debug("HQ endpoint check: %s", result.get("reason"))
                 except Exception as exc:  # noqa: BLE001 - never kill the thread

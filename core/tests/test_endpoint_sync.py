@@ -347,3 +347,46 @@ class ServerDocumentTests(SimpleTestCase):
             document = server_endpoints.build_document()
         self.assertNotIn("hq_db.password", document["endpoints"])
         self.assertNotIn("should-not-appear", json.dumps(document))
+
+
+class LiveSwitchTests(SimpleTestCase):
+    """A fleet move must take effect without waiting for a restart.
+
+    Every network loop builds its URL from self.api_url at call time, so the
+    running agent can be repointed in place. Without this a move only lands
+    when each desktop happens to restart, and the old host can never safely be
+    switched off.
+    """
+
+    class FakeAgent:
+        api_url = "https://host-a.example.com/api/sync"
+        hq_base_url = "https://host-a.example.com"
+
+    def setUp(self):
+        from sync.sync_agent_7 import DownloadCertHeartbeatMixin
+
+        self.agent = self.FakeAgent()
+        self.apply = DownloadCertHeartbeatMixin._apply_new_sync_url.__get__(self.agent)
+
+    def test_a_new_address_is_applied_in_place(self):
+        self.apply({"sync.api_url": NEW_SYNC})
+        self.assertEqual(self.agent.api_url, NEW_SYNC)
+        self.assertEqual(self.agent.hq_base_url, "https://host-b.example.com")
+
+    def test_the_base_url_drops_the_api_path(self):
+        self.apply({"sync.api_url": "https://host-c.example.com/api/sync"})
+        self.assertEqual(self.agent.hq_base_url, "https://host-c.example.com")
+
+    def test_the_same_address_is_a_no_op(self):
+        before = self.agent.api_url
+        self.apply({"sync.api_url": before})
+        self.assertEqual(self.agent.api_url, before)
+
+    def test_a_document_carrying_no_sync_address_changes_nothing(self):
+        before = self.agent.api_url
+        self.apply({"hq_db.host": "db.example.com"})
+        self.assertEqual(self.agent.api_url, before)
+
+    def test_a_trailing_slash_is_normalised(self):
+        self.apply({"sync.api_url": NEW_SYNC + "/"})
+        self.assertEqual(self.agent.api_url, NEW_SYNC)
