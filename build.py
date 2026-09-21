@@ -257,7 +257,6 @@ def verify_utilities_in_dist():
         return False
 
 
-
 def extract_archive(archive_path, extract_to):
     """Extract zip or tar with logging"""
     logger.info(f"📦 Extracting: {Path(archive_path).name}")
@@ -4012,7 +4011,6 @@ def verify_update_files_in_dist():
         return True  # Don't fail build, just warn
 
 
-
 def create_code_directory(internal_dir: Path, django_apps: list) -> bool:
     """
     Create 'code' directory containing all Django apps and backend code
@@ -4346,7 +4344,7 @@ def main():
     print("\n" + "=" * 70)
 
     return 0
-#123
+# 123
 
 if __name__ == "__main__":
     sys.exit(main())
