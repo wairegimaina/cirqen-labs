@@ -48,9 +48,8 @@ These come from reading the code, and each has a fix or a workaround in the plan
 - [ ] Decide the demo machine: a laptop with the packaged build installed, **not**
       your dev checkout. The built `dist/Cirqen/` is dated 21 Sep, but the archive
       `dist/Cirqen_linux_v1.0.0.tar.gz` is old. Rebuild (`python build.py`) so
-      what you show is 1.5.2. Note `build.py` and `version.txt` have uncommitted
-      changes on `improvement-plan`; commit or discard them first so the build is
-      reproducible.
+      what you show is 1.5.4 (`settings.APP_VERSION`). Build from a clean, merged
+      `main` so the build is reproducible.
 - [ ] Decide the demo HQ (see Part 0.1) and confirm the demo machine's
       `sync.api_url` points at it:
       `python -c "from config import resolve_endpoints as r; print(r('<data dir>'))"`

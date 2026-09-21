@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 # sibling modules in this package
 from .signatures import SignatureImageLoader
 from .watermark import _LogoWatermarkCanvas
-from core.branding import contact_line
+from core.branding import contact_line, organisation_name
 
 
 

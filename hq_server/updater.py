@@ -179,7 +179,7 @@ class Updater:
         dest = self.staging_dir / f"update_v{self.version}{ext}"
         self._emit("downloading", {
             "message": f"Reading local package ({src.stat().st_size // 1024} KB)…",
-            "progres": 50,
+            "progress": 50,
         })
         shutil.copy2(src, dest)
         self._emit("downloading", {"message": "Package ready.", "progress": 100})
