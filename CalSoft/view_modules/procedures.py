@@ -12,7 +12,7 @@ from decimal import Decimal, InvalidOperation
 from django.utils import timezone
 from django.contrib.auth import get_user_model
 
-from CalSoft.models import CalibrationProcedure, CalibrationParameter, Standard, Parameter, SubParameter, SetValue, CalibrationSession
+from CalSoft.models import CalibrationAuditLog, CalibrationProcedure, CalibrationParameter, Standard, Parameter, SubParameter, SetValue, CalibrationSession
 from CalSoft.forms import CalibrationProcedureForm, ParameterFormSet, ProcedureSearchForm
 
 User = get_user_model()
@@ -280,6 +280,7 @@ def procedure_edit(request, pk):
                         request, f'Procedure "{procedure.name}" updated successfully.')
                     return redirect('calibration:procedure_detail', pk=procedure.pk)
             except Exception as e:
+                logger.exception("%s failed: %s", "procedure_edit", e)
                 messages.error(request, f'Error updating procedure: {str(e)}')
         else:
             messages.error(request, 'Please correct the errors in the form.')

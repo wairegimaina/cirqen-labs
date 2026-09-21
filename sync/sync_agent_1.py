@@ -8,7 +8,7 @@ from .agent_prelude import (
 )
 from .agent_prelude import load_config_from_unified_manager, load_config_from_env_fallback
 from .agent_prelude import sleep_with_jitter, is_online, CERT_TABLES, DEFAULT_CONFIG
-from .agent_prelude import REDIS_AVAILABLE, REDIS_QUEUE_AVAILABLE, RedisQueueSync, DatabaseMirror
+from .agent_prelude import REDIS_AVAILABLE, DatabaseMirror
 import os
 import logging
 import threading
@@ -38,6 +38,10 @@ import pytz
 from .state_manager import StateManager
 from .dependency_manager import DependencyManager
 from .smart_delete import SmartDeleteMixin
+try:
+    from .sql_ident import qualified
+except ImportError:  # loaded as a top-level module with sync/ on sys.path
+    from sql_ident import qualified
 
 
 class AgentInitMixin(SmartDeleteMixin):
@@ -56,6 +60,8 @@ class AgentInitMixin(SmartDeleteMixin):
             config = load_agent_config(data_path)
 
         self.config = config
+        # Where config.json and endpoints.json live; the endpoint poll needs it.
+        self.data_path = Path(data_path) if data_path else Path.home() / ".cmms"
         self.api_url = self.config["api_url"].rstrip("/")
 
         # ============================================================
@@ -133,6 +139,17 @@ class AgentInitMixin(SmartDeleteMixin):
         # Initialize client_id
         self.client_id = self.auto_register_client()
 
+        # First run of a new install: exchange the installer's enrollment code
+        # for this client's own key (sync/enrollment.py).
+        if not self.auth_token:
+            try:
+                from .enrollment import ensure_client_key_for_data_path
+            except ImportError:
+                from enrollment import ensure_client_key_for_data_path
+            self.auth_token = ensure_client_key_for_data_path(
+                data_path, self.hq_base_url, self.client_id
+            ) or None
+
         # Thread management
         self.stop_event = threading.Event()
         self.threads = []
@@ -184,20 +201,6 @@ class AgentInitMixin(SmartDeleteMixin):
         LOG.info("  Crash recovery: Triple redundancy enabled")
         LOG.info("=" * 60)
 
-        # ============================================================
-        # INITIALIZE REDIS QUEUE
-        # ============================================================
-        self.redis_queue = self._init_redis_queue()
-        if not self.redis_queue:
-            LOG.warning("=" * 80)
-            LOG.warning("⚠️  REDIS QUEUE NOT AVAILABLE")
-            LOG.warning("=" * 80)
-            LOG.warning("   Falling back to LEGACY POLLING MODE")
-            LOG.warning("   Limitations:")
-            LOG.warning("   • Possible race conditions")
-            LOG.warning("   • No crash recovery")
-            LOG.warning("   • No idempotency guarantees")
-            LOG.warning("=" * 80)
 
     def _init_redis(self):
         """
@@ -256,57 +259,6 @@ class AgentInitMixin(SmartDeleteMixin):
         LOG.info("[Redis] Connected on %s:%d", host, port)
         return r
 
-    def _init_redis_queue(self):
-        """Initialize Redis queue sync (if available)"""
-        if not hasattr(self, "redis") or self.redis is None:
-            return None
-
-        if not REDIS_QUEUE_AVAILABLE:
-            return None
-
-        # ── Auth token sanity check ──────────────────────────────────────────
-        # If auth_token is missing the queue will be initialised but every
-        # upload request will be rejected by HQ with 403/401.  Log clearly
-        # so the problem is visible without diving into request traces.
-        if not self.auth_token:
-            LOG.warning(
-                "⚠️  RedisQueueSync: auth_token is MISSING — "
-                "all upload requests will be rejected by HQ (X-API-Key header "
-                "will not be sent). Check sync.auth_token in config.json."
-            )
-        else:
-            LOG.info(
-                "[RedisQueue] Auth token loaded (%d chars) — "
-                "X-API-Key header will be sent with every request.",
-                len(self.auth_token),
-            )
-        # ────────────────────────────────────────────────────────────────────
-
-        try:
-            queue = RedisQueueSync(
-                redis_client=self.redis,
-                api_url=self.api_url,
-                client_id=self.client_id,
-                auth_token=self.auth_token,
-                logger=LOG,
-                batch_size=int(self.sync_cfg.get("upload_batch_size", 50)),
-                max_retry_attempts=5,
-            )
-            LOG.info("=" * 80)
-            LOG.info("✅ REDIS QUEUE SYNC INITIALIZED")
-            LOG.info("=" * 80)
-            LOG.info("   Mode: Queue-based (one at a time)")
-            LOG.info("   Features:")
-            LOG.info("   • No race conditions (mutex lock)")
-            LOG.info("   • Crash recovery (inflight tracking)")
-            LOG.info("   • Idempotency (sync_id)")
-            LOG.info("   • Exponential backoff retry")
-            LOG.info("   • Dead letter queue")
-            LOG.info("=" * 80)
-            return queue
-        except Exception as e:
-            LOG.error("❌ Redis queue init failed: %s", e)
-            return None
 
     def pull_missing_certificates_from_hq(self):
         """
@@ -654,8 +606,7 @@ class AgentInitMixin(SmartDeleteMixin):
                         else:
                             schema, tbl = "public", first_table
 
-                        quoted_table = f'"{tbl}"'
-                        full_table = f"{schema}.{quoted_table}"
+                        full_table = qualified(schema, tbl)
 
                         cur.execute(f"SELECT COUNT(*) FROM {full_table} LIMIT 1")
                         count = cur.fetchone()[0]
@@ -689,7 +640,7 @@ class AgentInitMixin(SmartDeleteMixin):
             else:
                 schema, tbl = "public", first_table
 
-            full_table = f'{schema}."{tbl}"'
+            full_table = qualified(schema, tbl)
             conn = self.pool.getconn()
             try:
                 with conn.cursor() as cur:

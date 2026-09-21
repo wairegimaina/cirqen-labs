@@ -5,6 +5,7 @@ Matches equipment report styling
 """
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
+from reportlab.lib.colors import HexColor
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch, mm, cm
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image, PageBreak
@@ -16,6 +17,7 @@ from io import BytesIO
 import os
 from datetime import datetime
 import logging
+from core.branding import contact_line
 
 logger = logging.getLogger(__name__)
 
@@ -296,7 +298,7 @@ class ModernCalibrationPDFGenerator:
         canvas.drawCentredString(
             width / 2,
             height - 2.7*cm,
-            "Email: biomedical@hospital.com | Phone: +254-XXX-XXXX | ISO/IEC 17025:2017"
+            contact_line("ISO/IEC 17025:2017")
         )
 
         # FOOTER

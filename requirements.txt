@@ -90,6 +90,9 @@ PySide6>=6.6
 # ── Dev / Debug ───────────────────────────────────────────────
 django-debug-toolbar>=4.4
 django-extensions>=3.2
+# ── Error monitoring (active only when SENTRY_DSN is set) ─────
+sentry-sdk>=2.0
+
 pytest>=8.0
 pytest-django>=4.9
 chartjs

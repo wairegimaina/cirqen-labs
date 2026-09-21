@@ -303,7 +303,7 @@ def perform_startup_cleanup():
                 try:
                     lock_file.unlink()
                     cleanup_actions.append("✓ Removed corrupted lock file")
-                except:
+                except Exception:
                     pass
     except Exception as e:
         logger.debug(f"Lock cleanup error: {e}")

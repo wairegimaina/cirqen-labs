@@ -13,7 +13,7 @@ from django.core.paginator import Paginator
 from django.db.models import Q
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
-from django.views.decorators.csrf import csrf_protect, csrf_exempt
+from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_POST, require_http_methods
 from django.db import transaction
 from django.core.exceptions import ValidationError
@@ -28,7 +28,6 @@ User = get_user_model()
 logger = logging.getLogger(__name__)
 
 
-@csrf_exempt
 @require_http_methods(["POST"])
 @login_required
 @role_required('HOD')
@@ -194,105 +193,6 @@ def api_create_user(request):
 
 
 @login_required
-@hod_required
-def create_user_view(request):
-    """Enhanced view for HOD to create new users with first login setup"""
-
-    if request.method == 'POST':
-        form = UserCreationForm(request.POST)
-        if form.is_valid():
-            try:
-                with transaction.atomic():
-                    # Generate username and temporary password
-                    username = UserManagementUtils.generate_username(
-                        form.cleaned_data['first_name']
-                    )
-                    temp_password = UserManagementUtils.generate_temp_password()
-
-                    # Create user
-                    user = User.objects.create_user(
-                        username=username,
-                        first_name=form.cleaned_data['first_name'],
-                        last_name=form.cleaned_data['last_name'],
-                        email=form.cleaned_data['email'],
-                        password=temp_password,
-                        active_status=True
-                    )
-
-                    # Create profile with first login setup requirements
-                    profile_data = {
-                        'user': user,
-                        'role': form.cleaned_data['role'],
-                        'created_by': request.user,
-                        'must_change_password': True,
-                        'has_uploaded_signature': False
-                    }
-
-                    # Add role-specific assignments
-                    if form.cleaned_data['role'] == 'NIC':
-                        profile_data['department'] = form.cleaned_data['department']
-                    elif form.cleaned_data['role'] == 'Tech':
-                        profile_data['level'] = form.cleaned_data['level']
-                        if form.cleaned_data.get('workshop'):
-                            profile_data['workshop'] = form.cleaned_data['workshop']
-
-                    profile = UserProfile.objects.create(**profile_data)
-
-                    # Send welcome email
-                    email_sent = UserManagementUtils.send_welcome_email(
-                        user, temp_password, request.user
-                    )
-                    logger.info(
-                        "[CREATE USER VIEW] send_welcome_email returned %s for user=%s email=%s",
-                        email_sent, user.username, user.email,
-                    )
-
-                    success_message = f"""
-                    User '{username}' created successfully!
-                    Role: {profile.get_role_display()}
-                    """
-
-                    if profile.level:
-                        success_message += f"\nLevel: {profile.get_level_display()}"
-                    if profile.department:
-                        success_message += f"\ndepartment: {profile.department.name}"
-                    if profile.workshop:
-                        success_message += f"\nWorkshop: {profile.workshop.name}"
-
-                    success_message += f"\nEmployee ID: {profile.employee_id}"
-                    success_message += f"\nTemporary password: {temp_password}"
-                    success_message += "\n\nUser will be required to change password and create digital signature on first login."
-
-                    if email_sent:
-                        success_message += "\nWelcome email sent successfully."
-                    else:
-                        success_message += "\nNote: Welcome email could not be sent."
-
-                    messages.success(request, success_message)
-                    return redirect('createUser')
-
-            except Exception as e:
-                messages.error(request, f"Error creating user: {str(e)}")
-        else:
-            messages.error(request, "Please correct the errors below.")
-    else:
-        form = UserCreationForm()
-
-    recent_users = UserProfile.objects.filter(
-        created_by=request.user,
-        user__active_status=True
-    ).select_related('user', 'department', 'workshop').order_by('-created_at')[:5]
-
-    context = {
-        'show_sidebar': True,  # Enable hamburger menu
-        'form': form,
-        'title': 'Create New User',
-        'recent_users': recent_users
-    }
-    return render(request, 'users_login/create_user.html', context)
-
-
-@login_required
 @role_required('HOD')
 def admin_reset_user_password(request, user_id):
     """Allow HOD to reset any user's password (admin function)"""
@@ -326,20 +226,10 @@ def admin_reset_user_password(request, user_id):
 
         return redirect('manage_users')
 
-    return render(request, 'users_login/admin_reset_password.html', {
+    return render(request, 'users_login/Admin_Reset.html', {
         'show_sidebar': True,  # Enable hamburger menu
         'target_user': target_user,
         'title': f'Reset Password for {target_user.get_full_name() or target_user.username}'
-    })
-
-
-@login_required
-@role_required('HOD', 'NIC')
-def user_management_page(request):
-    """Render the user management HTML page"""
-    return render(request, 'users_login/user_management.html', {
-        'show_sidebar': True,  # Enable hamburger menu
-        'title': 'User Management System'
     })
 
 

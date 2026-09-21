@@ -1,6 +1,7 @@
 """machineReports views — equipment repair detail view."""
 from uuid import UUID
 from django.shortcuts import redirect, render, get_object_or_404
+from core.scoping import get_for_user_or_404
 from django.http import HttpResponse, JsonResponse
 from django.db.models import Count, Sum, Avg, Q, F
 from django.utils import timezone
@@ -68,7 +69,7 @@ def equipment_repair_details(request, equipment_id):
     """
     try:
         # Get the equipment
-        equipment = get_object_or_404(Equipment, id=equipment_id)
+        equipment = get_for_user_or_404(Equipment, request.user, id=equipment_id)
 
         # Get calibration sessions for this equipment
         # Match by BOTH schedule equipment relationship AND serial number

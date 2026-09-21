@@ -37,6 +37,10 @@ import requests
 from dataclasses import dataclass, asdict
 from enum import Enum
 from psycopg2.extras import RealDictCursor, Json
+try:
+    from .sql_ident import qualified
+except ImportError:  # loaded as a top-level module with sync/ on sys.path
+    from sql_ident import qualified
 
 # Setup logging
 LOG = logging.getLogger("mirror_sync")
@@ -164,8 +168,7 @@ def fetch_parent_record_from_local(local_conn, table: str, parent_id: str,
     else:
         schema, tbl = "public", table
 
-    quoted_table = f'"{tbl}"'
-    full_table = f"{schema}.{quoted_table}"
+    full_table = qualified(schema, tbl)
 
     try:
         with local_conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -210,7 +213,7 @@ def fetch_parent_record_from_local(local_conn, table: str, parent_id: str,
         LOG.error(f"   ❌ Error fetching parent {table}[{parent_id}]: {e}")
         try:
             local_conn.rollback()
-        except:
+        except Exception:
             pass
         return None
 # ============================================================
@@ -243,8 +246,7 @@ def check_and_fetch_missing_parents_for_mirror(
         else:
             schema, tbl = "public", table
 
-        quoted_table = f'"{tbl}"'
-        full_table = f"{schema}.{quoted_table}"
+        full_table = qualified(schema, tbl)
 
         try:
             with source_conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -909,8 +911,7 @@ class DatabaseMirror:
             schema, tbl = "public", table
 
         tbl = tbl.strip('"')
-        quoted_table = f'"{tbl}"'
-        full_table = f"{schema}.{quoted_table}"
+        full_table = qualified(schema, tbl)
 
         try:
             with conn.cursor() as cur:
@@ -950,14 +951,14 @@ class DatabaseMirror:
             LOG.error(f"   Error message: {str(e).split('CONTEXT:')[0].strip()}")
             try:
                 conn.rollback()
-            except:
+            except Exception:
                 pass
             return set()
         except Exception as e:
             LOG.error(f"❌ Error getting record IDs for {table}: {str(e)}")
             try:
                 conn.rollback()
-            except:
+            except Exception:
                 pass
             return set()
 
@@ -1031,7 +1032,7 @@ class DatabaseMirror:
 
                     # Try to count records
                     try:
-                        cur.execute(f'SELECT COUNT(*) FROM "{schema}"."{tbl}"')
+                        cur.execute(f'SELECT COUNT(*) FROM {qualified(schema, tbl)}')
                         count = cur.fetchone()[0]
                         LOG.info(f"   📊 Total records: {count}")
                     except Exception as e:
@@ -1060,8 +1061,7 @@ class DatabaseMirror:
             schema, tbl = "public", table
 
         tbl = tbl.strip('"')
-        quoted_table = f'"{tbl}"'
-        full_table = f"{schema}.{quoted_table}"
+        full_table = qualified(schema, tbl)
 
         try:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -1184,8 +1184,7 @@ class DatabaseMirror:
             schema, tbl = "public", table
 
         tbl = tbl.strip('"')
-        quoted_table = f'"{tbl}"'
-        full_table = f"{schema}.{quoted_table}"
+        full_table = qualified(schema, tbl)
 
         try:
             with self.hq_conn.cursor() as cur:
@@ -1212,7 +1211,7 @@ class DatabaseMirror:
                             try:
                                 parsed = json.loads(value)
                                 prepared_data[key] = Json(parsed)
-                            except:
+                            except Exception:
                                 prepared_data[key] = Json(value)
                         else:
                             prepared_data[key] = Json(value)
@@ -1284,7 +1283,7 @@ class DatabaseMirror:
             LOG.error(f"   ❌ Failed to sync to HQ {table}[{row_id}]: {e}")
             try:
                 self.hq_conn.rollback()
-            except:
+            except Exception:
                 pass
             return False
 
@@ -1394,8 +1393,7 @@ class DatabaseMirror:
             schema, tbl = "public", table
 
         tbl = tbl.strip('"')
-        quoted_table = f'"{tbl}"'
-        full_table = f"{schema}.{quoted_table}"
+        full_table = qualified(schema, tbl)
 
         try:
             with self.local_conn.cursor() as cur:
@@ -1448,7 +1446,7 @@ class DatabaseMirror:
                             try:
                                 parsed = json.loads(value)
                                 prepared_data[key] = Json(parsed)
-                            except:
+                            except Exception:
                                 prepared_data[key] = Json(value)
                         else:
                             prepared_data[key] = Json(value)
@@ -1478,7 +1476,7 @@ class DatabaseMirror:
             LOG.error(f"   ❌ Failed to sync to local {table}[{row_id}]: {e}")
             try:
                 self.local_conn.rollback()
-            except:
+            except Exception:
                 pass
             return False
     def resolve_conflict(self, conflict: RecordDifference,
@@ -1946,8 +1944,8 @@ def main():
 
     parser.add_argument(
         "--hq-host",
-        default=os.getenv("POSTGRES_HQ_HOST", "127.0.0.1"),
-        help="HQ database host"
+        default=os.getenv("POSTGRES_HQ_HOST", ""),
+        help="HQ database host (or POSTGRES_HQ_HOST)"
     )
 
     parser.add_argument(
@@ -1959,14 +1957,14 @@ def main():
 
     parser.add_argument(
         "--hq-db",
-        default=os.getenv("POSTGRES_HQ_DB", "b12technologies"),
-        help="HQ database name"
+        default=os.getenv("POSTGRES_HQ_DB", ""),
+        help="HQ database name (or POSTGRES_HQ_DB)"
     )
 
     parser.add_argument(
         "--hq-user",
-        default=os.getenv("POSTGRES_HQ_USER", "b12technologies"),
-        help="HQ database user"
+        default=os.getenv("POSTGRES_HQ_USER", ""),
+        help="HQ database user (or POSTGRES_HQ_USER)"
     )
 
     parser.add_argument(
@@ -2014,8 +2012,8 @@ def main():
 
     parser.add_argument(
         "--api-url",
-        default=os.getenv("SYNC_API_URL", "https://hq-server-dgs6.onrender.com/api/sync"),
-        help="HQ API URL"
+        default=os.getenv("SYNC_API_URL", ""),
+        help="HQ API URL (or SYNC_API_URL)"
     )
 
     parser.add_argument(
@@ -2039,6 +2037,15 @@ def main():
     )
 
     args = parser.parse_args()
+
+    missing = [flag for flag, value in (
+        ("--hq-host / POSTGRES_HQ_HOST", args.hq_host),
+        ("--hq-db / POSTGRES_HQ_DB", args.hq_db),
+        ("--hq-user / POSTGRES_HQ_USER", args.hq_user),
+        ("--api-url / SYNC_API_URL", args.api_url),
+    ) if not value]
+    if missing:
+        parser.error("no built-in HQ address; set: " + ", ".join(missing))
 
     # Parse tables
     tables = [t.strip() for t in args.tables.split(",") if t.strip()]

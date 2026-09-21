@@ -22,21 +22,17 @@ from .view_modules.procedures import (
     procedure_edit,
     procedure_delete,
 )
-from .view_modules.sessions import session_detail, session_list, certificate_validation
+from .view_modules.sessions import session_detail, certificate_validation
 from .view_modules.calibration import perform_calibration_global, complete_calibration_from_session
 
-# Standards: only non-parameter views come from view_modules.standards
-from .view_modules.standards import (
+from .view_modules.standards import StandardsParameters_lists
+
+# Standards and parameters CRUD: the AJAX-aware versions the list page's
+# stand-parameters-list.js expects (JSON from edit/delete, soft delete for sync).
+from .view_modules.parameters import (
     standard_create,
     standard_edit,
     standard_delete,
-    StandardsParameters_lists,
-    auto_assign_procedures,
-    equipment_procedure_mapping,
-)
-
-# Parameters: AJAX-aware versions live in view_modules.parameters
-from .view_modules.parameters import (
     parameter_create,
     parameter_edit,
     parameter_delete,
@@ -54,7 +50,6 @@ from .view_modules.imports import (
 # Alias for URL compatibility
 standards_list = StandardsParameters_lists
 
-from .view_modules.workflows import calibration_workflow_view, update_workflow_step
 from .view_modules.certificates import (
     certificate_list,
     generate_comprehensive_certificate,
@@ -80,12 +75,6 @@ from .view_modules.api import (
     api_validate_readings,
     api_calculate_uncertainty,
     api_session_details,
-)
-from .view_modules.analytics import (
-    analytics_dashboard,
-    trend_analysis,
-    performance_analysis,
-    reports_dashboard,
 )
 from .view_modules.notifications import (
     notifications_list_api,
@@ -124,55 +113,3 @@ def require_certificate_access(view_func):
     return wrapper
 
 
-@login_required
-def assign_procedure_to_schedule(request, schedule_id):
-    schedule = get_object_or_404(CalibrationSchedule, pk=schedule_id)
-
-    if request.method == "POST":
-        form = CalibrationScheduleForm(request.POST, instance=schedule)
-        if form.is_valid():
-            try:
-                with transaction.atomic():
-                    form.save()
-                    CalibrationAuditLog.objects.create(
-                        user=request.user,
-                        action="assign_procedure",
-                        description=f"Assigned procedure to schedule {schedule.id}",
-                        schedule=schedule,
-                    )
-                    messages.success(request, "Procedure assigned successfully.")
-                    return redirect("calibration:cal-dashboard")
-            except Exception as e:
-                messages.error(request, f"Error assigning procedure: {str(e)}")
-    else:
-        form = CalibrationScheduleForm(instance=schedule)
-
-    return render(
-        request,
-        "Calibration/assign_procedure.html",
-        {"schedule": schedule, "form": form, "show_sidebar": True},
-    )
-
-
-@login_required
-def audit_log(request):
-    logs = CalibrationAuditLog.objects.select_related("user", "schedule").order_by("-timestamp")
-    paginator = Paginator(logs, 20)
-    page_number = request.GET.get("page")
-    page_obj = paginator.get_page(page_number)
-
-    return render(
-        request,
-        "Calibration/audit_log.html",
-        {
-            "page_obj": page_obj,
-            "total_logs": logs.count(),
-            "show_sidebar": True,
-        },
-    )
-
-
-@login_required
-def backup_calibration_data(request):
-    messages.success(request, "Data backup initiated successfully.")
-    return redirect("calibration:calsoft_dashboard")

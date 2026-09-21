@@ -1,0 +1,201 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Calibration Groups - Equiper National Hospital{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'calibrition/schedule_groups.css' %}" />
+{% endblock %}
+
+{% block page_title %}Calibration Groups{% endblock %}
+
+{% block content %}
+<div class="main-container sg">
+
+  {% if messages %}
+  <div class="sg-messages">
+    {% for message in messages %}
+    <div class="alert alert-dismissible fade show
+      {% if 'error' in message.tags %}alert-danger
+      {% elif 'warning' in message.tags %}alert-warning
+      {% elif 'success' in message.tags %}alert-success
+      {% else %}alert-info{% endif %}" role="alert">
+      {{ message }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {# ── Month navigation and grouping logic ─────────────────────────────── #}
+  <form method="get" class="sg-toolbar" id="sg-filters">
+    <div class="sg-month-nav">
+      <a class="sg-nav-btn"
+         href="?month={{ previous_month|date:'Y-m' }}&logic={{ logic }}"
+         aria-label="Previous month" title="Previous month">&#8249;</a>
+      <div class="sg-month-label">
+        <span class="sg-month">{{ month|date:"F Y" }}</span>
+        <span class="sg-month-sub">
+          {{ summary.groups }} group{{ summary.groups|pluralize }} &middot;
+          {{ summary.devices }} device{{ summary.devices|pluralize }}
+        </span>
+      </div>
+      <a class="sg-nav-btn"
+         href="?month={{ next_month|date:'Y-m' }}&logic={{ logic }}"
+         aria-label="Next month" title="Next month">&#8250;</a>
+    </div>
+
+    <div class="sg-toolbar-right">
+      <label class="sg-field">
+        <span class="sg-field-label">Grouped by</span>
+        <select name="logic" class="sg-select" onchange="this.form.submit()">
+          <option value="department" {% if logic == 'department' %}selected{% endif %}>Department</option>
+          <option value="description" {% if logic == 'description' %}selected{% endif %}>Equipment type</option>
+        </select>
+      </label>
+      <input type="hidden" name="month" value="{{ month|date:'Y-m' }}" />
+      <a class="sg-btn sg-btn-ghost" href="{% url 'schedule:calibration_dashboard' %}">
+        All schedules
+      </a>
+    </div>
+  </form>
+
+  {# ── Month summary ───────────────────────────────────────────────────── #}
+  {% if groups %}
+  <section class="sg-summary" aria-label="Month summary">
+    <div class="sg-summary-bar">
+      <div class="sg-summary-fill" style="width: {{ summary.percent }}%"></div>
+    </div>
+    <div class="sg-summary-stats">
+      <div class="sg-stat">
+        <span class="sg-stat-value">{{ summary.percent }}%</span>
+        <span class="sg-stat-label">complete</span>
+      </div>
+      <div class="sg-stat">
+        <span class="sg-stat-value">{{ summary.completed_devices }}/{{ summary.devices }}</span>
+        <span class="sg-stat-label">devices done</span>
+      </div>
+      <div class="sg-stat">
+        <span class="sg-stat-value">{{ summary.remaining_devices }}</span>
+        <span class="sg-stat-label">remaining</span>
+      </div>
+      <div class="sg-stat">
+        <span class="sg-stat-value">{{ summary.finished_groups }}/{{ summary.groups }}</span>
+        <span class="sg-stat-label">groups finished</span>
+      </div>
+    </div>
+  </section>
+  {% endif %}
+
+  {# ── Group cards ─────────────────────────────────────────────────────── #}
+  {% if groups %}
+  <form method="post" action="{% url 'schedule:regroup_schedules' %}" id="sg-regroup-form">
+    {% csrf_token %}
+
+    <div class="sg-grid">
+      {% for group in groups %}
+      <article class="sg-card{% if group.all_completed %} is-complete{% endif %}"
+               data-group="{{ group.key }}">
+
+        <header class="sg-card-head">
+          <div>
+            <h3 class="sg-card-title">{{ group.name }}</h3>
+            <p class="sg-card-sub">
+              {% if group.all_completed %}
+                Finished &mdash; rolls to {{ group.next_period_month|date:"F Y" }}
+              {% else %}
+                {{ group.remaining }} of {{ group.total }} still to do
+              {% endif %}
+            </p>
+          </div>
+          <span class="sg-badge {% if group.all_completed %}sg-badge-done{% elif group.percent >= 50 %}sg-badge-mid{% else %}sg-badge-low{% endif %}">
+            {{ group.completed }}/{{ group.total }}
+          </span>
+        </header>
+
+        <div class="sg-progress" role="progressbar"
+             aria-valuenow="{{ group.percent }}" aria-valuemin="0" aria-valuemax="100"
+             aria-label="{{ group.name }} completion">
+          <div class="sg-progress-fill" style="width: {{ group.percent }}%"></div>
+        </div>
+
+        <p class="sg-hint">
+          {% if group.all_completed %}
+            All members are complete, so this group advances to the next period together.
+          {% else %}
+            The group advances only when every member is complete.
+          {% endif %}
+          {% if group.blocked %}
+            <span class="sg-locked">
+              {{ group.blocked }} cannot be moved &mdash; hover to see why
+            </span>
+          {% endif %}
+        </p>
+
+        <ul class="sg-members">
+          {% for member in group.members %}
+          <li class="sg-member sg-member-{{ member.status }}">
+            <label class="sg-member-label">
+              <input type="checkbox" name="schedule_ids" value="{{ member.id }}"
+                     class="sg-check"
+                     {% if not member.movable %}disabled{% endif %}
+                     {% if not member.movable %}title="{{ member.reason }}"{% endif %} />
+              <span class="sg-member-name">{{ member.equipment }}</span>
+            </label>
+            <span class="sg-member-state">
+              {% if member.status == 'completed' %}
+                <span class="sg-tag sg-tag-done">Done</span>
+              {% elif member.is_locked %}
+                <span class="sg-tag sg-tag-locked">Locked</span>
+              {% else %}
+                <span class="sg-tag">{{ member.status|title }}</span>
+              {% endif %}
+            </span>
+          </li>
+          {% endfor %}
+        </ul>
+
+        <footer class="sg-card-foot">
+          <button type="button" class="sg-link" data-select-group="{{ group.key }}">
+            Select all movable
+          </button>
+        </footer>
+      </article>
+      {% endfor %}
+    </div>
+
+    {# ── Move bar: appears once something is selected ──────────────────── #}
+    <div class="sg-movebar" id="sg-movebar" hidden>
+      <div class="sg-movebar-inner">
+        <span class="sg-movebar-count"><strong id="sg-count">0</strong> selected</span>
+        <label class="sg-field">
+          <span class="sg-field-label">Move to</span>
+          <select name="target_month" class="sg-select" required>
+            {% for option in month_options %}
+            <option value="{{ option|date:'Y-m' }}">{{ option|date:"F Y" }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <button type="submit" name="preview" value="1" class="sg-btn sg-btn-ghost">Preview</button>
+        <button type="submit" class="sg-btn sg-btn-primary">Move</button>
+        <button type="button" class="sg-link" id="sg-clear">Clear</button>
+      </div>
+    </div>
+  </form>
+
+  {% else %}
+  <div class="sg-empty">
+    <h3>Nothing scheduled in {{ month|date:"F Y" }}</h3>
+    <p>
+      Use the arrows to look at another month, or open
+      <a href="{% url 'schedule:calibration_dashboard' %}">all schedules</a>
+      to plan work into this one.
+    </p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'calibrition/schedule_groups.js' %}" defer></script>
+{% endblock %}

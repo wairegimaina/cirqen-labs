@@ -195,15 +195,15 @@ $(document).ready(function () {
     var workshopId = window.WORKSHOP_ID || '';
 
     var html = `
-      <div class="part-row fade-in" data-part-row="${partRowCounter}">
-        <select class="form-control part-select" name="part_${partRowCounter}" data-placeholder="Select Part">
+      <div class="part-row fade-in" data-part-row="${escapeHTML(partRowCounter)}">
+        <select class="form-control part-select" name="part_${escapeHTML(partRowCounter)}" data-placeholder="Select Part">
           <option value="none">Loading…</option>
         </select>
-        <input type="number" class="form-control quantity-input"  placeholder="Qty"  min="1" name="quantity_${partRowCounter}" disabled>
-        <input type="number" class="form-control cost-input"      placeholder="Cost" min="0" step="0.01" name="cost_${partRowCounter}" disabled>
+        <input type="number" class="form-control quantity-input"  placeholder="Qty"  min="1" name="quantity_${escapeHTML(partRowCounter)}" disabled>
+        <input type="number" class="form-control cost-input"      placeholder="Cost" min="0" step="0.01" name="cost_${escapeHTML(partRowCounter)}" disabled>
         <input type="text"   class="form-control total-cost-display" placeholder="Total" readonly disabled>
-        <input type="text"   class="form-control remarks-input"   placeholder="Remarks" maxlength="200" name="remarks_${partRowCounter}" disabled>
-        <button type="button" class="btn btn-danger btn-sm" onclick="removePartRow(${partRowCounter})">
+        <input type="text"   class="form-control remarks-input"   placeholder="Remarks" maxlength="200" name="remarks_${escapeHTML(partRowCounter)}" disabled>
+        <button type="button" class="btn btn-danger btn-sm" onclick="removePartRow(${escapeHTML(partRowCounter)})">
           <i class="fas fa-trash"></i>
         </button>
       </div>`;
@@ -233,7 +233,7 @@ $(document).ready(function () {
     if (data && data.length) {
       data.forEach(function (item) {
         var text = item.display_name || (item.name + ' (' + item.stock_count + ')');
-        $el.append('<option value="' + item.id + '">' + text + '</option>');
+        $el.append('<option value="' + escapeHTML(item.id) + '">' + escapeHTML(text) + '</option>');
       });
     } else {
       $el.append('<option value="none" disabled>No parts available</option>');
@@ -300,11 +300,11 @@ $(document).ready(function () {
         data.forEach(function (eq) {
           $eqSel.append(
             '<option value="' + eq.id + '"' +
-            ' data-description="' + (eq.description || '') + '"' +
-            ' data-serial="' + (eq.serial_number || '') + '"' +
-            ' data-model="' + (eq.model || '') + '"' +
-            ' data-status="' + (eq.status || '') + '">' +
-            eq.description + ' (' + eq.serial_number + ')</option>'
+            ' data-description="' + escapeHTML(eq.description) + '"' +
+            ' data-serial="' + escapeHTML(eq.serial_number) + '"' +
+            ' data-model="' + escapeHTML(eq.model) + '"' +
+            ' data-status="' + escapeHTML(eq.status) + '">' +
+            escapeHTML(eq.description) + ' (' + escapeHTML(eq.serial_number) + ')</option>'
           );
         });
         if (window.FORM_DATA.equipment) {
@@ -423,7 +423,7 @@ $(document).ready(function () {
         if (info) {
           var cls = info.available ? 'available' : 'unavailable';
           var text = info.available ? 'Stock: ' + info.current_stock : 'Out of Stock';
-          $row.find('.remarks-input').before('<div class="stock-info ' + cls + '">' + text + '</div>');
+          $row.find('.remarks-input').before('<div class="stock-info ' + cls + '">' + escapeHTML(text) + '</div>');
 
           var $qty = $row.find('.quantity-input');
           $qty.prop('disabled', !info.available);
@@ -449,7 +449,7 @@ $(document).ready(function () {
       if (res.schedules && res.schedules.length) {
         $('#ppm-no-schedules').hide();
         res.schedules.forEach(function (s) {
-          $sel.append('<option value="' + s.id + '">' + s.scheduled_month + ' (' + s.status + ')</option>');
+          $sel.append('<option value="' + escapeHTML(s.id) + '">' + escapeHTML(s.scheduled_month) + ' (' + escapeHTML(s.status) + ')</option>');
         });
       } else {
         $('#ppm-no-schedules').show();

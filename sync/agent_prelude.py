@@ -58,20 +58,6 @@ try:
 except ImportError:
     REDIS_AVAILABLE = False
 
-# ============================================================
-# REDIS QUEUE INTEGRATION
-# ============================================================
-if REDIS_AVAILABLE:
-    try:
-        from sync.sync_agent_redis_queue import RedisQueueSync
-
-        REDIS_QUEUE_AVAILABLE = True
-    except ImportError as e:
-        REDIS_QUEUE_AVAILABLE = False
-        RedisQueueSync = None
-else:
-    REDIS_QUEUE_AVAILABLE = False
-    RedisQueueSync = None
 
 
 # ============================================================
@@ -101,7 +87,7 @@ except ImportError:
                 saved_id = state_manager.get_client_id()
                 if saved_id:
                     return saved_id
-            except:
+            except Exception:
                 pass
         # Simple MAC-based fallback
         mac = uuid.getnode()
@@ -110,7 +96,7 @@ except ImportError:
         if state_manager:
             try:
                 state_manager.set_client_id(generated_id)
-            except:
+            except Exception:
                 pass
         return generated_id
 
@@ -256,7 +242,6 @@ _SYNC_LOGGER_NAMES = [
     "sync_agent_optimized",
     "mirror_sync",
     "data_checker_client",
-    "RedisQueueSync",
 ]
 
 _KENYAN_FORMATTER = KenyanTimeFormatter(
@@ -447,16 +432,17 @@ def load_config_from_env_fallback():
     load_dotenv()
 
     return {
-        "api_url": os.getenv("SYNC_API_URL", "https://hq-server-dgs6.onrender.com/api/sync"),
+        # No built-in addresses or credentials here: this path runs only when
+        # config.py cannot be imported, and guessing an HQ would be worse than
+        # failing. Everything comes from the environment.
+        "api_url": os.getenv("SYNC_API_URL", "").rstrip("/"),
         "auth_token": os.getenv("SYNC_AUTH_TOKEN", ""),
         "local_db": {
-            "host": os.getenv(
-                "POSTGRES_LOCAL_HOST", "cirqenlocal.cp4208se4zb7.eu-north-1.rds.amazonaws.com"
-            ),
+            "host": os.getenv("POSTGRES_LOCAL_HOST", "127.0.0.1"),
             "port": int(os.getenv("POSTGRES_LOCAL_PORT", "5432")),
-            "dbname": os.getenv("POSTGRES_LOCAL_DB", "criqenlocal"),
-            "user": os.getenv("POSTGRES_LOCAL_USER", "criqenlocal"),
-            "password": os.getenv("POSTGRES_LOCAL_PASSWORD", "0707337206"),
+            "dbname": os.getenv("POSTGRES_LOCAL_DB", ""),
+            "user": os.getenv("POSTGRES_LOCAL_USER", ""),
+            "password": os.getenv("POSTGRES_LOCAL_PASSWORD", ""),
         },
         "redis": {
             "host": os.getenv("REDIS_HOST", "127.0.0.1"),
@@ -488,12 +474,10 @@ def load_config_from_env_fallback():
             "interval_hours": float(os.getenv("MIRROR_INTERVAL_HOURS", "24")),
         },
         "hq_db": {
-            "host": os.getenv(
-                "POSTGRES_HQ_HOST", "dpg-d7rk2sa8qa3s73diimb0-a.ohio-postgres.render.com"
-            ),
+            "host": os.getenv("POSTGRES_HQ_HOST", ""),
             "port": int(os.getenv("POSTGRES_HQ_PORT", "5432")),
-            "dbname": os.getenv("POSTGRES_HQ_DB", "b12technologies"),
-            "user": os.getenv("POSTGRES_HQ_USER", "b12technologies"),
+            "dbname": os.getenv("POSTGRES_HQ_DB", ""),
+            "user": os.getenv("POSTGRES_HQ_USER", ""),
             "password": os.getenv("POSTGRES_HQ_PASSWORD", ""),
             "sslmode": os.getenv("POSTGRES_SSLMODE", "require"),
         },
@@ -575,8 +559,14 @@ def sleep_with_jitter(seconds: float):
     time.sleep(seconds + jitter)
 
 
-def is_online(url="https://hq-server-dgs6.onrender.com/api/sync/health", timeout=2) -> bool:
-    """Check if HQ server is reachable"""
+def is_online(url=None, timeout=2) -> bool:
+    """Check if HQ server is reachable. ``url`` defaults to the configured sync
+    address (SYNC_API_URL); with neither, HQ is reported as unreachable."""
+    if not url:
+        base = os.getenv("SYNC_API_URL", "").rstrip("/")
+        if not base:
+            return False
+        url = f"{base}/health"
     try:
         r = requests.get(url, timeout=timeout)
         return r.status_code == 200 and r.json().get("status") in ["UP", "ok"]

@@ -52,6 +52,7 @@ from Inventory.models import Equipment, Workshop
 
 # sibling modules in this package
 from .helpers import calculate_manufacturer_performance, get_user_workshop_context
+from core import aggregate_cache
 
 
 @login_required
@@ -170,9 +171,16 @@ def equipment_dashboard(request):
         }
 
     # ---- Manufacturer Performance ----
-    manufacturer_performance = calculate_manufacturer_performance(equipment_qs)
-    # Convert to JSON string properly
-    manufacturer_performance_json = json.dumps(manufacturer_performance)
+    # One job card query per device, so the unfiltered view is cached per
+    # workshop; a search or category filter is computed fresh.
+    if not category_id and not search_query:
+        scope = (request.GET.get("workshop") or "all") if is_hod else getattr(selected_workshop, "id", "none")
+        manufacturer_performance = aggregate_cache.get_or_compute(
+            "inv", ["manufacturer", scope],
+            lambda: calculate_manufacturer_performance(equipment_qs),
+        )
+    else:
+        manufacturer_performance = calculate_manufacturer_performance(equipment_qs)
 
     # ---- Repair Job Cards ----
     approved_job_cards = jobcard.objects.filter(
@@ -275,7 +283,7 @@ def equipment_dashboard(request):
         "categories": categories,
         "selected_category": category_id,
         "categorized_equipment": categorized_equipment,
-        "manufacturer_performance": manufacturer_performance_json,  # Now properly JSON encoded
+        "manufacturer_performance": manufacturer_performance,  # rendered with |json_script
         "history": history_items,
         "repair_stats": repair_stats,
         "workshops": workshops if is_hod else None,

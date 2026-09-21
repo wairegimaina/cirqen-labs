@@ -44,7 +44,6 @@ from .tasks import (
 from .diagnostics import (
     test_celery_connection,
     check_task_status,
-    debug_user_access,
     view_logs,
 )
 
@@ -76,6 +75,5 @@ __all__ = [
     "trigger_normalize_ppm",
     "test_celery_connection",
     "check_task_status",
-    "debug_user_access",
     "view_logs",
 ]

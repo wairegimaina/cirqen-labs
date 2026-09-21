@@ -27,9 +27,7 @@ from .apis import (
 from .inventory_list import (
     inventory,
     inventory_for_hod,
-    dashboard_view,
     inventory_by_department,
-    inventory_summary,
 )
 from .equipment import (
     check_equipment_ppm_locations,
@@ -68,7 +66,6 @@ from .exports import (
     export_inventory_summary_excel,
     export_equipment_to_pdf,
     export_inventory_summary_to_pdf,
-    equipment_reports_dashboard,
     bulk_export_departments_pdf,
 )
 
@@ -83,9 +80,7 @@ __all__ = [
     # inventory_list
     "inventory",
     "inventory_for_hod",
-    "dashboard_view",
     "inventory_by_department",
-    "inventory_summary",
     # equipment
     "check_equipment_ppm_locations",
     "create_equipment_description",
@@ -116,6 +111,5 @@ __all__ = [
     "export_inventory_summary_excel",
     "export_equipment_to_pdf",
     "export_inventory_summary_to_pdf",
-    "equipment_reports_dashboard",
     "bulk_export_departments_pdf",
 ]

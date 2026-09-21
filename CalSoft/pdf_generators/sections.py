@@ -37,6 +37,8 @@ from reportlab.pdfgen import canvas
 from reportlab.pdfgen import canvas as rl_canvas
 from reportlab.platypus import BaseDocTemplate, CondPageBreak, Frame, Image, KeepTogether, PageBreak, PageTemplate, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from ..models import Standard
+from calSchedules.grouping import next_due_date
+
 logger = logging.getLogger(__name__)
 
 # sibling modules in this package
@@ -116,12 +118,16 @@ class SectionsMixin:
         """Get Calibration Information content."""
         cal_date = self.session.timestamp.astimezone(EAT).strftime('%Y-%m-%d') if self.session.timestamp else 'N/A'
 
-        # Calculate due date: last day of the month, one year from calibration date (EAT)
+        # Due on the last day of the month the interval lands in, so the
+        # workshop has that whole month to schedule the visit.
+        #
+        # This used `timedelta(days=365)`, which is a day short of a year
+        # whenever a leap day falls in between, and assumed every device is on
+        # a 12-month interval regardless of what its schedule says.
         if self.session.timestamp:
             ts_eat = self.session.timestamp.astimezone(EAT)
-            due_dt = ts_eat + timedelta(days=365)
-            last_day = calendar.monthrange(due_dt.year, due_dt.month)[1]
-            cal_due = due_dt.replace(day=last_day).strftime('%Y-%m-%d')
+            interval = getattr(self.session.schedule, 'calibration_period', None) or 12
+            cal_due = next_due_date(ts_eat.date(), interval).strftime('%Y-%m-%d')
         else:
             cal_due = 'N/A'
 
@@ -130,7 +136,7 @@ class SectionsMixin:
             doc_number = self.reference_number or "N/A"
         else:
             doc_label  = "Certificate No:"
-            doc_number = self.certificate_number or "N/A"
+            doc_number = self.certificate_number or self.reference_number or "N/A"
 
         content = f"""
         <b>Calibration Date:</b> {cal_date}<br/>
@@ -262,33 +268,103 @@ class SectionsMixin:
         """
         return [Paragraph(traceability_text, self.styles['NormalText'])]
 
+    def _coverage_factor_note(self):
+        """Describe the coverage factor(s) actually applied on this certificate.
+
+        Two corrections are folded in here. The note used to assert "k=2"
+        unconditionally while the k column beside it printed each parameter's
+        configured value, so a parameter set to k=3 produced a certificate that
+        contradicted itself on one page. And k is no longer simply the
+        configured value: it is derived from the effective degrees of freedom
+        and the configured value acts as a floor, so with few readings it
+        exceeds 2.
+        """
+        default = "k=2"
+        try:
+            factors = sorted({
+                self._coverage_factor_used(reading)
+                for reading in self.session.readings.all()
+                if reading.combined_uncertainty is not None
+            })
+        except Exception:
+            # Falling back to "k=2" silently would state a coverage factor that
+            # may not be the one applied — the exact defect this method was
+            # written to fix. Logged so a wrong k on a certificate is traceable.
+            logger.exception(
+                "[NOTES] Could not determine the coverage factors used for "
+                "session %s; falling back to the conventional statement",
+                getattr(self.session, 'id', '?'),
+            )
+            return default
+
+        if not factors:
+            return default
+        if len(factors) == 1:
+            return (
+                f"k={factors[0]}, derived from the effective degrees of freedom "
+                f"(Welch-Satterthwaite) with the configured factor as a floor"
+            )
+        return (
+            "k as stated per parameter in the uncertainty table ("
+            + ", ".join(factors)
+            + "), each derived from that parameter's effective degrees of freedom"
+        )
+
     def build_notes_content(self):
         """Build notes content with failure-specific notes."""
         base_notes = [
             "1. This certificate relates only to the item(s) calibrated and the results are valid at the time and under the conditions of calibration.",
             "2. This certificate shall not be reproduced except in full without written approval.",
-            "3. The uncertainty of measurement is stated as the expanded uncertainty calculated using a coverage factor k=2.",
-            "4. Certificate authenticity can be verified by scanning the QR code."
+            "3. DECISION RULE: conformity is assessed by guard banding. A point is "
+            "reported PASS when the measured deviation lies within the tolerance "
+            "reduced by the expanded uncertainty, FAIL when it lies beyond the "
+            "tolerance increased by the expanded uncertainty, and INDETERMINATE "
+            "when it falls between the two — the measurement cannot decide. A "
+            "single point failing fails the calibration.",
+            f"4. The uncertainty of measurement is stated as the expanded uncertainty "
+            f"calculated using a coverage factor {self._coverage_factor_note()}, "
+            f"corresponding to a confidence level of approximately 95%.",
+            "5. Where the test uncertainty ratio is below 4:1 the measurement is not sharp enough to judge the tolerance by simple comparison, and the guarded rule above governs."
         ]
 
-        if self.is_failed_report:
+        # Name the parameters that fall below the ratio, rather than leaving
+        # the reader to compare every printed TUR against the floor.
+        capability = self.measurement_capability_warnings()
+        if capability:
+            listed = "; ".join(
+                f"{w['parameter']} ({w['tur']:.1f}:1)" for w in capability
+            )
+            base_notes.append(
+                f"6. MEASUREMENT CAPABILITY: the following parameters were measured "
+                f"with a test uncertainty ratio below the customary 4:1 floor: "
+                f"{listed}. For these, the guarded decision rule in note 3 governs, "
+                f"and a result reported PASS close to the tolerance should be "
+                f"treated as provisional. Improving repeatability or using a "
+                f"better reference standard would raise the ratio."
+            )
+
+        if self.conformity_failed:
+            failed = self.failure_stats['failed_readings']
+            total = self.failure_stats['total_readings']
+            n = len(base_notes)
             failure_notes = [
-                "5. CRITICAL: This device has FAILED calibration with a failure rate exceeding 40%.",
-                "6. The device must be taken out of service immediately and repaired before use.",
-                "7. This failure report serves as documentation for maintenance/repair requirements.",
-                "8. A new calibration must be performed after repairs are completed.",
-                "9. Contact the Biomedical Engineering Department for repair coordination."
+                f"{n + 1}. THIS DEVICE HAS FAILED CALIBRATION. {failed} of {total} measured "
+                f"points fell outside the permitted tolerance. A single point outside "
+                f"tolerance fails the calibration.",
+                f"{n + 2}. The device must not be returned to clinical service on the basis of "
+                "this document.",
+                f"{n + 3}. A new calibration must be performed after any adjustment or repair.",
+                f"{n + 4}. Contact the Biomedical Engineering Department for repair coordination.",
             ]
+            if self.is_failed_report:
+                failure_notes.append(
+                    f"{n + 5}. The proportion of failed points exceeds 40%, which indicates a "
+                    "device fault rather than isolated drift. Remove from service "
+                    "immediately."
+                )
             base_notes.extend(failure_notes)
-        elif self.failure_stats['failed_parameters']:
-            warning_notes = [
-                "5. WARNING: Some parameters failed calibration but overall failure rate is below 40%.",
-                "6. Monitor device performance closely and consider maintenance scheduling.",
-                "7. Calibration interval recommendation may be shortened based on failure analysis."
-            ]
-            base_notes.extend(warning_notes)
         else:
-            base_notes.append("5. Calibration interval recommendation: 12 months from calibration date.")
+            base_notes.append(f"{len(base_notes) + 1}. Calibration interval recommendation: 12 months from calibration date.")
 
         notes_text = "<br/>".join(base_notes)
         return [Paragraph(notes_text, self.styles['NormalText'])]

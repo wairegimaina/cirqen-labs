@@ -25,6 +25,7 @@ CACHES = {
     "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"},
     "sessions": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"},
     "offline": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"},
+    "throttle": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "throttle"},
 }
 
 SESSION_ENGINE = "django.contrib.sessions.backends.db"

@@ -9,8 +9,9 @@ import logging
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.http import JsonResponse
+from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from core.scoping import for_user, get_for_user_or_404
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
 
@@ -35,7 +36,7 @@ def check_equipment_ppm_locations(request, equipment_id):
     Useful for debugging transfer issues
     """
     try:
-        equipment = get_object_or_404(Equipment, pk=equipment_id)
+        equipment = get_for_user_or_404(Equipment, request.user, pk=equipment_id)
 
         # Call the dedicated PPM check function
         ppm_details = check_ppm_location(equipment)
@@ -64,6 +65,8 @@ def check_equipment_ppm_locations(request, equipment_id):
             'mismatch_details': mismatches
         })
 
+    except Http404:
+        raise
     except Exception as e:
         logger.error(f"Error checking PPM locations: {str(e)}")
         return JsonResponse({
@@ -180,7 +183,7 @@ def add_inventory(request):
             return redirect("inventory")
 
         try:
-            department = Department.objects.get(id=department_id)
+            department = for_user(Department.objects.all(), request.user).get(id=department_id)
         except Department.DoesNotExist:
             messages.error(request, "Invalid department selected.")
             return redirect("inventory")
@@ -259,7 +262,9 @@ def add_inventory(request):
             messages.error(request, f"Error adding equipment: {e}")
             logger.error(f"Failed to create equipment: {str(e)}")
 
-        return redirect("inventory")
+    # The add form is a modal on the inventory page; a plain GET has nothing
+    # of its own to show.
+    return redirect("inventory")
 
 
 @login_required
@@ -270,7 +275,7 @@ def get_equipment_dependency_info(request, equipment_id):
     Useful for showing users what will be transferred
     """
     try:
-        equipment = get_object_or_404(Equipment, pk=equipment_id)
+        equipment = get_for_user_or_404(Equipment, request.user, pk=equipment_id)
         dep_count, dep_breakdown = get_equipment_dependencies_count(equipment)
 
         # Format breakdown for display
@@ -302,7 +307,9 @@ def get_equipment_dependency_info(request, equipment_id):
 
 @login_required
 def edit_inventory(request, equipment_id):
-    equipment = get_object_or_404(Equipment, id=equipment_id)
+    # Scoped: a user can only edit devices they can see, and only move them
+    # into departments they can see.
+    equipment = get_for_user_or_404(Equipment, request.user, id=equipment_id)
 
     if request.method == "POST":
         description_id = request.POST.get("description")
@@ -319,7 +326,7 @@ def edit_inventory(request, equipment_id):
             return redirect("inventory")
 
         try:
-            department = Department.objects.get(id=department_id)
+            department = for_user(Department.objects.all(), request.user).get(id=department_id)
         except Department.DoesNotExist:
             messages.error(request, "Invalid department selected.")
             return redirect("inventory")
@@ -347,18 +354,8 @@ def edit_inventory(request, equipment_id):
 
         return redirect("inventory")
 
-    # GET request → load edit form
-    equipment_descriptions = EquipmentDescription.objects.all().order_by("name")
-    manufacturers = Manufacturer.objects.all().order_by("name")
-    departments = Department.objects.all().order_by("name")
-
-    return render(request, "Inventory/edit_inventory.html", {
-        'show_sidebar': True,  # Enable sidebar with hamburger menu
-        "equipment": equipment,
-        "equipment_descriptions": equipment_descriptions,
-        "manufacturers": manufacturers,
-        "departments": departments,
-    })
+    # Editing happens in the modal on the inventory page, which posts here.
+    return redirect("inventory")
 
 
 @login_required

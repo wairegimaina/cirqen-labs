@@ -20,94 +20,6 @@ from .smart_delete import SmartDeleteMixin
 
 class NetworkLoopsMixin(SmartDeleteMixin):
     """Connectivity (HQ health w/ cold-start retry), the upload/feeder loops, and download_updates orchestration."""
-    def handle_inbound_status_changes(self, changes: List[Dict]):
-            """
-            Handle inbound status changes from HQ broadcast
-            Processes activate/deactivate operations
-            """
-            if not changes:
-                return
-
-            LOG.info(f"📥 Received {len(changes)} status changes from HQ")
-
-            applied_count = 0
-            failed_count = 0
-
-            for change in changes:
-                table = change.get("table")
-                row_id = change.get("row_id")
-                operation = change.get("operation")
-
-                if not table or not row_id or not operation:
-                    LOG.warning("Invalid status change: missing required fields")
-                    failed_count += 1
-                    continue
-
-                try:
-                    success = self.apply_status_change_locally(table, change)
-
-                    if success:
-                        applied_count += 1
-                        LOG.debug(f"✅ Applied {operation} for {table}[{row_id}]")
-                    else:
-                        failed_count += 1
-                        LOG.warning(f"❌ Failed to apply {operation} for {table}[{row_id}]")
-
-                except Exception as e:
-                    LOG.error(f"💥 Error applying status change for {table}[{row_id}]: {e}")
-                    failed_count += 1
-
-            LOG.info(f"📥 Status changes applied: {applied_count} successful, {failed_count} failed")
-    def wait_for_hq_connection(self, max_wait_seconds=300, check_interval=5):
-            """
-            Wait for HQ server to become available before starting sync.
-            Returns True when connected, False if timeout reached.
-            """
-            LOG.info("🔌 Waiting for HQ server connection...")
-            LOG.info(f"   Server: {self.api_url}")
-            LOG.info(f"   Max wait time: {max_wait_seconds} seconds")
-
-            start_time = time.time()
-            attempts = 0
-
-            while (time.time() - start_time) < max_wait_seconds:
-                attempts += 1
-
-                try:
-                    response = requests.get(
-                        f"{self.api_url}/health",
-                        timeout=5
-                    )
-
-                    if response.status_code == 200:
-                        data = response.json()
-                        if data.get("status") in ["ok", "UP"]:
-                            elapsed = time.time() - start_time
-                            LOG.info(f"✅ HQ server is ONLINE (connected after {elapsed:.1f}s, {attempts} attempts)")
-                            LOG.info(f"   Database: {data.get('checks', {}).get('db', 'Unknown')}")
-                            return True
-
-                except requests.exceptions.ConnectionError:
-                    elapsed = time.time() - start_time
-                    remaining = max_wait_seconds - elapsed
-
-                    if attempts == 1:
-                        LOG.warning(f"⚠️  HQ server not reachable yet...")
-                    elif attempts % 5 == 0:
-                        LOG.info(f"🔄 Still waiting for HQ server... ({elapsed:.0f}s elapsed, {remaining:.0f}s remaining)")
-
-
-                except Exception as e:
-                    LOG.debug(f"Connection check failed: {e}")
-
-                for _ in range(check_interval):
-                    if self.stop_event.is_set():
-                        LOG.info("ℹ️  Shutdown requested during connection wait")
-                        return False
-                    time.sleep(1)
-
-            LOG.error(f"❌ Could not connect to HQ server after {max_wait_seconds} seconds")
-            return False
     def check_hq_online(self, retries: int = 2):
             """
             Check if HQ is currently reachable, resilient to Render free-tier
@@ -119,6 +31,18 @@ class NetworkLoopsMixin(SmartDeleteMixin):
             """
             import requests as _rq
             backoff = 1.0
+            online = self._check_hq_online_once(retries, _rq, backoff)
+            # A move adopted from the update server is on probation: sustained
+            # failure of the new address reverts it without anyone on site.
+            try:
+                import endpoint_sync
+
+                endpoint_sync.note_health(self.data_path, online)
+            except Exception:  # noqa: BLE001 - never let this break the check
+                pass
+            return online
+
+    def _check_hq_online_once(self, retries, _rq, backoff):
             for attempt in range(retries + 1):
                 try:
                     response = requests.get(f"{self.api_url}/health", timeout=5 + attempt * 5)
@@ -148,391 +72,6 @@ class NetworkLoopsMixin(SmartDeleteMixin):
                 if getattr(self, "stop_event", None) and self.stop_event.is_set():
                     return
                 time.sleep(0.2)
-    def immediate_sync_on_reconnect(self):
-            """
-            ⚡ OPTIMIZED: Immediately sync all pending changes when connection is restored.
-            Uses per-table upload for faster sync.
-            """
-            try:
-                LOG.info("🚀 IMMEDIATE SYNC: Checking for offline changes...")
-
-                last_upload_time = self.get_last_upload_time()
-                batch_size = int(self.sync_cfg.get("upload_batch_size", 50))
-
-                total_synced = 0
-                total_changes = 0
-
-                # Sync each table individually
-                for table in self.tables:
-                    table_changes = self.fetch_recent_changes_for_table(table, last_upload_time)
-                    restore_events = self.detect_local_restores(table, last_upload_time)
-
-                    all_changes = table_changes + restore_events
-
-                    if all_changes:
-                        total_changes += len(all_changes)
-                        LOG.info(f"📦 {table}: {len(all_changes)} changes to sync")
-
-                        # Upload in batches
-                        for i in range(0, len(all_changes), batch_size):
-                            batch = all_changes[i:i + batch_size]
-
-                            success, error = self.upload_batch(batch)
-
-                            if success:
-                                total_synced += len(batch)
-                            else:
-                                LOG.error(f"❌ Failed to sync {table}: {error}")
-                                break
-
-                if total_changes == 0:
-                    LOG.info("✅ No pending changes to sync")
-                else:
-                    LOG.info(f"🎉 IMMEDIATE SYNC COMPLETE! Synced {total_synced}/{total_changes} changes")
-
-                return True
-
-            except Exception as e:
-                LOG.error(f"❌ Immediate sync failed: {e}")
-                return False
-    def enqueue_change(self, entity: str, record_id: Any, operation: str, data: Optional[Dict] = None):
-            """
-            ✅ Enqueue a change for instant sync (NON-BLOCKING)
-
-            Call this after EVERY local DB write for instant sync.
-
-            Examples:
-                agent.enqueue_change("CalSoft_asset", 123, "u", asset_data)
-                agent.enqueue_change("CalSoft_calibrationsession", 456, "u", session_data)
-                agent.enqueue_change("CalSoft_asset", 123, "deactivate")
-
-            Args:
-                entity: Table name
-                record_id: Primary key value
-                operation: "u", "d", "activate", "deactivate"
-                data: Optional data payload
-            """
-            if self.redis_queue:
-                self.redis_queue.enqueue_change(
-                    entity=entity,
-                    record_id=record_id,
-                    action=operation,
-                    data=data,
-                    operation=operation
-                )
-            else:
-                LOG.debug(f"Queue unavailable, change will be polled: {entity}:{record_id}")
-    def enqueue_batch(self, events: List[Dict]):
-            """Enqueue multiple events as a batch"""
-            if self.redis_queue:
-                self.redis_queue.enqueue_batch(events)
-            else:
-                LOG.debug(f"Queue unavailable, {len(events)} events will be polled")
-    def get_sync_queue_status(self) -> Dict:
-            """Get current sync queue status"""
-            if self.redis_queue:
-                return self.redis_queue.get_status()
-            else:
-                return {"error": "Queue not available"}
-    def get_failed_jobs(self) -> List[Dict]:
-            """Get jobs that failed after max retries"""
-            if self.redis_queue:
-                return self.redis_queue.get_dead_letter_queue()
-            else:
-                return []
-    def retry_failed_jobs(self):
-            """Retry all failed jobs"""
-            if self.redis_queue:
-                self.redis_queue.retry_dead_letter_jobs()
-                LOG.info("✅ Retrying all failed jobs")
-            else:
-                LOG.warning("⚠️  Queue not available")
-    def upload_loop(self):
-            """
-            ⚡ UPLOAD LOOP: Queue-based or legacy polling
-
-            If Redis queue available:
-                - Starts queue worker (mutex-protected, one at a time)
-                - Starts queue feeder (discovers changes, enqueues them)
-
-            If Redis queue not available:
-                - Falls back to legacy polling mode
-
-            If sync.use_outbox is enabled, trigger-based CDC replaces all of the
-            above (see sync/outbox.py).
-            """
-            if self.outbox_enabled():
-                return self.outbox_upload_loop()
-
-            if self.redis_queue:
-                # ✅ REDIS QUEUE MODE
-                LOG.info("=" * 80)
-                LOG.info("⚡ REDIS QUEUE MODE ACTIVATED")
-                LOG.info("=" * 80)
-                LOG.info("   Strategy: Event-driven queue (one at a time)")
-                LOG.info("   Features:")
-                LOG.info("   • No race conditions (mutex lock)")
-                LOG.info("   • Crash recovery (inflight tracking)")
-                LOG.info("   • Idempotency (sync_id)")
-                LOG.info("   • Exponential backoff retry")
-                LOG.info("=" * 80)
-
-                # Start queue worker
-                self.redis_queue.start_worker()
-
-                # Start queue feeder
-                self._queue_feeder_loop()
-            else:
-                # ⚠️  LEGACY POLLING MODE
-                LOG.warning("=" * 80)
-                LOG.warning("⚠️  LEGACY POLLING MODE")
-                LOG.warning("=" * 80)
-                LOG.warning("   Redis queue not available")
-                LOG.warning("   Using old polling-based sync")
-                LOG.warning("=" * 80)
-
-                self._upload_loop_legacy()
-    def _queue_feeder_loop(self):
-            """
-            ✅ Queue feeder: Discovers changes and enqueues them
-
-            Discovers changes from database and enqueues them.
-            The queue worker handles the actual upload.
-            """
-            poll_interval = int(self.sync_cfg.get("poll_interval_seconds", 10))
-
-            LOG.info(f"🔄 Queue feeder started (poll interval: {poll_interval}s)")
-
-            loop_count = 0
-            last_online_check = time.time()
-            online_check_interval = 30
-            is_online = False
-            first_connection = True
-
-            while not self.stop_event.is_set():
-                try:
-                    loop_count += 1
-                    current_time = time.time()
-
-                    # Check if HQ is online
-                    if current_time - last_online_check >= online_check_interval or first_connection:
-                        was_online = is_online
-                        is_online = self.check_hq_online()
-                        last_online_check = current_time
-
-                        if is_online and not was_online:
-                            LOG.info("✅ HQ RECONNECTED at %s", format_kenyan_time(now_kenyan()))
-                        elif not is_online and was_online:
-                            LOG.warning("⚠️  HQ OFFLINE at %s", format_kenyan_time(now_kenyan()))
-
-                        first_connection = False
-
-                    if not is_online:
-                        if loop_count % 30 == 1:
-                            LOG.debug("🔵 Offline - waiting for HQ connection...")
-                        time.sleep(poll_interval)
-                        continue
-
-                    # Discover changes and enqueue them
-                    last_upload_time = self.get_last_upload_time()
-                    any_changes_found = False
-
-                    for table in self.tables:
-                        if self.stop_event.is_set():
-                            break
-
-                        table_changes = self.fetch_recent_changes_for_table(table, last_upload_time)
-                        restore_events = self.detect_local_restores(table, last_upload_time)
-
-                        all_changes = table_changes + restore_events
-
-                        if all_changes:
-                            any_changes_found = True
-                            LOG.info(f"📝 Discovered {len(all_changes)} changes in {table}")
-
-                            # Enqueue as batch
-                            sync_id = self.redis_queue.enqueue_batch(all_changes)
-                            LOG.info(f"   Enqueued batch: sync_id={sync_id[:8] if sync_id else 'N/A'}...")
-
-                            # Update checkpoint — ONLY if the enqueue actually
-                            # succeeded. enqueue_batch() returns None when Redis
-                            # is unavailable; advancing regardless skipped those
-                            # rows on every future scan, so they could never
-                            # reach HQ by any path.
-                            #
-                            # NOTE: even on success this advances on ENQUEUE, not
-                            # on confirmed delivery to HQ. If the local queue is
-                            # flushed or its worker never drains it, these rows
-                            # are still silently skipped. Advancing only once the
-                            # queue worker confirms upload is the correct design.
-                            if sync_id and all_changes:
-                                latest_time = max(
-                                    e.get("created_at", e.get("updated_at", ""))
-                                    for e in all_changes
-                                )
-                                if latest_time:
-                                    self.set_last_upload_time(latest_time)
-                            elif not sync_id:
-                                LOG.error(
-                                    "❌ Enqueue failed for %d changes — holding checkpoint "
-                                    "so they are rediscovered on the next scan",
-                                    len(all_changes),
-                                )
-
-                    # Check queue status periodically
-                    if loop_count % 30 == 0:
-                        status = self.redis_queue.get_status()
-                        LOG.info(f"📊 Queue: {status['queue_length']} pending, "
-                                f"{status['success_count']} synced, "
-                                f"{status['failed_count']} failed, "
-                                f"DLQ: {status.get('dead_letter_queue', 0)}")
-
-                    # Update status file
-                    if any_changes_found or loop_count % 30 == 1:
-                        status = self.redis_queue.get_status()
-                        self.write_status_file(
-                            hq_online=is_online,
-                            pending_changes=status.get('queue_length', 0)
-                        )
-
-                except Exception as e:
-                    LOG.exception(f"💥 Queue feeder error: {e}")
-
-                # Sleep between checks
-                for _ in range(poll_interval):
-                    if self.stop_event.is_set():
-                        break
-                    time.sleep(1)
-
-            LOG.info("Queue feeder exiting")
-    def _upload_loop_legacy(self):
-            """
-            ⚠️  LEGACY: Old polling-based upload loop
-
-            This is your ORIGINAL upload_loop code, preserved as fallback.
-            """
-            poll_interval = int(self.sync_cfg.get("poll_interval_seconds", 1))
-            batch_size = int(self.sync_cfg.get("upload_batch_size", 50))
-
-            LOG.info("=" * 80)
-            LOG.info("⚡ INSTANT UPLOAD MODE ACTIVATED")
-            LOG.info(f"   Strategy: Per-table instant upload (no batch waiting)")
-            LOG.info(f"   Polling: Every {poll_interval}s per table")
-            LOG.info(f"   Batch size: {batch_size} records")
-            LOG.info(f"   Timezone: 🇰🇪 East Africa Time (EAT/UTC+3)")
-            LOG.info("=" * 80)
-
-            loop_count = 0
-            consecutive_failures = 0
-            max_consecutive_failures = 5
-            last_online_check = time.time()
-            online_check_interval = 30
-            is_online = False
-            first_connection = True
-
-            while not self.stop_event.is_set():
-                try:
-                    loop_count += 1
-                    current_time = time.time()
-
-                    # Online check
-                    if current_time - last_online_check >= online_check_interval or first_connection:
-                        was_online = is_online
-                        is_online = self.check_hq_online()
-                        last_online_check = current_time
-
-                        if is_online and not was_online:
-                            LOG.info("✅ HQ RECONNECTED at %s", format_kenyan_time(now_kenyan()))
-                            consecutive_failures = 0
-                            self.immediate_sync_on_reconnect()
-                        elif not is_online and was_online:
-                            LOG.warning("⚠️ HQ OFFLINE at %s", format_kenyan_time(now_kenyan()))
-
-                        first_connection = False
-
-                    if not is_online:
-                        if loop_count % 30 == 1:
-                            LOG.debug("🔵 Offline - waiting for HQ connection...")
-                        time.sleep(poll_interval)
-                        continue
-
-                    # Check each table individually and upload immediately.
-                    # The checkpoint is read PER TABLE: a single shared value let
-                    # a busy table (Inventory_equipment) drag it forward past
-                    # other tables' older pending rows, which then became
-                    # permanently invisible to `updated_at > checkpoint`.
-                    for table in self.tables:
-                        if self.stop_event.is_set():
-                            break
-
-                        last_upload_time = self.get_last_upload_time(table)
-                        table_changes = self.fetch_recent_changes_for_table(table, last_upload_time)
-                        restore_events = self.detect_local_restores(table, last_upload_time)
-
-                        all_changes = table_changes + restore_events
-
-                        if all_changes:
-                            LOG.info("=" * 80)
-                            LOG.info(f"⚡ INSTANT UPLOAD TRIGGERED at {format_kenyan_time(now_kenyan())}")
-                            LOG.info(f"   Table: {table}")
-                            LOG.info(f"   Changes: {len(all_changes)}")
-                            LOG.info("=" * 80)
-
-                            # Upload immediately (in batches if needed)
-                            for i in range(0, len(all_changes), batch_size):
-                                batch = all_changes[i:i + batch_size]
-                                batch_num = (i // batch_size) + 1
-                                total_batches = (len(all_changes) + batch_size - 1) // batch_size
-
-                                start_time = time.time()
-                                success, error = self.upload_batch(batch)
-                                duration = time.time() - start_time
-
-                                if success:
-                                    consecutive_failures = 0
-                                    is_online = True
-                                    LOG.info(f"✅ Batch {batch_num}/{total_batches} uploaded in {duration:.2f}s")
-
-                                    # Advance checkpoint so the next poll skips these
-                                    # rows — scoped to THIS table, so finishing one
-                                    # table cannot skip another's pending rows.
-                                    try:
-                                        latest_ts = max(
-                                            e.get("created_at") or e.get("updated_at") or ""
-                                            for e in batch
-                                        )
-                                        if latest_ts:
-                                            self.set_last_upload_time(latest_ts, table=table)
-                                    except Exception as _ckpt_err:
-                                        LOG.warning("Could not advance upload checkpoint: %s", _ckpt_err)
-                                else:
-                                    consecutive_failures += 1
-                                    is_online = False
-                                    LOG.error(f"❌ Batch {batch_num} failed: {error}")
-
-                                    if consecutive_failures >= max_consecutive_failures:
-                                        backoff_time = min(300, 60 * consecutive_failures)
-                                        LOG.warning(f"Too many failures, backing off {backoff_time}s")
-                                        for _ in range(backoff_time):
-                                            if self.stop_event.is_set():
-                                                break
-                                            time.sleep(1)
-                                    break
-
-                            LOG.info("=" * 80)
-
-                except Exception as e:
-                    LOG.exception("💥 Exception in upload_loop: %s", e)
-                    consecutive_failures += 1
-                    is_online = False
-
-                # Short sleep for near-instant detection
-                for _ in range(poll_interval):
-                    if self.stop_event.is_set():
-                        break
-                    time.sleep(1)
-
-            LOG.info("Upload loop exiting")
     @staticmethod
     def _parse_download_ts(value):
             from datetime import datetime, timezone
@@ -570,6 +109,42 @@ class NetworkLoopsMixin(SmartDeleteMixin):
                 LOG.warning("Unreadable download cursor %r — keeping checkpoint %s", next_since, last_ts)
                 return last_ts
 
+    def note_hq_rejected_key(self, status: int, where: str):
+            """Say plainly that HQ refused this client's key, and why it matters.
+
+            Without this a rejected key looks like any other failed request, and
+            the most likely cause — HQ was moved to a host that does not carry
+            the client keys — is invisible. Rate-limited to once every 10
+            minutes so a 5-second loop cannot flood the log.
+            """
+            now = time.time()
+            last = getattr(self, "_last_key_rejection_log", 0)
+            if now - last < 600:
+                return
+            self._last_key_rejection_log = now
+
+            adopted = ""
+            try:
+                import endpoint_sync
+
+                state = endpoint_sync.describe(self.data_path)
+                if state.get("adopted"):
+                    adopted = (
+                        f" This machine recently followed an HQ move to "
+                        f"{state['adopted'].get('sync.api_url')} (adopted {state.get('adopted_at')})."
+                    )
+            except Exception:  # noqa: BLE001
+                pass
+
+            LOG.error(
+                "🔑 HQ rejected this client's sync key (HTTP %s on %s at %s).%s "
+                "Sync will not work until the key is accepted. If HQ was moved to a new "
+                "host, its sync_api_keys table must move with it, or this client must be "
+                "re-issued a key (POST /api/admin/generate_api_key with replace=true). "
+                "Local work is unaffected and will upload once the key is valid.",
+                status, where, self.api_url, adopted,
+            )
+
     def download_updates(self):
             """
             ENHANCED: Download updates from HQ with cross-workshop transfer support
@@ -588,6 +163,10 @@ class NetworkLoopsMixin(SmartDeleteMixin):
                 # forever. HQ's gunicorn timeout is 120s.
                 r = requests.get(url, params=params, headers=headers, timeout=(10, 90))
 
+                if r.status_code in (401, 403):
+                    self.note_hq_rejected_key(r.status_code, "download")
+                    return
+
                 if r.status_code != 200:
                     LOG.warning(f"❌ Download returned status {r.status_code}: {r.text}")
                     return
@@ -602,7 +181,12 @@ class NetworkLoopsMixin(SmartDeleteMixin):
                         if checkpoint != last_ts:
                             self.set_last_download_time(checkpoint)
                     LOG.debug(f"📭 No new updates available from HQ")
+                    # Lets download_loop stretch its interval while nothing is
+                    # happening; any real update below snaps it back.
                     return
+
+                # Something arrived: keep the download loop at its fast interval.
+                self._download_saw_changes = True
 
                 # === Enhanced logging with transfer detection ===
                 status_updates = [u for u in updates if u.get("operation") in ["activate", "deactivate"]]

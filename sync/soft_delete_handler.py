@@ -35,6 +35,10 @@ import uuid
 from datetime import datetime, timezone
 import json
 import traceback
+try:
+    from .sql_ident import identifier, qualified
+except ImportError:  # loaded as a top-level module with sync/ on sys.path
+    from sql_ident import identifier, qualified
 
 LOG = logging.getLogger("soft_delete_handler")
 
@@ -248,9 +252,8 @@ class SoftDeleteDependencyChecker:
         else:
             schema, tbl = "public", child_table
 
-        quoted_table = f'"{tbl}"'
         quoted_fk = f'"{fk_column}"'
-        full_table = f"{schema}.{quoted_table}"
+        full_table = qualified(schema, tbl)
 
         try:
             # Get column information BEFORE building query
@@ -398,8 +401,8 @@ class SoftDeleteDependencyChecker:
                     try:
                         cur.execute(f"""
                             SELECT COUNT(*) as count
-                            FROM "{child_schema}"."{child_table}"
-                            WHERE "{fk_column}" = %s
+                            FROM {qualified(child_schema, child_table)}
+                            WHERE {identifier(fk_column)} = %s
                             LIMIT 1
                         """, (row_id,))
 
@@ -762,8 +765,7 @@ def perform_soft_delete_with_cascade(
         else:
             schema, tbl = "public", table
 
-        quoted_table = f'"{tbl}"'
-        full_table = f"{schema}.{quoted_table}"
+        full_table = qualified(schema, tbl)
 
         # ===== CRITICAL FIX: Get column types BEFORE cursor operations =====
         update_parts = []
@@ -907,9 +909,8 @@ def cascade_soft_delete_to_children(
     else:
         schema, tbl = "public", child_table
 
-    quoted_table = f'"{tbl}"'
     quoted_fk = f'"{fk_column}"'
-    full_table = f"{schema}.{quoted_table}"
+    full_table = qualified(schema, tbl)
 
     try:
         # Check child table status columns
@@ -1042,8 +1043,7 @@ def perform_hard_delete(
         else:
             schema, tbl = "public", table
 
-        quoted_table = f'"{tbl}"'
-        full_table = f"{schema}.{quoted_table}"
+        full_table = qualified(schema, tbl)
 
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             # Get record before deletion for audit
@@ -1194,8 +1194,7 @@ def perform_activation(
         else:
             schema, tbl = "public", table
 
-        quoted_table = f'"{tbl}"'
-        full_table = f"{schema}.{quoted_table}"
+        full_table = qualified(schema, tbl)
 
         # ===== CRITICAL FIX: Get column types BEFORE cursor operations =====
         update_parts = []
@@ -1331,9 +1330,8 @@ def cascade_activation_to_children(
     else:
         schema, tbl = "public", child_table
 
-    quoted_table = f'"{tbl}"'
     quoted_fk = f'"{fk_column}"'
-    full_table = f"{schema}.{quoted_table}"
+    full_table = qualified(schema, tbl)
 
     try:
         # Check child table status columns
@@ -1470,8 +1468,7 @@ def get_record_status(conn, table: str, row_id: str) -> Dict:
     else:
         schema, tbl = "public", table
 
-    quoted_table = f'"{tbl}"'
-    full_table = f"{schema}.{quoted_table}"
+    full_table = qualified(schema, tbl)
 
     try:
         checker = SoftDeleteDependencyChecker(conn)
@@ -1648,8 +1645,7 @@ def diagnose_table_status_system(conn, table: str) -> Dict:
         else:
             schema, tbl = "public", table
 
-        quoted_table = f'"{tbl}"'
-        full_table = f"{schema}.{quoted_table}"
+        full_table = qualified(schema, tbl)
 
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             columns = ["id"]
@@ -1712,8 +1708,7 @@ def repair_inconsistent_status_values(conn, table: str, dry_run: bool = True) ->
         else:
             schema, tbl = "public", table
 
-        quoted_table = f'"{tbl}"'
-        full_table = f"{schema}.{quoted_table}"
+        full_table = qualified(schema, tbl)
 
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             # Check for CHAR(1) columns with invalid values

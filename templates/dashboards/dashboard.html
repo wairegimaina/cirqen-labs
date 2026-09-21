@@ -17,10 +17,13 @@
 <div class="cmms-dash">
 
   <!-- ========== Embedded Data ========== -->
+  {{ analytics_data|json_script:"analytics-data" }}
+  {{ ppm_data|json_script:"ppm-data" }}
+  {{ inventory_data|json_script:"inventory-data" }}
   <script>
-    window.analyticsData = {{ analytics_data|safe }};
-    window.ppmData = {{ ppm_data|safe }};
-    window.inventoryData = {{ inventory_data|safe }};
+    window.analyticsData = JSON.parse(document.getElementById("analytics-data").textContent);
+    window.ppmData = JSON.parse(document.getElementById("ppm-data").textContent);
+    window.inventoryData = JSON.parse(document.getElementById("inventory-data").textContent);
   </script>
 
   <!-- Header -->

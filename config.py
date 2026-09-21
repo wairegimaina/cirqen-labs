@@ -12,6 +12,333 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# HQ ENDPOINTS
+# ══════════════════════════════════════════════════════════════════════════════
+# This block is the ONLY place in the codebase that names where HQ is hosted
+# (test_hq_endpoints.py fails the build if a hostname appears anywhere else).
+#
+# Each value is resolved, highest priority first, from:
+#   1. its environment variable          (HQ_ENDPOINT_ENV)   — honoured in
+#                                          production as well as in development
+#   2. config.json                       — only a value an operator set on
+#                                          purpose; defaults are never written
+#   3. endpoints.json                    — the signed document the update server
+#                                          hands out (endpoint_sync.py). This is
+#                                          how a fleet-wide move reaches a machine
+#                                          without a release; an operator's own
+#                                          pin above still wins.
+#   4. provisioning.json                 — an installer can carry addresses
+#   5. HQ_ENDPOINT_DEFAULTS below        — what a fresh install uses
+#
+# Because defaults are not written to config.json, changing HQ_ENDPOINT_DEFAULTS
+# and shipping a build moves every machine that has not been pinned by hand.
+# describe_endpoints() / resolve_endpoints() report which layer supplied each.
+HQ_ENDPOINT_DEFAULTS = {
+    # Sync API and certificate authority (~/Desktop/hq_server, Flask).
+    "sync.api_url": "https://hq-server-dgs6.onrender.com/api/sync",
+    # Update server (cirqen-labs/hq_server, FastAPI). A different service.
+    "update.server_url": "https://cirqen-hq.onrender.com",
+    # HQ database, reached directly by the sync agent and Django's HQ alias.
+    "hq_db.host": "aws-0-eu-north-1.pooler.supabase.com",
+    "hq_db.port": 5432,
+    "hq_db.database": "postgres",
+    "hq_db.user": "postgres.nwlwaeeyduxroykrgksi",
+    "hq_db.sslmode": "require",
+}
+
+HQ_ENDPOINT_ENV = {
+    "sync.api_url": "SYNC_API_URL",
+    "update.server_url": "HQ_SERVER_URL",
+    "hq_db.host": "POSTGRES_HQ_HOST",
+    "hq_db.port": "POSTGRES_HQ_PORT",
+    "hq_db.database": "POSTGRES_HQ_DB",
+    "hq_db.user": "POSTGRES_HQ_USER",
+    "hq_db.sslmode": "POSTGRES_SSLMODE",
+}
+
+# Values every config.json written BEFORE endpoint layering may contain because
+# they were once the shipped defaults. A file without ENDPOINT_MARKER is
+# migrated: any of these (or the current default) is treated as "not set", so
+# the machine follows HQ_ENDPOINT_DEFAULTS instead of staying pinned. Anything
+# else in such a file was typed by a person and is kept. This set is frozen
+# history; it never needs to grow, because files written from now on hold
+# overrides only.
+PRE_LAYERING_DEFAULTS = {
+    "sync.api_url": {"https://hq-server-dgs6.onrender.com/api/sync"},
+    "update.server_url": {"https://cirqen-hq.onrender.com"},
+    "hq_db.host": {
+        "aws-0-eu-north-1.pooler.supabase.com",
+        "dpg-d7rk2sa8qa3s73diimb0-a.ohio-postgres.render.com",  # decommissioned
+    },
+    "hq_db.port": {5432},
+    "hq_db.database": {"postgres", "cirqen_hq", "b12technologies"},
+    "hq_db.user": {"postgres.nwlwaeeyduxroykrgksi", "cirqen_hq", "b12technologies"},
+    "hq_db.sslmode": {"require"},
+}
+
+# setup_environment_variables() exports every resolved value into os.environ so
+# that legacy code (and child processes) can read POSTGRES_HQ_HOST and friends.
+# Those exports are this layer's own output, not an operator's choice, and a
+# child process inherits them. Without this marker the child would read its
+# parent's export back as an "env" override, mislabel the source and make the
+# settings page read-only.
+#
+# The marker records the exported VALUES as JSON, not just the names: a variable
+# is treated as this layer's own echo only while it still holds exactly what we
+# wrote. Anything an operator sets differs from that and is honoured normally.
+ENDPOINTS_FROM_CONFIG_VAR = "CIRQEN_ENDPOINTS_FROM_CONFIG"
+
+# Written by endpoint_sync.py after it has verified a signed document from the
+# update server and confirmed the address answers. Kept in its own file so it is
+# never confused with an operator's deliberate pin in config.json, and so a
+# single delete puts the machine back on the shipped default.
+REMOTE_ENDPOINTS_FILE = "endpoints.json"
+
+# Non-secret settings that must still be overridable by the environment in the
+# packaged app, not only in development. Same failure as finding C-2: an
+# override that works on a developer's machine and is silently ignored in
+# production is worse than no override at all. Values here are never written to
+# config.json, so the environment stays the source.
+PLAIN_ENV = {
+    "update.public_key": "UPDATE_PUBLIC_KEY",
+}
+
+ENDPOINT_MARKER = "_endpoints_v"
+ENDPOINT_MARKER_VALUE = 2
+
+_LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
+_SSLMODES = ("disable", "allow", "prefer", "require", "verify-ca", "verify-full")
+
+
+def _get_path(cfg: dict, dotted: str):
+    node = cfg
+    for part in dotted.split("."):
+        if not isinstance(node, dict) or part not in node:
+            return None
+        node = node[part]
+    return node
+
+
+def _put_path(cfg: dict, dotted: str, value) -> None:
+    *parents, leaf = dotted.split(".")
+    node = cfg
+    for part in parents:
+        node = node.setdefault(part, {})
+    node[leaf] = value
+
+
+def _del_path(cfg: dict, dotted: str) -> None:
+    *parents, leaf = dotted.split(".")
+    node = cfg
+    for part in parents:
+        node = node.get(part) if isinstance(node, dict) else None
+        if node is None:
+            return
+    if isinstance(node, dict):
+        node.pop(leaf, None)
+
+
+def coerce_endpoint(key: str, value):
+    """Public: used by the settings page and the hq_endpoint command.
+
+    Normalise a raw value: ports become int, URLs and hosts lose whitespace
+    and trailing slashes. Raises ValueError naming the setting."""
+    if key == "hq_db.port":
+        try:
+            return int(str(value).strip())
+        except ValueError:
+            raise ValueError(f"{key} must be a whole number, got {value!r}")
+    text = str(value).strip()
+    if key in ("sync.api_url", "update.server_url"):
+        text = text.rstrip("/")
+    return text
+
+
+def _endpoint_is_override(key: str, stored, migrating: bool) -> bool:
+    """Is a value found in config.json something a person set on purpose?"""
+    if stored is None or stored == "":
+        return False
+    try:
+        value = coerce_endpoint(key, stored)
+    except ValueError:
+        return True  # keep it; validation reports it by name
+    if value == HQ_ENDPOINT_DEFAULTS[key]:
+        return False
+    if migrating and value in PRE_LAYERING_DEFAULTS.get(key, ()):
+        return False
+    return True
+
+
+def layer_endpoints(stored: dict, provisioning: dict, env, migrating: bool, remote=None):
+    """Resolve every HQ endpoint. Returns (values, sources, overrides).
+
+    values     key -> resolved value
+    sources    key -> "env" | "config.json" | "remote" | "provisioning" | "default"
+    overrides  key -> value that must be written to config.json to keep it
+    """
+    remote = remote or {}
+    values, sources, overrides = {}, {}, {}
+    try:
+        derived = json.loads(env.get(ENDPOINTS_FROM_CONFIG_VAR) or "{}")
+        if not isinstance(derived, dict):
+            derived = {}
+    except ValueError:
+        derived = {}
+    for key, default in HQ_ENDPOINT_DEFAULTS.items():
+        stored_raw = _get_path(stored, key)
+        prov_raw = _get_path(provisioning, key)
+        env_name = HQ_ENDPOINT_ENV[key]
+        env_raw = (env.get(env_name) or "").strip()
+        if env_name in derived and env_raw == str(derived[env_name]):
+            env_raw = ""  # our own export echoed back, not an operator's choice
+
+        if _endpoint_is_override(key, stored_raw, migrating):
+            overrides[key] = coerce_endpoint(key, stored_raw)
+        elif prov_raw not in (None, "") and coerce_endpoint(key, prov_raw) != default:
+            overrides[key] = coerce_endpoint(key, prov_raw)
+
+        from_config = _endpoint_is_override(key, stored_raw, migrating)
+
+        if env_raw:
+            values[key], sources[key] = coerce_endpoint(key, env_raw), "env"
+        elif from_config:
+            values[key], sources[key] = overrides[key], "config.json"
+        elif key in remote:
+            # A fleet-wide move. Below an operator's own pin on purpose: a
+            # machine deliberately pointed somewhere stays there.
+            values[key], sources[key] = remote[key], "remote"
+        elif key in overrides:
+            values[key], sources[key] = overrides[key], "provisioning"
+        else:
+            values[key], sources[key] = default, "default"
+    return values, sources, overrides
+
+
+def validate_endpoints(values: dict, sync_enabled: bool = True, db_enabled: bool = True) -> list:
+    """Problems with the resolved addresses, each naming the setting."""
+    from urllib.parse import urlparse
+
+    errors = []
+
+    def check_url(key, required, suffix=None, forbid_suffix=None):
+        raw = values.get(key)
+        if not raw:
+            if required:
+                errors.append(f"{key} is required")
+            return
+        parsed = urlparse(str(raw))
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
+            errors.append(f"{key} must be a full URL such as https://host, got {raw!r}")
+            return
+        if parsed.scheme == "http" and parsed.hostname not in _LOCAL_HOSTS:
+            errors.append(f"{key} must use https (plain http is only allowed for localhost)")
+        if any(ch.isspace() for ch in str(raw)):
+            errors.append(f"{key} must not contain spaces")
+        path = parsed.path.rstrip("/")
+        if suffix and not path.endswith(suffix):
+            errors.append(f"{key} should end with {suffix}, got {raw!r}")
+        if forbid_suffix and "/api/" in path:
+            errors.append(f"{key} is a server address, not an API path; remove {path!r}")
+
+    check_url("sync.api_url", sync_enabled, suffix="/api/sync")
+    check_url("update.server_url", True, forbid_suffix=True)
+
+    if db_enabled:
+        host = str(values.get("hq_db.host") or "")
+        if not host:
+            errors.append("hq_db.host is required")
+        elif "://" in host or "/" in host or any(ch.isspace() for ch in host):
+            errors.append(f"hq_db.host must be a bare host name, got {host!r}")
+        port = values.get("hq_db.port")
+        if not isinstance(port, int) or not 1 <= port <= 65535:
+            errors.append(f"hq_db.port must be between 1 and 65535, got {port!r}")
+        if not values.get("hq_db.database"):
+            errors.append("hq_db.database is required")
+        if not values.get("hq_db.user"):
+            errors.append("hq_db.user is required")
+        if values.get("hq_db.sslmode") not in _SSLMODES:
+            errors.append(f"hq_db.sslmode must be one of {', '.join(_SSLMODES)}")
+    return errors
+
+
+def _provisioning_candidates_for(data_path: Path) -> list:
+    import sys
+
+    candidates = []
+    if os.getenv("CIRQEN_PROVISIONING_FILE"):
+        candidates.append(Path(os.environ["CIRQEN_PROVISIONING_FILE"]))
+    candidates.append(Path(data_path) / "provisioning.json")
+    if getattr(sys, "frozen", False):
+        candidates.append(Path(sys.executable).resolve().parent / "provisioning.json")
+    candidates.append(Path(__file__).resolve().parent / "provisioning.json")
+    return candidates
+
+
+def read_remote_endpoints(data_path) -> dict:
+    """Addresses adopted from the update server, or {} if none/unreadable.
+
+    Never raises and never fetches: a corrupt or absent file simply means this
+    layer has nothing to say, and resolution falls through to the layers below.
+    """
+    try:
+        with open(Path(data_path) / REMOTE_ENDPOINTS_FILE) as fh:
+            payload = json.load(fh)
+    except (OSError, ValueError):
+        return {}
+    adopted = payload.get("endpoints") if isinstance(payload, dict) else None
+    if not isinstance(adopted, dict):
+        return {}
+    resolved = {}
+    for key, value in adopted.items():
+        if key in HQ_ENDPOINT_DEFAULTS:
+            try:
+                resolved[key] = coerce_endpoint(key, value)
+            except ValueError:
+                continue
+    return resolved
+
+
+def _read_provisioning_for(data_path: Path) -> dict:
+    for candidate in _provisioning_candidates_for(data_path):
+        try:
+            if candidate.is_file():
+                with open(candidate) as fh:
+                    return json.load(fh)
+        except (OSError, ValueError) as exc:
+            print(f"⚠️  Ignoring unreadable provisioning file {candidate}: {exc}")
+    return {}
+
+
+def resolve_endpoints(data_path=None, env=None) -> dict:
+    """Read-only lookup for code that cannot build a CirqenConfig (the desktop
+    launcher, helper scripts). Never writes, never prints.
+
+    Returns {key: (value, source)} for every key in HQ_ENDPOINT_DEFAULTS.
+    """
+    base = Path(data_path) if data_path else Path(
+        os.environ.get("CIRQEN_DATA_DIR") or Path.home() / ".cirqen" / "data"
+    )
+    stored = {}
+    try:
+        with open(base / "config.json") as fh:
+            loaded = json.load(fh)
+        if isinstance(loaded, dict):
+            stored = loaded
+    except (OSError, ValueError):
+        pass
+    migrating = bool(stored) and stored.get(ENDPOINT_MARKER) != ENDPOINT_MARKER_VALUE
+    values, sources, _ = layer_endpoints(
+        stored,
+        _read_provisioning_for(base),
+        os.environ if env is None else env,
+        migrating,
+        remote=read_remote_endpoints(base),
+    )
+    return {key: (values[key], sources[key]) for key in values}
+
+
+
 class CirqenConfig:
     """
     Unified configuration manager with custom port configuration and update settings.
@@ -23,10 +350,11 @@ class CirqenConfig:
     DEFAULT_CONFIG = {
         # ===== SYNC AGENT =====
         "sync": {
-            "api_url": "https://hq-server-dgs6.onrender.com/api/sync",
-            "auth_token": "G6PScpbnjBWe4PMhi9c_31FzFzzxnHkyfnyzqsdE-JgIYwe4WBRBkBgLyuje43F5",
+            "api_url": HQ_ENDPOINT_DEFAULTS["sync.api_url"],
+            "auth_token": "",  # secret: env SYNC_AUTH_TOKEN, or issued at enrollment
+            "enrollment_code": "",  # secret: installer's one-time code (provisioning.json)
             "enabled": True,
-            "debug": True,
+            "debug": False,
             "poll_interval": 1,
             "download_interval": 5,
             "upload_batch_size": 50,
@@ -44,16 +372,18 @@ class CirqenConfig:
             "port": 2215,
             "database": "cirqen1",
             "user": "cirqen1",
-            "password": "Btwelvetech@2024",
+            # secret: generated on a machine's first run and kept in config.json
+            # (the embedded database is created with it), or env POSTGRES_LOCAL_PASSWORD.
+            "password": "",
         },
         # ===== HQ DATABASE (Supabase pooler) =====
         "hq_db": {
-            "host": "aws-0-eu-north-1.pooler.supabase.com",
-            "port": 5432,
-            "database": "postgres",
-            "user": "postgres.nwlwaeeyduxroykrgksi",
-            "password": "M0707337206m",
-            "sslmode": "require",
+            "host": HQ_ENDPOINT_DEFAULTS["hq_db.host"],
+            "port": HQ_ENDPOINT_DEFAULTS["hq_db.port"],
+            "database": HQ_ENDPOINT_DEFAULTS["hq_db.database"],
+            "user": HQ_ENDPOINT_DEFAULTS["hq_db.user"],
+            "password": "",  # secret: env POSTGRES_HQ_PASSWORD or provisioning.json
+            "sslmode": HQ_ENDPOINT_DEFAULTS["hq_db.sslmode"],
             "enabled": True,
         },
         # ===== REDIS (Custom Port 7788) =====
@@ -71,6 +401,9 @@ class CirqenConfig:
         "client": {
             "name": "Test Hospital Workshop",
             "id": None,  # None = auto-generate from MAC address on first run
+            # Printed in PDF headers (core/branding.py); left out when empty.
+            "email": "",
+            "phone": "",
         },
         # ===== MIRROR =====
         "mirror": {
@@ -83,8 +416,16 @@ class CirqenConfig:
         # Both values are read by settings.py → UPDATE_SYSTEM and by
         # views.py → _get_hq_config() for check / download / apply.
         "update": {
-            "server_url": "https://cirqen-hq.onrender.com",
-            "api_key": "58f8605e1966ce148990c477dcb99d02",
+            "server_url": HQ_ENDPOINT_DEFAULTS["update.server_url"],
+            "api_key": "",  # secret: env HQ_API_KEY or provisioning.json
+            # Ed25519 public half of the update server's signing key, from
+            # `python hq_server/build_package.py --genkeys`. NOT a secret — it
+            # is the trust anchor, so it belongs in the build, and an empty
+            # value means unsigned mode: packages are applied unverified and
+            # the fleet redirect (endpoint_sync.py) refuses to act at all.
+            # Deliberately not something HQ can set remotely; a server that
+            # could choose its own verification key is not verified.
+            "public_key": "cIa1UoY7prue5F4cr7sNw2vwv8AK+G/Ea4hBYbL/Hz4=",
             "check_interval_hours": 24,
             "auto_apply": False,
             "require_confirmation": True,
@@ -239,7 +580,7 @@ class CirqenConfig:
         # ===== APPLICATION =====
         "app": {
             "django_port": 8000,
-            "debug": True,
+            "debug": False,
             "log_level": "INFO",
         },
         # ===== EMAIL (SMTP) =====
@@ -265,6 +606,8 @@ class CirqenConfig:
         self.data_path = data_path
         self.config_file = data_path / "config.json"
         self.env_file = Path(".env")
+        self.endpoint_sources: Dict[str, str] = {}
+        self._endpoint_overrides: Dict[str, Any] = {}
 
         if use_env_file is None:
             use_env_file = self.env_file.exists()
@@ -363,6 +706,9 @@ class CirqenConfig:
             # update  ← the important new block
             cfg["update"]["server_url"] = os.getenv("HQ_SERVER_URL", cfg["update"]["server_url"])
             cfg["update"]["api_key"] = os.getenv("HQ_API_KEY", cfg["update"]["api_key"])
+            cfg["update"]["public_key"] = os.getenv(
+                "UPDATE_PUBLIC_KEY", cfg["update"]["public_key"]
+            )
             cfg["update"]["check_interval_hours"] = float(
                 os.getenv("UPDATE_CHECK_INTERVAL_HOURS", cfg["update"]["check_interval_hours"])
             )
@@ -453,6 +799,8 @@ class CirqenConfig:
                 "EMAIL_HOST_PASSWORD", cfg["email"]["host_password"]
             )
 
+            self._resolve_endpoints(cfg, stored={}, migrating=False)  # noqa: E501
+            self._apply_secret_sources(cfg)
             print("✓ Configuration loaded from .env file")
             return cfg
 
@@ -462,24 +810,245 @@ class CirqenConfig:
             return self._deep_copy(self.DEFAULT_CONFIG)
 
     def _load_from_json(self) -> Dict[str, Any]:
-        """Load from config.json, creating it from defaults on first run."""
-        if self.config_file.exists():
+        """Load from config.json, creating it on first run.
+
+        HQ addresses follow HQ_ENDPOINT_DEFAULTS unless something set them on
+        purpose; only those deliberate values are written back (see the block
+        at the top of this file).
+        """
+        cfg = self._deep_copy(self.DEFAULT_CONFIG)
+        stored: dict = {}
+        first_run = not self.config_file.exists()
+        recreated = False
+        if not first_run:
             try:
                 with open(self.config_file, "r") as f:
-                    user_config = json.load(f)
-                cfg = self._deep_copy(self.DEFAULT_CONFIG)
-                self._deep_merge(cfg, user_config)
+                    stored = json.load(f)
+                if not isinstance(stored, dict):
+                    raise ValueError("top level is not an object")
+                self._deep_merge(cfg, stored)
                 print(f"✓ Configuration loaded from {self.config_file}")
-                return cfg
             except Exception as exc:
                 print(f"⚠️  Error loading config.json: {exc}")
-                print("   Recreating from defaults")
-                self._save_json(self.DEFAULT_CONFIG)
-                return self._deep_copy(self.DEFAULT_CONFIG)
+                print("   Recreating from defaults (the unreadable file is kept as config.json.corrupt)")
+                self._keep_copy("config.json.corrupt")
+                cfg = self._deep_copy(self.DEFAULT_CONFIG)
+                stored = {}
+                recreated = True
         else:
             print("🔍 First run — creating default config.json")
-            self._save_json(self.DEFAULT_CONFIG)
-            return self._deep_copy(self.DEFAULT_CONFIG)
+
+        migrating = bool(stored) and stored.get(ENDPOINT_MARKER) != ENDPOINT_MARKER_VALUE
+        self._resolve_endpoints(cfg, stored, migrating)
+        self._apply_plain_env(cfg)
+
+        if first_run:
+            if not cfg["local_db"].get("password"):
+                cfg["local_db"]["password"] = secrets.token_urlsafe(24)
+            self._save_json(self._persistable(cfg))
+        elif recreated:
+            self._save_json(self._persistable(cfg))
+        elif migrating:
+            print("   Migrating config.json: HQ addresses now follow the shipped defaults")
+            self._keep_copy("config.json.pre-endpoints")
+            self._save_json(self._persistable(cfg))
+
+        if self._apply_secret_sources(cfg):
+            # Persist secrets that came from a provisioning file, so the file
+            # can be deleted after first run. Environment values are not saved.
+            self._save_json(self._without_env_secrets(cfg))
+        return cfg
+
+    # ── HQ endpoints ─────────────────────────────────────────────────────────
+
+    def _apply_plain_env(self, cfg: dict) -> None:
+        """Environment wins for PLAIN_ENV settings, in every mode."""
+        self._plain_env_keys = set()
+        for dotted, env_name in PLAIN_ENV.items():
+            value = (os.getenv(env_name) or "").strip()
+            if value:
+                _put_path(cfg, dotted, value)
+                self._plain_env_keys.add(dotted)
+
+    def _resolve_endpoints(self, cfg: dict, stored: dict, migrating: bool) -> None:
+        """Fill cfg's HQ addresses: env > config.json > remote > provisioning > default."""
+        values, sources, overrides = layer_endpoints(
+            stored, self._read_provisioning(), os.environ, migrating,
+            remote=read_remote_endpoints(self.data_path),
+        )
+        for key, value in values.items():
+            _put_path(cfg, key, value)
+        self.endpoint_sources = sources
+        self._endpoint_overrides = overrides
+
+    def _persistable(self, cfg: dict) -> dict:
+        """Copy of cfg for writing to disk: HQ addresses appear only when set
+        on purpose, so a shipped default is never frozen into a machine."""
+        saved = self._deep_copy(cfg)
+        for key in HQ_ENDPOINT_DEFAULTS:
+            if key in self._endpoint_overrides:
+                _put_path(saved, key, self._endpoint_overrides[key])
+            else:
+                _del_path(saved, key)
+        # An environment-supplied value must not be frozen into config.json,
+        # or unsetting the variable would silently leave the old value behind.
+        # Keep whatever the file already held instead.
+        on_disk = None
+        for dotted in getattr(self, "_plain_env_keys", ()):
+            if on_disk is None:
+                try:
+                    with open(self.config_file) as fh:
+                        on_disk = json.load(fh)
+                except (OSError, ValueError):
+                    on_disk = {}
+            _put_path(saved, dotted, _get_path(on_disk, dotted) or "")
+        saved[ENDPOINT_MARKER] = ENDPOINT_MARKER_VALUE
+        return saved
+
+    def _keep_copy(self, suffix_name: str) -> None:
+        """Copy config.json beside itself once, before it is rewritten."""
+        target = self.config_file.with_name(suffix_name)
+        try:
+            if self.config_file.exists() and not target.exists():
+                target.write_bytes(self.config_file.read_bytes())
+                try:
+                    target.chmod(0o600)
+                except OSError:
+                    pass
+        except OSError as exc:
+            print(f"⚠️  Could not keep a copy as {suffix_name}: {exc}")
+
+    def sync_url(self) -> str:
+        return self.get("sync.api_url")
+
+    def update_url(self) -> str:
+        return self.get("update.server_url")
+
+    def describe_endpoints(self) -> list:
+        """[{key, value, source}] for every HQ address, for UIs and logs."""
+        return [
+            {"key": key, "value": self.get(key), "source": self.endpoint_sources.get(key, "default")}
+            for key in HQ_ENDPOINT_DEFAULTS
+        ]
+
+    # ── Secrets ───────────────────────────────────────────────────────────────
+    #
+    # Secrets are never baked into this file. Each is resolved from, in order:
+    #   1. its environment variable (never written to disk by this class),
+    #   2. config.json in the data directory,
+    #   3. a provisioning.json shipped with the installer (first run only; the
+    #      values are copied into config.json).
+    # A missing secret is reported loudly by missing_secrets()/validate_config().
+
+    SECRET_ENV = {
+        "sync.auth_token": "SYNC_AUTH_TOKEN",
+        "sync.enrollment_code": "SYNC_ENROLLMENT_CODE",
+        "update.api_key": "HQ_API_KEY",
+        "hq_db.password": "POSTGRES_HQ_PASSWORD",
+    }
+
+    def _provisioning_candidates(self):
+        return _provisioning_candidates_for(self.data_path)
+
+    def _read_provisioning(self) -> dict:
+        for candidate in self._provisioning_candidates():
+            try:
+                if candidate.is_file():
+                    with open(candidate) as fh:
+                        return json.load(fh)
+            except (OSError, ValueError) as exc:
+                print(f"⚠️  Ignoring unreadable provisioning file {candidate}: {exc}")
+        return {}
+
+    @staticmethod
+    def _dig(cfg: dict, dotted: str):
+        node = cfg
+        for part in dotted.split("."):
+            if not isinstance(node, dict) or part not in node:
+                return None
+            node = node[part]
+        return node
+
+    @staticmethod
+    def _put(cfg: dict, dotted: str, value):
+        *parents, leaf = dotted.split(".")
+        node = cfg
+        for part in parents:
+            node = node.setdefault(part, {})
+        node[leaf] = value
+
+    def _apply_secret_sources(self, cfg: dict) -> bool:
+        """Fill secrets from env / provisioning. Returns True if provisioning supplied any."""
+        self._env_secret_keys = set()
+        provisioning = None
+        from_provisioning = False
+        for dotted, env_name in self.SECRET_ENV.items():
+            env_value = os.getenv(env_name, "").strip()
+            if env_value:
+                self._put(cfg, dotted, env_value)
+                self._env_secret_keys.add(dotted)
+                continue
+            if self._dig(cfg, dotted):
+                continue
+            if provisioning is None:
+                provisioning = self._read_provisioning()
+            value = self._dig(provisioning, dotted)
+            if value:
+                self._put(cfg, dotted, value)
+                from_provisioning = True
+        return from_provisioning
+
+    def _without_env_secrets(self, cfg: dict) -> dict:
+        """Copy of cfg for writing to disk: env-supplied secrets keep the value
+        already stored in config.json instead of the environment's."""
+        saved = self._persistable(cfg)
+        env_keys = getattr(self, "_env_secret_keys", ())
+        if env_keys:
+            try:
+                with open(self.config_file) as fh:
+                    on_disk = json.load(fh)
+            except (OSError, ValueError):
+                on_disk = {}
+            for dotted in env_keys:
+                self._put(saved, dotted, self._dig(on_disk, dotted) or "")
+        return saved
+
+    def missing_secrets(self) -> list:
+        """Secrets that are required by the current config but not set."""
+        missing = []
+        # A new install has no key yet but an enrollment code to obtain one.
+        if self.get("sync.enabled", True) and not (
+            self.get("sync.auth_token") or self.get("sync.enrollment_code")
+        ):
+            missing.append("sync.auth_token (SYNC_AUTH_TOKEN) or sync.enrollment_code (SYNC_ENROLLMENT_CODE)")
+        if self.get("hq_db.enabled") and not self.get("hq_db.password"):
+            missing.append("hq_db.password (POSTGRES_HQ_PASSWORD)")
+        if not self.get("update.api_key"):
+            missing.append("update.api_key (HQ_API_KEY)")
+        if not self.get("local_db.password"):
+            missing.append("local_db.password (POSTGRES_LOCAL_PASSWORD)")
+        return missing
+
+    def export_provisioning(self, output_path: Path, include_endpoints: bool = False) -> Path:
+        """Write the secrets an installer must carry to provisioning.json.
+
+        include_endpoints also writes the HQ addresses, so an installer can
+        point a group of machines at a different HQ without a rebuild.
+        """
+        data = {}
+        for dotted in self.SECRET_ENV:
+            if self.get(dotted):
+                self._put(data, dotted, self.get(dotted))
+        if include_endpoints:
+            for dotted in HQ_ENDPOINT_DEFAULTS:
+                self._put(data, dotted, self.get(dotted))
+        output_path = Path(output_path)
+        output_path.write_text(json.dumps(data, indent=2))
+        try:
+            output_path.chmod(0o600)
+        except OSError:
+            pass
+        return output_path
 
     # ── Internal helpers ──────────────────────────────────────────────────────
 
@@ -517,7 +1086,7 @@ class CirqenConfig:
 
     def save(self):
         if not self.use_env_file:
-            self._save_json(self.config)
+            self._save_json(self._without_env_secrets(self.config))
 
     def get(self, key_path: str, default=None):
         """
@@ -536,6 +1105,14 @@ class CirqenConfig:
 
     def set(self, key_path: str, value):
         """Write a value using dot notation and persist to config.json."""
+        if key_path in HQ_ENDPOINT_DEFAULTS:
+            value = coerce_endpoint(key_path, value)
+            if value == HQ_ENDPOINT_DEFAULTS[key_path]:
+                self._endpoint_overrides.pop(key_path, None)
+                self.endpoint_sources[key_path] = "default"
+            else:
+                self._endpoint_overrides[key_path] = value
+                self.endpoint_sources[key_path] = "config.json"
         keys = key_path.split(".")
         target = self.config
         for key in keys[:-1]:
@@ -571,9 +1148,13 @@ class CirqenConfig:
         os.environ["WAIT_FOR_HQ"] = "true" if self.get("sync.wait_for_hq") else "false"
         os.environ["MAX_WAIT_FOR_HQ"] = str(self.get("sync.max_wait_for_hq"))
 
-        # local_db  (port 2215)
+        # local_db  (port 2215 by default) — PortManager may have dynamically
+        # reallocated this if the default was busy, and sets POSTGRES_LOCAL_PORT
+        # itself before this ever runs (e.g. inside the Django/Celery
+        # subprocess). setdefault() so we never clobber that with the static
+        # config.json port once something else has already resolved it.
         os.environ["POSTGRES_LOCAL_HOST"] = self.get("local_db.host")
-        os.environ["POSTGRES_LOCAL_PORT"] = str(self.get("local_db.port"))
+        os.environ.setdefault("POSTGRES_LOCAL_PORT", str(self.get("local_db.port")))
         os.environ["POSTGRES_LOCAL_DB"] = self.get("local_db.database")
         os.environ["POSTGRES_LOCAL_USER"] = self.get("local_db.user")
         os.environ["POSTGRES_LOCAL_PASSWORD"] = self.get("local_db.password")
@@ -593,16 +1174,26 @@ class CirqenConfig:
         os.environ["HQ_DB_PASSWORD"] = self.get("hq_db.password")
         os.environ["HQ_DB_SSLMODE"] = self.get("hq_db.sslmode", "require")
 
-        # redis  (port 7788)
-        os.environ["REDIS_HOST"] = self.get("redis.host")
-        os.environ["REDIS_PORT"] = str(self.get("redis.port"))
+        # redis  (port 7788 by default) — same story as local_db above:
+        # PortManager dynamically reallocates this port when the default is
+        # busy (typically a just-closed previous session's redis-server
+        # still releasing it) and may have already published the real
+        # REDIS_HOST/REDIS_PORT to the environment before this runs. Resolve
+        # from whatever is already set first, config.json only as a fallback,
+        # so every derived URL below (including CELERY_BROKER_URL) points at
+        # the redis-server that's actually running instead of a stale default
+        # nothing is listening on.
+        redis_host_val = os.environ.get("REDIS_HOST") or self.get("redis.host")
+        redis_port_val = os.environ.get("REDIS_PORT") or str(self.get("redis.port"))
+        os.environ["REDIS_HOST"] = redis_host_val
+        os.environ["REDIS_PORT"] = redis_port_val
         os.environ["REDIS_PASSWORD"] = self.get("redis.password")
         os.environ["REDIS_ENABLED"] = "true" if self.get("redis.enabled") else "false"
         os.environ["REDIS_PENDING_LIST"] = self.get("redis.pending_list")
         os.environ["REDIS_RETENTION_HOURS"] = str(self.get("redis.retention_hours"))
         os.environ["SYNC_LAST_DOWNLOAD_KEY"] = self.get("redis.last_download_key")
         os.environ["SYNC_LAST_UPLOAD_KEY"] = self.get("redis.last_upload_key")
-        _redis = f"redis://{self.get('redis.host')}:{self.get('redis.port')}"
+        _redis = f"redis://{redis_host_val}:{redis_port_val}"
         os.environ["REDIS_URL"] = f"{_redis}/0"
         os.environ["SESSION_REDIS_URL"] = f"{_redis}/1"
         os.environ["CELERY_BROKER_URL"] = f"{_redis}/2"
@@ -618,6 +1209,16 @@ class CirqenConfig:
 
         # ── update system ── (read by settings.py → UPDATE_SYSTEM)
         os.environ["HQ_SERVER_URL"] = self.get("update.server_url")
+        os.environ["UPDATE_PUBLIC_KEY"] = self.get("update.public_key", "") or ""
+
+        # Tell any later load (including a child process) which of the endpoint
+        # variables above this layer produced, so they are not read back as
+        # operator overrides. See ENDPOINTS_FROM_CONFIG_VAR.
+        os.environ[ENDPOINTS_FROM_CONFIG_VAR] = json.dumps({
+            HQ_ENDPOINT_ENV[key]: str(self.get(key))
+            for key in HQ_ENDPOINT_DEFAULTS
+            if self.endpoint_sources.get(key, "default") != "env"
+        }, sort_keys=True)
         os.environ["HQ_API_KEY"] = self.get("update.api_key")
         os.environ["UPDATE_CHECK_INTERVAL_HOURS"] = str(self.get("update.check_interval_hours"))
         os.environ["AUTO_APPLY_UPDATES"] = "true" if self.get("update.auto_apply") else "false"
@@ -682,6 +1283,19 @@ class CirqenConfig:
         os.environ["DJANGO_SECRET_KEY"] = self._get_or_create_secret_key()
         os.environ["DJANGO_ALLOWED_HOSTS"] = "localhost,127.0.0.1"
 
+        missing = self.missing_secrets()
+        if missing:
+            import logging
+
+            message = (
+                "Cirqen is missing required secrets: " + ", ".join(missing) + ". "
+                "Set the environment variables, add them to config.json, or place the "
+                "installer's provisioning.json in the data directory. Sync and updates "
+                "will fail until then."
+            )
+            print("\n" + "!" * 60 + "\n❌ " + message + "\n" + "!" * 60)
+            logging.getLogger("cirqen.config").error(message)
+
         print("✓ Environment variables configured")
         print(f"  • Local DB  : {self.get('local_db.host')}:{self.get('local_db.port')}")
         print(f"  • HQ DB     : {self.get('hq_db.host')}:{self.get('hq_db.port')}")
@@ -712,17 +1326,18 @@ class CirqenConfig:
         if self.get("local_db.port") != 2215:
             errors.append("⚠ local_db.port should be 2215")
         if self.get("hq_db.port") not in (3315, 5432, 6543):
-            errors.append(
-                "⚠ hq_db.port should be 5432/6543 (Supabase pooler) or 3315 (custom)"
-            )
+            errors.append("⚠ hq_db.port should be 5432/6543 (Supabase pooler) or 3315 (custom)")
         if self.get("redis.port") != 7788:
             errors.append("⚠ redis.port should be 7788")
-        if self.get("hq_db.enabled") and not self.get("hq_db.host"):
-            errors.append("hq_db.host is required when hq_db.enabled=True")
-        if not self.get("update.server_url"):
-            errors.append("update.server_url is required for the update system")
-        if not self.get("update.api_key"):
-            errors.append("update.api_key is required for the update system")
+        errors.extend(
+            validate_endpoints(
+                {key: self.get(key) for key in HQ_ENDPOINT_DEFAULTS},
+                sync_enabled=bool(self.get("sync.enabled", True)),
+                db_enabled=bool(self.get("hq_db.enabled")),
+            )
+        )
+        for secret in self.missing_secrets():
+            errors.append(f"missing secret: {secret}")
         if self.get("update.check_interval_hours") < 0:
             errors.append("update.check_interval_hours cannot be negative")
         if self.get("update.max_backups") < 1:
@@ -731,6 +1346,12 @@ class CirqenConfig:
             errors.append("update.chunk_size must be ≥ 1024 bytes")
         if self.get("update.max_download_size") < 1048576:
             errors.append("update.max_download_size must be ≥ 1 MB")
+        if not self.get("update.public_key"):
+            errors.append(
+                "⚠ update.public_key is empty: update packages are applied WITHOUT "
+                "signature checks and HQ address changes cannot be followed. Generate "
+                "with `python hq_server/build_package.py --genkeys`."
+            )
         if self.get("redpanda.enabled") and not self.get("redpanda.bootstrap_servers"):
             errors.append("redpanda.bootstrap_servers required when redpanda.enabled=True")
         if not self.get("sync_tables"):

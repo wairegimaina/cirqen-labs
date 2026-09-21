@@ -21,6 +21,11 @@ GET  /api/updates/machines/            → admin: registered machines + versions
 GET  /api/updates/packages/            → admin: built packages
 POST /api/migrations/acquire|release/  → shared-DB migration lock  (#9, persistent)
 GET  /api/migrations/status/
+GET  /api/endpoints/                   → signed "where is the sync HQ" document
+
+This server's address never changes, which is why the fleet asks *it* where the
+sync HQ is (see endpoints.py). Moving the sync HQ is then an environment change
+here, not a client release.
 
 Rollout controls (#7): edit a package's cirqen_update_v<ver>.json to set
 "yanked": true (kill switch), "rollout_percent": 0-100 (canary), or
@@ -38,14 +43,21 @@ from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+import endpoints as fleet_endpoints
 import store
 from build_package import build_package_if_needed, build_delta_zip
 
 # ── Config ───────────────────────────────────────────────────────────────────
 
 BASE_DIR = Path(__file__).parent
-PACKAGES_DIR = BASE_DIR / "packages"
-PACKAGES_DIR.mkdir(exist_ok=True)
+# Built packages belong on the persistent disk, not inside the deployed code.
+# A redeploy wipes the code directory, and with it every PREVIOUS version's
+# package and manifest. build_delta_zip needs the old manifest to work out what
+# changed, so without them every desktop falls back to a full download — at 500
+# desktops that is the difference between a few MB each and the whole package
+# each. HQ_PACKAGES_DIR points at the Render disk (see render.yaml).
+PACKAGES_DIR = Path(os.environ.get("HQ_PACKAGES_DIR", BASE_DIR / "packages"))
+PACKAGES_DIR.mkdir(parents=True, exist_ok=True)
 VERSION_FILE = BASE_DIR / "version.txt"
 
 API_KEY = os.environ.get("HQ_API_KEY", "change-this-in-render-env-vars")
@@ -145,6 +157,21 @@ def health():
 
 
 # ── Check for update ──────────────────────────────────────────────────────────
+
+# ── Fleet endpoints (where is the sync HQ?) ──────────────────────────────────
+
+@app.get("/api/endpoints/")
+def fleet_endpoint_document():
+    """Signed document naming the sync HQ the fleet should use.
+
+    Deliberately unauthenticated. A desktop whose sync key has been lost or
+    rejected is exactly the one that most needs to find out where HQ moved to,
+    and the document carries no secrets — only addresses, which are public the
+    moment any client connects. Integrity comes from the signature, not from
+    who is asking.
+    """
+    return fleet_endpoints.signed_response()
+
 
 @app.get("/api/updates/latest/")
 def check_latest(current_version: str = "0.0.0", machine_id: Optional[str] = None,

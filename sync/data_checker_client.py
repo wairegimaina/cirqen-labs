@@ -35,7 +35,7 @@ Usage (in sync_agent.py startup)
     from data_checker_client import DataCheckerClient
 
     checker = DataCheckerClient(
-        hq_url=self.server_url,          # e.g. "https://hq-server.onrender.com"
+        hq_url=self.server_url,          # e.g. "https://hq.example.com"
         api_key=self.api_key,
         client_id=self.client_id,
         local_pool=self.pool,            # psycopg2 connection pool
@@ -70,6 +70,10 @@ import requests
 from psycopg2.extras import RealDictCursor, Json
 
 from .agent_prelude import json_safe
+try:
+    from .sql_ident import qualified
+except ImportError:  # loaded as a top-level module with sync/ on sys.path
+    from sql_ident import qualified
 
 LOG = logging.getLogger("data_checker_client")
 
@@ -185,7 +189,7 @@ def _split_table(table: str) -> Tuple[str, str]:
 
 
 def _quoted(schema: str, tbl: str) -> str:
-    return f'"{schema}"."{tbl}"'
+    return qualified(schema, tbl)
 
 
 def _decode_value(value: Any) -> Any:
@@ -214,7 +218,7 @@ class DataCheckerClient:
     Parameters
     ----------
     hq_url:
-        Base URL of the HQ server, e.g. ``"https://hq-server.onrender.com"``.
+        Base URL of the HQ server, e.g. ``"https://hq.example.com"``.
     api_key:
         API key used for all requests (sent as ``X-API-Key`` header).
     client_id:

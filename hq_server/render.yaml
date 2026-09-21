@@ -8,7 +8,21 @@ services:
     rootDir: hq_server
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
-    plan: free          # upgrade to starter ($7/mo) for always-on
+    # NOT free: this service is the fleet's fixed anchor. Every desktop asks it
+    # where the sync HQ is (/api/endpoints/), so if it sleeps or is unreachable
+    # the fleet cannot be redirected — the one job it exists for. Free instances
+    # also spin down and answer the first request slowly.
+    plan: starter
+
+    # Without a disk the SQLite state file lives inside the deployed code and is
+    # WIPED ON EVERY DEPLOY. That state is not cosmetic: it holds the machine
+    # registry behind /api/updates/machines/ *and* the shared-DB migration lock.
+    # Losing the lock mid-rollout lets two desktops migrate the HQ database at
+    # once. store.py always supported this; only the disk was missing.
+    disk:
+      name: hq-state
+      mountPath: /var/lib/cirqen
+      sizeGB: 1
 
     envVars:
       - key: HQ_API_KEY
@@ -23,5 +37,39 @@ services:
           name: cirqen-hq-update-server
           property: host
 
+      # Only a fallback: _read_version() prefers hq_server/version.txt, which is
+      # the file that actually decides whether a new package gets built.
       - key: APP_VERSION
-        value: "1.0.0"          # Keep in sync with hq_server/version.txt
+        value: "1.5.2"          # Keep in sync with hq_server/version.txt
+
+      # ── Persistent state (machine registry + migration lock) ──────────────
+      - key: HQ_STATE_DB
+        value: /var/lib/cirqen/hq_state.db
+
+      # Built update packages. On the disk so PREVIOUS versions survive a
+      # redeploy — delta downloads need the old manifest, and without them
+      # every desktop re-downloads the full package.
+      - key: HQ_PACKAGES_DIR
+        value: /var/lib/cirqen/packages
+
+      # ── Package + endpoint signing ────────────────────────────────────────
+      # Generate once with:  python build_package.py --genkeys
+      # Private half here (secret); public half embedded in the client as
+      # UPDATE_PUBLIC_KEY. Until this is set, packages are unsigned and the
+      # /api/endpoints/ document is refused by clients.
+      - key: HQ_SIGNING_PRIVATE_KEY
+        sync: false
+
+      # ── Where the fleet should find the sync HQ ───────────────────────────
+      # THIS is how you move the sync HQ from one host to another: change this
+      # value, redeploy, and every desktop follows within FLEET_POLL_SECONDS.
+      # No client release. Leave unset to express "no opinion" — clients then
+      # keep whatever they already have.
+      - key: FLEET_SYNC_API_URL
+        sync: false
+      # Comma-separated; tried when the primary fails. Keep the old host here
+      # during a move so a desktop that misses the change is not stranded.
+      - key: FLEET_SYNC_FALLBACKS
+        sync: false
+      - key: FLEET_POLL_SECONDS
+        value: "900"

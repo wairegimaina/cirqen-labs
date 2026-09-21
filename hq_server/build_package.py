@@ -70,10 +70,54 @@ def _genkeys():
         encoding=serialization.Encoding.Raw,
         format=serialization.PublicFormat.Raw,
     )
-    print("HQ_SIGNING_PRIVATE_KEY (server env, keep secret):")
-    print("  " + base64.b64encode(seed).decode())
-    print("\nUPDATE_PUBLIC_KEY (embed in the client):")
-    print("  " + base64.b64encode(pub).decode())
+    private_b64 = base64.b64encode(seed).decode()
+    public_b64 = base64.b64encode(pub).decode()
+
+    # The private half is written to a 0600 file and never printed. Printing it
+    # puts it into terminal scrollback, shell history, CI logs and any transcript
+    # of the session — and whoever holds it can sign packages that every desktop
+    # executes. The public half is not secret and is printed, because it has to
+    # be copied into the client build.
+    key_file = Path(__file__).resolve().parent / "hq_signing_key.private"
+    key_file.write_text(private_b64 + "\n")
+    try:
+        key_file.chmod(0o600)
+    except OSError:
+        pass
+
+    print("=" * 72)
+    print("Ed25519 signing keypair — generated once, then never again")
+    print("=" * 72)
+    print()
+    print("1. PRIVATE half — HQ_SIGNING_PRIVATE_KEY")
+    print(f"   Written to: {key_file}")
+    print("   NOT printed on purpose: printing puts it in scrollback, shell")
+    print("   history and logs. Whoever holds it can sign packages that every")
+    print("   desktop executes, so treat it like a production database password.")
+    print()
+    print("   Copy it into Render -> cirqen-hq-update-server -> Environment")
+    print("   as HQ_SIGNING_PRIVATE_KEY, e.g.:")
+    print(f"       cat {key_file.name}      # run this yourself, in a private terminal")
+    print()
+    print("   Then keep one offline copy somewhere you would keep a root")
+    print("   password, and delete the file from this machine:")
+    print(f"       shred -u {key_file.name}   (or securely delete it)")
+    print("   Losing it means re-keying every client.")
+    print()
+    print("2. PUBLIC half — UPDATE_PUBLIC_KEY")
+    print("   Not secret. It is the trust anchor, so it belongs in the build:")
+    print("   set it in the client environment or config.json (update.public_key).")
+    print("   While it is empty, packages are applied WITHOUT signature checks")
+    print("   and HQ address changes are refused.")
+    print()
+    print("   " + public_b64)
+    print()
+    print("3. Verify, on a client:  python manage.py hq_endpoint --show")
+    print("   It prints whether signing is active.")
+    print()
+    print("Losing the private half means re-keying every client, so keep an")
+    print("offline copy somewhere you would keep a root password.")
+    print("=" * 72)
 
 
 def _tree_hash(files: list[dict]) -> str:

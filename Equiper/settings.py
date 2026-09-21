@@ -54,13 +54,16 @@ config.setup_environment_variables()
 # ============================================================
 # 🔒 CORE DJANGO SETTINGS
 # ============================================================
-# DEBUG: an explicit DJANGO_DEBUG env var wins so production/packaged builds can
-# force it OFF (config.json app.debug is only the fallback). Running Django with
-# DEBUG=True leaks stack traces + settings and disables ALLOWED_HOSTS enforcement,
-# so production should set DJANGO_DEBUG=0 (after running collectstatic).
+# DEBUG: an explicit DJANGO_DEBUG env var always wins. Running Django with
+# DEBUG=True leaks stack traces + settings and disables ALLOWED_HOSTS enforcement.
+# A packaged (PyInstaller) build ignores config.json's app.debug: clients
+# installed from older builds have "debug": true saved there, so the only way to
+# turn DEBUG on in the field is to set DJANGO_DEBUG=1 deliberately.
 _debug_env = os.getenv("DJANGO_DEBUG")
 if _debug_env is not None:
     DEBUG = _debug_env.strip().lower() in ("1", "true", "yes", "on")
+elif getattr(sys, "frozen", False):
+    DEBUG = False
 else:
     DEBUG = bool(config.get("app.debug"))
 if DEBUG:
@@ -69,6 +72,11 @@ if DEBUG:
           "(set DJANGO_DEBUG=0).", file=_sys.stderr)
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
+
+# Error monitoring: no-op unless SENTRY_DSN is set (core/monitoring.py).
+from core.monitoring import init_sentry  # noqa: E402
+
+init_sentry("django", client_name=config.get("client.name"), with_django=True)
 ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 
 INSTALLED_APPS = [
@@ -102,12 +110,15 @@ INSTALLED_APPS = [
 if DEBUG:
     INSTALLED_APPS += ["debug_toolbar"]
 
-APP_VERSION = "1.5.0"
+APP_VERSION = "1.5.3"
 
 UPDATE_SYSTEM = {
     "enabled": True,
     "server_url": config.get("update.server_url"),
     "api_key": config.get("update.api_key"),
+    # Ed25519 trust anchor for update packages AND the fleet endpoint document
+    # (endpoint_sync.py). Empty = unsigned mode; see config.py.
+    "public_key": config.get("update.public_key", ""),
     "check_interval_hours": config.get("update.check_interval_hours", 24),
     "auto_apply_updates": config.get("update.auto_apply", True),
     "components": {
@@ -136,6 +147,12 @@ MIDDLEWARE = [
 
 if DEBUG:
     MIDDLEWARE += ["debug_toolbar.middleware.DebugToolbarMiddleware"]
+
+# N+1 guard for development (core/query_budget.py): warn when a request runs
+# more than this many queries. Off in packaged builds.
+QUERY_BUDGET = int(os.getenv("CIRQEN_QUERY_BUDGET", "100" if DEBUG else "0")) or None
+QUERY_BUDGET_STRICT = os.getenv("CIRQEN_QUERY_BUDGET_STRICT", "0") == "1"
+MIDDLEWARE.insert(0, "core.query_budget.QueryBudgetMiddleware")
 
 ROOT_URLCONF = "Equiper.urls"
 
@@ -237,6 +254,18 @@ if redis_password:
 else:
     redis_base = f"redis://{redis_host}:{redis_port}"
 
+# Redis is an accelerator, never a dependency. On a single offline machine the
+# bundled redis-server can start late or die; with IGNORE_EXCEPTIONS and short
+# socket timeouts every cache call degrades to a miss instead of raising or
+# hanging, and sessions (cached_db) fall back to the database.
+_REDIS_FAIL_SOFT = {
+    "IGNORE_EXCEPTIONS": True,
+    "SOCKET_CONNECT_TIMEOUT": 0.3,
+    "SOCKET_TIMEOUT": 0.5,
+}
+DJANGO_REDIS_LOG_IGNORED_EXCEPTIONS = True
+DJANGO_REDIS_LOGGER = "cirqen.cache"
+
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
@@ -244,11 +273,11 @@ CACHES = {
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
             "CONNECTION_POOL_KWARGS": {
-                "retry_on_timeout": True,
                 "max_connections": 50,
             },
             "COMPRESSOR": "django_redis.compressors.zlib.ZlibCompressor",
             "SERIALIZER": "django_redis.serializers.json.JSONSerializer",
+            **_REDIS_FAIL_SOFT,
         },
         "TIMEOUT": 300,
         "KEY_PREFIX": "cirqen",
@@ -261,7 +290,15 @@ CACHES = {
             "CONNECTION_POOL_KWARGS": {
                 "max_connections": 50,
             },
+            **_REDIS_FAIL_SOFT,
         },
+    },
+    # Login / reset-code attempt counters (users.throttle). File-based on
+    # purpose: brute-force protection must not switch off when Redis is down.
+    "throttle": {
+        "BACKEND": "django.core.cache.backends.filebased.FileBasedCache",
+        "LOCATION": DATA_PATH / "throttle_cache",
+        "TIMEOUT": 3600,
     },
     "offline": {
         "BACKEND": "django.core.cache.backends.filebased.FileBasedCache",
@@ -427,15 +464,28 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "Africa/Nairobi"
-USE_I18N = True
+# The UI is English-only: no template or view marks strings for translation.
+# Turn this back on together with {% translate %} tags and LocaleMiddleware
+# if a second language is ever needed (IMPROVEMENT_PLAN.md section 8).
+USE_I18N = False
 USE_TZ = True
 
 # Static files — source dirs stay in BASE_DIR (read-only OK), output goes to DATA_PATH
 STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = DATA_PATH / "staticfiles"
+# Content-hash query strings on {% static %} URLs so an update never leaves a
+# browser on stale CSS/JS (see core/static_storage.py for why not Manifest).
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "core.static_storage.VersionedStaticFilesStorage"},
+}
 
 SITE_NAME = config.get("client.name", "Cirqen Desktop")
+REPORT_CONTACT = {
+    "email": config.get("client.email", ""),
+    "phone": config.get("client.phone", ""),
+}
 SITE_URL = "http://127.0.0.1:8000"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
@@ -457,7 +507,12 @@ SESSION_COOKIE_NAME = "sessionid"
 SESSION_COOKIE_AGE = 3600
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 SESSION_SAVE_EVERY_REQUEST = True
-SESSION_COOKIE_SECURE = False
+# Transport security. The desktop build serves plain HTTP on 127.0.0.1, so these
+# stay off by default; a deployment reachable over HTTPS sets CIRQEN_HTTPS=1 and
+# gets secure cookies, an HTTPS redirect and HSTS without a code change.
+# CIRQEN_BEHIND_PROXY=1 additionally trusts X-Forwarded-Proto from a TLS proxy.
+CIRQEN_HTTPS = os.getenv("CIRQEN_HTTPS", "0").strip().lower() in ("1", "true", "yes", "on")
+SESSION_COOKIE_SECURE = CIRQEN_HTTPS
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 
@@ -465,7 +520,12 @@ SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
 
-CSRF_COOKIE_SECURE = False
+CSRF_COOKIE_SECURE = CIRQEN_HTTPS
+SECURE_SSL_REDIRECT = CIRQEN_HTTPS
+SECURE_HSTS_SECONDS = int(os.getenv("CIRQEN_HSTS_SECONDS", "31536000")) if CIRQEN_HTTPS else 0
+SECURE_HSTS_INCLUDE_SUBDOMAINS = CIRQEN_HTTPS
+if os.getenv("CIRQEN_BEHIND_PROXY", "0").strip().lower() in ("1", "true", "yes", "on"):
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 CSRF_COOKIE_HTTPONLY = True
 CSRF_COOKIE_SAMESITE = "Lax"
 CSRF_TRUSTED_ORIGINS = ["http://localhost:8000", "http://127.0.0.1:8000"]
@@ -638,7 +698,6 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 26214400  # 25MB
 FILE_UPLOAD_PERMISSIONS = 0o644
 FILE_UPLOAD_DIRECTORY_PERMISSIONS = 0o755
 
-DEFAULT_FILE_STORAGE = "django.core.files.storage.FileSystemStorage"
 
 # ============================================================
 # 🛠️ DATA MANAGEMENT & CLEANUP
@@ -686,9 +745,6 @@ FEATURE_FLAGS = {
 DATABASE_POOL_SIZE = config.get("system.database_pool_size")
 DATABASE_MAX_OVERFLOW = 30
 DATABASE_POOL_RECYCLE = 3600
-
-CACHE_MIDDLEWARE_SECONDS = 600
-CACHE_MIDDLEWARE_KEY_PREFIX = "cirqen"
 
 TEMPLATE_LOADERS_CACHE = True
 TEMPLATE_DEBUG = DEBUG

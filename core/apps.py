@@ -11,3 +11,9 @@ class CoreConfig(AppConfig):
         from core import hq_link
 
         post_save.connect(hq_link.record_save, dispatch_uid="core.hq_link.record_save")
+
+        from core import aggregate_cache, cache_health
+
+        aggregate_cache.connect_invalidation_signals()
+
+        cache_health.log_cache_status()

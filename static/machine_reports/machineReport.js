@@ -81,7 +81,7 @@ function fetchEquipment(page = 1, search = '') {
                         <td>${escapeHtml(item.model || '-')}</td>
                         <td><span class="badge badge-category">${escapeHtml(item.category?.name || '-')}</span></td>
                         <td>
-                            <span class="status-badge ${getStatusClass(item.status)}">${escapeHtml(item.status)}</span>
+                            <span class="status-badge ${escapeHTML(getStatusClass(item.status))}">${escapeHtml(item.status)}</span>
                         </td>
                         <td class="text-center">
                             <button class="btn-icon" onclick="showRepairDetails('${escapeHtml(item.id)}')" title="View History">
@@ -113,14 +113,14 @@ function renderPagination(data) {
   if (!container) return;
 
   container.innerHTML = `
-        <div class="text-muted small">Page ${data.current_page || 1} of ${data.total_pages || 1} (${data.total_count || 0} items)</div>
+        <div class="text-muted small">Page ${escapeHTML(data.current_page || 1)} of ${escapeHTML(data.total_pages || 1)} (${escapeHTML(data.total_count || 0)} items)</div>
         <div class="btn-group">
             <button class="btn btn-outline-secondary btn-sm"
-                ${!data.has_previous ? 'disabled' : ''}
-                onclick="fetchEquipment(${data.previous || 1})">Previous</button>
+                ${escapeHTML(!data.has_previous ? 'disabled' : '')}
+                onclick="fetchEquipment(${escapeHTML(data.previous || 1)})">Previous</button>
             <button class="btn btn-outline-secondary btn-sm"
-                ${!data.has_next ? 'disabled' : ''}
-                onclick="fetchEquipment(${data.next || 1})">Next</button>
+                ${escapeHTML(!data.has_next ? 'disabled' : '')}
+                onclick="fetchEquipment(${escapeHTML(data.next || 1)})">Next</button>
         </div>
     `;
 }
@@ -169,7 +169,7 @@ function showRepairDetails(equipmentId) {
         contentDiv.innerHTML = `
         <div class="alert alert-danger">
           <i class="fas fa-exclamation-triangle me-2"></i>
-          <strong>Error loading repair history:</strong> ${error.message}
+          <strong>Error loading repair history:</strong> ${escapeHTML(error.message)}
         </div>
       `;
       }
@@ -203,17 +203,17 @@ function populateRepairModal(data) {
         <div class="card-body p-3">
           <div class="d-flex justify-content-between align-items-start mb-2">
             <div>
-              <h6 class="mb-1 fw-bold text-primary">Job Card #${repair.id.substring(0, 8)}</h6>
+              <h6 class="mb-1 fw-bold text-primary">Job Card #${escapeHTML(repair.id.substring(0, 8))}</h6>
               <small class="text-muted">
-                <i class="fas fa-calendar me-1"></i>${formatDate(repair.date)}
+                <i class="fas fa-calendar me-1"></i>${escapeHTML(formatDate(repair.date))}
                 ${repair.time_started ? `<span class="mx-1">•</span>${repair.time_started} - ${repair.time_completed || 'Ongoing'}` : ''}
               </small>
             </div>
             <span class="badge bg-success">KSh ${parseFloat(repair.total_cost).toFixed(2)}</span>
           </div>
 
-          <p class="mb-2"><strong>Description:</strong> ${repair.description || 'No description'}</p>
-          <p class="mb-2"><small class="text-muted"><i class="fas fa-user me-1"></i>${repair.performed_by}</small></p>
+          <p class="mb-2"><strong>Description:</strong> ${escapeHTML(repair.description || 'No description')}</p>
+          <p class="mb-2"><small class="text-muted"><i class="fas fa-user me-1"></i>${escapeHTML(repair.performed_by)}</small></p>
 
           ${repair.downtime_hours > 0 ? `
             <div class="alert alert-warning alert-sm py-1 px-2 mb-2">
@@ -281,19 +281,19 @@ function populateRepairModal(data) {
                 <i class="fas fa-certificate me-1"></i>Cert #${cert.certificate_number}
               </h6>
               <small class="text-muted">
-                <i class="fas fa-calendar me-1"></i>${formatDate(cert.date)}
+                <i class="fas fa-calendar me-1"></i>${escapeHTML(formatDate(cert.date))}
               </small>
             </div>
             <span class="badge ${cert.overall_pass ? 'bg-success' : 'bg-warning'}">${cert.overall_pass ? 'PASS' : 'FAIL'}</span>
           </div>
 
-          <p class="mb-2 small"><strong>Procedure:</strong> ${cert.procedure_name}</p>
-          <p class="mb-2 small"><strong>Performed by:</strong> ${cert.performed_by}</p>
-          <p class="mb-2 small"><strong>Next Due:</strong> ${formatDate(cert.next_due)}</p>
+          <p class="mb-2 small"><strong>Procedure:</strong> ${escapeHTML(cert.procedure_name)}</p>
+          <p class="mb-2 small"><strong>Performed by:</strong> ${escapeHTML(cert.performed_by)}</p>
+          <p class="mb-2 small"><strong>Next Due:</strong> ${escapeHTML(formatDate(cert.next_due))}</p>
 
           ${cert.notes ? `<p class="mb-2 small text-muted"><em>${cert.notes}</em></p>` : ''}
 
-          <a href="/calibration/sessions/${cert.id}/certificate/comprehensive/" target="_blank" class="btn btn-sm btn-outline-success w-100">
+          <a href="/calibration/sessions/${escapeHTML(cert.id)}/certificate/comprehensive/" target="_blank" class="btn btn-sm btn-outline-success w-100">
             <i class="fas fa-download me-1"></i>View Certificate
           </a>
         </div>
@@ -312,6 +312,20 @@ function populateRepairModal(data) {
   setupDownloadButtons(equipment.id, data);
 }
 
+// --- START A FILE DOWNLOAD ---
+// Every export here is an attachment. window.open() is not an option: the
+// desktop shell is a QWebEngineView, which drops window.open/target="_blank"
+// silently, so the button looked dead. A hidden iframe starts the download in
+// both the shell and a plain browser without leaving the page.
+function startDownload(url) {
+  const frame = document.createElement('iframe');
+  frame.style.display = 'none';
+  frame.src = url;
+  document.body.appendChild(frame);
+  setTimeout(() => frame.remove(), 60000);
+}
+window.startDownload = startDownload;
+
 // --- SETUP DOWNLOAD BUTTONS ---
 function setupDownloadButtons(equipmentId, data) {
   const downloadAllBtn = document.getElementById('downloadAllHistory');
@@ -320,13 +334,13 @@ function setupDownloadButtons(equipmentId, data) {
 
   if (downloadAllBtn) {
     downloadAllBtn.onclick = () => {
-      window.open(`/machineReports/equipment/${equipmentId}/export/`, '_blank');
+      startDownload(`/machineReports/equipment/${equipmentId}/export/`);
     };
   }
 
   if (downloadRepairsBtn) {
     downloadRepairsBtn.onclick = () => {
-      window.open(`/machineReports/equipment/${equipmentId}/export/`, '_blank');
+      startDownload(`/machineReports/equipment/${equipmentId}/export/`);
     };
   }
 
@@ -337,7 +351,7 @@ function setupDownloadButtons(equipmentId, data) {
         data.calibration_certificates.forEach((cert, index) => {
           // Stagger the downloads slightly to avoid browser blocking
           setTimeout(() => {
-            window.open(`/calibration/sessions/${cert.id}/certificate/comprehensive/`, '_blank');
+            startDownload(`/calibration/sessions/${cert.id}/certificate/comprehensive/`);
           }, index * 100);
         });
       } else {
@@ -588,5 +602,5 @@ function exportEquipmentList() {
   if (category) params.set('category', category);
   if (search) params.set('search', search);
   const url = `/machineReports/export-equipment-category-detailed-pdf/?${params.toString()}`;
-  window.open(url, '_blank');
+  startDownload(url);
 }

@@ -30,14 +30,112 @@ from .state_manager import StateManager
 from .dependency_manager import DependencyManager
 from .smart_delete import SmartDeleteMixin
 
+# Instant push is a nicety; correctness comes from interval polling. When HQ is
+# at its stream cap, retry slowly rather than adding to the pressure.
+SSE_BASE_BACKOFF = 30.0
+SSE_MAX_BACKOFF = 600.0
+
+# Idle download pacing (see download_loop).
+DOWNLOAD_IDLE_AFTER = 3
+DOWNLOAD_IDLE_MAX_INTERVAL = int(os.getenv("SYNC_DOWNLOAD_IDLE_MAX", "120"))
+
+
 class DownloadCertHeartbeatMixin(SmartDeleteMixin):
     """Download loop, certificate sync, SSE/Redis notify listeners, and heartbeat."""
+    def _apply_new_sync_url(self, adopted: dict):
+            """Point the running loops at a newly adopted sync address.
+
+            Every network loop builds its URL from self.api_url at call time, so
+            reassigning it here takes effect on the next iteration — seconds,
+            not whenever the machine next restarts. That matters: a fleet move
+            is only finished when the old host can be switched off, and a
+            hospital desktop may run for weeks between restarts.
+
+            The mirror is the exception: it was handed api_url when it was
+            constructed and keeps its own copy until the agent restarts. It runs
+            every 24h and its database connection is unaffected by a server
+            move, so it is left to pick the change up on restart.
+            """
+            new_url = (adopted.get("sync.api_url") or "").rstrip("/")
+            if not new_url or new_url == self.api_url:
+                return
+
+            previous = self.api_url
+            self.api_url = new_url
+            self.hq_base_url = (
+                new_url.split("/api/")[0] if "/api/" in new_url else new_url
+            )
+            LOG.warning(
+                "🧭 Sync address switched live: %s -> %s (mirror follows on restart)",
+                previous, new_url,
+            )
+
+    def endpoint_sync_loop(self):
+            """Ask the update server whether the sync HQ has moved.
+
+            The update server's address never changes, so this keeps working
+            when the sync HQ is unreachable — which is exactly when a move
+            needs to be discovered. Adoption is guarded by signature, freshness,
+            validation and a health probe (endpoint_sync.py); anything short of
+            all four leaves this machine where it is.
+            """
+            import random
+
+            try:
+                import endpoint_sync
+            except ImportError:
+                LOG.info("endpoint_sync unavailable — HQ address changes will need a release")
+                return
+
+            update_url = (os.getenv("HQ_SERVER_URL") or "").rstrip("/")
+            if not update_url:
+                LOG.info("No update server address — skipping HQ endpoint checks")
+                return
+
+            LOG.info("🧭 HQ endpoint check started (update server: %s)", update_url)
+
+            # Spread the fleet out: 500 desktops restarting together must not
+            # arrive at the same second.
+            sleep_with_jitter(random.uniform(5, 60))
+
+            while not self.stop_event.is_set():
+                try:
+                    result = endpoint_sync.fetch_and_apply(self.data_path, update_url)
+                    if result.get("changed"):
+                        LOG.warning(
+                            "🧭 HQ addresses changed by the update server: %s",
+                            result.get("adopted"),
+                        )
+                        self._apply_new_sync_url(result.get("adopted") or {})
+                    else:
+                        LOG.debug("HQ endpoint check: %s", result.get("reason"))
+                except Exception as exc:  # noqa: BLE001 - never kill the thread
+                    LOG.debug("HQ endpoint check failed: %s", exc)
+
+                interval = 900
+                try:
+                    interval = endpoint_sync.poll_seconds(self.data_path, 900)
+                except Exception:  # noqa: BLE001
+                    pass
+                for _ in range(interval):
+                    if self.stop_event.is_set():
+                        break
+                    time.sleep(1)
+
+            LOG.info("🧭 HQ endpoint check exiting")
+
     def download_loop(self):
             """Enhanced download loop with connection awareness"""
+            import random
+
             interval = int(self.sync_cfg.get("download_interval_seconds", 15))
 
-            LOG.info("📥 Download loop started (checking every %d seconds) 🔄", interval)
+            LOG.info(
+                "📥 Download loop started (every %ds when active, backing off to %ds when idle) 🔄",
+                interval, DOWNLOAD_IDLE_MAX_INTERVAL,
+            )
 
+            idle_cycles = 0
             loop_count = 0
             consecutive_failures = 0
             max_consecutive_failures = 5
@@ -86,7 +184,27 @@ class DownloadCertHeartbeatMixin(SmartDeleteMixin):
                 except Exception as e:
                     LOG.exception("💥 Exception in download_loop: %s", e)
 
-                for i in range(interval):
+                # Adaptive pacing. The configured interval is what a busy site
+                # needs; an idle one does not, and at fleet scale the idle cost
+                # dominates (every desktop polling every 5s is 0.2 req/s each,
+                # ~100 req/s across 500 machines with nothing happening).
+                # Quiet cycles stretch the wait up to DOWNLOAD_IDLE_MAX_INTERVAL;
+                # any change, or an SSE wake-up, snaps it straight back.
+                if getattr(self, "_download_saw_changes", False):
+                    idle_cycles = 0
+                    self._download_saw_changes = False
+                else:
+                    idle_cycles += 1
+
+                wait = interval
+                if idle_cycles >= DOWNLOAD_IDLE_AFTER:
+                    wait = min(interval * (2 ** min(idle_cycles - DOWNLOAD_IDLE_AFTER + 1, 5)),
+                               DOWNLOAD_IDLE_MAX_INTERVAL)
+                # Jitter: 500 desktops started by the same morning routine must
+                # not land on HQ in lockstep.
+                wait = max(1, int(wait * random.uniform(0.85, 1.15)))
+
+                for _ in range(wait):
                     if self.stop_event.is_set():
                         break
                     time.sleep(1)
@@ -97,6 +215,10 @@ class DownloadCertHeartbeatMixin(SmartDeleteMixin):
             Subscribe to HQ Server-Sent Events for instant table updates.
             Redis pub/sub stays server-side only; clients receive events over HTTP.
             """
+            import random
+
+            rejected_backoff = SSE_BASE_BACKOFF
+
             while not self.stop_event.is_set():
                 url = f"{self.api_url}/events"
                 headers = self._http_headers()
@@ -106,10 +228,30 @@ class DownloadCertHeartbeatMixin(SmartDeleteMixin):
                 try:
                     with requests.get(url, headers=headers, stream=True, timeout=(10, 300)) as response:
                         if response.status_code != 200:
-                            LOG.warning("SSE sync listener rejected by HQ: %s %s", response.status_code, response.text[:200])
-                            time.sleep(10)
+                            # 503 means HQ is at its stream cap. Instant push is
+                            # an optimisation — interval polling below still
+                            # syncs correctly — so back off hard rather than
+                            # hammering. Honour Retry-After when HQ sends it,
+                            # and jitter so a fleet does not retry in lockstep.
+                            retry_after = response.headers.get("Retry-After")
+                            try:
+                                wait = float(retry_after) if retry_after else rejected_backoff
+                            except (TypeError, ValueError):
+                                wait = rejected_backoff
+                            wait = min(max(wait, 10.0), SSE_MAX_BACKOFF)
+                            rejected_backoff = min(rejected_backoff * 2, SSE_MAX_BACKOFF)
+                            if response.status_code == 503:
+                                LOG.info(
+                                    "HQ is at its stream capacity; using interval polling "
+                                    "and retrying in %.0fs", wait,
+                                )
+                            else:
+                                LOG.warning("SSE sync listener rejected by HQ: %s %s",
+                                            response.status_code, response.text[:200])
+                            sleep_with_jitter(wait * random.uniform(0.8, 1.2))
                             continue
 
+                        rejected_backoff = SSE_BASE_BACKOFF  # connected: reset
                         LOG.info("✅ SSE sync listener connected to HQ")
                         for line in response.iter_lines(decode_unicode=True):
                             if self.stop_event.is_set():
@@ -130,6 +272,9 @@ class DownloadCertHeartbeatMixin(SmartDeleteMixin):
                                     continue
                                 LOG.info("📡 SSE sync update received from HQ: %s", payload)
                                 try:
+                                    # An SSE wake-up is activity: bring the
+                                    # download loop back to its fast interval.
+                                    self._download_saw_changes = True
                                     self.download_updates()
                                 except Exception as download_error:
                                     LOG.warning("SSE-triggered download failed: %s", download_error)
@@ -540,6 +685,8 @@ class DownloadCertHeartbeatMixin(SmartDeleteMixin):
 
                 if response.status_code == 200:
                     LOG.debug("Heartbeat sent successfully")
+                elif response.status_code in (401, 403):
+                    self.note_hq_rejected_key(response.status_code, "heartbeat")
                 else:
                     LOG.warning("Heartbeat failed: %d", response.status_code)
 

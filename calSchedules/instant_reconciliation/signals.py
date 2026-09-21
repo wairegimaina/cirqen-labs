@@ -14,7 +14,13 @@ from .. import grouping
 logger = logging.getLogger(__name__)
 
 # sibling modules in this package
-from .helpers import check_group_completion_status, get_group_scheduled_month, get_next_group_month, lock_schedule_immediately
+from .helpers import (
+    alignment_suppressed,
+    check_group_completion_status,
+    get_group_scheduled_month,
+    get_next_group_month,
+    lock_schedule_immediately,
+)
 
 
 @receiver(post_save, sender=CalibrationSchedule)
@@ -306,6 +312,12 @@ def instant_grouping_alignment(sender, instance, created, **kwargs):
     - If yes, align to group's month
     - If no, current month becomes the group's month
     """
+    # Stand down during a deliberate regroup. The whole selection is being
+    # moved together, so pulling each schedule back to the group's old month as
+    # it is saved would make the move impossible.
+    if alignment_suppressed():
+        return
+
     # Skip if completed (handled by reschedule signal)
     if instance.status == 'completed':
         return

@@ -28,6 +28,10 @@ import pytz
 from .state_manager import StateManager
 from .dependency_manager import DependencyManager
 from .smart_delete import SmartDeleteMixin
+try:
+    from .sql_ident import qualified
+except ImportError:  # loaded as a top-level module with sync/ on sys.path
+    from sql_ident import qualified
 
 
 class SchemaAndChangeDetectionMixin(SmartDeleteMixin):
@@ -298,7 +302,7 @@ class SchemaAndChangeDetectionMixin(SmartDeleteMixin):
             try:
                 hostname = os.uname().nodename
                 return f"host-{hostname}"
-            except:
+            except Exception:
                 return f"machine-{str(uuid.uuid4())[:8]}"
 
     def _create_db_pool(self, db_cfg: Dict[str, Any]) -> ThreadedConnectionPool:
@@ -415,8 +419,7 @@ class SchemaAndChangeDetectionMixin(SmartDeleteMixin):
             else:
                 schema, tbl = "public", table
 
-            quoted_table = f'"{tbl}"'
-            full_table = f"{schema}.{quoted_table}"
+            full_table = qualified(schema, tbl)
 
             # Check if table has status columns
             with conn.cursor() as cur:
@@ -481,7 +484,7 @@ class SchemaAndChangeDetectionMixin(SmartDeleteMixin):
                         f"""
                             SELECT
                                 id,
-                                to_jsonb(t.*) as row_data,
+                                to_jsonb(t.*) || jsonb_build_object('source_updated_at', t.updated_at) as row_data,
                                 updated_at,
                                 active_status,
                                 pending_delete
@@ -614,8 +617,7 @@ class SchemaAndChangeDetectionMixin(SmartDeleteMixin):
                 else:
                     schema, tbl = "public", table
 
-                quoted_table = f'"{tbl}"'
-                full_table_name = f"{schema}.{quoted_table}"
+                full_table_name = qualified(schema, tbl)
 
                 # ⚡ Parse and validate timestamp
                 since_dt = self._parse_timestamp(since_ts)
@@ -638,7 +640,7 @@ class SchemaAndChangeDetectionMixin(SmartDeleteMixin):
                 query = f"""
                         SELECT
                             id,
-                            to_jsonb(t.*) as row_data,
+                            to_jsonb(t.*) || jsonb_build_object('source_updated_at', t.updated_at) as row_data,
                             updated_at,
                             created_at
                             {', pending_delete' if has_pending_delete else ''}

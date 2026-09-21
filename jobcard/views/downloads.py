@@ -117,6 +117,19 @@ def download_jobcard_pdf(request, jobcard_id):
         return redirect('jobcard:approved_jobcards')
 
 
+def _hod_redirect(request):
+    """Send an HOD back to the workshop they downloaded from, or to their dashboard.
+
+    ``workshop_id`` arrives from the query string and the route only accepts a
+    UUID, so anything else (including a missing value) must not be reversed.
+    """
+    try:
+        workshop_id = UUID(request.GET.get("workshop_id", ""))
+    except ValueError:
+        return redirect("dashboard:hod_dashboard")
+    return redirect("jobcard:hod_workshop_jobcards", workshop_id=workshop_id)
+
+
 @login_required
 def bulk_download_approved_jobcards(request):
     """
@@ -130,7 +143,7 @@ def bulk_download_approved_jobcards(request):
     if not start_date or not end_date:
         messages.error(request, "Please select a valid date range.")
         if role == 'HOD':
-            return redirect("jobcard:hod_workshop_jobcards", workshop_id=request.GET.get('workshop_id', 1))
+            return _hod_redirect(request)
         elif role == 'NIC':
             return redirect("jobcard:approved_jobcards")
         elif role == 'Tech':
@@ -173,7 +186,7 @@ def bulk_download_approved_jobcards(request):
     if not job_cards.exists():
         messages.warning(request, "No approved job cards found in this date range.", extra_tags="jobcard")
         if role == 'HOD':
-            return redirect("jobcard:hod_workshop_jobcards", workshop_id=request.GET.get('workshop_id', 1))
+            return _hod_redirect(request)
         elif role == 'NIC':
             return redirect("jobcard:approved_jobcards")
         elif role == 'Tech':
@@ -213,7 +226,7 @@ def bulk_download_waiting_jobcards(request):
     if not start_date or not end_date:
         messages.error(request, "Please select a valid date range.", extra_tags="jobcard")
         if role == 'HOD':
-            return redirect("jobcard:hod_workshop_jobcards", workshop_id=request.GET.get('workshop_id', 1))
+            return _hod_redirect(request)
         elif role == 'NIC':
             return redirect("jobcard:waiting_jobcards")
         elif role == 'Tech':
@@ -256,7 +269,7 @@ def bulk_download_waiting_jobcards(request):
     if not job_cards.exists():
         messages.warning(request, "No waiting approval job cards found in this date range.", extra_tags="jobcard")
         if role == 'HOD':
-            return redirect("jobcard:hod_workshop_jobcards", workshop_id=request.GET.get('workshop_id', 1))
+            return _hod_redirect(request)
         elif role == 'NIC':
             return redirect("jobcard:waiting_jobcards")
         elif role == 'Tech':
@@ -295,7 +308,7 @@ def bulk_download_declined_jobcards(request):
     if not start_date or not end_date:
         messages.error(request, "Please select a valid date range.", extra_tags="jobcard")
         if role == 'HOD':
-            return redirect("jobcard:hod_workshop_jobcards", workshop_id=request.GET.get('workshop_id', 1))
+            return _hod_redirect(request)
         elif role == 'NIC':
             return redirect("jobcard:declined_jobcards")
         elif role == 'Tech':
@@ -338,7 +351,7 @@ def bulk_download_declined_jobcards(request):
     if not job_cards.exists():
         messages.warning(request, "No declined job cards found in this date range.", extra_tags="jobcard")
         if role == 'HOD':
-            return redirect("jobcard:hod_workshop_jobcards", workshop_id=request.GET.get('workshop_id', 1))
+            return _hod_redirect(request)
         elif role == 'NIC':
             return redirect("jobcard:declined_jobcards")
         elif role == 'Tech':

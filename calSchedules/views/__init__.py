@@ -7,6 +7,10 @@ from .helpers import (
     _get_logic_change_context,
     get_user_access_context,
 )
+from .groups import (
+    schedule_groups,
+    regroup_schedules,
+)
 from .dashboard import (
     calibration_dashboard,
     calibration_by_department,

@@ -8,7 +8,7 @@ USAGE:
     # AppImage already built:
     python build_deb.py
 
-    # Full build from scratch (runs bulid_backup.py first):
+    # Full build from scratch (runs build.py first):
     python build_deb.py --full-build
 
     # Custom dist path or version:
@@ -192,8 +192,8 @@ def check_platform():
 # ──────────────────────────────────────────────────────────────────
 
 def run_pyinstaller():
-    banner("PyInstaller Build (bulid_backup.py)")
-    script = PROJECT_ROOT / "bulid_backup.py"
+    banner("PyInstaller Build (build.py)")
+    script = PROJECT_ROOT / "build.py"
     if not script.exists():
         logger.error(f"❌ {script} not found")
         return False
@@ -229,7 +229,7 @@ def run_docker_build():
         "bash", "-c",
         (
             "pip install --quiet pyinstaller && "
-            f"python bulid_backup.py"
+            f"python build.py"
         ),
     ]
 
@@ -766,7 +766,7 @@ def main():
     )
     parser.add_argument(
         "--full-build", action="store_true",
-        help="Run bulid_backup.py (PyInstaller) before packaging"
+        help="Run build.py (PyInstaller) before packaging"
     )
     parser.add_argument(
         "--docker-build", action="store_true",

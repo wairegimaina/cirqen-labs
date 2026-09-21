@@ -1,7 +1,10 @@
 """Tools management (Tech users) — CRUD, listing, AJAX name/manufacturer helpers."""
 import logging
 
+from django.http import Http404
+from users.control import role_required
 from django.shortcuts import render, redirect, get_object_or_404
+from core.scoping import get_for_user_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse
@@ -16,14 +19,11 @@ logger = logging.getLogger(__name__)
 
 
 @login_required
+@role_required('Tech', redirect_to='partstools:accessories_dashboard', message='Only Tech users can add tools.')
 def add_tool(request):
     """Add a new tool — only Tech users."""
     profile = request.user.userprofile
 
-    if profile.role != 'Tech':
-        logger.warning(f"Unauthorized add_tool attempt by {request.user.username} (role={profile.role})")
-        messages.error(request, 'Only Tech users can add tools.')
-        return redirect('partstools:accessories_dashboard')
 
     if request.method != 'POST':
         return redirect('partstools:accessories_dashboard')
@@ -144,13 +144,15 @@ def edit_tool(request, pk):
 def get_tool(request, pk):
     """Return tool data as JSON for the edit modal."""
     try:
-        tool = get_object_or_404(Tools, pk=pk)
+        tool = get_for_user_or_404(Tools, request.user, pk=pk)
         return JsonResponse({
             'name': str(tool.name.id) if tool.name else '',
             'manufacturer': str(tool.manufacturer.id) if tool.manufacturer else '',
             'model': tool.model or '',
             'serial_number': tool.serial_number or '',
         })
+    except Http404:
+        raise
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=400)
 
@@ -247,11 +249,10 @@ def ajax_add_tool_manufacturer(request):
 
 @login_required
 @require_POST
+@role_required('Tech', json=True, message='Only Tech users can delete tool names.')
 def delete_tool_name(request, name_id):
     """Soft-delete a tool name — Tech users only."""
     profile = request.user.userprofile
-    if profile.role != 'Tech':
-        return JsonResponse({'error': 'Only Tech users can delete tool names.'}, status=403)
 
     try:
         tool_name = get_object_or_404(Toolname, id=name_id)
@@ -272,11 +273,10 @@ def delete_tool_name(request, name_id):
 
 @login_required
 @require_POST
+@role_required('Tech', json=True, message='Only Tech users can delete manufacturers.')
 def delete_tool_manufacturer(request, manufacturer_id):
     """Soft-delete a tool manufacturer — Tech users only."""
     profile = request.user.userprofile
-    if profile.role != 'Tech':
-        return JsonResponse({'error': 'Only Tech users can delete manufacturers.'}, status=403)
 
     try:
         manufacturer = get_object_or_404(ToolsManufacturer, id=manufacturer_id)

@@ -9,8 +9,9 @@ import logging
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.http import JsonResponse
+from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from core.scoping import get_for_user_or_404
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
 
@@ -35,7 +36,8 @@ def transfer_equipment(request, equipment_id):
     ✅ NOW INCLUDES: Automatic dependency transfer + verification
     """
     try:
-        equipment = get_object_or_404(Equipment, pk=equipment_id, active_status=True)
+        # Only devices in the technician's own workshop can be sent elsewhere.
+        equipment = get_for_user_or_404(Equipment.objects.filter(active_status=True), request.user, pk=equipment_id)
         profile = request.user.userprofile
 
         # Permission check - only Tech can transfer
@@ -223,6 +225,8 @@ def transfer_equipment(request, equipment_id):
             }
         })
 
+    except Http404:
+        return JsonResponse({'success': False, 'error': 'Equipment not found.'}, status=404)
     except Exception as e:
         logger.error(f"❌ Transfer failed: {str(e)}")
         logger.exception(e)

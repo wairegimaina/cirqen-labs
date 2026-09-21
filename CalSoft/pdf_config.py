@@ -5,6 +5,9 @@ from reportlab.lib.colors import HexColor
 from reportlab.lib.units import inch, mm, cm
 from reportlab.lib.pagesizes import A4, letter
 from decimal import Decimal
+import logging
+
+logger = logging.getLogger(__name__)
 
 class PDFConfiguration:
     """
@@ -380,7 +383,7 @@ def load_config(template_name='comprehensive', lab_code='KNH', user_preferences=
         return config
         
     except Exception as e:
-        print(f"Error loading configuration: {str(e)}")
+        logger.exception("Error loading PDF configuration")
         return DEFAULT_CONFIG
 
 # Usage examples:

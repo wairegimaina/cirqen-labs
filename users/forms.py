@@ -4,6 +4,7 @@ from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm, SetPasswordForm
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 
 from Inventory.models import Department
 from workshop.models import Workshop
@@ -259,18 +260,25 @@ class VerifyResetCodeForm(forms.Form):
                 reset_code=code,
                 user=self.user if self.user else None
             )
-
-            if not reset_request.is_valid():
-                if reset_request.is_used:
-                    raise ValidationError("This reset code has already been used.")
-                elif reset_request.is_expired():
-                    raise ValidationError("This reset code has expired. Please request a new one.")
-
-            # Store the reset request for later use
-            self.reset_request = reset_request
-
         except UserPasswordReset.DoesNotExist:
+            # A wrong guess spends one of the attempts on the user's live code;
+            # once they run out that code is dead (increment_attempt marks it used).
+            live = (UserPasswordReset.objects
+                    .filter(user=self.user, is_used=False, expires_at__gt=timezone.now())
+                    .first()) if self.user else None
+            if live is not None:
+                live.increment_attempt()
             raise ValidationError("Invalid reset code. Please check and try again.")
+
+        if not reset_request.is_valid():
+            if reset_request.is_expired():
+                raise ValidationError("This reset code has expired. Please request a new one.")
+            if reset_request.attempts >= reset_request.max_attempts:
+                raise ValidationError("Too many incorrect attempts. Please request a new code.")
+            raise ValidationError("This reset code has already been used.")
+
+        # Store the reset request for later use
+        self.reset_request = reset_request
 
         return code
 

@@ -24,7 +24,11 @@ from CalSoft.models import (
     HistoricalCalibration,
 )
 from Inventory.models import Department
+from workshop.models import Workshop
 from CalSoft.pdf_generators import BtwelveHospitalCertificateGenerator, generate_btwelve_certificate
+
+from calSchedules.grouping import days_until_due, is_overdue, next_due_date
+from users.control import get_user_role
 
 logger = logging.getLogger(__name__)
 
@@ -35,8 +39,8 @@ def require_certificate_access(view_func):
     @wraps(view_func)
     def wrapper(request, *args, **kwargs):
         try:
-            user_profile = request.user.userprofile
-            role = user_profile.role
+            role = get_user_role(request.user)
+            user_profile = getattr(request.user, "userprofile", None)
 
             if role not in ["Tech", "NIC"]:
                 messages.error(
@@ -45,7 +49,7 @@ def require_certificate_access(view_func):
                 )
                 return HttpResponseForbidden("Insufficient permissions")
 
-            if role == "Tech" and not user_profile.workshop:
+            if role == "Tech" and not getattr(user_profile, "workshop", None):
                 messages.error(request, "No workshop assigned. Please contact your administrator.")
                 return HttpResponseForbidden("No workshop assigned")
 
@@ -60,8 +64,8 @@ def require_certificate_access(view_func):
 
 @login_required
 def certificate_list(request):
-    user_profile = request.user.userprofile
-    user_role = user_profile.role
+    user_profile = getattr(request.user, "userprofile", None)
+    user_role = get_user_role(request.user)
 
     base_sessions = CalibrationSession.objects.select_related(
         "procedure", "performed_by", "device_description", "device_manufacturer"
@@ -95,6 +99,27 @@ def certificate_list(request):
             device_serial__in=accessible_equipment.values_list("serial_number", flat=True)
         )
         user_workshop = None
+    elif user_role == "HOD":
+        # The head of department reviews certificates across every workshop.
+        # Without this branch an HOD fell through to the else and was refused
+        # its own certificate register.
+        accessible_equipment = Equipment.objects.all()
+        sessions = base_sessions
+        user_workshop = None
+
+        workshop_id = request.GET.get("workshop")
+        if workshop_id:
+            workshop = Workshop.objects.filter(id=workshop_id).first()
+            if workshop:
+                user_workshop = workshop
+                accessible_equipment = accessible_equipment.filter(
+                    department__workshop=workshop
+                )
+                sessions = base_sessions.filter(
+                    device_serial__in=accessible_equipment.values_list(
+                        "serial_number", flat=True
+                    )
+                )
     else:
         messages.error(request, f"Unknown user role: {user_role}. Contact admin.")
         return HttpResponseForbidden("Invalid user role.")
@@ -187,11 +212,16 @@ def certificate_list(request):
                 session.workshop_name = "Restricted"
 
         if session.timestamp:
-            cal_due_date = session.timestamp.date() + relativedelta(months=12)
+            # Due at the END of the month the interval lands in, so the
+            # workshop has that whole month to schedule the visit. The interval
+            # comes from the schedule where there is one, rather than assuming
+            # every device is annual.
+            interval = getattr(session.schedule, "calibration_period", None) or 12
+            cal_due_date = next_due_date(session.timestamp.date(), interval)
             session.cal_due_date = cal_due_date
             current_date = timezone.now().date()
-            session.days_until_due = (cal_due_date - current_date).days
-            session.is_overdue = session.days_until_due < 0
+            session.days_until_due = days_until_due(cal_due_date, current_date)
+            session.is_overdue = is_overdue(cal_due_date, current_date)
 
         enhanced_sessions.append(session)
 
@@ -253,8 +283,10 @@ def certificate_list(request):
 @require_http_methods(["GET", "POST"])
 def generate_comprehensive_certificate(request, session_pk):
     try:
+        # The FK is named ``Department`` (capital D); the old code followed it
+        # as ``session.department`` and raised AttributeError on every call.
         session = get_object_or_404(
-            CalibrationSession.objects.select_related("Department"), pk=session_pk
+            CalibrationSession.objects.select_related("Department__workshop"), pk=session_pk
         )
 
         department_name = "Unknown Department"
@@ -304,7 +336,7 @@ def generate_comprehensive_certificate(request, session_pk):
     except CalibrationSession.DoesNotExist:
         logger.error(f"Session {session_pk} not found")
         messages.error(request, f"Calibration session {session_pk} not found.")
-        return redirect("calibration:session_list")
+        return redirect("calibration:certificate_list")
 
     except Exception as e:
         logger.error(
@@ -375,8 +407,9 @@ def get_accessible_sessions(user, date_from=None, date_to=None):
     """
     from django.utils.dateparse import parse_date
 
-    user_profile = user.userprofile
-    user_workshop = user_profile.workshop
+    user_profile = getattr(user, "userprofile", None)
+    user_role = get_user_role(user)
+    user_workshop = getattr(user_profile, "workshop", None)
 
     base_sessions = CalibrationSession.objects.select_related("procedure", "performed_by").filter(
         status="approved"
@@ -385,7 +418,7 @@ def get_accessible_sessions(user, date_from=None, date_to=None):
     if date_from and date_to:
         base_sessions = base_sessions.filter(approved_at__date__range=(date_from, date_to))
 
-    if user_profile.role == "Tech":
+    if user_role == "Tech":
         if not user_workshop:
             raise PermissionError("No workshop assigned to Tech profile.")
 
@@ -402,23 +435,23 @@ def get_accessible_sessions(user, date_from=None, date_to=None):
         else:
             raise PermissionError(f"Unknown workshop category: {user_workshop.category}")
 
-    elif user_profile.role == "NIC":
+    elif user_role == "NIC":
         user_department = getattr(user_profile, "department", None)
         if not user_department:
             raise PermissionError("No department assigned to NIC profile.")
 
-        sessions = base_sessions.filter(department=user_department)
-
+        # A session belongs to the NIC's department if it was recorded against
+        # it, or if it calibrated a device that department owns. (The old code
+        # filtered on ``department``; the field is ``Department``, so it raised.)
         nic_equipment = Equipment.objects.filter(department=user_department)
-        extra_sessions = base_sessions.filter(
-            device_serial__in=nic_equipment.values_list("serial_number", flat=True)
+        sessions = base_sessions.filter(
+            Q(Department=user_department)
+            | Q(device_serial__in=nic_equipment.values_list("serial_number", flat=True))
         )
-
-        sessions = sessions.union(extra_sessions)
         accessible_equipment = nic_equipment
     else:
         raise PermissionError(
-            f"Unknown role: {user_profile.role}. Only Tech and NIC roles can access certificates."
+            f"Unknown role: {user_role}. Only Tech and NIC roles can access certificates."
         )
 
     return sessions, accessible_equipment
@@ -436,8 +469,8 @@ def bulk_certificates_download(request):
     week_start = today - timedelta(days=today.weekday())
     week_end = week_start + timedelta(days=6)
 
-    date_from = parse_date(request.GET.get("date_from")) or week_start
-    date_to = parse_date(request.GET.get("date_to")) or week_end
+    date_from = parse_date(request.GET.get("date_from", "")) or week_start
+    date_to = parse_date(request.GET.get("date_to", "")) or week_end
     check_only = request.GET.get("check_only") == "1"
 
     try:
@@ -445,6 +478,7 @@ def bulk_certificates_download(request):
     except PermissionError as e:
         return HttpResponseForbidden(str(e))
     except Exception as e:
+        logger.exception("%s failed: %s", "bulk_certificates_download", e)
         return JsonResponse({"error": f"Error retrieving sessions: {str(e)}"}, status=500)
 
     if not sessions.exists():
@@ -463,9 +497,9 @@ def bulk_certificates_download(request):
                 department_name = "Unknown Department"
                 workshop_name = "Unknown Workshop"
 
-                if hasattr(session, "department") and session.department:
+                if session.Department:
                     department_name = session.Department.name
-                    if hasattr(session.department, "workshop") and session.department.workshop:
+                    if session.Department.workshop:
                         workshop_name = session.Department.workshop.name
                 elif session.device_serial:
                     try:

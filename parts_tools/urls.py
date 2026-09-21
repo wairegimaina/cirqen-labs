@@ -31,7 +31,6 @@ urlpatterns = [
     path('request/', views.request_accessory, name='request_accessory'),
     path('requests/<uuid:request_id>/approve/', views.approve_accessory_request, name='approve_accessory_request'),
     path('requests/<uuid:request_id>/accept/', views.accept_accessory_request, name='accept_accessory_request'),
-    path('requests/<uuid:request_id>/history/', views.view_request_history, name='view_request_history'),
 
     # ── Accessory direct management (HOD only) ────────────────────────────────
     path('edit/<uuid:pk>/', views.edit_accessory, name='edit_accessory'),

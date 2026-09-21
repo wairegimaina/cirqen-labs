@@ -1,107 +1,44 @@
 # utils.py
 import math
-from decimal import Decimal, ROUND_HALF_UP, getcontext
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP, getcontext
 from datetime import datetime, timedelta
 from django.utils import timezone
 from django.template.loader import render_to_string
 import logging
 
-# Set decimal precision high enough for calculations
+# One decimal precision for the whole application, set once.
+#
+# This module was previously two modules concatenated, and the second copy of
+# the header reset the precision to 12 further down the file. The later
+# assignment won at import time and applied process-wide — to every Decimal
+# operation in every app, not just this one. 28 digits is Python's default and
+# is far more than any measurement needs; the limit on reported precision is the
+# six-decimal quantisation applied when results are stored, not this context.
 getcontext().prec = 28
 
 logger = logging.getLogger(__name__)
 
 
-def statistics_from_readings(readings):
-    """
-    Compute mean and sample standard deviation from a list of readings.
-    
-    Args:
-        readings (list): List of numeric values (measurements).
-    
-    Returns:
-        tuple: (mean, sample_std, count)
-    """
-    n = len(readings)
-    if n == 0:
-        raise ValueError("readings must contain at least one value")
-    
-    vals = [Decimal(str(x)) for x in readings]
-    mean = sum(vals) / Decimal(n)
-    
-    if n == 1:
-        sample_std = Decimal('0')
-    else:
-        ss = sum((x - mean) ** 2 for x in vals)
-        sample_var = ss / Decimal(n - 1)
-        sample_std = sample_var.sqrt()
-    
-    return float(mean), float(sample_std), n
+def resolution_for_reading(reading, default=Decimal('1')):
+    """The resolution in force for a reading, from its session.
 
-
-def calculate_uncertainties(
-    readings,
-    resolution,
-    reference_uncertainty,
-    reference_is_expanded=False,
-    k=2
-):
-    """
-    Calculate Type A, Type B (resolution + reference), combined standard uncertainty, and expanded uncertainty.
-    
-    Args:
-        readings (list): Measurement readings.
-        resolution (float): Instrument resolution in measurement units.
-        reference_uncertainty (float): Reference uncertainty (standard or expanded).
-        reference_is_expanded (bool): If True, 'reference_uncertainty' is expanded and must be divided by k.
-        k (float): Coverage factor for expanded uncertainty.
-        
-    Returns:
-        dict: Contains all uncertainty components and summary statistics.
+    Resolution belongs to the device on the day, not to the procedure, so it is
+    stored per session in ``SessionParameterResolution``. Three helpers in this
+    module previously read ``reading.parameter.resolution``, a field that does
+    not exist on ``CalibrationParameter``, and raised ``AttributeError`` on
+    every call.
     """
     try:
-        # 1. Mean and sample std
-        mean, sample_std, n = statistics_from_readings(readings)
-        
-        # 2. Type A uncertainty (standard uncertainty of the mean)
-        u_A = sample_std / math.sqrt(n) if n > 0 else 0.0
-        
-        # 3. Resolution standard uncertainty (rectangular distribution)
-        u_res = float(Decimal(str(resolution)) / Decimal(str(math.sqrt(12))))
-        
-        # 4. Reference standard uncertainty
-        if reference_is_expanded:
-            u_ref = float(Decimal(str(reference_uncertainty)) / Decimal(str(k)))
-        else:
-            u_ref = float(Decimal(str(reference_uncertainty)))
-        
-        # 5. Combined standard uncertainty
-        u_combined = math.sqrt(u_A**2 + u_res**2 + u_ref**2)
-        
-        # 6. Expanded uncertainty
-        U_expanded = k * u_combined
-        
-        return {
-            "mean": mean,
-            "sample_std": sample_std,
-            "n": n,
-            "u_A": u_A,
-            "u_res": u_res,
-            "u_ref": u_ref,
-            "u_combined": u_combined,
-            "U_expanded": U_expanded,
-            "k": k,
-            "reference_is_expanded": reference_is_expanded
-        }
-    except Exception as e:
-        logger.error(f"Error in calculate_uncertainties: {str(e)}", exc_info=True)
-        return None
+        return reading.session.parameter_resolutions.get(
+            parameter=reading.parameter
+        ).resolution
+    except Exception:
+        logger.warning(
+            "No session resolution for reading %s; falling back to %s",
+            getattr(reading, 'id', '?'), default,
+        )
+        return default
 
-# utils.py
-import math
-from decimal import Decimal, getcontext, ROUND_HALF_UP
-
-getcontext().prec = 12  # high precision
 
 class CalibrationCalculator:
     """
@@ -239,12 +176,392 @@ class CalibrationCalculator:
         max_err_units = max(errors_units, key=lambda e: abs(e))
         max_err_percent = max(errors_percent, key=lambda e: abs(e))
 
+        # slope and intercept are returned because they diagnose different
+        # faults: an intercept away from zero is an offset (zero-adjustable), a
+        # slope away from one is a gain error (span-adjustable), and large
+        # residuals are true non-linearity, which is not adjustable at all.
         return {
+            'slope': slope,
+            'intercept': intercept,
+            'full_scale': full_scale,
             'max_linearity_error_units': max_err_units,
             'max_linearity_error_percent': max_err_percent,
             'errors_units': errors_units,
             'errors_percent': errors_percent
         }
+
+
+# ── Coverage factor from effective degrees of freedom ────────────────────────
+#
+# k = 2 assumes the standard deviation is well known. With the three to five
+# readings this system actually operates on, it is not: s was estimated from
+# n-1 degrees of freedom and could easily be too small. The honest multiplier
+# comes from Student's t, which widens as the sample shrinks.
+#
+# Only Type A carries few degrees of freedom. Resolution and the reference
+# standard are effectively known (conventionally infinite), so the blend —
+# Welch-Satterthwaite — gives an effective degrees of freedom higher than n-1
+# and a multiplier between 2 and t(n-1). That is what this computes.
+#
+# The previous implementation was declared as Welch-Satterthwaite and its body
+# was `return max(2, 10)`: a literal 10, independent of both arguments.
+
+# Two-sided Student's t at 95% confidence, by degrees of freedom.
+T_95 = {
+    1: Decimal('12.706'), 2: Decimal('4.303'), 3: Decimal('3.182'),
+    4: Decimal('2.776'), 5: Decimal('2.571'), 6: Decimal('2.447'),
+    7: Decimal('2.365'), 8: Decimal('2.306'), 9: Decimal('2.262'),
+    10: Decimal('2.228'), 11: Decimal('2.201'), 12: Decimal('2.179'),
+    13: Decimal('2.160'), 14: Decimal('2.145'), 15: Decimal('2.131'),
+    16: Decimal('2.120'), 17: Decimal('2.110'), 18: Decimal('2.101'),
+    19: Decimal('2.093'), 20: Decimal('2.086'), 25: Decimal('2.060'),
+    30: Decimal('2.042'), 40: Decimal('2.021'), 50: Decimal('2.009'),
+    100: Decimal('1.984'),
+}
+T_95_LARGE = Decimal('1.960')
+
+
+def statistics_from_readings(readings):
+    """
+    Compute mean and sample standard deviation from a list of readings.
+    
+    Args:
+        readings (list): List of numeric values (measurements).
+    
+    Returns:
+        tuple: (mean, sample_std, count)
+    """
+    n = len(readings)
+    if n == 0:
+        raise ValueError("readings must contain at least one value")
+
+    # Delegates to the one implementation so the arithmetic cannot diverge.
+    # The single-reading case is handled here rather than there: a standard
+    # deviation is undefined for n = 1, and `calculate_statistics` correctly
+    # returns None. This function's callers (quality-assurance checks) need a
+    # number, and 0 is the only defensible one — with the caveat that it means
+    # "unknown", not "perfectly repeatable".
+    if n == 1:
+        return float(Decimal(str(readings[0]))), 0.0, 1
+
+    stats = CalibrationCalculator().calculate_statistics(readings)
+    return float(stats['mean']), float(stats['std_dev']), stats['count']
+
+
+def t_factor_95(effective_dof):
+    """Student's t at 95% for the given degrees of freedom, rounded up in width.
+
+    Interpolation between tabulated rows is not attempted: the next lower row
+    is used, which errs toward a wider interval. Overstating an uncertainty is
+    the safe direction.
+    """
+    if effective_dof is None:
+        return T_95_LARGE
+    try:
+        dof = int(effective_dof)
+    except (TypeError, ValueError):
+        return T_95_LARGE
+    if dof < 1:
+        return T_95[1]
+    if dof in T_95:
+        return T_95[dof]
+    candidates = [d for d in T_95 if d <= dof]
+    if not candidates:
+        return T_95[1]
+    if dof > 100:
+        return T_95_LARGE
+    return T_95[max(candidates)]
+
+
+def effective_degrees_of_freedom(type_a, combined, count):
+    """Welch-Satterthwaite effective degrees of freedom.
+
+        nu_eff = u_c^4 / (u_A^4 / (n - 1))
+
+    Type B components are taken as known (infinite degrees of freedom), so they
+    contribute nothing to the denominator — which is the standard treatment for
+    a resolution bound and an accredited reference uncertainty.
+
+    Returns ``None`` when Type A contributes nothing, because the effective
+    degrees of freedom is then unbounded and ``k = 2`` needs no correction.
+    """
+    try:
+        u_a = abs(Decimal(str(type_a)))
+        u_c = abs(Decimal(str(combined)))
+        n = int(count)
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+    if u_a == 0 or u_c == 0 or n < 2:
+        return None
+    denominator = (u_a ** 4) / Decimal(n - 1)
+    if denominator == 0:
+        return None
+    return (u_c ** 4) / denominator
+
+
+def coverage_factor_for_95(type_a, combined, count):
+    """The k that actually gives ~95% coverage for this budget.
+
+    Returns ``(k, effective_dof)``. Where Type A dominates a small sample this
+    exceeds 2 — at n = 5 with repeatability dominating it approaches 2.78 —
+    and where Type B dominates it falls back toward 2.
+    """
+    dof = effective_degrees_of_freedom(type_a, combined, count)
+    if dof is None:
+        return (Decimal('2'), None)
+    k = t_factor_95(dof)
+    return (k, dof)
+
+
+# ── Conformity decisions ─────────────────────────────────────────────────────
+
+PASS = 'PASS'
+FAIL = 'FAIL'
+INDETERMINATE = 'INDETERMINATE'
+
+TUR_FLOOR = Decimal('4')
+
+
+def test_uncertainty_ratio(tolerance, expanded_uncertainty):
+    """TUR = tolerance / U. Is the measurement sharp enough to judge the limit?
+
+    Returns ``None`` when it cannot be computed. The customary floor is 4:1;
+    below that a bare pass/fail on a marginal point overstates what is known.
+    """
+    try:
+        tol = abs(Decimal(str(tolerance)))
+        expanded = abs(Decimal(str(expanded_uncertainty)))
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+    if expanded == 0 or tol == 0:
+        return None
+    return tol / expanded
+
+
+def guarded_decision(error, tolerance, expanded_uncertainty):
+    """Conformity with the measurement uncertainty taken into account.
+
+    Simple acceptance compares |error| with the tolerance and ignores the
+    uncertainty entirely, so a reading just inside the limit passes even when
+    the uncertainty puts the true value well outside it.
+
+    Guard banding pulls the acceptance limit in by U and pushes the rejection
+    limit out by U, which yields three outcomes rather than two:
+
+        |error| <= T - U   PASS           uncertainty cannot change it
+        |error| >= T + U   FAIL           uncertainty cannot save it
+        otherwise          INDETERMINATE  the measurement cannot decide
+
+    The third outcome is the point. A device landing there is not condemned; it
+    needs a better measurement, or an accepted-risk decision recorded by
+    someone with the authority to make it.
+
+    Returns ``(verdict, acceptance_limit, rejection_limit)``. With no usable
+    uncertainty it degrades to simple acceptance, and says so by returning
+    ``None`` for both limits.
+    """
+    try:
+        err = abs(Decimal(str(error)))
+        tol = abs(Decimal(str(tolerance)))
+    except (InvalidOperation, TypeError, ValueError):
+        return (INDETERMINATE, None, None)
+
+    try:
+        expanded = abs(Decimal(str(expanded_uncertainty)))
+    except (InvalidOperation, TypeError, ValueError):
+        expanded = None
+
+    if not expanded:
+        return (PASS if err <= tol else FAIL, None, None)
+
+    acceptance = tol - expanded
+    rejection = tol + expanded
+
+    if acceptance < 0:
+        # The uncertainty exceeds the tolerance: nothing can be accepted, and
+        # only a gross failure can be rejected with confidence.
+        acceptance = Decimal('0')
+
+    if err <= acceptance:
+        return (PASS, acceptance, rejection)
+    if err >= rejection:
+        return (FAIL, acceptance, rejection)
+    return (INDETERMINATE, acceptance, rejection)
+
+
+# ── The uncertainty budget: one implementation ───────────────────────────────
+
+SIX_DP = Decimal('0.000001')
+
+
+def compute_uncertainty_budget(
+    readings,
+    resolution,
+    reference_uncertainty,
+    coverage_factor=Decimal('2'),
+    *,
+    reference_is_expanded=True,
+    quantise=True,
+):
+    """Compute a complete uncertainty budget for one measurement point.
+
+    The single implementation. Both the stored result
+    (``CalibrationReading.calculate_statistics``) and the live preview
+    (``api_calculate_uncertainty``) call this, so the number a technician sees
+    while typing is the number that gets saved.
+
+    They previously diverged: the preview computed Type A from the full-precision
+    standard deviation while the model computed it from the value already
+    quantised to six decimal places, so the two could differ in the last digits
+    for the same readings.
+
+    Args:
+        readings: measured values; ``None`` entries are ignored.
+        resolution: the display resolution, as a full quantisation step.
+        reference_uncertainty: from the reference standard's certificate.
+        coverage_factor: k, applied to expand the combined uncertainty.
+        reference_is_expanded: whether ``reference_uncertainty`` is expanded
+            (and so must be divided by k) or already standard.
+        quantise: round each result to six decimal places, matching what the
+            model stores. Pass ``False`` for full precision.
+
+    Returns:
+        A dict of ``Decimal`` values, or ``None`` when there are fewer than two
+        readings and the standard deviation is therefore undefined.
+    """
+    calculator = CalibrationCalculator(reference_is_expanded=reference_is_expanded)
+
+    stats = calculator.calculate_statistics(readings)
+    if not stats:
+        return None
+
+    stated_k = Decimal(str(coverage_factor or 2))
+
+    def out(value):
+        return value.quantize(SIX_DP, rounding=ROUND_HALF_UP) if quantise else value
+
+    mean = out(stats['mean'])
+    std_dev = out(stats['std_dev'])
+
+    # Type A is computed from the same standard deviation that is reported, so
+    # the printed budget is internally consistent.
+    type_a = out(calculator.calculate_type_a_uncertainty(std_dev, stats['count']))
+    type_b = out(calculator.calculate_type_b_uncertainty(resolution))
+
+    # The reference standard's own certificate quotes its uncertainty at the
+    # coverage factor stated on it, so that division uses the stated k — not
+    # the derived one, which belongs to this measurement rather than to the
+    # standard.
+    reference = out(calculator.calculate_reference_uncertainty(
+        reference_uncertainty or 0, stated_k
+    ))
+    combined = out(calculator.calculate_combined_uncertainty(type_a, type_b, reference))
+
+    # k derived from the effective degrees of freedom, not assumed.
+    #
+    # A stated k of 2 assumes the standard deviation is well known. With the
+    # three to five readings this system operates on it is not, and a 95%
+    # interval needs Student's t — 2.776 at four degrees of freedom. Only
+    # Type A carries few degrees of freedom, so the Welch-Satterthwaite blend
+    # lands between 2 and t(n-1) depending on how much of the budget is
+    # repeatability.
+    derived_k, effective_dof = coverage_factor_for_95(type_a, combined, stats['count'])
+    k = max(stated_k, derived_k)
+
+    expanded = out(calculator.calculate_expanded_uncertainty(combined, k))
+
+    return {
+        'mean': mean,
+        'std_dev': std_dev,
+        'count': stats['count'],
+        'type_a': type_a,
+        'type_b': type_b,
+        'reference': reference,
+        'combined': combined,
+        'expanded': expanded,
+        'coverage_factor': k,
+        'stated_coverage_factor': stated_k,
+        'effective_dof': effective_dof,
+        'coverage_factor_is_derived': k != stated_k,
+    }
+
+
+# ── Drift grading ────────────────────────────────────────────────────────────
+#
+# Drift is a dimensioned rate, so a bare number cannot be graded. The previous
+# thresholds (0.1 / 0.5 / 1.0 per year) were applied to every parameter
+# regardless of unit or tolerance, so 0.4/year graded "Good" whether it was
+# 13% of a 3 mmHg tolerance or 400% of a 0.1 mV one — and that grade drove a
+# printed recommendation to change a service interval.
+#
+# Dividing by the parameter's own tolerance makes the quantity dimensionless
+# and comparable across parameters, which is the only form in which a single
+# set of thresholds means anything.
+
+DRIFT_BANDS = (
+    (Decimal('0.10'), 'Very stable', 'Interval can likely be extended.'),
+    (Decimal('0.25'), 'Normal', 'Current calibration interval is appropriate.'),
+    (Decimal('0.50'), 'Drifting', 'Consider shortening the calibration interval.'),
+)
+DRIFT_BAND_URGENT = ('Urgent', 'Shorten the calibration interval: tolerance will be '
+                               'breached within two years at this rate.')
+
+
+def drift_fraction_of_tolerance(drift_per_year, tolerance):
+    """|drift per year| / tolerance — dimensionless, so comparable.
+
+    Returns ``None`` when the tolerance is missing or zero, because the
+    fraction is undefined and a grade would be invented rather than measured.
+    """
+    if tolerance in (None, ''):
+        return None
+    try:
+        tol = abs(Decimal(str(tolerance)))
+        rate = abs(Decimal(str(drift_per_year)))
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+    if tol == 0:
+        return None
+    return rate / tol
+
+
+def grade_drift(drift_per_year, tolerance):
+    """Grade a drift rate against the parameter's own tolerance.
+
+    Returns ``(label, recommendation, fraction)``. When the tolerance is
+    unknown the label is ``'Ungraded'`` and the recommendation says so, rather
+    than falling back to a unit-blind comparison.
+    """
+    fraction = drift_fraction_of_tolerance(drift_per_year, tolerance)
+    if fraction is None:
+        return ('Ungraded',
+                'No tolerance on record for this parameter, so the drift rate '
+                'cannot be graded.',
+                None)
+    for limit, label, recommendation in DRIFT_BANDS:
+        if fraction < limit:
+            return (label, recommendation, fraction)
+    return (DRIFT_BAND_URGENT[0], DRIFT_BAND_URGENT[1], fraction)
+
+
+def years_until_tolerance_breach(current_error, drift_per_year, tolerance):
+    """How long until a steadily drifting device reaches its tolerance.
+
+    Handbook section 13.3. Returns ``None`` when the device is not drifting, or
+    when the inputs are unusable — an infinite answer is not a useful one.
+    """
+    try:
+        rate = abs(Decimal(str(drift_per_year)))
+        tol = abs(Decimal(str(tolerance)))
+        err = abs(Decimal(str(current_error)))
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+    if rate == 0 or tol == 0:
+        return None
+    margin = tol - err
+    if margin <= 0:
+        return Decimal('0')
+    return margin / rate
 
 
 class DriftAnalyzer:
@@ -370,105 +687,6 @@ class DriftAnalyzer:
         }
 
 
-class ReportGenerator:
-    """Generate calibration reports and certificates"""
-    
-    @staticmethod
-    def generate_certificate(session):
-        """Generate HTML certificate content"""
-        # Calculate overall statistics
-        readings = session.readings.all()
-        total_points = readings.count()
-        passed_points = readings.filter(passes_tolerance=True).count()
-        pass_rate = (passed_points / total_points * 100) if total_points > 0 else 0
-        
-        # Group readings by parameter
-        readings_by_parameter = {}
-        for reading in readings:
-            param_name = reading.parameter.name
-            if param_name not in readings_by_parameter:
-                readings_by_parameter[param_name] = []
-            readings_by_parameter[param_name].append(reading)
-        
-        # Calculate linearity for each parameter
-        linearity_analysis = {}
-        for param_name, param_readings in readings_by_parameter.items():
-            if len(param_readings) >= 3:
-                set_values = [float(r.set_value.value) for r in param_readings]
-                errors = [float(r.error) if r.error else 0 for r in param_readings]
-                linearity = CalibrationCalculator.calculate_linearity(set_values, errors)
-                if linearity:
-                    linearity_analysis[param_name] = linearity
-        
-        context = {
-            'session': session,
-            'readings_by_parameter': readings_by_parameter,
-            'linearity_analysis': linearity_analysis,
-            'total_points': total_points,
-            'passed_points': passed_points,
-            'pass_rate': pass_rate,
-            'generation_date': timezone.now(),
-        }
-        
-        return render_to_string('calibration/certificate_template.html', context)
-    
-    @staticmethod
-    def generate_pdf_certificate(session):
-        """Generate PDF certificate (placeholder - would use WeasyPrint or similar)"""
-        # This would integrate with a PDF generation library
-        # For example, using WeasyPrint:
-        # from weasyprint import HTML, CSS
-        # 
-        # html_content = ReportGenerator.generate_certificate(session)
-        # pdf = HTML(string=html_content).write_pdf()
-        # return pdf
-        
-        # For now, return a placeholder
-        return b"PDF generation would be implemented here using a library like WeasyPrint or ReportLab"
-    
-    @staticmethod
-    def generate_uncertainty_budget_report(session):
-        """Generate detailed uncertainty budget report"""
-        readings = session.readings.select_related('parameter', 'set_value')
-        
-        budget_data = []
-        for reading in readings:
-            if reading.mean is not None:
-                # Calculate uncertainty components using the enhanced function
-                readings_list = reading.get_readings_list() if hasattr(reading, 'get_readings_list') else []
-                
-                if readings_list:
-                    uncertainty_budget = calculate_uncertainties(
-                        readings=readings_list,
-                        resolution=float(reading.parameter.resolution) if reading.parameter.resolution else 1.0,
-                        reference_uncertainty=float(reading.parameter.reference_uncertainty) if reading.parameter.reference_uncertainty else 0.0,
-                        reference_is_expanded=getattr(reading.parameter, 'reference_is_expanded', False),
-                        k=2
-                    )
-                    
-                    if uncertainty_budget:
-                        budget_item = {
-                            'reading': reading,
-                            'type_a': uncertainty_budget['u_A'],
-                            'type_b': uncertainty_budget['u_res'],
-                            'reference': uncertainty_budget['u_ref'],
-                            'combined': uncertainty_budget['u_combined'],
-                            'expanded': uncertainty_budget['U_expanded'],
-                            'type_a_percent': (uncertainty_budget['u_A'] / uncertainty_budget['u_combined'] * 100) if uncertainty_budget['u_combined'] > 0 else 0,
-                            'type_b_percent': (uncertainty_budget['u_res'] / uncertainty_budget['u_combined'] * 100) if uncertainty_budget['u_combined'] > 0 else 0,
-                            'reference_percent': (uncertainty_budget['u_ref'] / uncertainty_budget['u_combined'] * 100) if uncertainty_budget['u_combined'] > 0 else 0,
-                        }
-                        budget_data.append(budget_item)
-        
-        context = {
-            'session': session,
-            'budget_data': budget_data,
-            'generation_date': timezone.now(),
-        }
-        
-        return render_to_string('calibration/uncertainty_budget_template.html', context)
-
-
 class QualityAssurance:
     """Quality assurance utilities"""
     
@@ -540,14 +758,15 @@ class QualityAssurance:
             if hasattr(reading, 'get_readings_list'):
                 readings_list = reading.get_readings_list()
                 if readings_list:
-                    uncertainty_budget = calculate_uncertainties(
+                    uncertainty_budget = compute_uncertainty_budget(
                         readings=readings_list,
-                        resolution=float(reading.parameter.resolution) if reading.parameter.resolution else 1.0,
-                        reference_uncertainty=float(reading.parameter.reference_uncertainty) if reading.parameter.reference_uncertainty else 0.0
+                        resolution=resolution_for_reading(reading),
+                        reference_uncertainty=reading.parameter.reference_uncertainty or 0,
+                        coverage_factor=reading.parameter.coverage_factor or 2,
                     )
                     
                     if uncertainty_budget and reading.parameter.tolerance:
-                        uncertainty_ratio = uncertainty_budget['U_expanded'] / float(reading.parameter.tolerance)
+                        uncertainty_ratio = uncertainty_budget['expanded'] / float(reading.parameter.tolerance)
                         if uncertainty_ratio > 0.25:  # Uncertainty > 25% of tolerance
                             high_uncertainty_count += 1
         
@@ -583,284 +802,26 @@ class QualityAssurance:
         return assessment
 
 
-class TrendAnalysis:
-    """Analyze trends in calibration data"""
-    
-    @staticmethod
-    def analyze_procedure_trends(procedure, months=12):
-        """Analyze trends for a specific procedure over time"""
-        end_date = timezone.now()
-        start_date = end_date - timedelta(days=30 * months)
-        
-        sessions = procedure.sessions.filter(
-            timestamp__gte=start_date,
-            timestamp__lte=end_date
-        ).order_by('timestamp')
-        
-        if sessions.count() < 3:
-            return None
-        
-        # Calculate monthly statistics
-        monthly_stats = []
-        current_date = start_date.replace(day=1)
-        
-        while current_date < end_date:
-            next_month = (current_date.replace(day=28) + timedelta(days=4)).replace(day=1)
-            
-            month_sessions = sessions.filter(
-                timestamp__gte=current_date,
-                timestamp__lt=next_month
-            )
-            
-            if month_sessions.exists():
-                total_sessions = month_sessions.count()
-                passed_sessions = month_sessions.filter(overall_pass=True).count()
-                pass_rate = (passed_sessions / total_sessions * 100) if total_sessions > 0 else 0
-                
-                # Calculate average uncertainty using enhanced calculations
-                uncertainties = []
-                for session in month_sessions:
-                    for reading in session.readings.all():
-                        if hasattr(reading, 'get_readings_list'):
-                            readings_list = reading.get_readings_list()
-                            if readings_list:
-                                uncertainty_budget = calculate_uncertainties(
-                                    readings=readings_list,
-                                    resolution=float(reading.parameter.resolution) if reading.parameter.resolution else 1.0,
-                                    reference_uncertainty=float(reading.parameter.reference_uncertainty) if reading.parameter.reference_uncertainty else 0.0
-                                )
-                                if uncertainty_budget:
-                                    uncertainties.append(uncertainty_budget['U_expanded'])
-                
-                avg_uncertainty = sum(uncertainties) / len(uncertainties) if uncertainties else 0
-                
-                monthly_stats.append({
-                    'month': current_date,
-                    'total_sessions': total_sessions,
-                    'pass_rate': pass_rate,
-                    'avg_uncertainty': avg_uncertainty
-                })
-            
-            current_date = next_month
-        
-        if len(monthly_stats) < 3:
-            return None
-        
-        # Calculate trends
-        pass_rate_trend = TrendAnalysis._calculate_trend([stat['pass_rate'] for stat in monthly_stats])
-        uncertainty_trend = TrendAnalysis._calculate_trend([stat['avg_uncertainty'] for stat in monthly_stats])
-        
-        return {
-            'monthly_stats': monthly_stats,
-            'pass_rate_trend': pass_rate_trend,
-            'uncertainty_trend': uncertainty_trend,
-            'analysis_period': f"{start_date.strftime('%Y-%m')} to {end_date.strftime('%Y-%m')}"
-        }
-    
-    @staticmethod
-    def _calculate_trend(values):
-        """Calculate trend (slope) for a list of values"""
-        if len(values) < 2:
-            return 0
-        
-        n = len(values)
-        x_values = list(range(n))
-        
-        sum_x = sum(x_values)
-        sum_y = sum(values)
-        sum_xy = sum(x * y for x, y in zip(x_values, values))
-        sum_xx = sum(x * x for x in x_values)
-        
-        denominator = n * sum_xx - sum_x * sum_x
-        if denominator == 0:
-            return 0
-        
-        slope = (n * sum_xy - sum_x * sum_y) / denominator
-        return slope
-
-
-class CalibrationValidator:
-    """Validate calibration data and procedures"""
-    
-    @staticmethod
-    def validate_procedure(procedure):
-        """Validate a calibration procedure for completeness and consistency"""
-        errors = []
-        warnings = []
-        
-        # Check basic information
-        if not procedure.name.strip():
-            errors.append("Procedure name is required")
-        
-        if not procedure.parameters.exists():
-            errors.append("At least one parameter is required")
-        
-        # Validate parameters
-        for param in procedure.parameters.all():
-            if not param.name.strip():
-                errors.append(f"Parameter name is required")
-            
-            if param.num_readings < 3:
-                warnings.append(f"Parameter '{param.name}': Less than 3 readings may provide poor statistics")
-            
-            if param.resolution <= 0:
-                errors.append(f"Parameter '{param.name}': Resolution must be positive")
-            
-            if param.tolerance <= 0:
-                errors.append(f"Parameter '{param.name}': Tolerance must be positive")
-            
-            if param.reference_uncertainty < 0:
-                errors.append(f"Parameter '{param.name}': Reference uncertainty cannot be negative")
-            
-            if not param.set_values.exists():
-                errors.append(f"Parameter '{param.name}': At least one set value is required")
-            
-            # Check set value coverage
-            set_values = list(param.set_values.values_list('value', flat=True))
-            if len(set_values) < 3:
-                warnings.append(f"Parameter '{param.name}': Consider using at least 3 set values for linearity analysis")
-            
-            # Check for reasonable spread in set values
-            if len(set_values) > 1:
-                value_range = max(set_values) - min(set_values)
-                if value_range < float(param.tolerance) * 10:
-                    warnings.append(f"Parameter '{param.name}': Set value range might be too small relative to tolerance")
-        
-        # Environmental conditions check
-        if hasattr(procedure, 'temperature'):
-            if procedure.temperature < -50 or procedure.temperature > 100:
-                warnings.append("Temperature seems outside typical calibration range")
-        
-        if hasattr(procedure, 'humidity'):
-            if procedure.humidity < 0 or procedure.humidity > 100:
-                errors.append("Humidity must be between 0 and 100%")
-        
-        return {
-            'is_valid': len(errors) == 0,
-            'errors': errors,
-            'warnings': warnings
-        }
-    
-    @staticmethod
-    def validate_calibration_data(session):
-        """Validate calibration session data"""
-        errors = []
-        warnings = []
-        
-        if not session.readings.exists():
-            errors.append("No calibration readings found")
-            return {'is_valid': False, 'errors': errors, 'warnings': warnings}
-        
-        for reading in session.readings.all():
-            if hasattr(reading, 'get_readings_list'):
-                readings_list = reading.get_readings_list()
-            else:
-                readings_list = []
-            
-            if len(readings_list) < reading.parameter.num_readings:
-                errors.append(f"Insufficient readings for {reading.parameter.name} at {reading.set_value.value}")
-            
-            if len(readings_list) < 3:
-                errors.append(f"Minimum 3 readings required for {reading.parameter.name} at {reading.set_value.value}")
-            
-            # Check for quality issues using enhanced validation
-            if readings_list:
-                qa_issues = QualityAssurance.validate_readings(readings_list, reading.parameter)
-                warnings.extend(qa_issues)
-        
-        return {
-            'is_valid': len(errors) == 0,
-            'errors': errors,
-            'warnings': warnings
-        }
-
-
-class MetrologyUtils:
-    """Metrology and measurement science utilities"""
-    
-    @staticmethod
-    def calculate_measurement_capability(uncertainty, tolerance):
-        """Calculate measurement capability ratio"""
-        if tolerance <= 0:
-            return float('inf')
-        
-        # Test Accuracy Ratio (TAR) or Test Uncertainty Ratio (TUR)
-        # Should be >= 4:1 for good measurement capability
-        return float(tolerance) / float(uncertainty)
-    
-    @staticmethod
-    def estimate_calibration_interval(drift_rate, tolerance, target_probability=0.95):
-        """Estimate optimal calibration interval based on drift rate"""
-        if drift_rate <= 0:
-            return 365  # Default to 1 year if no drift
-        
-        # Calculate time until drift might exceed tolerance
-        # Using normal distribution assumption
-        # P(|drift| < tolerance) = target_probability
-        
-        # For 95% probability, use 1.96 sigma
-        z_score = 1.96 if target_probability == 0.95 else 2.58  # 99%
-        
-        # Assume drift has some uncertainty (e.g., 20% of the drift rate)
-        drift_uncertainty = abs(drift_rate) * 0.2
-        
-        # Time when total uncertainty (drift + measurement) approaches tolerance
-        allowable_drift = float(tolerance) / z_score
-        optimal_interval_days = allowable_drift / abs(drift_rate) if drift_rate != 0 else 365
-        
-        # Limit to reasonable range (30 days to 3 years)
-        optimal_interval_days = max(30, min(1095, optimal_interval_days))
-        
-        return int(optimal_interval_days)
-    
-    @staticmethod
-    def calculate_guard_banding(measurement_uncertainty, tolerance):
-        """Calculate guard band for pass/fail decisions"""
-        # Guard band helps account for measurement uncertainty
-        # Conservative approach: guard band = 2 * measurement uncertainty
-        
-        guard_band = 2 * float(measurement_uncertainty)
-        effective_tolerance = float(tolerance) - guard_band
-        
-        return {
-            'guard_band': guard_band,
-            'effective_tolerance': max(0, effective_tolerance),
-            'risk_reduction': (guard_band / float(tolerance)) * 100 if tolerance > 0 else 0
-        }
-    
-    @staticmethod
-    def convert_confidence_level_to_k_factor(confidence_level):
-        """Convert confidence level to coverage factor"""
-        # Standard coverage factors for normal distribution
-        confidence_map = {
-            68.27: 1.0,
-            90.0: 1.645,
-            95.0: 1.96,
-            95.45: 2.0,
-            99.0: 2.576,
-            99.73: 3.0
-        }
-        
-        # Find closest match
-        closest_confidence = min(confidence_map.keys(), 
-                               key=lambda x: abs(x - confidence_level))
-        
-        return confidence_map[closest_confidence]
-    
-    @staticmethod
-    def calculate_degrees_of_freedom(type_a_uncertainty, type_b_components):
-        """Calculate effective degrees of freedom using Welch-Satterthwaite equation"""
-        # Simplified calculation for common case
-        # In practice, this would be more complex with proper uncertainty budgets
-        
-        if type_a_uncertainty <= 0:
-            return float('inf')  # Type B only
-        
-        # Assume Type A has n-1 degrees of freedom (from sample std dev)
-        # Type B components typically have infinite degrees of freedom
-        
-        # For simplicity, return finite value based on Type A contribution
-        return max(2, 10)  # Conservative estimate
+# Four classes were removed here on 18 September 2026, all with zero callers:
+#
+#   ReportGenerator      — HTML certificate and budget report. Built on
+#                          `reading.parameter.resolution`, a field that does not
+#                          exist, so every method raised AttributeError.
+#   TrendAnalysis        — monthly pass-rate and uncertainty slopes. Its only
+#                          call site asked for `calculate_linear_regression`,
+#                          a method the class never had.
+#   CalibrationValidator — procedure and session completeness checks, never
+#                          invoked on any path.
+#   MetrologyUtils       — TUR, guard banding, interval estimation, k lookup and
+#                          a degrees-of-freedom stub that returned the constant
+#                          10. Every one of these is now a module-level function
+#                          above, implemented properly and covered by tests:
+#                          `test_uncertainty_ratio`, `guarded_decision`,
+#                          `years_until_tolerance_breach`, `t_factor_95` and
+#                          `effective_degrees_of_freedom`.
+#
+# The behaviour worth keeping was reimplemented first and is tested; what went
+# was the code that could not run.
 
 def _validate_environmental_conditions(temperature, humidity, pressure, procedure):
     """Validate environmental conditions against procedure requirements."""

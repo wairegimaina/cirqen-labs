@@ -29,12 +29,16 @@ def _get_group_key(schedule, planning_logic):
 def _get_group_members(schedule, planning_logic):
     """All active CalibrationSchedule members in the same group/month.
 
-    Historical filter for this module: schedule ``active_status=True`` (does NOT
-    filter on equipment.active_status). Preserved via explicit flags.
+    Uses the canonical rule: the equipment and the schedule must both be
+    active. This module used to filter on the schedule only, so a retired
+    device stayed a member and its group never completed.
     """
     return grouping.group_members_qs(
         schedule.equipment, schedule.scheduled_month, planning_logic,
-        require_schedule_active=True, require_equipment_active=False,
+        # Canonical rule: both must be active (see grouping.group_members_qs).
+        # This previously ignored the equipment flag, so a retired device
+        # held its group open and the next period was never created.
+        require_schedule_active=True, require_equipment_active=True,
     )
 
 

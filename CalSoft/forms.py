@@ -353,7 +353,8 @@ class ProcedureSearchForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        from django.contrib.auth.models import User
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
         self.fields['created_by'].queryset = User.objects.filter(
             calibrationprocedure__isnull=False
         ).distinct()
@@ -411,7 +412,8 @@ class SessionSearchForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        from django.contrib.auth.models import User
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
 
         self.fields['procedure'].queryset = CalibrationProcedure.objects.filter(
             active_status=True

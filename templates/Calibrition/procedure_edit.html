@@ -524,10 +524,10 @@
                         if (standardInfoDiv) {
                             standardInfoDiv.innerHTML = `
                                 <small class="text-muted">
-                                    Model: ${standard.model_number || "N/A"} |
-                                    Manufacturer: ${standard.manufacturer || "N/A"} |
-                                    Cal Due: ${standard.calibration_due_date || "N/A"} |
-                                    Uncertainty: ${uncertainty}
+                                    Model: ${escapeHTML(standard.model_number || "N/A")} |
+                                    Manufacturer: ${escapeHTML(standard.manufacturer || "N/A")} |
+                                    Cal Due: ${escapeHTML(standard.calibration_due_date || "N/A")} |
+                                    Uncertainty: ${escapeHTML(uncertainty)}
                                 </small>
                             `;
                         }
@@ -903,7 +903,7 @@
                             <div class="input-group">
                                 <input type="number" step="0.0001" class="form-control"
                                        name="parameters-${parameterIndex}-set_values-${setValueCount}-value" required>
-                                <span class="input-group-text">${unit}</span>
+                                <span class="input-group-text">${escapeHTML(unit)}</span>
                             </div>
                         </div>
                         <div class="col-md-4">

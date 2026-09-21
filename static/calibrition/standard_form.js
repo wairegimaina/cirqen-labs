@@ -18,7 +18,7 @@
         window.STANDARD_FORM_CONFIG.parameterOptions) ||
       [];
     return options
-      .map((p) => `<option value="${p.id}">${p.name}</option>`)
+      .map((p) => `<option value="${escapeHTML(p.id)}">${escapeHTML(p.name)}</option>`)
       .join("");
   }
 
@@ -254,7 +254,7 @@
               "alert alert-success alert-dismissible fade show";
             alertEl.innerHTML = `
                             <i class="fas fa-check-circle me-2"></i>
-                            Parameter "${data.parameter.name}" created successfully!
+                            Parameter "${escapeHTML(data.parameter.name)}" created successfully!
                             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                         `;
             form.parentElement.insertBefore(alertEl, form);
@@ -273,7 +273,7 @@
               "alert alert-danger alert-dismissible fade show";
             alertEl.innerHTML = `
                             <i class="fas fa-exclamation-circle me-2"></i>
-                            Error: ${errorText}
+                            Error: ${escapeHTML(errorText)}
                             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                         `;
             form.parentElement.insertBefore(alertEl, form);
@@ -285,7 +285,7 @@
           alertEl.className = "alert alert-danger alert-dismissible fade show";
           alertEl.innerHTML = `
                         <i class="fas fa-exclamation-triangle me-2"></i>
-                        Error: Failed to create parameter. ${error.message}
+                        Error: Failed to create parameter. ${escapeHTML(error.message)}
                         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                     `;
           form.parentElement.insertBefore(alertEl, form);

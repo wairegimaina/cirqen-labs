@@ -43,6 +43,19 @@ def _load_config_json() -> dict:
 
 _CFG = _load_config_json()
 
+# HQ addresses are not read from config.json directly: the app no longer writes
+# them there unless someone set them on purpose. config.resolve_endpoints applies
+# the same env > config.json > provisioning > shipped-default order the app uses.
+try:
+    import sys as _sys
+
+    _sys.path.append(str(Path(__file__).resolve().parent.parent))
+    from config import resolve_endpoints as _resolve_endpoints
+
+    _EP = {key: value for key, (value, _src) in _resolve_endpoints().items()}
+except Exception:  # config.py unreachable: fall back to env / config.json only
+    _EP = {}
+
 
 def _pick(env_key: str, cfg_section: str, cfg_key: str, default: str = "") -> str:
     val = os.getenv(env_key)
@@ -63,10 +76,10 @@ LOCAL_DB = {
 }
 
 HQ_DB = {
-    "host": _pick("POSTGRES_HQ_HOST", "hq_db", "host"),
-    "port": int(_pick("POSTGRES_HQ_PORT", "hq_db", "port", "5432")),
-    "database": _pick("POSTGRES_HQ_DB", "hq_db", "database"),
-    "user": _pick("POSTGRES_HQ_USER", "hq_db", "user"),
+    "host": _EP.get("hq_db.host") or _pick("POSTGRES_HQ_HOST", "hq_db", "host"),
+    "port": int(_EP.get("hq_db.port") or _pick("POSTGRES_HQ_PORT", "hq_db", "port", "5432")),
+    "database": _EP.get("hq_db.database") or _pick("POSTGRES_HQ_DB", "hq_db", "database"),
+    "user": _EP.get("hq_db.user") or _pick("POSTGRES_HQ_USER", "hq_db", "user"),
     "password": _pick("POSTGRES_HQ_PASSWORD", "hq_db", "password"),
 }
 

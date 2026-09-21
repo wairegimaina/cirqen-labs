@@ -16,6 +16,7 @@ from reportlab.graphics.charts.linecharts import HorizontalLineChart
 from reportlab.graphics.charts.legends import Legend
 
 from reporthub.utils import get_report_data
+from core.branding import contact_line
 
 logger = logging.getLogger(__name__)
 
@@ -329,7 +330,7 @@ class PDFReportGenerator:
         canvas.drawCentredString(
             width / 2,
             height - 2.7*cm,
-            "Email: biomedical@hospital.com | Phone: +254-XXX-XXXX | ISO 9001:2015 Certified"
+            contact_line("ISO 9001:2015 Certified")
         )
 
         # FOOTER

@@ -184,7 +184,7 @@ function showLoading(message = 'Processing calibration...') {
       </svg>
     </div>
     <div class="loading-title">Processing calibration</div>
-    <div class="loading-text" id="loadingText">${message}</div>
+    <div class="loading-text" id="loadingText">${escapeHTML(message)}</div>
     <div class="loading-steps">
       <div class="loading-step active" id="step-validate">
         <div class="step-dot"></div>
@@ -221,7 +221,7 @@ function showSuccess(message = 'Calibration completed successfully!', details = 
 
   loadingContent.innerHTML = `
     <div class="loading-success-icon"><i class="fas fa-circle-check"></i></div>
-    <div class="loading-success-title">${message}</div>
+    <div class="loading-success-title">${escapeHTML(message)}</div>
     ${details ? `<div class="loading-success-sub">${details}</div>` : ''}
   `;
 }
@@ -394,7 +394,7 @@ function validateAllInputs() {
 
   // Display errors if any
   if (errors.length > 0) {
-    validationErrors.innerHTML = errors.map(err => `<li>${err}</li>`).join('');
+    validationErrors.innerHTML = errors.map(err => `<li>${escapeHTML(err)}</li>`).join('');
     validationAlert.classList.add('show');
     validationAlert.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return false;
@@ -514,7 +514,7 @@ function loadProcedureDetails(procedureId) {
         });
       } else {
         const errorMsg = 'No parameters available for this procedure';
-        readingFields.innerHTML = `<div class="alert alert-warning">${errorMsg}</div>`;
+        readingFields.innerHTML = `<div class="alert alert-warning">${escapeHTML(errorMsg)}</div>`;
         logDebug(errorMsg);
         checkAllRequiredFields();
       }
@@ -522,7 +522,7 @@ function loadProcedureDetails(procedureId) {
     .catch(error => {
       console.error('Error fetching procedure:', error);
       const errorMsg = `Error loading procedure details: ${error.message}`;
-      readingFields.innerHTML = `<div class="alert alert-error">${errorMsg}</div>`;
+      readingFields.innerHTML = `<div class="alert alert-error">${escapeHTML(errorMsg)}</div>`;
       logDebug(errorMsg);
       checkAllRequiredFields();
     });
@@ -565,8 +565,8 @@ function generateParameterTable(param, setValues) {
   const header = document.createElement('h3');
   header.className = 'parameter-header';
   header.innerHTML = `
-        <span>${param.name}</span>
-        <span>${param.unit || 'No unit'}</span>
+        <span>${escapeHTML(param.name)}</span>
+        <span>${escapeHTML(param.unit || 'No unit')}</span>
     `;
 
   // Resolution input
@@ -574,16 +574,16 @@ function generateParameterTable(param, setValues) {
   resolutionSection.className = 'parameter-resolution';
   resolutionSection.innerHTML = `
         <div class="form-group">
-            <label for="resolution_${param.id}">Resolution <span class="label-unit">${param.unit || ''}</span></label>
+            <label for="resolution_${escapeHTML(param.id)}">Resolution <span class="label-unit">${escapeHTML(param.unit || '')}</span></label>
             <input type="number"
-                name="resolution_${param.id}"
-                id="resolution_${param.id}"
+                name="resolution_${escapeHTML(param.id)}"
+                id="resolution_${escapeHTML(param.id)}"
                 class="form-control resolution-input"
                 step="0.000001"
                 placeholder="e.g., 0.001"
                 required
-                data-param-id="${param.id}">
-            <div class="error-message" id="error_resolution_${param.id}"></div>
+                data-param-id="${escapeHTML(param.id)}">
+            <div class="error-message" id="error_resolution_${escapeHTML(param.id)}"></div>
             <small class="help-text">Enter the smallest unit the equipment can read for this parameter</small>
         </div>
     `;
@@ -595,16 +595,11 @@ function generateParameterTable(param, setValues) {
   const infoSection = document.createElement('div');
   infoSection.className = 'parameter-info';
   infoSection.innerHTML = `
-        <div class="info-item"><span class="info-label">Standard reference</span><span class="info-value">${param.standard_reference || 'N/A'
-    }</span></div>
-        <div class="info-item"><span class="info-label">Reference uncertainty</span><span class="info-value">±${param.reference_uncertainty || 'N/A'
-    } ${param.unit || ''}</span></div>
-        <div class="info-item"><span class="info-label">Tolerance</span><span class="info-value">±${param.tolerance || 'N/A'
-    } ${param.unit || ''}</span></div>
-        <div class="info-item"><span class="info-label">Coverage factor</span><span class="info-value">k = ${param.coverage_factor || '2.0'
-    }</span></div>
-        <div class="info-item"><span class="info-label">Readings required</span><span class="info-value">${requiredReadings} of ${param.num_readings
-    }</span></div>
+        <div class="info-item"><span class="info-label">Standard reference</span><span class="info-value">${escapeHTML(param.standard_reference || 'N/A')}</span></div>
+        <div class="info-item"><span class="info-label">Reference uncertainty</span><span class="info-value">±${escapeHTML(param.reference_uncertainty || 'N/A')} ${escapeHTML(param.unit || '')}</span></div>
+        <div class="info-item"><span class="info-label">Tolerance</span><span class="info-value">±${escapeHTML(param.tolerance || 'N/A')} ${escapeHTML(param.unit || '')}</span></div>
+        <div class="info-item"><span class="info-label">Coverage factor</span><span class="info-value">k = ${escapeHTML(param.coverage_factor || '2.0')}</span></div>
+        <div class="info-item"><span class="info-label">Readings required</span><span class="info-value">${escapeHTML(requiredReadings)} of ${escapeHTML(param.num_readings)}</span></div>
     `;
 
   // Calibration table
@@ -617,13 +612,13 @@ function generateParameterTable(param, setValues) {
         <tr>
             <th rowspan="2">Set value</th>
             <th rowspan="2">Sub-parameter</th>
-            <th colspan="${param.num_readings}">Readings (${param.unit || ''})</th>
+            <th colspan="${escapeHTML(param.num_readings)}">Readings (${escapeHTML(param.unit || '')})</th>
         </tr>
         <tr>
     `;
   for (let i = 1; i <= param.num_readings; i++) {
     const required = i <= requiredReadings ? ' *' : ''; // ✅ USE requiredReadings
-    headerHTML += `<th>R${i}${required}</th>`;
+    headerHTML += `<th>R${i}${escapeHTML(required)}</th>`;
   }
   headerHTML += '</tr>';
   thead.innerHTML = headerHTML;
@@ -640,13 +635,13 @@ function generateParameterTable(param, setValues) {
       rowHTML += `
                 <td>
                     <input type="number"
-                        name="${inputName}"
-                        class="reading-input ${required}"
+                        name="${escapeHTML(inputName)}"
+                        class="reading-input ${escapeHTML(required)}"
                         step="0.000001"
                         placeholder="R${i}"
-                        data-param="${param.id}"
+                        data-param="${escapeHTML(param.id)}"
                         data-reading="${i}">
-                    <div class="error-message" id="error_${inputName}"></div>
+                    <div class="error-message" id="error_${escapeHTML(inputName)}"></div>
                 </td>
             `;
     }
@@ -660,8 +655,8 @@ function generateParameterTable(param, setValues) {
       const subParamName = setValue.sub_parameter_name || 'Default';
 
       let rowHTML = `
-                <td class="set-value-cell">${setValue.value} ${param.unit || ''}</td>
-                <td class="sub-parameter-name">${subParamName}</td>
+                <td class="set-value-cell">${escapeHTML(setValue.value)} ${escapeHTML(param.unit || '')}</td>
+                <td class="sub-parameter-name">${escapeHTML(subParamName)}</td>
             `;
 
       for (let i = 1; i <= param.num_readings; i++) {
@@ -670,15 +665,15 @@ function generateParameterTable(param, setValues) {
         rowHTML += `
                     <td>
                         <input type="number"
-                            name="${inputName}"
-                            class="reading-input ${required}"
+                            name="${escapeHTML(inputName)}"
+                            class="reading-input ${escapeHTML(required)}"
                             step="0.000001"
                             placeholder="R${i}"
-                            data-param="${param.id}"
-                            data-sub-param="${subParamId}"
-                            data-set-value="${setValue.value}"
+                            data-param="${escapeHTML(param.id)}"
+                            data-sub-param="${escapeHTML(subParamId)}"
+                            data-set-value="${escapeHTML(setValue.value)}"
                             data-reading="${i}">
-                        <div class="error-message" id="error_${inputName}"></div>
+                        <div class="error-message" id="error_${escapeHTML(inputName)}"></div>
                     </td>
                 `;
       }

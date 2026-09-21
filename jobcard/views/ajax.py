@@ -48,6 +48,7 @@ logger = logging.getLogger(__name__)
 from .helpers import get_or_create_user_signature
 
 
+@login_required
 def get_user_signature_data(request):
     """
     AJAX endpoint to get user's auto-signature data

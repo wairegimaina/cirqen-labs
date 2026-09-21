@@ -14,7 +14,7 @@
 
     <!-- Filters -->
     <div class="section-card toolbar-card filter-section">
-        <form method="GET" class="toolbar" action="{% if department %}{% url 'calibration:department_certificates' department.pk %}{% else %}{% url 'calibration:certificate_list' %}{% endif %}">
+        <form method="GET" class="toolbar" action="{% url 'calibration:certificate_list' %}">
             <div class="search-field">
                 <i class="fas fa-search" aria-hidden="true"></i>
                 <input type="text" class="form-control" id="equipment" name="equipment"
@@ -28,7 +28,7 @@
                 <option value="fail" {% if current_filters.status == 'fail' %}selected{% endif %}>Fail</option>
             </select>
             <button type="submit" class="btn btn-secondary">Apply</button>
-            <a href="{% if department %}{% url 'calibration:department_certificates' department.pk %}{% else %}{% url 'calibration:certificate_list' %}{% endif %}" class="btn btn-link">Reset</a>
+            <a href="{% url 'calibration:certificate_list' %}" class="btn btn-link">Reset</a>
         </form>
     </div>
 

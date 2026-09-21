@@ -2,6 +2,7 @@
 import logging
 
 from django.shortcuts import render, redirect, get_object_or_404
+from users.control import role_required
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.utils import timezone
@@ -127,14 +128,11 @@ def request_accessory(request):
 
 @login_required
 @require_POST
+@role_required('HOD', redirect_to='partstools:accessories_dashboard', message='Only HOD can approve or decline requests.')
 def approve_accessory_request(request, request_id):
     """HOD approves or declines an accessory request, setting quantity and unit cost."""
     profile = request.user.userprofile
 
-    if profile.role != 'HOD':
-        logger.warning(f"Unauthorized approval attempt by {request.user.username} (role={profile.role})")
-        messages.error(request, "Only HOD can approve or decline requests.")
-        return redirect('partstools:accessories_dashboard')
 
     accessory_request = get_object_or_404(AccessoryRequest, id=request_id)
 
@@ -322,20 +320,3 @@ def accept_accessory_request(request, request_id):
     return redirect('partstools:accessories_dashboard')
 
 
-@login_required
-def view_request_history(request, request_id):
-    """View the full history log of a specific accessory request."""
-    accessory_request = get_object_or_404(AccessoryRequest, id=request_id)
-    profile = request.user.userprofile
-
-    if profile.role != 'HOD' and accessory_request.workshop != profile.workshop:
-        messages.error(request, "You don't have permission to view this request.")
-        return redirect('partstools:accessories_dashboard')
-
-    history = accessory_request.history.all().select_related('performed_by__user')
-
-    return render(request, 'Parts & tools/request_history.html', {
-        'show_sidebar': True,
-        'request': accessory_request,
-        'history': history,
-    })

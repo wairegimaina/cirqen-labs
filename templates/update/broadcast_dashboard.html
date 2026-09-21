@@ -124,9 +124,9 @@ function updateStats(s) {
   if (!s) return;
   document.getElementById('stat-strip').innerHTML = `
     <div class="kpi-card"><div class="kpi-label"><i class="fas fa-desktop" aria-hidden="true"></i> Total machines</div><div class="kpi-value">${s.total}</div></div>
-    <div class="kpi-card kpi-success"><div class="kpi-label"><i class="fas fa-check-circle" aria-hidden="true"></i> Updated</div><div class="kpi-value">${s.updated}</div></div>
-    <div class="kpi-card kpi-warning"><div class="kpi-label"><i class="fas fa-sync-alt" aria-hidden="true"></i> Need update</div><div class="kpi-value">${s.needs_update}</div></div>
-    <div class="kpi-card kpi-info"><div class="kpi-label"><i class="fas fa-signal" aria-hidden="true"></i> Online now</div><div class="kpi-value">${s.online_now}</div></div>
+    <div class="kpi-card kpi-success"><div class="kpi-label"><i class="fas fa-check-circle" aria-hidden="true"></i> Updated</div><div class="kpi-value">${escapeHTML(s.updated)}</div></div>
+    <div class="kpi-card kpi-warning"><div class="kpi-label"><i class="fas fa-sync-alt" aria-hidden="true"></i> Need update</div><div class="kpi-value">${escapeHTML(s.needs_update)}</div></div>
+    <div class="kpi-card kpi-info"><div class="kpi-label"><i class="fas fa-signal" aria-hidden="true"></i> Online now</div><div class="kpi-value">${escapeHTML(s.online_now)}</div></div>
   `;
 }
 
@@ -190,19 +190,19 @@ function renderMachines() {
 
     const onlineChip = m.is_online
       ? '<span class="badge bg-info">Online</span>'
-      : `<span class="badge bg-secondary">Offline · ${m.minutes_since_seen != null ? m.minutes_since_seen + 'm ago' : 'unknown'}</span>`;
+      : `<span class="badge bg-secondary">Offline · ${escapeHTML(m.minutes_since_seen != null ? m.minutes_since_seen + 'm ago' : 'unknown')}</span>`;
 
     const seen = m.last_seen ? new Date(m.last_seen).toLocaleString() : '?';
     const updated = m.last_updated ? new Date(m.last_updated).toLocaleDateString() : '—';
 
     return `
-    <div class="machine-card ${cls} ${offlineCls}">
+    <div class="machine-card ${escapeHTML(cls)} ${escapeHTML(offlineCls)}">
       <div class="mc-top">
         <div>
-          <div class="mc-host"><span class="dot ${dotCls}"></span>${m.hostname || 'Unknown host'}</div>
-          <div class="mc-id">${m.client_id || '—'}</div>
+          <div class="mc-host"><span class="dot ${escapeHTML(dotCls)}"></span>${escapeHTML(m.hostname || 'Unknown host')}</div>
+          <div class="mc-id">${escapeHTML(m.client_id || '—')}</div>
         </div>
-        <span class="mono-chip">v${m.current_version || '?'}</span>
+        <span class="mono-chip">v${escapeHTML(m.current_version || '?')}</span>
       </div>
       <div class="mc-chips">
         ${statusChip}
@@ -210,7 +210,7 @@ function renderMachines() {
         ${m.update_status === 'failed' ? '<span class="badge bg-danger">Failed</span>' : ''}
       </div>
       <div class="mc-meta">
-        <span>IP: ${m.ip || '?'}</span>
+        <span>IP: ${escapeHTML(m.ip || '?')}</span>
         <span>Last seen: ${seen}</span>
         ${m.last_updated ? `<span>Updated: ${updated}</span>` : ''}
       </div>

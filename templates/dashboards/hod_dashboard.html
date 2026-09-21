@@ -180,71 +180,126 @@
         <div class="ws-stat">
           <span class="ws-stat-label">Equipment</span>
           <span class="ws-stat-value">
-            {% for ws_id, data in workshop_data.items %}
-              {% if ws_id == workshop.id %}
-                <a href="{% url 'inventory_for_hod' workshop.id %}">{{ data.equipment_count }}</a>
-              {% endif %}
-            {% endfor %}
+            <a href="{% url 'inventory_for_hod' workshop.id %}">{{ workshop.stats.equipment_count }}</a>
           </span>
         </div>
 
         <div class="ws-stat">
           <span class="ws-stat-label">Departments</span>
           <span class="ws-stat-value">
-            {% for ws_id, data in workshop_data.items %}
-              {% if ws_id == workshop.id %}
-                <a href="{% url 'create_department_for_hod' workshop.id %}">{{ data.departments_count }}</a>
-              {% endif %}
-            {% endfor %}
+            <a href="{% url 'create_department_for_hod' workshop.id %}">{{ workshop.stats.departments_count }}</a>
           </span>
         </div>
 
         <div class="ws-stat">
           <span class="ws-stat-label">Job cards</span>
           <span class="ws-stat-value">
-            {% for ws_id, data in workshop_data.items %}
-              {% if ws_id == workshop.id %}
-                <a href="{% url 'jobcard:hod_workshop_jobcards' workshop.id %}">{{ data.job_cards_count }}</a>
-              {% endif %}
-            {% endfor %}
+            <a href="{% url 'jobcard:hod_workshop_jobcards' workshop.id %}">{{ workshop.stats.job_cards_count }}</a>
           </span>
         </div>
 
         <div class="ws-stat">
           <span class="ws-stat-label">PPMs</span>
           <span class="ws-stat-value">
-            {% for ws_id, data in workshop_data.items %}
-              {% if ws_id == workshop.id %}
-                <a href="{% url 'ppm_dashboard' %}">{{ data.ppms_count }}</a>
-              {% endif %}
-            {% endfor %}
+            <a href="{% url 'ppm_dashboard' %}?workshop={{ workshop.id }}">{{ workshop.stats.ppms_count }}</a>
           </span>
+          {% if workshop.stats.ppms_pending_count %}
+          <span class="ws-stat-note">{{ workshop.stats.ppms_pending_count }} outstanding</span>
+          {% endif %}
         </div>
 
         <div class="ws-stat">
           <span class="ws-stat-label">Reports</span>
           <span class="ws-stat-value">
-            {% for ws_id, data in workshop_data.items %}
-              {% if ws_id == workshop.id %}
-                <a href="{% url 'report_hub:hod_reports_view' workshop.id %}">{{ data.reports_count }}</a>
-              {% endif %}
-            {% endfor %}
+            <a href="{% url 'report_hub:hod_reports_view' workshop.id %}">{{ workshop.stats.reports_count }}</a>
           </span>
         </div>
 
-        {% if workshop.category == 'calibration_center' %}
         <div class="ws-stat">
-          <span class="ws-stat-label">Calibration sessions</span>
+          <span class="ws-stat-label">Certificates</span>
           <span class="ws-stat-value">
-            {% for ws_id, data in workshop_data.items %}
-              {% if ws_id == workshop.id %}
-                <a href="{% url 'calibration:cal-dashboard' %}">{{ data.calibrations_count|default:"—" }}</a>
-              {% endif %}
-            {% endfor %}
+            <a href="{% url 'calibration:certificate_list' %}?workshop={{ workshop.id }}">{{ workshop.stats.certificates_count }}</a>
           </span>
+          {% if workshop.stats.certified_equipment_count %}
+          <span class="ws-stat-note">
+            {{ workshop.stats.certified_equipment_count }} of {{ workshop.stats.equipment_count }} devices
+          </span>
+          {% endif %}
+        </div>
+
+        {% if workshop.stats.awaiting_certificate_count %}
+        <div class="ws-stat ws-stat-warn">
+          <span class="ws-stat-label">Awaiting certificate</span>
+          <span class="ws-stat-value">{{ workshop.stats.awaiting_certificate_count }}</span>
+          <span class="ws-stat-note">approved, number pending from HQ</span>
         </div>
         {% endif %}
+
+        <div class="ws-stat">
+          <span class="ws-stat-label">Calibrations</span>
+          <span class="ws-stat-value">
+            <a href="{% url 'schedule:schedule_groups' %}">{{ workshop.stats.calibrations_count }}</a>
+          </span>
+          <span class="ws-stat-note">sessions on this estate</span>
+        </div>
+
+        <div class="ws-stat">
+          <span class="ws-stat-label">Machine reports</span>
+          <span class="ws-stat-value">
+            <a href="{% url 'equipment_dashboard' %}?workshop={{ workshop.id }}">View</a>
+          </span>
+          <span class="ws-stat-note">manufacturer performance</span>
+        </div>
       </div>
+
+      {# Department drill-down: a workshop total says whether we are broadly
+         covered; this says which ward is behind, which is what leads to an
+         action. Collapsed by default so the card stays scannable. #}
+      {% if workshop.stats.departments %}
+      <details class="ws-depts">
+        <summary class="ws-depts-summary">
+          Calibration coverage by department
+          <span class="ws-depts-count">{{ workshop.stats.departments|length }}</span>
+        </summary>
+
+        <table class="ws-depts-table">
+          <thead>
+            <tr>
+              <th scope="col">Department</th>
+              <th scope="col" class="num">Equipment</th>
+              <th scope="col" class="num">Certified</th>
+              <th scope="col" class="num">Outstanding</th>
+              <th scope="col">Coverage</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for dept in workshop.stats.departments %}
+            <tr{% if dept.percent == 0 and dept.equipment_count %} class="is-behind"{% endif %}>
+              <td>{{ dept.name }}</td>
+              <td class="num">{{ dept.equipment_count }}</td>
+              <td class="num">{{ dept.certified_count }}</td>
+              <td class="num">
+                {{ dept.uncertified_count }}
+                {% if dept.awaiting_count %}
+                <span class="ws-depts-await" title="Approved, certificate number pending from HQ">
+                  ({{ dept.awaiting_count }} awaiting)
+                </span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="ws-depts-bar" role="progressbar"
+                     aria-valuenow="{{ dept.percent }}" aria-valuemin="0" aria-valuemax="100"
+                     aria-label="{{ dept.name }} calibration coverage">
+                  <div class="ws-depts-fill" style="width: {{ dept.percent }}%"></div>
+                </div>
+                <span class="ws-depts-pct">{{ dept.percent }}%</span>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </details>
+      {% endif %}
     </section>
     {% empty %}
     <section class="section-card">
@@ -261,8 +316,11 @@
 {% endblock %}
 
 {% block extra_js %}
-  <script src="{% static 'js/chart.min.js' %}"></script>
+  <script src="{% static 'js/chart.umd.min.js' %}"></script>
   <script src="{% static 'dashboards/cmms-dashboard.js' %}"></script>
+  {{ jobcard_status|json_script:"jobcard-status-data" }}
+  {{ ppm_monthly_labels|json_script:"ppm-monthly-labels-data" }}
+  {{ ppm_monthly_by_workshop|json_script:"ppm-monthly-by-workshop-data" }}
   <script>
     (function () {
       function cssVar(name, fallback) {
@@ -270,9 +328,12 @@
         return v || fallback;
       }
 
-      var jobcardStatus = {{ jobcard_status_json|safe }};
-      var ppmMonthlyLabels = {{ ppm_monthly_labels_json|safe }};
-      var ppmMonthlyByWorkshop = {{ ppm_monthly_by_workshop_json|safe }};
+      function readJson(id) {
+        return JSON.parse(document.getElementById(id).textContent);
+      }
+      var jobcardStatus = readJson('jobcard-status-data');
+      var ppmMonthlyLabels = readJson('ppm-monthly-labels-data');
+      var ppmMonthlyByWorkshop = readJson('ppm-monthly-by-workshop-data');
       var fontFamily = getComputedStyle(document.body).fontFamily;
 
       // One distinct colour per workshop, cycling if there are more

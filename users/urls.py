@@ -3,7 +3,6 @@ from django.urls import path
 from .views import (
     admin_reset_user_password,
     api_create_user,
-    create_user_view,
     custom_login_view,
     force_setup,
     forgot_password_view,
@@ -12,7 +11,6 @@ from .views import (
     reset_password_view,
     verify_reset_code_view,
     manage_users_view,
-    user_management_page,
     api_get_users,
     api_update_user,
     api_delete_user,
@@ -46,11 +44,9 @@ urlpatterns = [
     # USER MANAGEMENT URLS (HOD and NIC Access)
     # ============================================================================
 
-    path('createUser/', create_user_view, name='createUser'),
     path('api/create-user/', api_create_user, name='api_create_user'),
 
     path('manage/', manage_users_view, name='manage_users'),
-    path('user-management/', user_management_page, name='user_management'),
 
     # Admin Password Reset (HOD Only) - now UUID
     path('admin-reset-password/<uuid:user_id>/', admin_reset_user_password, name='admin_reset_user_password'),

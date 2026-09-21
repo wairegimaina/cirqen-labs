@@ -16,11 +16,7 @@
     error: '<span class="badge bg-danger">Error</span>',
   };
 
-  function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text == null ? '' : String(text);
-    return div.innerHTML;
-  }
+  const escapeHtml = window.escapeHTML; // static/js/escape.js
 
   function csrfToken(modal) {
     return (
@@ -128,7 +124,7 @@
         setBanner(
           'success',
           `<i class="fas fa-check-circle me-2"></i><strong>Import complete.</strong>
-          ${counts.create} ${noun}(s) added${skipped}${failed}.`,
+          ${escapeHTML(counts.create)} ${noun}(s) added${escapeHTML(skipped)}${escapeHTML(failed)}.`,
         );
       } else if (!counts.create) {
         setBanner(
@@ -143,7 +139,7 @@
         setBanner(
           'info',
           `<i class="fas fa-info-circle me-2"></i><strong>Preview only - nothing has been saved yet.</strong>
-          ${counts.create} ${noun}(s) are ready to import${skipped}${failed}.`,
+          ${escapeHTML(counts.create)} ${noun}(s) are ready to import${escapeHTML(skipped)}${escapeHTML(failed)}.`,
         );
       }
 
@@ -169,11 +165,11 @@
 
       role('rows').innerHTML = data.rows
         .map(
-          (row) => `<tr class="${row.action === 'error' ? 'table-danger' : ''}">
-            <td class="text-nowrap">${row.sheet ? `${escapeHtml(row.sheet)} &middot; ` : ''}${row.row}</td>
+          (row) => `<tr class="${escapeHTML(row.action === 'error' ? 'table-danger' : '')}">
+            <td class="text-nowrap">${row.sheet ? `${escapeHtml(row.sheet)} &middot; ` : ''}${escapeHTML(row.row)}</td>
             <td>${BADGES[row.action] || escapeHtml(row.action)}</td>
             <td>${escapeHtml(row.item) || '-'}</td>
-            <td class="small ${row.action === 'error' ? 'text-danger' : 'text-muted'}">
+            <td class="small ${escapeHTML(row.action === 'error' ? 'text-danger' : 'text-muted')}">
               ${row.messages.map(escapeHtml).join('<br>')}
             </td>
           </tr>`,
@@ -185,7 +181,7 @@
       find('[data-action="done"]').hidden = !data.committed;
       confirm.hidden = data.committed || !counts.create;
       if (!data.committed) {
-        confirm.innerHTML = `<i class="fas fa-check"></i> Import ${counts.create} ${noun}(s)`;
+        confirm.innerHTML = `<i class="fas fa-check"></i> Import ${escapeHTML(counts.create)} ${noun}(s)`;
       }
     }
 

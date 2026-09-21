@@ -254,7 +254,7 @@ class FirstRunSetup(QObject):
             # Get current username
             try:
                 current_user = os.getlogin()
-            except:
+            except Exception:
                 current_user = os.getenv('USER', 'postgres')
 
             logger.info(f"Using superuser: {current_user}")
@@ -304,7 +304,7 @@ class FirstRunSetup(QObject):
                 try:
                     if os.path.exists(pwfile_path):
                         os.unlink(pwfile_path)
-                except:
+                except Exception:
                     pass
 
             # ====================================================================
@@ -401,7 +401,7 @@ class FirstRunSetup(QObject):
                     logger.info(f"âœ… PostgreSQL is ready (attempt {i+1})")
                     break
 
-                except:
+                except Exception:
                     time.sleep(0.5)
 
             if not pg_ready:
@@ -418,7 +418,7 @@ class FirstRunSetup(QObject):
                             logger.error("Last 20 lines of log:")
                             for line in lines[-20:]:
                                 logger.error(f"  {line.rstrip()}")
-                except:
+                except Exception:
                     pass
 
                 return False
@@ -564,7 +564,7 @@ class FirstRunSetup(QObject):
                     conn.close()
                     logger.info(f"PostgreSQL ready on port {port}")
                     return process
-                except:
+                except Exception:
                     time.sleep(0.5)
 
             return process

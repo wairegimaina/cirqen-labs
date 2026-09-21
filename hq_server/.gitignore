@@ -3,3 +3,8 @@ packages/
 __pycache__/
 *.pyc
 *.log
+
+# Signing keys — the private half must never be committed. Whoever holds it
+# can sign packages that every desktop executes.
+*.private
+hq_signing_key.*

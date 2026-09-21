@@ -71,3 +71,10 @@ desktop.ini
 htmlcov/
 .pytest_cache/
 *.deb
+
+# Installer secrets written by the build (IMPROVEMENT_PLAN.md 3.3)
+provisioning.json
+
+# Ed25519 signing keys (see hq_server/build_package.py --genkeys)
+*.private
+hq_signing_key.*

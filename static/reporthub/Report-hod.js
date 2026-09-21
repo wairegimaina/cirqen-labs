@@ -446,7 +446,7 @@ document.addEventListener('DOMContentLoaded', function () {
   if (filterTitle && !document.querySelector('.current-period-info')) {
     const currentInfo = document.createElement('small');
     currentInfo.className = 'text-muted ms-2 current-period-info';
-    currentInfo.innerHTML = `<br><i class="bx fas fa-info-circle"></i> Current: Week ${currentWeek}, ${monthName} ${currentYear}, Q${currentQuarter}`;
+    currentInfo.innerHTML = `<br><i class="bx fas fa-info-circle"></i> Current: Week ${escapeHTML(currentWeek)}, ${escapeHTML(monthName)} ${escapeHTML(currentYear)}, Q${escapeHTML(currentQuarter)}`;
     filterTitle.appendChild(currentInfo);
   }
 });

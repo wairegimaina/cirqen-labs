@@ -8,6 +8,7 @@ import logging
 from collections import Counter
 
 from django.contrib import messages
+from users.control import role_required
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import Q, Count, Case, When, IntegerField
@@ -27,6 +28,7 @@ from .helpers import (
 logger = logging.getLogger(__name__)
 
 
+@login_required
 def inventory(request):
     """Enhanced Inventory view with full AJAX support for all roles"""
     profile = request.user.userprofile
@@ -88,7 +90,7 @@ def inventory(request):
             department__workshop=selected_workshop,
             department__active_status=True,  # ✅ FILTER ACTIVE DEPARTMENTS
             active_status=True
-        ).select_related('description', 'department', 'manufacturer').order_by('id')
+        ).select_related('description', 'department__workshop', 'manufacturer').order_by('id')
 
     elif profile.role == 'NIC':
         # In-charge sees only ACTIVE equipment in their department
@@ -96,7 +98,7 @@ def inventory(request):
             department=selected_department,
             department__active_status=True,  # ✅ FILTER ACTIVE DEPARTMENTS
             active_status=True
-        ).select_related('description', 'department', 'manufacturer').order_by('id')
+        ).select_related('description', 'department__workshop', 'manufacturer').order_by('id')
 
     else:  # Technician
         # Technician sees all ACTIVE equipment in their workshop
@@ -104,7 +106,7 @@ def inventory(request):
             department__workshop=selected_workshop,
             department__active_status=True,  # ✅ FILTER ACTIVE DEPARTMENTS
             active_status=True
-        ).select_related('description', 'department', 'manufacturer').order_by('id')
+        ).select_related('description', 'department__workshop', 'manufacturer').order_by('id')
 
     # --- Apply filters ---
     department_filter = request.GET.get('department', '').strip()
@@ -323,13 +325,11 @@ def inventory(request):
 
 
 @login_required
+@role_required('HOD', redirect_to='inventory', message="Access denied. Only Heads of Department can view other workshops.")
 def inventory_for_hod(request, workshop_id):
     """HOD-specific view for viewing equipment in a specific workshop"""
     profile = request.user.userprofile
 
-    if profile.role != 'HOD':
-        messages.error(request, "Access denied. Only Heads of Department can view other workshops.")
-        return redirect('inventory')
 
     # Get the target workshop
     target_workshop = get_object_or_404(Workshop, id=workshop_id, active_status=True)
@@ -354,7 +354,7 @@ def inventory_for_hod(request, workshop_id):
         department__workshop=target_workshop,
         department__active_status=True,  # Department must be active
         active_status=True  # Equipment must be active
-    ).select_related('description', 'department', 'manufacturer').order_by('id')
+    ).select_related('description', 'department__workshop', 'manufacturer').order_by('id')
 
     # --- Apply filters ---
     department_filter = request.GET.get('department', '').strip()
@@ -499,37 +499,6 @@ def inventory_for_hod(request, workshop_id):
 
 
 @login_required
-def dashboard_view(request):
-    profile = request.user.userprofile
-    target_workshop = None
-
-    if profile.role == 'HOD':
-        status_counts = Equipment.objects.filter(
-            active_status=True  # ✅ FILTER ACTIVE EQUIPMENT
-        ).values('status').annotate(total=Count('status'))
-    else:  # Tech
-        if not profile.workshop:
-            messages.error(request, "Your profile is not associated with a workshop.")
-            return redirect('inventory')
-        target_workshop = profile.workshop
-        status_counts = Equipment.objects.filter(department__workshop=target_workshop, active_status=True).values('status').annotate(total=Count('status'))
-
-    status_summary = {
-        'Working': 0,
-        'Not working': 0,
-        'Under repair': 0,
-    }
-
-    for entry in status_counts:
-        status_summary[entry['status']] = entry['total']
-
-    return render(request, '/dashboard.html', {
-        'show_sidebar': True,  # Enable sidebar with hamburger menu
-        'status_summary': status_summary
-    })
-
-
-@login_required
 def inventory_by_department(request, dept_id):
     profile = request.user.userprofile
     target_workshop = None
@@ -585,102 +554,3 @@ def inventory_by_department(request, dept_id):
     })
 
 
-@login_required
-def inventory_summary(request):
-    profile = request.user.userprofile
-    workshop_to_summarize = None
-    template_name = 'Inventory/inventory_summary.html'  # Assuming a separate summary template
-
-    requested_workshop_id = request.GET.get('workshop')
-
-    if profile.role == 'HOD':
-        # HODs can view summary for any workshop
-        if requested_workshop_id:
-            workshop_to_summarize = get_object_or_404(Workshop, id=requested_workshop_id)
-        else:
-            messages.error(request, "Please select a workshop to view the summary.")
-            return redirect('inventory')  # Redirect to inventory, which will handle HOD view
-    else:  # Tech
-        if not profile.workshop:
-            messages.error(request, "Your profile is not associated with a workshop.")
-            return redirect('inventory')
-        workshop_to_summarize = profile.workshop
-        if requested_workshop_id and int(requested_workshop_id) != workshop_to_summarize.id:
-            messages.error(request, "Unauthorized to view summary for selected workshop.")
-            return redirect('inventory')
-
-    department_filter = request.GET.get('department', '')
-    description_filter = request.GET.get('description', '')
-
-    base_queryset = Equipment.objects.filter(department__workshop=workshop_to_summarize, active_status=True)
-
-    filtered_queryset = base_queryset
-    if department_filter:
-        filtered_queryset = filtered_queryset.filter(department__id=department_filter)
-    if description_filter:
-        filtered_queryset = filtered_queryset.filter(description__id=description_filter)
-
-    summary_data = filtered_queryset.values(
-        'description__name',
-        'description__id'
-    ).annotate(
-        total_count=Count('id'),
-        working_count=Count(
-            Case(When(status='Working', then=1), output_field=IntegerField())
-        ),
-        not_working_count=Count(
-            Case(When(status='Not working', then=1), output_field=IntegerField())
-        ),
-        under_repair_count=Count(
-            Case(When(status='Under repair', then=1), output_field=IntegerField())
-        )
-    ).order_by('description__name')
-
-    overall_totals = {
-        'total_equipment': filtered_queryset.count(),
-        'total_working': filtered_queryset.filter(status='Working').count(),
-        'total_not_working': filtered_queryset.filter(status='Not working').count(),
-        'total_under_repair': filtered_queryset.filter(status='Under repair').count(),
-    }
-
-    departments = Department.objects.filter(workshop=workshop_to_summarize).order_by('name')
-    equipment_descriptions = EquipmentDescription.objects.filter(
-        equipment__department__workshop=workshop_to_summarize, equipment__active_status=True
-    ).distinct().order_by('name')
-
-    current_department = None
-    current_description = None
-
-    if department_filter:
-        try:
-            current_department = get_object_or_404(Department, id=department_filter, workshop=workshop_to_summarize)
-        except Department.DoesNotExist:
-            pass
-
-    if description_filter:
-        try:
-            current_description = get_object_or_404(EquipmentDescription, id=description_filter)
-        except EquipmentDescription.DoesNotExist:
-            pass
-
-    all_workshops = []
-    if profile.role == 'HOD':
-        all_workshops = Workshop.objects.all().order_by('name')
-    else:  # Tech
-        all_workshops = [profile.workshop] if profile.workshop else []
-
-    context = {
-        'show_sidebar': True,  # Enable sidebar with hamburger menu
-        'summary_data': summary_data,
-        'overall_totals': overall_totals,
-        'departments': departments,
-        'equipment_descriptions': equipment_descriptions,
-        'current_department': current_department,
-        'current_description': current_description,
-        'department_filter': department_filter,
-        'description_filter': description_filter,
-        'all_workshops': all_workshops,
-        'selected_workshop': workshop_to_summarize,
-    }
-
-    return render(request, template_name, context)

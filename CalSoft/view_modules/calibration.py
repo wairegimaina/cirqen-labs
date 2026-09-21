@@ -14,9 +14,10 @@ from CalSoft.models import (
     SubParameter, SetValue, CalibrationAuditLog, EquipmentCalibrationProcedure
 )
 from calSchedules.models import CalibrationSchedule
+from calSchedules.grouping import next_due_date
 from CalSoft.models import Equipment, CalibrationSession, CalibrationProcedure
 from CalSoft.forms import CalibrationSessionForm
-from CalSoft.utils import _validate_environmental_conditions, CalibrationCalculator
+from CalSoft.utils import _validate_environmental_conditions
 
 from .calibration_helpers import (
     _store_historical_data, _get_grouped_schedule_if_exists,
@@ -273,11 +274,27 @@ def _process_readings(request, session, procedure, equipment, schedule, return_d
                     except Exception as e:
                         logger.error(f"Error setting reading: {str(e)}")
 
-                _calculate_stats(reading, float(resolution), parameter)
+                reading.calculate_statistics()
                 if not reading.passes_tolerance:
                     overall_pass = False
 
     session.overall_pass = overall_pass
+
+    # Record when this calibration next falls due.
+    #
+    # `next_calibration_due` is read by the machine reports and the equipment
+    # export, but nothing ever wrote it, so both have always shown "Not Set".
+    # The due date is the last day of the month the interval lands in, giving
+    # the workshop that whole month to schedule the visit.
+    interval_months = (
+        getattr(schedule, "calibration_period", None)
+        or getattr(procedure, "calibration_period", None)
+        or 12
+    )
+    session.next_calibration_due = next_due_date(
+        session.timestamp.date() if session.timestamp else timezone.now().date(),
+        interval_months,
+    )
     session.save()
 
     if schedule:
@@ -311,27 +328,6 @@ def _process_readings(request, session, procedure, equipment, schedule, return_d
     if params:
         return_url += "?" + "&".join(params)
     return redirect(return_url)
-
-
-def _calculate_stats(reading, resolution, parameter):
-    try:
-        calculator = CalibrationCalculator()
-        readings_list = [getattr(reading, f'reading_{i}', None)
-            for i in range(1, 11) if getattr(reading, f'reading_{i}', None) is not None]
-        if readings_list:
-            stats = calculator.calculate_statistics([float(r) for r in readings_list])
-            if stats:
-                reading.type_a_uncertainty = calculator.calculate_type_a_uncertainty(float(stats['std_dev']), stats['count'])
-                reading.type_b_uncertainty = calculator.calculate_type_b_uncertainty(resolution)
-                reading.reference_uncertainty_component = parameter.reference_uncertainty or Decimal('0')
-                reading.combined_uncertainty = calculator.calculate_combined_uncertainty(
-                    float(reading.type_a_uncertainty), float(reading.type_b_uncertainty),
-                    float(parameter.reference_uncertainty or Decimal('0')))
-                reading.expanded_uncertainty = calculator.calculate_expanded_uncertainty(
-                    float(reading.combined_uncertainty), parameter.coverage_factor or 2)
-                reading.save()
-    except Exception as e:
-        logger.error(f"Error in statistics: {str(e)}")
 
 
 def _handle_calibration_get(request):

@@ -149,7 +149,7 @@
                 </div>
                 <div id="parts-container"></div>
                 <input type="hidden" name="spare_parts_data" id="spare_parts_data"
-                       value='{{ form_data.spare_parts_data|safe|default:"[]" }}'>
+                       value='{{ form_data.spare_parts_data|default:"[]" }}'>
             </div>
 
             <!-- Cost Breakdown Panel -->
@@ -213,7 +213,7 @@
                 </div>
                 {% endif %}
 
-                <input type="hidden" name="signature_data" id="signature_data" value="{{ form_data.signature_data|safe|default:"" }}">
+                <input type="hidden" name="signature_data" id="signature_data" value="{{ form_data.signature_data|default:"" }}">
             </div>
 
             <div class="form-actions">

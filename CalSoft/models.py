@@ -12,7 +12,7 @@ from django.utils.timezone import now
 import json
 import math
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
-from CalSoft.utils import CalibrationCalculator
+from CalSoft.utils import CalibrationCalculator, compute_uncertainty_budget
 from Inventory.models import Department, Equipment
 from workshop.models import Workshop
 import re
@@ -491,31 +491,21 @@ class CalibrationSession(models.Model):
             ("approve_session", "Can approve calibration sessions"),
         ]
 
-    @classmethod
-    def generate_certificate_number(cls):
-        """Generate the next unique sequential certificate number safely.
-
-        The DB read (locked, to serialise concurrent minting) stays here; the
-        pure parse/increment lives in ``calSchedules.grouping.next_certificate_number``
-        so it can be unit-tested without a database.
-        """
-        # Local import avoids a circular import: calSchedules.models imports
-        # CalSoft.models, and grouping imports calSchedules.models.
-        from calSchedules.grouping import next_certificate_number
-
-        prefix_pattern = "BNH-"
-
-        with transaction.atomic():
-            last_cert = (
-                cls.objects.select_for_update()
-                .filter(certificate_number__startswith=prefix_pattern)
-                .exclude(certificate_number__exact="")
-                .order_by("-certificate_number")
-                .values_list("certificate_number", flat=True)
-                .first()
-            )
-
-            return next_certificate_number(last_cert, prefix=prefix_pattern)
+    # Certificate numbers are allocated by the HQ server only.
+    #
+    # ``generate_certificate_number()`` used to live here: it read the local
+    # maximum under ``select_for_update`` and returned max+1. Writes never
+    # route to HQ (``Equiper/db_router.db_for_write`` returns "default"), so
+    # that number came from this site's own sequence while HQ allocated from
+    # its own. Two field sites at the same local maximum produced the same
+    # BNH-NNNN, each succeeding locally because the unique constraint is
+    # per-database, and colliding on sync — the "BNH-0093 problem" that
+    # ``sync/cert_conflict_guard.py`` repairs after the fact.
+    #
+    # Approval now queues a ``PendingCertificate`` and HQ allocates. The
+    # numbering format itself still has one pure, tested implementation in
+    # ``calSchedules.grouping.next_certificate_number``, which HQ's allocator
+    # mirrors.
 
     def save(self, *args, **kwargs):
         self.needs_sync = True  # mark for sync
@@ -640,10 +630,6 @@ class CalibrationReading(models.Model):
                 self.save()
                 return False
 
-            self.mean = stats['mean'].quantize(Decimal('0.000001'), rounding=ROUND_HALF_UP)
-            self.standard_deviation = stats['std_dev'].quantize(Decimal('0.000001'), rounding=ROUND_HALF_UP)
-            self.error = (self.set_value.value - self.mean).quantize(Decimal('0.000001'), rounding=ROUND_HALF_UP)
-
             # Get session-specific resolution
             try:
                 session_resolution = self.session.parameter_resolutions.get(parameter=self.parameter).resolution
@@ -651,26 +637,28 @@ class CalibrationReading(models.Model):
                 logger.error(f"No resolution defined for parameter {self.parameter.name} in session {self.session.id}")
                 raise ValueError("No resolution defined for parameter in this session")
 
-            # Calculate uncertainties
-            self.type_a_uncertainty = calculator.calculate_type_a_uncertainty(
-                self.standard_deviation, stats['count']
-            ).quantize(Decimal('0.000001'), rounding=ROUND_HALF_UP)
-
-            self.type_b_uncertainty = calculator.calculate_type_b_uncertainty(
-                session_resolution
-            ).quantize(Decimal('0.000001'), rounding=ROUND_HALF_UP)
-
-            ref_unc = self.parameter.reference_uncertainty or Decimal('0')
             cov_factor = Decimal(str(self.parameter.coverage_factor or 2))
-            self.reference_uncertainty_component = (ref_unc / cov_factor).quantize(Decimal('0.000001'), rounding=ROUND_HALF_UP)
 
-            self.combined_uncertainty = calculator.calculate_combined_uncertainty(
-                self.type_a_uncertainty, self.type_b_uncertainty, self.reference_uncertainty_component
-            ).quantize(Decimal('0.000001'), rounding=ROUND_HALF_UP)
+            # One budget implementation, shared with the live preview endpoint
+            # so the value a technician sees while typing is the value stored.
+            budget = compute_uncertainty_budget(
+                readings=readings,
+                resolution=session_resolution,
+                reference_uncertainty=self.parameter.reference_uncertainty or Decimal('0'),
+                coverage_factor=cov_factor,
+                reference_is_expanded=True,
+            )
+            if not budget:
+                raise ValueError("Uncertainty budget could not be computed")
 
-            self.expanded_uncertainty = calculator.calculate_expanded_uncertainty(
-                self.combined_uncertainty, cov_factor
-            ).quantize(Decimal('0.000001'), rounding=ROUND_HALF_UP)
+            self.mean = budget['mean']
+            self.standard_deviation = budget['std_dev']
+            self.error = (self.set_value.value - self.mean).quantize(Decimal('0.000001'), rounding=ROUND_HALF_UP)
+            self.type_a_uncertainty = budget['type_a']
+            self.type_b_uncertainty = budget['type_b']
+            self.reference_uncertainty_component = budget['reference']
+            self.combined_uncertainty = budget['combined']
+            self.expanded_uncertainty = budget['expanded']
 
             # Check tolerance
             tolerance = self.sub_parameter.tolerance if self.sub_parameter else self.parameter.tolerance
@@ -981,8 +969,30 @@ class CalibrationSchedule(models.Model):
         return self.equipment.serial_number
 
     @property
+    def due_date(self):
+        """The last day of the scheduled month — the official due date.
+
+        Matches ``calSchedules.CalibrationSchedule.due_date``. Both models are
+        in use (the machine reports read this one, calibration sessions the
+        other), and they previously disagreed: this one measured to the raw
+        ``scheduled_month``, so a device could show as overdue in the reports
+        while its certificate said it still had most of the month.
+        """
+        from calSchedules.grouping import month_end
+
+        return month_end(self.scheduled_month)
+
+    @property
     def days_until_due(self):
-        return (self.scheduled_month - now().date()).days if self.scheduled_month else None
+        from calSchedules.grouping import days_until_due as _days_until_due
+
+        return _days_until_due(self.due_date, now().date())
+
+    @property
+    def is_overdue(self):
+        from calSchedules.grouping import is_overdue as _is_overdue
+
+        return _is_overdue(self.due_date, now().date())
 
     def __str__(self):
         return f"Calibration Schedule for {self.equipment.description} on {self.scheduled_month}"

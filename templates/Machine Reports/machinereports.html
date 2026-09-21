@@ -83,7 +83,7 @@
                                             {% for cat in categories %}
                                             <option value="{{ cat.id }}"
                                                 {% if desc.category.id == cat.id %}selected{% endif %}>
-                                                {{ cat.name }} {% if cat.is_critical %}(Critical){% else %}(General){% endif %}
+                                                {{ cat.name }}
                                             </option>
                                             {% endfor %}
                                         </select>
@@ -315,7 +315,7 @@
                         <i class="fas fa-chart-bar me-2 text-primary"></i>
                         Manufacturer Performance Analysis
                     </h5>
-                    <a href="{% url 'export_manufacturer_pdf' %}" class="btn btn-sm btn-danger" target="_blank">
+                    <a href="{% url 'export_manufacturer_pdf' %}" class="btn btn-sm btn-danger" download>
                         <i class="fas fa-file-pdf me-1"></i> Export Report
                     </a>
                 </div>
@@ -486,12 +486,12 @@
 
 <!-- Manufacturer Data JSON -->
 {% if manufacturer_performance %}
-    <script id="manufacturer-data" type="application/json">{{ manufacturer_performance|safe }}</script>
+    {{ manufacturer_performance|json_script:"manufacturer-data" }}
 {% endif %}
 
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'js/chart.min.js' %}"></script>
+<script src="{% static 'js/chart.umd.min.js' %}"></script>
 <script src="{% static 'machine_reports/machineReport.js' %}"></script>
 {% endblock %}

@@ -82,8 +82,15 @@ CHECK_INTERVAL_SECS: int  = 6 * 60 * 60   # 6 hours
 REQUEST_TIMEOUT_SECS: int = 20
 DOWNLOAD_TIMEOUT_SECS: int = 120
 
-_DEFAULT_HQ_URL  = "https://cirqen-hq.onrender.com"
 _DEFAULT_API_KEY = ""
+
+
+def _resolved_hq_url(data_path) -> str:
+    """The update server address: env, config.json, provisioning, then the shipped
+    default (see config.HQ_ENDPOINT_DEFAULTS). Nothing is hardcoded here."""
+    from config import resolve_endpoints
+
+    return resolve_endpoints(data_path)["update.server_url"][0]
 
 # File extensions that classify as frontend-only (no restart needed)
 _FRONTEND_EXTS = {
@@ -178,7 +185,7 @@ class AppUpdateService(QObject):
         self._status_dir.mkdir(parents=True, exist_ok=True)
         self._staging.mkdir(parents=True, exist_ok=True)
 
-        self._hq_url  = _DEFAULT_HQ_URL
+        self._hq_url  = _resolved_hq_url(self._data_path)
         self._api_key = _DEFAULT_API_KEY
 
         self._stop_event  = threading.Event()
@@ -411,10 +418,10 @@ class AppUpdateService(QObject):
             return
         try:
             cfg = json.loads(cfg_file.read_text())
+            # Top-level keys are older hand-edits; honour them, then resolve.
             self._hq_url = (
                 cfg.get("hq_server_url") or cfg.get("server_url") or
-                cfg.get("hq_url") or cfg.get("update", {}).get("server_url") or
-                _DEFAULT_HQ_URL
+                cfg.get("hq_url") or _resolved_hq_url(self._data_path)
             ).rstrip("/")
             self._api_key = (
                 cfg.get("hq_api_key") or cfg.get("api_key") or

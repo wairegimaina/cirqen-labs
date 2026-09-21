@@ -17,6 +17,10 @@ import pytz
 from .state_manager import StateManager
 from .dependency_manager import DependencyManager
 from .smart_delete import SmartDeleteMixin
+try:
+    from .sql_ident import identifier, qualified
+except ImportError:  # loaded as a top-level module with sync/ on sys.path
+    from sql_ident import identifier, qualified
 
 class ApplyRemoteUpdateMixin(SmartDeleteMixin):
     """apply_remote_update_locally: the download-apply path incl. conflict quarantine, deterministic LWW, schema-drift guard, and smart delete."""
@@ -51,8 +55,7 @@ class ApplyRemoteUpdateMixin(SmartDeleteMixin):
                 else:
                     schema, tbl = "public", table
 
-                quoted_table = f'"{tbl}"'
-                full_table = f"{schema}.{quoted_table}"
+                full_table = qualified(schema, tbl)
 
                 # ============================================================
                 # Guard: skip broadcast/mirror-sync signals entirely.
@@ -377,7 +380,7 @@ class ApplyRemoteUpdateMixin(SmartDeleteMixin):
                                 try:
                                     parsed = json.loads(val)
                                     return Json(parsed)
-                                except:
+                                except Exception:
                                     return Json(val)
                             else:
                                 return Json(val)
@@ -615,12 +618,12 @@ class ApplyRemoteUpdateMixin(SmartDeleteMixin):
                 error_msg = str(null_error)
                 try:
                     column_match = error_msg.split('column "')[1].split('"')[0]
-                except:
+                except Exception:
                     column_match = 'unknown'
 
                 try:
                     failing_row = error_msg.split('Failing row contains (')[1].split(')')[0]
-                except:
+                except Exception:
                     failing_row = 'not available'
 
                 LOG.error("")
@@ -799,7 +802,7 @@ class ApplyRemoteUpdateMixin(SmartDeleteMixin):
                             f"{local_loser_id} to {remote_row_id}"
                         )
 
-                cur.execute(f'DELETE FROM "{table}" WHERE "{pk_column}" = %s', (local_loser_id,))
+                cur.execute(f'DELETE FROM {identifier(table)} WHERE {identifier(pk_column)} = %s', (local_loser_id,))
                 conn.commit()
                 LOG.info(
                     f"   ↳ retired local duplicate {table}[{local_loser_id}] "

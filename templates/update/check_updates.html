@@ -432,7 +432,7 @@ async function checkForUpdates() {
     const data = await resp.json();
 
     if (data.error) {
-      showAlert('upd-page-alerts', 'error', `Check failed: ${data.error}`);
+      showAlert('upd-page-alerts', 'error', `Check failed: ${escapeHTML(data.error)}`);
       return;
     }
 
@@ -450,7 +450,7 @@ async function checkForUpdates() {
       show('upd-current-card');
     }
   } catch (e) {
-    showAlert('upload-alert-area', 'error', 'Network error: ' + e.message);
+    showAlert('upload-alert-area', 'error', 'Network error: ' + escapeHTML(e.message));
   } finally {
     btn.disabled = false;
     btn.innerHTML = '<i class="fas fa-sync-alt"></i> Check for updates';
@@ -692,7 +692,7 @@ async function submitUpload() {
 
     if (xhr.status === 200 && data.success) {
       showAlert('upload-alert-area', 'success',
-        `Package v${data.version} (${data.size_mb} MB) uploaded. ` +
+        `Package v${escapeHTML(data.version)} (${escapeHTML(data.size_mb)} MB) uploaded. ` +
         `Head to the <strong>Available</strong> tab to apply it.`);
       clearFile();
       // Optionally auto-switch to available tab after short delay
@@ -702,7 +702,7 @@ async function submitUpload() {
       }, 2500);
     } else {
       document.getElementById('upload-submit-area').style.display = 'block';
-      showAlert('upload-alert-area', 'error', data.error || 'Upload failed. Please try again.');
+      showAlert('upload-alert-area', 'error', escapeHTML(data.error || 'Upload failed. Please try again.'));
     }
   };
 
@@ -756,8 +756,8 @@ function showAlert(areaId, type, html) {
   const icons = { success: 'fa-check-circle', error: 'fa-times-circle', info: 'fa-info-circle', warning: 'fa-exclamation-triangle' };
   const classes = { success: 'alert-success', error: 'alert-danger', info: 'alert-info', warning: 'alert-warning' };
   area.insertAdjacentHTML('afterbegin',
-    `<div class="alert upd-alert ${classes[type] || 'alert-info'}" id="flash-alert">
-      <i class="fas ${icons[type] || 'fa-info-circle'}" aria-hidden="true"></i>
+    `<div class="alert upd-alert ${escapeHTML(classes[type] || 'alert-info')}" id="flash-alert">
+      <i class="fas ${escapeHTML(icons[type] || 'fa-info-circle')}" aria-hidden="true"></i>
       <span>${html}</span>
       <button type="button" class="btn-close" aria-label="Dismiss" onclick="this.parentElement.remove()"></button>
     </div>`

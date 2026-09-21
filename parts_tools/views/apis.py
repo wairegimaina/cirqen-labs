@@ -3,6 +3,8 @@ import json
 import logging
 
 from django.shortcuts import get_object_or_404
+from users.control import role_required
+from core.scoping import get_for_user_or_404
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.utils import timezone
@@ -51,12 +53,11 @@ def api_accessories(request):
 
 
 @login_required
+@role_required('HOD', json=True, message='Unauthorized')
 def api_accessory_detail(request, pk):
     """JSON API: single accessory — supports DELETE."""
     profile = request.user.userprofile
 
-    if profile.role != 'HOD':
-        return JsonResponse({'error': 'Unauthorized'}, status=403)
 
     accessory = get_object_or_404(Accessories, pk=pk)
 
@@ -122,10 +123,7 @@ def api_tools(request):
 def api_tool_detail(request, pk):
     """JSON API: single tool — supports DELETE."""
     profile = request.user.userprofile
-    tool = get_object_or_404(Tools, pk=pk)
-
-    if profile.role == 'Tech' and tool.workshop != profile.workshop:
-        return JsonResponse({'error': 'Unauthorized'}, status=403)
+    tool = get_for_user_or_404(Tools, request.user, pk=pk)
 
     if request.method == 'DELETE':
         if profile.role != 'Tech':

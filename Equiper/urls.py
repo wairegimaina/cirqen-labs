@@ -1,5 +1,6 @@
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, re_path, include
+from django.views.generic import RedirectView
 from django.conf import settings
 from django.conf.urls.static import static
 from django.http import JsonResponse
@@ -45,9 +46,16 @@ urlpatterns = [
     path("calSchedules/", include("calSchedules.urls")),
     path('updates/', include('updates.urls')),
     path("machineReports/", include("machineReports.urls")),
-    path("", include("machineReports.urls")),
-    path("parts-tools/", include("parts_tools.urls")),
+    # Each app is mounted once (a second include made reverse() ambiguous,
+    # urls.W005). The old prefixes redirect so bookmarks keep working; "/" is
+    # also where the desktop shell opens.
+    path("", RedirectView.as_view(pattern_name="equipment_dashboard", query_string=True)),
+    re_path(
+        r"^parts-tools/(?P<rest>.*)$",
+        RedirectView.as_view(url="/accessories/%(rest)s", query_string=True),
+    ),
     path("audit-log/", include("audit_log.urls")),
+    path("settings/", include("core.urls")),
     path("health/", health_check, name="health_check"),
 ]
 

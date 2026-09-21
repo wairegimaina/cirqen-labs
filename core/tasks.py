@@ -262,3 +262,14 @@ CELERY_BEAT_SCHEDULE = {
 }
 
 
+
+
+@shared_task(soft_time_limit=1800, time_limit=2400)
+def backup_local_database(keep=14):
+    """Daily local database backup (core.backups); same as manage.py backup_db."""
+    from core import backups
+
+    path = backups.create_backup()
+    removed = backups.prune(keep)
+    logger.info("Local database backup written to %s (%d old backup(s) removed)", path, len(removed))
+    return str(path)

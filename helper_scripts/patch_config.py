@@ -1,14 +1,22 @@
 #!/usr/bin/env python3
 """
-Patch ~/.cirqen/data/config.json so hq_db points at Supabase instead of
-the old Render-managed Postgres instance. Only touches the hq_db block;
-everything else (local_db, redis, update, email, sync_tables, etc.) is
-left exactly as-is.
+Patch ~/.cirqen/data/config.json so hq_db points at the current HQ database
+(config.HQ_ENDPOINT_DEFAULTS) instead of the old Render-managed Postgres
+instance. Only touches the hq_db block; everything else (local_db, redis,
+update, email, sync_tables, etc.) is left exactly as-is.
+
+Mostly superseded: the app now migrates an old config.json itself on its next
+start. Use this only to write the hq_db password from the environment.
 """
 
 import json
+import os
 import shutil
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from config import HQ_ENDPOINT_DEFAULTS as _HQ  # noqa: E402  the one place addresses live
 
 config_path = Path.home() / ".cirqen" / "data" / "config.json"
 
@@ -27,12 +35,12 @@ old_hq_db = cfg.get("hq_db", {})
 print(f"Old hq_db.host: {old_hq_db.get('host')}")
 
 cfg["hq_db"] = {
-    "host": "aws-0-eu-north-1.pooler.supabase.com",
-    "port": 6543,
-    "database": "postgres",
-    "user": "postgres.nwlwaeeyduxroykrgksi",
-    "password": "M0707337206m",
-    "sslmode": "require",
+    "host": _HQ["hq_db.host"],
+    "port": _HQ["hq_db.port"],
+    "database": _HQ["hq_db.database"],
+    "user": _HQ["hq_db.user"],
+    "password": os.environ["POSTGRES_HQ_PASSWORD"],  # never commit the value
+    "sslmode": _HQ["hq_db.sslmode"],
     "enabled": True,
 }
 

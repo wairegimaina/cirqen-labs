@@ -12,31 +12,39 @@ then the legacy engine in dependency order:
 
 | Class | File | Responsibility |
 |---|---|---|
-| `OutboxMixin` | `outbox.py` | Trigger-based CDC: outbox table, monotonic-seq checkpoint, idempotency, backpressure (Phase 2, opt-in) |
 | `ConflictQuarantineMixin` | `conflict_quarantine.py` | Persist LWW losers to `sync_conflicts` instead of dropping |
 | `ConflictResolverMixin` | `conflict_resolver.py` | Deterministic, convergent LWW decision |
 | `SchemaGuardMixin` | `schema_guard.py` | Record + surface schema drift (`sync_schema_drift`) |
 | `AgentInitMixin` | `sync_agent_1.py` | Construction: config, Redis/pool, registration, mirror init, validation helpers |
 | `SchemaAndChangeDetectionMixin` | `sync_agent_2.py` | DB pool/schema introspection, download checkpoint, timestamp poller |
 | `UploadMixin` | `sync_agent_3.py` | Event build, `upload_batch` (idempotency + backpressure), checkpoints |
-| `NetworkLoopsMixin` | `sync_agent_4.py` | HQ health (cold-start retry), upload/feeder loops, `download_updates` |
+| `NetworkLoopsMixin` | `sync_agent_4.py` | HQ health (cold-start retry), `download_updates` |
 | `ParentRecoveryMixin` | `sync_agent_5.py` | Recover missing FK parents from HQ |
 | `ApplyRemoteUpdateMixin` | `sync_agent_6.py` | `apply_remote_update_locally` — the download-apply path |
 | `DownloadCertHeartbeatMixin` | `sync_agent_7.py` | Download loop, certificate sync, notify listeners, heartbeat |
-| `LifecycleMixin` | `sync_agent_8.py` | `start()`/`stop()` thread orchestration, background init |
+| `LifecycleMixin` | `sync_agent_8.py` | `start()`/`stop()` thread orchestration, background init, **the upload loop** (`upload_loop_with_background_init`) |
 | `StatusReportingMixin` | `sync_agent_9.py` | Status file + summary for the UI |
 
 Supporting modules: `agent_prelude.py` (shared helpers/logging), `mirror.py`
 (DB-to-DB reconciliation), `data_checker_client.py` (HTTP bootstrap),
 `smart_delete.py` / `soft_delete_handler.py` (delete cascade),
-`sync_agent_redis_queue.py` (optional Redis queue), `state_manager.py`,
+`state_manager.py`,
 `dependency_manager.py`.
 
 ## Tests
 
-`sync/tests/` (38 tests) run against an embedded throwaway Postgres. Coverage:
-resolver, outbox CDC, schema guard, quarantine, the live apply path, upload/
+`sync/tests/` run against a throwaway Postgres. Coverage:
+resolver, schema guard, quarantine, the live apply path, upload/
 download HTTP orchestration (mocked HQ), and mirror HQ→Local recovery (two DBs).
+
+## One upload engine
+
+Upload runs in exactly one place: `LifecycleMixin.upload_loop_with_background_init`
+(`sync_agent_8.py`), which finds changes with the timestamp poller
+(`discover_recent_changes`) and sends them with `upload_batch`. Two alternative
+engines that never ran in production — trigger-based outbox CDC (`outbox.py`)
+and a Redis upload queue (`sync_agent_redis_queue.py`) — were removed together
+with their dispatcher in `sync_agent_4.py` (CODE_REVIEW.md, top fix 1).
 
 ## Known follow-up (not yet done)
 

@@ -253,6 +253,13 @@ class LifecycleMixin(SmartDeleteMixin):
                  "Drift reconciler thread (self-heals stranded rows)")
             )
 
+            self._thread_specs.append(
+                # Learns from the (fixed-address) update server that the sync HQ
+                # has moved. Independent of the sync HQ being reachable.
+                ("EndpointSyncThread", self.endpoint_sync_loop,
+                 "HQ endpoint check thread (follows a sync-HQ move)")
+            )
+
             self._named_threads = {}
             self._thread_restart_counts = {name: 0 for name, _, _ in self._thread_specs}
             self._thread_last_restart_time = {}
@@ -805,16 +812,12 @@ class LifecycleMixin(SmartDeleteMixin):
             # 📊 FINAL STATUS: Shutting down
             try:
                 self.write_status_file(hq_online=False, pending_changes=0)
-            except:
+            except Exception:
                 pass
     def stop(self):
             """Stop all sync loops gracefully"""
             LOG.info("Stopping SyncAgent...")
             self.stop_event.set()
-
-            # Stop Redis queue worker
-            if hasattr(self, 'redis_queue') and self.redis_queue:
-                self.redis_queue.stop()
 
             for t in self.threads:
                 if t.is_alive():

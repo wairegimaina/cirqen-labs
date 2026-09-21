@@ -162,45 +162,6 @@ def check_task_status(request, task_id):
 
 
 @login_required
-def debug_user_access(request):
-    access_context = get_user_access_context(request)
-
-    debug_info = {
-        'user': request.user.username,
-        'access_context': access_context,
-        'session_workshop_id': request.session.get('workshop_id'),
-        'session_department_id': request.session.get('department_id'),
-        'has_userprofile': hasattr(request.user, 'userprofile'),
-    }
-
-    if hasattr(request.user, 'userprofile'):
-        profile = request.user.userprofile
-        debug_info.update({
-            'profile_role': getattr(profile, 'role', 'No role'),
-            'profile_level': getattr(profile, 'level', 'No level'),
-            'profile_has_workshop': profile.workshop is not None,
-            'profile_has_department': profile.department is not None,
-        })
-
-        if profile.workshop:
-            debug_info['profile_workshop_id'] = profile.workshop.id
-            debug_info['profile_workshop_name'] = profile.workshop.name
-
-        if profile.department:
-            debug_info['profile_department_id'] = profile.department.id
-            debug_info['profile_department_name'] = profile.department.name
-            debug_info['profile_department_workshop_id'] = profile.department.workshop_id if profile.department.workshop else None
-
-        try:
-            profile.clean()
-            debug_info['profile_validation'] = 'Valid'
-        except ValidationError as e:
-            debug_info['profile_validation'] = f'Invalid: {e}'
-
-    return JsonResponse(debug_info, indent=2)
-
-
-@login_required
 def view_logs(request):
     """View recent log entries"""
     if not request.user.is_staff:

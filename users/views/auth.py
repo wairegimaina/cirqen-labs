@@ -13,7 +13,7 @@ from django.core.paginator import Paginator
 from django.db.models import Q
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
-from django.views.decorators.csrf import csrf_protect, csrf_exempt
+from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_POST, require_http_methods
 from django.db import transaction
 from django.core.exceptions import ValidationError
@@ -23,6 +23,7 @@ from Inventory.models import Department
 from ..forms import CustomLoginForm, UserCreationForm, ForgotPasswordForm, VerifyResetCodeForm, CustomSetPasswordForm
 from ..models import UserProfile, UserSecurityLog, UserSignature, UserPasswordReset
 from ..utils import UserManagementUtils
+from .. import throttle
 from ..control import hod_required, role_required
 User = get_user_model()
 logger = logging.getLogger(__name__)
@@ -31,10 +32,27 @@ logger = logging.getLogger(__name__)
 def custom_login_view(request):
     """Enhanced login view with active status check and first login setup redirect"""
     if request.method == 'POST':
+        username = request.POST.get('username', '')
+        ip = throttle.client_ip(request)
+        wait = max(throttle.LOGIN_PER_USER.blocked_for(username),
+                   throttle.LOGIN_PER_IP.blocked_for(ip))
+        if wait:
+            # Checked before the password is even looked at, so a blocked
+            # account cannot be probed.
+            form = CustomLoginForm(request, initial={'username': username})
+            return render(request, 'users_login/login.html', {
+                'form': form,
+                'throttle_error': (
+                    'Too many failed sign-in attempts. '
+                    f'Try again in {throttle.minutes(wait)} minute(s).'
+                ),
+            }, status=429)
+
         form = CustomLoginForm(request, data=request.POST)
 
         if form.is_valid():
             user = form.get_user()
+            throttle.LOGIN_PER_USER.reset(username)
 
             # Check if user account is active
             if not user.active_status:
@@ -98,17 +116,19 @@ def custom_login_view(request):
                         return redirect('calibration:cal-dashboard')
                     else:
                         messages.warning(request, 'No workshop category assigned. Redirecting to home.')
-                        return redirect('home')
+                        return redirect('dashboard:dashboard-main')
                 except (Workshop.DoesNotExist, AttributeError):
                     messages.error(request, 'No workshop assigned. Please contact administrator.')
-                    return redirect('home')
+                    return redirect('dashboard:dashboard-main')
             elif user_role == 'NIC':
                 return redirect('dashboard:nic_dashboard')
 
-            return redirect('home')
+            return redirect('dashboard:dashboard-main')
         else:
             # Handle form validation errors
-            username = request.POST.get('username', '')
+            throttle.LOGIN_PER_IP.hit(ip)
+            if username and throttle.LOGIN_PER_USER.hit(username):
+                logger.warning("Sign-in locked for %r after repeated failures (ip=%s)", username, ip)
 
             if username:
                 # Try to log failed login attempt
@@ -254,10 +274,10 @@ def _redirect_based_on_role(profile):
                 return redirect('calibration:cal-dashboard')
         except Workshop.DoesNotExist:
             messages.error(profile.user, 'No workshop assigned. Please contact administrator.')
-            return redirect('home')
+            return redirect('dashboard:dashboard-main')
     elif profile.role == 'NIC':
         return redirect('dashboard:nic_dashboard')
-    return redirect('home')
+    return redirect('dashboard:dashboard-main')
 
 
 def logout_view(request):
@@ -291,6 +311,18 @@ def forgot_password_view(request):
         form = ForgotPasswordForm(request.POST)
         if form.is_valid():
             email = form.cleaned_data['email']
+            ip = throttle.client_ip(request)
+            if (throttle.RESET_REQUEST_PER_EMAIL.blocked_for(email)
+                    or throttle.RESET_REQUEST_PER_IP.blocked_for(ip)):
+                messages.error(request, 'Too many reset requests. Please try again later.')
+                return render(request, 'users_login/forgot_password.html', {
+                    'form': form,
+                    'title': 'Forgot Password'
+                }, status=429)
+            # Every request counts: issuing fresh codes is how a guesser would
+            # get around the per-code attempt limit.
+            throttle.RESET_REQUEST_PER_EMAIL.hit(email)
+            throttle.RESET_REQUEST_PER_IP.hit(ip)
 
             try:
                 user = User.objects.get(email=email)
@@ -363,8 +395,18 @@ def verify_reset_code_view(request):
         return redirect('forgot_password')
 
     if request.method == 'POST':
+        ip = throttle.client_ip(request)
+        if throttle.RESET_VERIFY_PER_IP.blocked_for(ip):
+            messages.error(request, 'Too many incorrect codes. Please try again later.')
+            return render(request, 'users_login/verify_reset_code.html', {
+                'form': VerifyResetCodeForm(user=user),
+                'title': 'Enter Verification Code',
+                'email': reset_email
+            }, status=429)
         form = VerifyResetCodeForm(request.POST, user=user)
-        if form.is_valid():
+        if not form.is_valid():
+            throttle.RESET_VERIFY_PER_IP.hit(ip)
+        else:
             # Mark the code as used
             reset_request = form.reset_request
             reset_request.use_code()

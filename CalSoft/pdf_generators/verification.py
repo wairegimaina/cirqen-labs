@@ -106,7 +106,17 @@ def verify_certificate_qr_with_results(qr_data):
                     logger.warning(f"Could not parse result entry: {result} - {parse_error}")
 
         verification_result = {
-            'valid': True,
+            # Parsing a payload is not verifying it — see verify_certificate_qr
+            # below. This reports that the payload was readable, and leaves
+            # authenticity to a caller that can check it against the record.
+            'valid': None,
+            'verification_available': False,
+            'parsed': True,
+            'reason': (
+                'The QR payload is not signed, so authenticity cannot be '
+                'established from it. Confirm this certificate number against '
+                'the issuing record.'
+            ),
             'certificate_number': cert_data.get('CERT', 'Unknown'),
             'issue_date': cert_data.get('DATE', 'Unknown'),
             'device_serial': cert_data.get('SERIAL', 'Unknown'),
@@ -117,7 +127,7 @@ def verify_certificate_qr_with_results(qr_data):
             'readings_info': cert_data.get('READINGS', 'Unknown'),
             'results_count': len(parsed_results),
             'results': parsed_results,
-            'has_more_results': any(r.startswith('...+') for r in results_data)
+            'has_more_results': any('MORE POINTS NOT IN QR' in r for r in results_data)
         }
 
         return verification_result
@@ -206,12 +216,27 @@ def verify_certificate_qr(qr_data):
                 key, value = part.split(':', 1)
                 cert_data[key] = value
 
+        # 'valid' reported whether the payload PARSED, never whether the
+        # certificate was genuine — it returned True for any input, including a
+        # forged or hand-typed one, while the certificate told the reader the QR
+        # code proved authenticity.
+        #
+        # Until the payload is signed and checked against the issuing record,
+        # the honest answer is that this function cannot establish validity. It
+        # now says so, and returns the parsed fields for lookup by a caller that
+        # can.
         return {
-            'valid': True,  # This would be determined by database lookup
+            'valid': None,
+            'verification_available': False,
+            'reason': (
+                'The QR payload is not signed, so authenticity cannot be '
+                'established from it. Confirm this certificate number against '
+                'the issuing record.'
+            ),
             'certificate_number': cert_data.get('CERT', 'Unknown'),
             'issue_date': cert_data.get('DATE', 'Unknown'),
             'device_serial': cert_data.get('SERIAL', 'Unknown'),
-            'hospital': cert_data.get('HOSPITAL', 'Unknown')
+            'hospital': cert_data.get('HOSPITAL', 'Unknown'),
         }
 
     except Exception as e:

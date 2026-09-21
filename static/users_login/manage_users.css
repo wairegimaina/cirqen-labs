@@ -182,7 +182,10 @@ body {
 ================================= */
 .users-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  /* `min(100%, 340px)` rather than a bare 340px: on a narrow screen a fixed
+     minimum forces the track wider than the viewport and the card overflows
+     instead of shrinking. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
   gap: 1rem;
   padding: 1.25rem;
 }
@@ -238,10 +241,21 @@ body {
   font-size: 0.85rem;
 }
 
-/* User details */
+/* User details
+ *
+ * The card used to clip long values: a work email like
+ * firstname.lastname@hospital.go.ke does not fit a 140px grid track, and with
+ * nothing allowed to wrap it simply ran out of the card. Three changes let the
+ * card size itself to its content instead:
+ *
+ *   1. the email row spans every column, because it is the longest value;
+ *   2. values wrap on any character, so an address with no spaces still breaks;
+ *   3. tracks may not be narrower than the card, so they shrink rather than
+ *      overflow on a phone.
+ */
 .user-details {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
   gap: 10px 16px;
   margin-bottom: 12px;
   text-align: left;
@@ -250,6 +264,12 @@ body {
 .detail-row {
   display: flex;
   flex-direction: column;
+  min-width: 0;            /* let a grid item shrink below its content width */
+}
+
+/* A value too long to share a row takes the whole width. */
+.detail-row--wide {
+  grid-column: 1 / -1;
 }
 
 .detail-label {
@@ -263,6 +283,15 @@ body {
   font-size: 0.9rem;
   color: var(--text-primary);
   font-weight: 500;
+  min-width: 0;
+  /* An email address has no spaces, so normal word wrapping cannot break it. */
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.detail-value--email {
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
 }
 
 /* User actions */

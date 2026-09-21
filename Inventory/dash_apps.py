@@ -10,6 +10,9 @@ from django.contrib.auth.decorators import login_required
 from django_plotly_dash.access import login_required as dash_login_required
 from django.db.models import Count
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Initialize the Dash app
 app = DjangoDash('InventoryDashboard')
@@ -263,7 +266,7 @@ def get_equipment_data(workshop=None, department=None):
             'status', 'department', 'description', 'workshop', 'manufacturer', 'model'
         ])
     except Exception as e:
-        print(f"Error fetching equipment data: {e}")
+        logger.exception("Error fetching equipment data")
         return pd.DataFrame(columns=['status', 'department', 'description', 'workshop', 'manufacturer', 'model'])
 
 def get_departments_for_workshop(workshop=None):
@@ -274,7 +277,7 @@ def get_departments_for_workshop(workshop=None):
             return [{'label': f"🏢 {name}", 'value': dept_id} for dept_id, name in departments]
         return []
     except Exception as e:
-        print(f"Error fetching departments: {e}")
+        logger.exception("Error fetching departments")
         return []
 
 def get_color_scheme(color_scheme, data_type='status'):
@@ -578,7 +581,7 @@ def update_dashboard(chart_type, selected_department, color_scheme, refresh_inte
         )
         
     except Exception as e:
-        print(f"Error in dashboard callback: {e}")
+        logger.exception("Error in dashboard callback")
         # Return safe defaults on error
         empty_fig = create_empty_figure("Error loading data")
         

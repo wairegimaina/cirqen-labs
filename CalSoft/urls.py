@@ -61,18 +61,6 @@ urlpatterns = [
         name="generate_comprehensive_certificate",
     ),
     path("sessions/<uuid:pk>/", views.session_detail, name="session_detail"),
-    path("sessions/", views.session_list, name="session_list"),
-    # 🗓️ Schedule Management
-    path(
-        "schedules/<uuid:schedule_id>/assign/",
-        views.assign_procedure_to_schedule,
-        name="assign_procedure_to_schedule",
-    ),
-    path("schedules/auto-assign/", views.auto_assign_procedures, name="auto_assign_procedures"),
-    # 🏭 Equipment Management
-    path(
-        "equipment/mapping/", views.equipment_procedure_mapping, name="equipment_procedure_mapping"
-    ),
     # 📏 Standards Management
     path("standards/", views.standards_list, name="standard_list"),
     path("standards/create/", views.standard_create, name="standard_create"),
@@ -101,21 +89,6 @@ urlpatterns = [
         views.StandardsParameters_lists,
         name="StandardsParameters_lists",
     ),
-    # 🧭 Calibration Workflow Steps
-    path(
-        "workflow/<uuid:schedule_id>/", views.calibration_workflow_view, name="calibration_workflow"
-    ),
-    path(
-        "workflow/step/<uuid:step_id>/update/",
-        views.update_workflow_step,
-        name="update_workflow_step",
-    ),
-    # 📊 Analytics & Reports
-    path("analytics/", views.analytics_dashboard, name="analytics_dashboard"),
-    path("analytics/trends/", views.trend_analysis, name="trend_analysis"),
-    path("analytics/performance/", views.performance_analysis, name="performance_analysis"),
-    path("reports/", views.reports_dashboard, name="reports_dashboard"),
-    path("backup/", views.backup_calibration_data, name="backup_calibration_data"),
     # 📜 Certificate Management
     path("certificates/", views.certificate_list, name="certificate_list"),
     path(
@@ -124,7 +97,6 @@ urlpatterns = [
         name="certificate_validation",
     ),
     # 🔐 Admin & Settings
-    path("audit-log/", views.audit_log, name="audit_log"),
     # 🔌 API Endpoints
     path("api/dashboard/", views.api_dashboard_data, name="api_dashboard_data"),
     path("api/equipment-status/", views.api_equipment_status, name="api_equipment_status"),

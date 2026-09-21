@@ -10,6 +10,7 @@ from CalSoft.models import (
     CalibrationAuditLog
 )
 from calSchedules.models import CalibrationSchedule
+from calSchedules.grouping import next_due_date
 
 logger = logging.getLogger(__name__)
 
@@ -76,10 +77,11 @@ def _create_next_schedule(equipment, procedure):
     try:
         today = timezone.now().date()
         interval_months = getattr(procedure, "interval_months", None) or getattr(procedure, "calibration_period", 12) or 12
-        if interval_months:
-            next_month = today + timedelta(days=30 * interval_months)
-        else:
-            next_month = today + timedelta(days=365)
+        # Calendar months, ending on the last day of the due month.
+        # `today + timedelta(days=30 * months)` treated every month as 30 days,
+        # so a 12-month interval came out 5 days short and the due date slid
+        # into the previous month after about six cycles.
+        next_month = next_due_date(today, interval_months)
         new_schedule, _ = CalibrationSchedule.objects.get_or_create(
             equipment=equipment,
             scheduled_month=next_month,

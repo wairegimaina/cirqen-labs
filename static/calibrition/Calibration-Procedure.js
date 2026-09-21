@@ -76,10 +76,10 @@ document.addEventListener("DOMContentLoaded", () => {
       if (infoDiv) {
         infoDiv.innerHTML = `
           <small class="text-muted">
-            Model: ${standard.model_number || "N/A"} |
-            Manufacturer: ${standard.manufacturer || "N/A"} |
-            Cal Due: ${standard.calibration_due_date || "N/A"} |
-            Uncertainty: ${uncertainty}
+            Model: ${escapeHTML(standard.model_number || "N/A")} |
+            Manufacturer: ${escapeHTML(standard.manufacturer || "N/A")} |
+            Cal Due: ${escapeHTML(standard.calibration_due_date || "N/A")} |
+            Uncertainty: ${escapeHTML(uncertainty)}
           </small>`;
       }
     } catch (err) {

@@ -24,14 +24,13 @@ from .sync_agent_9 import StatusReportingMixin
 from .conflict_quarantine import ConflictQuarantineMixin
 from .conflict_resolver import ConflictResolverMixin
 from .schema_guard import SchemaGuardMixin
-from .outbox import OutboxMixin
 from .cert_conflict_guard import CertConflictGuardMixin
 from .drift_reconciler import DriftReconcilerMixin
 
 
 class SyncAgent(
     # New capabilities first (override legacy where names overlap).
-    OutboxMixin, ConflictQuarantineMixin, ConflictResolverMixin, SchemaGuardMixin,
+    ConflictQuarantineMixin, ConflictResolverMixin, SchemaGuardMixin,
     CertConflictGuardMixin, DriftReconcilerMixin,
     # Legacy engine, in dependency order (unchanged MRO).
     AgentInitMixin, SchemaAndChangeDetectionMixin, UploadMixin, NetworkLoopsMixin,
@@ -68,6 +67,13 @@ def main():
     # Wire every sync-subsystem logger to the resolved log file before
     # the agent (and its threads) start producing output.
     setup_logging(log_file=log_file, level=log_level)
+
+    try:
+        from core.monitoring import init_sentry
+
+        init_sentry("sync_agent")
+    except ImportError:  # running from a checkout without the Django apps
+        pass
 
     agent = SyncAgent(data_path=data_path)
 

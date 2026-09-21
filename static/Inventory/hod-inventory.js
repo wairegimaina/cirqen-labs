@@ -171,7 +171,7 @@ const UI = {
             else if (item.status === 'Under repair') badgeClass = 'bg-warning text-dark';
 
             tr.innerHTML = `
-                <td>${startCount + index + 1}</td>
+                <td>${escapeHTML(startCount + index + 1)}</td>
                 <td class="fw-bold text-primary">${escapeHtml(item.description || 'Unknown')}</td>
                 <td>${escapeHtml(item.manufacturer || '-')}</td>
                 <td>${escapeHtml(item.model || '-')}</td>
@@ -191,7 +191,7 @@ const UI = {
                 <tr>
                     <td colspan="7" class="text-center py-5 text-muted">
                         <i class="fas fa-inbox fa-3x mb-3 opacity-25"></i>
-                        <p>${msg}</p>
+                        <p>${escapeHTML(msg)}</p>
                     </td>
                 </tr>`;
         }
@@ -216,7 +216,7 @@ const UI = {
                 buttons += `<span class="px-2 text-muted">...</span>`;
             } else {
                 const active = p === pagination.current_page ? 'active btn-primary' : 'btn-outline-secondary';
-                buttons += `<button class="btn btn-sm ${active} ajax-page-btn" data-page="${p}">${p}</button>`;
+                buttons += `<button class="btn btn-sm ${escapeHTML(active)} ajax-page-btn" data-page="${p}">${p}</button>`;
             }
         });
 
@@ -437,10 +437,7 @@ function setText(id, text) {
 }
 
 function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+  return window.escapeHTML(text); // static/js/escape.js
 }
 
 function updateBrowserURL(params) {

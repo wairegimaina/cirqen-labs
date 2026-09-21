@@ -40,6 +40,12 @@ logger = logging.getLogger(__name__)
 
 # sibling modules in this package
 from .signatures import SignatureImageLoader
+from CalSoft.utils import (
+    TUR_FLOOR,
+    coverage_factor_for_95,
+    guarded_decision,
+    test_uncertainty_ratio,
+)
 from .watermark import _LogoWatermarkCanvas
 
 
@@ -147,17 +153,21 @@ class ResultsMixin:
         if not readings:
             return
 
-        # Table headers
+        # Table headers. TUR and the guarded verdict are here because a bare
+        # pass/fail against tolerance ignores the uncertainty this certificate
+        # spends a whole table computing. TUR says whether the measurement is
+        # sharp enough to judge the limit; the guarded verdict says what the
+        # answer is once the uncertainty is counted.
         table_data = [
-            ['Set Value', 'Mean', 'Std Dev', 'Error', 'Tolerance', 'Status']
+            ['Set Value', 'Mean', 'Std Dev', 'Error', 'Tolerance', 'TUR', 'Status']
         ]
 
         # Add readings data
         for reading in readings:
             set_value = str(reading.set_value.value) if reading.set_value else 'N/A'
-            mean = f"{reading.mean:.4f}" if reading.mean else 'N/A'
-            std_dev = f"{reading.standard_deviation:.4f}" if getattr(reading, 'standard_deviation', None) else 'N/A'
-            error = f"{reading.error:.4f}" if reading.error else 'N/A'
+            mean = f"{reading.mean:.4f}" if reading.mean is not None else 'N/A'
+            std_dev = f"{reading.standard_deviation:.4f}" if getattr(reading, 'standard_deviation', None) is not None else 'N/A'
+            error = f"{reading.error:.4f}" if reading.error is not None else 'N/A'
 
             # Determine tolerance
             tolerance = 'N/A'
@@ -168,7 +178,7 @@ class ResultsMixin:
 
             # Determine pass/fail status
             passes_tolerance = getattr(reading, 'passes_tolerance', True)
-            if not hasattr(reading, 'passes_tolerance') and reading.error and reading.parameter:
+            if not hasattr(reading, 'passes_tolerance') and reading.error is not None and reading.parameter:
                 tol_value = None
                 if reading.sub_parameter and reading.sub_parameter.tolerance:
                     tol_value = float(reading.sub_parameter.tolerance)
@@ -178,12 +188,28 @@ class ResultsMixin:
                 if tol_value:
                     passes_tolerance = abs(float(reading.error)) <= tol_value
 
-            status = 'PASS' if passes_tolerance else 'FAIL'
+            # Guarded verdict: the uncertainty is allowed to change the answer,
+            # and a reading the measurement cannot decide says so.
+            tol_value = None
+            if reading.sub_parameter and reading.sub_parameter.tolerance:
+                tol_value = reading.sub_parameter.tolerance
+            elif reading.parameter and reading.parameter.tolerance:
+                tol_value = reading.parameter.tolerance
 
-            table_data.append([set_value, mean, std_dev, error, tolerance, status])
+            expanded = getattr(reading, 'expanded_uncertainty', None)
+            tur = test_uncertainty_ratio(tol_value, expanded)
+            tur_display = f"{tur:.1f}:1" if tur is not None else 'N/A'
+
+            if reading.error is not None and tol_value is not None:
+                verdict, _, _ = guarded_decision(reading.error, tol_value, expanded)
+            else:
+                verdict = 'PASS' if passes_tolerance else 'FAIL'
+
+            table_data.append([set_value, mean, std_dev, error, tolerance,
+                               tur_display, verdict])
 
         # Create table with proper column widths
-        readings_table = Table(table_data, colWidths=[1.0*inch, 1.2*inch, 1.0*inch, 1.0*inch, 1.0*inch, 0.7*inch])
+        readings_table = Table(table_data, colWidths=[1.0*inch, 1.1*inch, 0.9*inch, 0.9*inch, 0.9*inch, 0.7*inch, 1.4*inch])
 
         # Style the table
         table_style = [
@@ -201,13 +227,22 @@ class ResultsMixin:
             ('INNERGRID', (0, 0), (-1, -1), 0.25, HexColor('#d1d5db')),
         ]
 
-        # Add highlighting for failed rows
+        # Highlight by verdict. INDETERMINATE gets its own colour because it is
+        # neither a pass nor a failure — it is a measurement that cannot decide.
+        status_col = 6
         for i, row in enumerate(table_data[1:], 1):  # Skip header row
-            if row[5] == 'FAIL':  # Status column
+            verdict = row[status_col]
+            if verdict == 'FAIL':
                 table_style.extend([
                     ('BACKGROUND', (0, i), (-1, i), HexColor('#fef2f2')),
-                    ('TEXTCOLOR', (5, i), (5, i), HexColor('#dc2626')),
-                    ('FONTNAME', (5, i), (5, i), 'Helvetica-Bold'),
+                    ('TEXTCOLOR', (status_col, i), (status_col, i), HexColor('#dc2626')),
+                    ('FONTNAME', (status_col, i), (status_col, i), 'Helvetica-Bold'),
+                ])
+            elif verdict == 'INDETERMINATE':
+                table_style.extend([
+                    ('BACKGROUND', (0, i), (-1, i), HexColor('#fffbeb')),
+                    ('TEXTCOLOR', (status_col, i), (status_col, i), HexColor('#92400e')),
+                    ('FONTNAME', (status_col, i), (status_col, i), 'Helvetica-Bold'),
                 ])
             else:
                 table_style.append(('BACKGROUND', (0, i), (-1, i), HexColor('#ffffff')))
@@ -285,24 +320,44 @@ class ResultsMixin:
         if not readings:
             return
 
-        # Table headers
+        # Table headers.
+        #
+        # The Reference column is not decoration: without it the printed budget
+        # does not add up. Combined is the root sum of squares of Type A, Type B
+        # AND Reference, so a table showing only the first two leaves an
+        # assessor with an unexplained discrepancy. "n" is here for the same
+        # reason — Type A depends on it, and it cannot be checked otherwise.
         uncertainty_data = [
-            ['Set Value', 'Type A', 'Type B', 'Combined', 'Expanded', 'k-factor']
+            ['Set Value', 'n', 'Type A', 'Type B', 'Reference', 'Combined', 'Expanded', 'k']
         ]
 
         # Add uncertainty data
         for reading in readings:
             set_value = str(reading.set_value.value) if reading.set_value else 'N/A'
-            type_a = f"{reading.type_a_uncertainty:.4f}" if getattr(reading, 'type_a_uncertainty', None) else 'N/A'
-            type_b = f"{reading.type_b_uncertainty:.4f}" if getattr(reading, 'type_b_uncertainty', None) else 'N/A'
-            combined = f"{reading.combined_uncertainty:.4f}" if getattr(reading, 'combined_uncertainty', None) else 'N/A'
-            expanded = f"{reading.expanded_uncertainty:.4f}" if getattr(reading, 'expanded_uncertainty', None) else 'N/A'
-            k_factor = str(reading.parameter.coverage_factor) if reading.parameter and reading.parameter.coverage_factor else '2.0'
+            n_readings = len(reading.get_readings_list()) if hasattr(reading, 'get_readings_list') else None
+            n_display = str(n_readings) if n_readings else 'N/A'
+            type_a = self._format_uncertainty(getattr(reading, 'type_a_uncertainty', None))
+            type_b = self._format_uncertainty(getattr(reading, 'type_b_uncertainty', None))
+            reference = self._format_uncertainty(getattr(reading, 'reference_uncertainty_component', None))
+            combined = self._format_uncertainty(getattr(reading, 'combined_uncertainty', None))
+            expanded = self._format_uncertainty(getattr(reading, 'expanded_uncertainty', None))
+            # Print the k that was actually applied, not the one configured on
+            # the parameter. Expanded uncertainty is now expanded by a coverage
+            # factor derived from the effective degrees of freedom, so printing
+            # the configured value would leave Expanded != Combined x k on the
+            # page. Derived from the stored components through the same shared
+            # function, so the two cannot drift apart.
+            k_factor = self._coverage_factor_used(reading)
 
-            uncertainty_data.append([set_value, type_a, type_b, combined, expanded, k_factor])
+            uncertainty_data.append([set_value, n_display, type_a, type_b, reference,
+                                     combined, expanded, k_factor])
 
         # Create uncertainty table
-        uncertainty_table = Table(uncertainty_data, colWidths=[1.15*inch] * 6)
+        uncertainty_table = Table(
+            uncertainty_data,
+            colWidths=[0.95*inch, 0.35*inch, 0.90*inch, 0.90*inch, 0.95*inch,
+                       0.95*inch, 0.95*inch, 0.45*inch],
+        )
         uncertainty_table.setStyle(TableStyle([
             ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
             ('FONTSIZE', (0, 0), (-1, -1), 8),
@@ -320,6 +375,102 @@ class ResultsMixin:
         ]))
 
         elements.append(uncertainty_table)
+
+    @staticmethod
+    def _format_uncertainty(value, min_places=4, max_places=8):
+        """Format an uncertainty so a small component does not print as zero.
+
+        Fixed 4-decimal formatting rendered anything below 0.00005 as "0.0000":
+        a 0.0001 resolution gives a component of 0.0000289, which vanished. This
+        keeps 4 decimals for ordinary magnitudes and extends — up to the 6
+        decimals actually stored, with headroom — only when the value would
+        otherwise round away to nothing.
+        """
+        if value is None:
+            return 'N/A'
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            return 'N/A'
+        if numeric == 0:
+            return '0.0000'
+        # Extend the precision until at least two significant digits survive,
+        # so a small component reads as a number rather than as zero.
+        places = min_places
+        while places < max_places and abs(numeric) * (10 ** places) < 10:
+            places += 1
+        return f"{numeric:.{places}f}"
+
+    @staticmethod
+    def _coverage_factor_used(reading):
+        """The coverage factor actually applied to this reading's uncertainty.
+
+        The budget expands by ``max(stated k, k derived from the effective
+        degrees of freedom)``, so the configured parameter value is a floor
+        rather than the answer. This recovers the applied value from the stored
+        components using the same helper the budget uses.
+        """
+        stated = Decimal('2')
+        if reading.parameter and reading.parameter.coverage_factor:
+            stated = Decimal(str(reading.parameter.coverage_factor))
+
+        type_a = getattr(reading, 'type_a_uncertainty', None)
+        combined = getattr(reading, 'combined_uncertainty', None)
+        count = len(reading.get_readings_list()) if hasattr(reading, 'get_readings_list') else 0
+
+        if type_a is None or combined is None or count < 2:
+            return f"{stated.normalize():f}"
+
+        derived, _ = coverage_factor_for_95(type_a, combined, count)
+        applied = max(stated, derived)
+        return f"{applied.normalize():f}"
+
+    def measurement_capability_warnings(self):
+        """Parameters whose measurement is not sharp enough to judge the limit.
+
+        TUR below 4:1 means the expanded uncertainty is a large fraction of the
+        tolerance, so a bare pass on a marginal point overstates what is known.
+        The ratio was already printed per point; this surfaces it as a warning
+        so it is not left to the reader to notice.
+        """
+        offenders = {}
+        try:
+            readings = self.session.readings.select_related('parameter', 'sub_parameter')
+        except Exception:
+            # Returning [] here would print a certificate with no capability
+            # warning, which reads as "every parameter is fine" rather than
+            # "the check did not run". Logged loudly so the difference is
+            # recoverable from the logs.
+            logger.exception(
+                "[TUR] Could not read readings for session %s; no measurement-"
+                "capability warnings will appear on this certificate",
+                getattr(self.session, 'id', '?'),
+            )
+            return []
+
+        for reading in readings:
+            tolerance = None
+            if reading.sub_parameter and reading.sub_parameter.tolerance is not None:
+                tolerance = reading.sub_parameter.tolerance
+            elif reading.parameter and reading.parameter.tolerance is not None:
+                tolerance = reading.parameter.tolerance
+
+            tur = test_uncertainty_ratio(tolerance, getattr(reading, 'expanded_uncertainty', None))
+            if tur is None or tur >= TUR_FLOOR:
+                continue
+
+            name = reading.parameter.name if reading.parameter else 'Unknown'
+            if reading.sub_parameter:
+                name = f"{name} - {reading.sub_parameter.name}"
+            # Keep the worst ratio per parameter; one line per parameter reads
+            # better than one per test point.
+            if name not in offenders or tur < offenders[name]:
+                offenders[name] = tur
+
+        return [
+            {'parameter': name, 'tur': ratio}
+            for name, ratio in sorted(offenders.items(), key=lambda kv: kv[1])
+        ]
 
     def calculate_failure_statistics(self):
         """Calculate failure statistics for the calibration session."""
@@ -344,7 +495,7 @@ class ResultsMixin:
 
                 if hasattr(reading, 'passes_tolerance'):
                     passes_tolerance = reading.passes_tolerance
-                elif reading.error and reading.parameter:
+                elif reading.error is not None and reading.parameter:
                     # Calculate based on error and tolerance
                     tolerance = None
                     if reading.sub_parameter and reading.sub_parameter.tolerance:

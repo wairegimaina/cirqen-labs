@@ -1,0 +1,21 @@
+# Lint baseline for CI (IMPROVEMENT_PLAN.md section 6).
+#
+# Starts with the rules that catch code which cannot run: syntax errors,
+# undefined names, bad comparisons and misplaced statements. The codebase
+# passes these today, and CI keeps it that way. Widen `select` one rule
+# family at a time as the tree is cleaned up.
+target-version = "py312"
+extend-exclude = [
+    "venv", "dist", "build", "runtime", "Archives", "node_modules",
+    "*/migrations/*",
+]
+
+[lint]
+# E722: a bare `except:` also swallows KeyboardInterrupt/SystemExit, which
+# keeps sync threads alive through shutdown. Name the exception instead.
+select = ["E9", "F63", "F7", "F82", "E722"]
+
+[lint.per-file-ignores]
+# Files with uncommitted local work in progress at the time E722 was enabled.
+"CalSoft/pdf_generators/signatures.py" = ["E722"]
+"users/management/commands/create_base64_signatures.py" = ["E722"]

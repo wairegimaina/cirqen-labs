@@ -1,10 +1,5 @@
 {% load static %}
 
-{% block extra_css %}
-<link rel="stylesheet" href="{% static 'css/select2.min.css' %}" />
-<link rel="stylesheet" href="{% static 'css/flatpickr.min.css' %}" />
-{% endblock %}
-
 <aside class="equiper-sidebar{% if request.user.userprofile.sidebar_collapsed %} sidebar-collapsed{% endif %}"
   id="equiperSidebar" aria-label="Main navigation"
   data-sidebar-collapsed="{% if request.user.userprofile.sidebar_collapsed %}true{% else %}false{% endif %}">
@@ -38,7 +33,7 @@
            Routing priority:
              1. HOD            → hod_dashboard   (always, regardless of workshop)
              2. calibration_center workshop → cal-dashboard
-             3. Tech, no ws    → workshop_dashboard
+             3. Tech, no ws    → dashboard-main
              4. NIC, no ws     → nic_dashboard
              5. fallback       → dashboard-main
       -->
@@ -54,7 +49,7 @@
             class="menu-link {% if request.resolver_match.url_name == 'cal-dashboard' %}active-link{% endif %}"
             role="menuitem">
             {% elif nav.is_tech and not ws %}
-            <a href="{% url 'workshop_dashboard' %}"
+            <a href="{% url 'dashboard:dashboard-main' %}"
               class="menu-link {% if request.resolver_match.url_name == 'workshop_dashboard' %}active-link{% endif %}"
               role="menuitem">
               {% elif nav.is_nic and not ws %}
@@ -108,17 +103,6 @@
         </a>
       </li>
 
-      <!-- Check Updates -->
-      <li class="menu-entry" role="none">
-        <a href="{% url 'updates:dashboard' %}"
-          class="menu-link {% if 'updates' in request.path %}active-link{% endif %}" role="menuitem">
-          <div class="link-icon" aria-hidden="true">
-            <i class="fas fa-cloud-download-alt"></i>
-          </div>
-          <span class="link-label">Check Updates</span>
-        </a>
-      </li>
-
       <!-- Audit Log -->
       <li class="menu-entry" role="none">
         <a href="{% url 'audit_log:list' %}"
@@ -144,6 +128,42 @@
 
     {% endif %}
     {# ── END HOD BLOCK ── #}
+
+    {# ══════════════════════════════════════════════════════ #}
+    {# ║  SYSTEM BLOCK — staff only, matching the view guard ║ #}
+    {# ══════════════════════════════════════════════════════ #}
+    {% if request.user.is_staff %}
+
+      <li class="menu-section-header" role="none">
+        <span class="section-label">System</span>
+      </li>
+
+      <!-- HQ Connection -->
+      <li class="menu-entry" role="none">
+        <a href="{% url 'core:hq_connection' %}"
+          class="menu-link {% if request.resolver_match.url_name == 'hq_connection' %}active-link{% endif %}"
+          role="menuitem">
+          <div class="link-icon" aria-hidden="true">
+            <i class="fas fa-network-wired"></i>
+          </div>
+          <span class="link-label">HQ Connection</span>
+        </a>
+      </li>
+
+      <!-- Application updates -->
+      <li class="menu-entry" role="none">
+        <a href="{% url 'updates:dashboard' %}"
+          class="menu-link {% if '/updates/' in request.path %}active-link{% endif %}"
+          role="menuitem">
+          <div class="link-icon" aria-hidden="true">
+            <i class="fas fa-cloud-download-alt"></i>
+          </div>
+          <span class="link-label">Updates</span>
+        </a>
+      </li>
+
+    {% endif %}
+    {# ── END SYSTEM BLOCK ── #}
 
     <!-- ╔═══════════════════════════════════════════════════════╗ -->
     <!-- ║  MAINTENANCE BLOCK                                    ║ -->

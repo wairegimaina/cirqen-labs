@@ -1,14 +1,17 @@
 import json
 import logging
 import random
-from calendar import monthrange
+
+from calSchedules.grouping import is_overdue, month_end
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from django.shortcuts import render, redirect
+from users.control import role_required
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import logout
 from django.contrib import messages
+from django.core.exceptions import PermissionDenied
 from django.db.models import Count, Sum, Q
 from django.http import JsonResponse
 from django.urls import reverse
@@ -17,11 +20,13 @@ from django.utils import timezone
 from Inventory.models import Equipment, Department
 from workshop.models import Workshop
 from jobcard.models import jobcard
+from CalSoft.models import CalibrationSession
 from ppms.models import PPMSchedule
 from parts_tools.models import Tools, Accessories
 from reporthub.models import Report
 from users.models import UserProfile
 from users.control import get_user_role
+from core import aggregate_cache
 from CalSoft.models import Standard
 
 logger = logging.getLogger(__name__)
@@ -56,11 +61,113 @@ def generate_greeting(user_first_name):
     return random.choice(messages_list)
 
 
+def _equipment_analytics(workshop):
+    equipments = Equipment.objects.filter(
+        department__workshop=workshop, department__active_status=True, active_status=True
+    )
+    dept_counts = (
+        equipments.values("department__name")
+        .annotate(count=Count("id"))
+        .order_by("department__name")
+    )
+
+    top_equipment = []
+    jobcard_counts = (
+        jobcard.objects.filter(equipment__in=equipments)
+        .values("equipment_id")
+        .annotate(job_count=Count("id"))
+        .order_by("-job_count")[:8]
+    )
+    counts_by_equipment = {item["equipment_id"]: item["job_count"] for item in jobcard_counts}
+    if counts_by_equipment:
+        for eq in Equipment.objects.filter(id__in=counts_by_equipment.keys()).select_related(
+            "department", "description"
+        ):
+            top_equipment.append(
+                {
+                    "name": eq.description.name if eq.description else "Unknown",
+                    "department": eq.department.name if eq.department else "Unknown",
+                    "job_cards": counts_by_equipment.get(eq.id, 0),
+                    "active_status": eq.active_status,
+                }
+            )
+
+    return {
+        "total_equipment": equipments.count(),
+        "active_equipment": equipments.filter(status="Working").count(),
+        "total_departments": Department.objects.filter(workshop=workshop, active_status=True).count(),
+        "by_category": {item["department__name"]: item["count"] for item in dept_counts},
+        "top_equipment": top_equipment,
+    }
+
+
+def _ppm_summary(workshop, today):
+    schedules = PPMSchedule.objects.filter(workshop=workshop)
+
+    # Overdue: the scheduled month has ended and the PPM is not completed.
+    overdue = 0
+    upcoming = 0
+    for scheduled_month, status in schedules.exclude(status="completed").values_list(
+        "scheduled_month", "status"
+    ):
+        if not scheduled_month:
+            continue
+        if is_overdue(month_end(scheduled_month), today):
+            overdue += 1
+        elif scheduled_month > today.replace(day=1):
+            upcoming += 1
+
+    monthly_completed = (
+        schedules.filter(status="completed")
+        .values("scheduled_month")
+        .annotate(count=Count("id"))
+        .order_by("scheduled_month")
+    )
+    return {
+        "total": schedules.count(),
+        "completed": schedules.filter(status="completed").count(),
+        "overdue": overdue,
+        "pending": schedules.filter(status="pending").count(),
+        "upcoming": upcoming,
+        # For the trend chart, e.g. {"Jan 2026": 4}
+        "monthly_breakdown": {
+            item["scheduled_month"].strftime("%b %Y"): item["count"] for item in monthly_completed
+        },
+    }
+
+
+def _inventory_overview(workshop):
+    equipment_qs = Equipment.objects.filter(department__workshop=workshop, active_status=True)
+    accessories_qs = Accessories.objects.filter(workshop=workshop)
+    return {
+        "equipment": equipment_qs.count(),
+        "equipment_working": equipment_qs.filter(status="Working").count(),
+        "equipment_not_working": equipment_qs.filter(status="Not working").count(),
+        "equipment_under_repair": equipment_qs.filter(status="Under repair").count(),
+        "accessories": accessories_qs.count(),
+        "accessories_stock_count": accessories_qs.aggregate(total=Sum("stock_count"))["total"] or 0,
+        "tools": Tools.objects.filter(workshop=workshop).count(),
+        "inactive": Equipment.objects.filter(department__workshop=workshop, active_status=False).count(),
+    }
+
+
+EMPTY_ANALYTICS = {
+    "total_equipment": 0, "active_equipment": 0, "total_departments": 0,
+    "by_category": {}, "top_equipment": [],
+}
+EMPTY_PPM = {"total": 0, "completed": 0, "overdue": 0, "pending": 0, "upcoming": 0, "monthly_breakdown": {}}
+EMPTY_INVENTORY = {
+    "equipment": 0, "equipment_working": 0, "equipment_not_working": 0, "equipment_under_repair": 0,
+    "accessories": 0, "accessories_stock_count": 0, "tools": 0, "inactive": 0,
+}
+
+
 @login_required
 def Dashboard(request):
     """
     Main CMMS dashboard – computes all three data sets (Equipment Analytics,
     PPM Summary, Inventory Overview) server‑side and embeds them as JSON.
+    Each set is cached per workshop and day (core.aggregate_cache).
     """
     greeting = generate_greeting(request.user.first_name)
     try:
@@ -69,156 +176,28 @@ def Dashboard(request):
     except Exception:
         workshop = None
 
-    # ---------- 1. Equipment Analytics ----------
-    analytics_data = {
-        "total_equipment": 0,
-        "active_equipment": 0,
-        "total_departments": 0,
-        "by_category": {},
-        "top_equipment": [],
-    }
     if workshop:
-        equipments = Equipment.objects.filter(
-            department__workshop=workshop, department__active_status=True, active_status=True
-        )
-        total_equipment = equipments.count()
-        active_equipment = equipments.filter(status="Working").count()
-        total_departments = Department.objects.filter(workshop=workshop, active_status=True).count()
-
-        dept_counts = (
-            equipments.values("department__name")
-            .annotate(count=Count("id"))
-            .order_by("department__name")
-        )
-        by_category = {item["department__name"]: item["count"] for item in dept_counts}
-
-        equipment_ids = list(equipments.values_list("id", flat=True))
-        top_equipment = []
-        if equipment_ids:
-            jobcard_counts = (
-                jobcard.objects.filter(equipment_id__in=equipment_ids)
-                .values("equipment_id")
-                .annotate(job_count=Count("id"))
-                .order_by("-job_count")[:8]
-            )
-            eq_ids_with_counts = {
-                item["equipment_id"]: item["job_count"] for item in jobcard_counts
-            }
-            eq_objs = Equipment.objects.filter(id__in=eq_ids_with_counts.keys()).select_related(
-                "department", "description"
-            )
-            for eq in eq_objs:
-                top_equipment.append(
-                    {
-                        "name": eq.description.name if eq.description else "Unknown",
-                        "department": eq.department.name if eq.department else "Unknown",
-                        "job_cards": eq_ids_with_counts.get(eq.id, 0),
-                        "active_status": eq.active_status,
-                    }
-                )
-
-        analytics_data = {
-            "total_equipment": total_equipment,
-            "active_equipment": active_equipment,
-            "total_departments": total_departments,
-            "by_category": by_category,
-            "top_equipment": top_equipment,
-        }
-
-    # ---------- 2. PPM Summary ----------
-    ppm_data = {
-        "total": 0,
-        "completed": 0,
-        "overdue": 0,
-        "pending": 0,
-        "upcoming": 0,
-        "monthly_breakdown": {},
-    }
-    if workshop:
-        schedules = PPMSchedule.objects.filter(workshop=workshop)
-        total = schedules.count()
-        completed = schedules.filter(status="completed").count()
-        pending = schedules.filter(status="pending").count()
-        # pushed is not shown as a KPI, but we could include it if needed
-
-        # Overdue: scheduled_month's last day < today and status != 'completed'
         today = timezone.now().date()
-        overdue = 0
-        upcoming = 0
-        for s in schedules:
-            if s.scheduled_month and s.status != "completed":
-                last_day = monthrange(s.scheduled_month.year, s.scheduled_month.month)[1]
-                month_end = s.scheduled_month.replace(day=last_day)
-                if month_end < today:
-                    overdue += 1
-                elif s.scheduled_month > today.replace(day=1):
-                    upcoming += 1
-
-        # Monthly breakdown of completed schedules (for the trend chart)
-        monthly_completed = (
-            schedules.filter(status="completed")
-            .values("scheduled_month")
-            .annotate(count=Count("id"))
-            .order_by("scheduled_month")
+        analytics_data = aggregate_cache.get_or_compute(
+            "dash", [workshop.id, today, "analytics"], lambda: _equipment_analytics(workshop)
         )
-        monthly_breakdown = {}
-        for item in monthly_completed:
-            dt = item["scheduled_month"]
-            key = dt.strftime("%b %Y")  # e.g., "Jan 2026"
-            monthly_breakdown[key] = item["count"]
-
-        ppm_data = {
-            "total": total,
-            "completed": completed,
-            "overdue": overdue,
-            "pending": pending,
-            "upcoming": upcoming,
-            "monthly_breakdown": monthly_breakdown,
-        }
-
-    # ---------- 3. Inventory Overview ----------
-    inventory_data = {
-        "equipment": 0,
-        "equipment_working": 0,
-        "equipment_not_working": 0,
-        "equipment_under_repair": 0,
-        "accessories": 0,
-        "accessories_stock_count": 0,
-        "tools": 0,
-        "inactive": 0,
-    }
-    if workshop:
-        equipment_qs = Equipment.objects.filter(department__workshop=workshop, active_status=True)
-        equipment_count = equipment_qs.count()
-        equipment_working = equipment_qs.filter(status="Working").count()
-        equipment_not_working = equipment_qs.filter(status="Not working").count()
-        equipment_under_repair = equipment_qs.filter(status="Under repair").count()
-        inactive_count = Equipment.objects.filter(
-            department__workshop=workshop, active_status=False
-        ).count()
-        accessories_qs = Accessories.objects.filter(workshop=workshop)
-        accessories_count = accessories_qs.count()
-        accessories_stock_count = accessories_qs.aggregate(total=Sum("stock_count"))["total"] or 0
-        tools_count = Tools.objects.filter(workshop=workshop).count()
-
-        inventory_data = {
-            "equipment": equipment_count,
-            "equipment_working": equipment_working,
-            "equipment_not_working": equipment_not_working,
-            "equipment_under_repair": equipment_under_repair,
-            "accessories": accessories_count,
-            "accessories_stock_count": accessories_stock_count,
-            "tools": tools_count,
-            "inactive": inactive_count,
-        }
+        ppm_data = aggregate_cache.get_or_compute(
+            "dash", [workshop.id, today, "ppm"], lambda: _ppm_summary(workshop, today)
+        )
+        inventory_data = aggregate_cache.get_or_compute(
+            "dash", [workshop.id, today, "inventory"], lambda: _inventory_overview(workshop)
+        )
+    else:
+        analytics_data, ppm_data, inventory_data = EMPTY_ANALYTICS, EMPTY_PPM, EMPTY_INVENTORY
 
     # ---------- Context ----------
     context = {
         "greeting": greeting,
         "username": request.user.username,
-        "analytics_data": json.dumps(analytics_data),
-        "ppm_data": json.dumps(ppm_data),
-        "inventory_data": json.dumps(inventory_data),
+        # Rendered with |json_script, which escapes </script> and friends.
+        "analytics_data": analytics_data,
+        "ppm_data": ppm_data,
+        "inventory_data": inventory_data,
         "initial_kpis": (
             {
                 "equipment": analytics_data["total_equipment"],
@@ -237,10 +216,9 @@ def Dashboard(request):
 
 
 @login_required
+@role_required('NIC', message='Only In-Charges can access this page.')
 def nic_dashboard(request):
     profile = request.user.userprofile
-    if profile.role != "NIC":
-        return render(request, "unauthorized.html")
     department = profile.department
     equipments = Equipment.objects.filter(department=department, active_status=True)
     jobcards = jobcard.objects.filter(equipment__department=department)
@@ -262,8 +240,8 @@ def nic_dashboard(request):
         "ppm_schedules": ppm_schedules,
         "greeting": generate_greeting(request.user.first_name),
         "username": request.user.username,
-        "equipment_status_json": json.dumps(equipment_status),
-        "jobcard_status_json": json.dumps(jobcard_status),
+        "equipment_status": equipment_status,
+        "jobcard_status": jobcard_status,
     }
     return render(request, "dashboards/nurse_dashboard.html", context)
 
@@ -272,10 +250,16 @@ def nic_dashboard(request):
 def nurse_inventory(request):
     profile = request.user.userprofile
     department = profile.department
-    equipments = Equipment.objects.filter(department=department, active_status=True)
+    if department is None:
+        # filter(department=None) would list every unassigned device.
+        equipments = Equipment.objects.none()
+    else:
+        equipments = Equipment.objects.filter(
+            department=department, active_status=True
+        ).select_related("description", "manufacturer", "department__workshop")
     return render(
         request,
-        "inventory/nurse_inventory.html",
+        "Inventory/nurse_inventory.html",
         {
             "equipments": equipments,
             "greeting": generate_greeting(request.user.first_name),
@@ -297,13 +281,24 @@ def nurse_ppms(request):
         )
         return redirect("custom_login")
 
-    schedules = (
-        PPMSchedule.objects.select_related("equipment__department")
-        .filter(equipment__department=department)
-        .order_by("scheduled_month", "equipment__description")
-    )
+    if department is None:
+        # A department can be deleted out from under an In-Charge
+        # (on_delete=SET_NULL). Show the empty page with a clear reason
+        # rather than every schedule that has no department.
+        messages.warning(
+            request,
+            "You are not assigned to a department, so there are no PPM schedules to show. "
+            "Please contact the administrator.",
+        )
+        schedules = PPMSchedule.objects.none()
+    else:
+        schedules = (
+            PPMSchedule.objects.select_related("equipment__department", "equipment__description")
+            .filter(equipment__department=department)
+            .order_by("scheduled_month", "equipment__description")
+        )
 
-    if not schedules.exists():
+    if department is not None and not schedules.exists():
         logger.info(
             f"No PPM schedules found for department {department.name} (ID: {department.id})"
         )
@@ -333,12 +328,141 @@ def nurse_ppms(request):
             # department_name below now matches the template's own reference.
             "current_month_name": today.strftime("%B"),
             "current_year": today.year,
-            "access_context": {"department_name": department.name},
+            "access_context": {"department_name": department.name if department else "No department"},
         },
     )
 
 
 # ---------- HOD Dashboard with corrected PPM monthly breakdown ----------
+
+
+def _hod_workshop_stats(workshop):
+    """Counters for one workshop on the HOD overview (JSON-serialisable for the cache)."""
+    if workshop.category == "calibration_center":
+        cards = jobcard.objects.filter(workshop=workshop)
+    else:
+        cards = jobcard.objects.filter(department__workshop=workshop).exclude(
+            workshop__category="calibration_center"
+        )
+    # order_by() clears any Meta.ordering, which would otherwise split the GROUP BY.
+    status_counts = dict(
+        cards.order_by().values("status").annotate(n=Count("id")).values_list("status", "n")
+    )
+
+    ppm_schedules = PPMSchedule.objects.filter(workshop=workshop)
+    monthly_completed = (
+        ppm_schedules.filter(status="completed")
+        .values("scheduled_month")
+        .annotate(count=Count("id"))
+        .order_by("scheduled_month")
+    )
+    workshop_monthly = {}
+    monthly_by_key = {}
+    month_labels = {}
+    for item in monthly_completed:
+        dt = item["scheduled_month"]
+        label, sort_key = dt.strftime("%b %Y"), dt.strftime("%Y-%m")
+        workshop_monthly[label] = item["count"]
+        monthly_by_key[sort_key] = item["count"]
+        month_labels[sort_key] = label
+
+    info = {
+        "equipment_count": Equipment.objects.filter(
+            department__workshop=workshop, active_status=True
+        ).count(),
+        "departments_count": Department.objects.filter(workshop=workshop).count(),
+        "ppms_count": ppm_schedules.count(),
+        "reports_count": Report.objects.filter(workshop=workshop).count(),
+        "accessories_count": Accessories.objects.filter(workshop=workshop).count(),
+        "tools_count": Tools.objects.filter(workshop=workshop).count(),
+        "job_cards_count": cards.count(),
+        "waiting_approval_count": status_counts.get("Waiting Approval", 0),
+        "approved_count": status_counts.get("Approved", 0),
+        "declined_count": status_counts.get("Declined", 0),
+        "is_calibration_center": workshop.category == "calibration_center",
+        "ppm_monthly_breakdown": workshop_monthly,
+    }
+
+    # Calibration coverage for this workshop's estate.
+    #
+    # The HOD needs to see certificates where the equipment lives, not only in
+    # the calibration centre's own card: a certificate belongs to a device in a
+    # ward, and "how much of this workshop is certified?" is a question about
+    # the workshop, not about the centre that issued the paperwork.
+    workshop_serials = list(
+        Equipment.objects
+        .filter(department__workshop=workshop, active_status=True)
+        .exclude(serial_number="")
+        .values_list("serial_number", flat=True)
+    )
+    sessions = CalibrationSession.objects.filter(
+        device_serial__in=workshop_serials, active_status=True
+    )
+    certified = (
+        sessions.filter(status="approved")
+        .exclude(certificate_number__isnull=True)
+        .exclude(certificate_number="")
+    )
+    info["certificates_count"] = certified.count()
+    info["certified_equipment_count"] = (
+        certified.order_by().values("device_serial").distinct().count()
+    )
+    info["awaiting_certificate_count"] = sessions.filter(
+        status="approved_pending_certificate"
+    ).count()
+    info["calibrations_count"] = sessions.count()
+
+    # PPM state, so the card says what is outstanding rather than only a total.
+    info["ppms_completed_count"] = ppm_schedules.filter(status="completed").count()
+    info["ppms_pending_count"] = ppm_schedules.exclude(status="completed").count()
+
+    # Calibration coverage per department.
+    #
+    # A workshop total answers "are we broadly covered"; it cannot answer "which
+    # ward is behind", which is the question that leads to an action. Serial
+    # numbers are the only link between a session and its device, so the map is
+    # built once here rather than per department.
+    certified_serials = set(
+        certified.order_by().values_list("device_serial", flat=True)
+    )
+    pending_serials = set(
+        sessions.filter(status="approved_pending_certificate")
+        .order_by()
+        .values_list("device_serial", flat=True)
+    )
+
+    departments = []
+    dept_rows = (
+        Equipment.objects
+        .filter(department__workshop=workshop, active_status=True)
+        .values("department__id", "department__name", "serial_number")
+    )
+    grouped = {}
+    for row in dept_rows:
+        key = (str(row["department__id"]), row["department__name"] or "Unassigned")
+        grouped.setdefault(key, []).append(row["serial_number"] or "")
+
+    for (dept_id, dept_name), serials in sorted(grouped.items(), key=lambda kv: kv[0][1]):
+        total = len(serials)
+        certified_here = sum(1 for s in serials if s and s in certified_serials)
+        pending_here = sum(1 for s in serials if s and s in pending_serials)
+        departments.append({
+            "id": dept_id,
+            "name": dept_name,
+            "equipment_count": total,
+            "certified_count": certified_here,
+            "awaiting_count": pending_here,
+            "uncertified_count": total - certified_here,
+            "percent": round(certified_here / total * 100) if total else 0,
+        })
+
+    # Least covered first: that is where the work is.
+    info["departments"] = sorted(departments, key=lambda d: (d["percent"], d["name"]))
+    if workshop.category != "calibration_center":
+        info["calibration_work_count"] = jobcard.objects.filter(
+            department__workshop=workshop, workshop__category="calibration_center"
+        ).count()
+    return {"info": info, "monthly_by_key": monthly_by_key, "month_labels": month_labels}
 
 
 @login_required
@@ -350,7 +474,7 @@ def hod_dashboard(request):
     except UserProfile.DoesNotExist:
         return redirect("custom_login")
 
-    workshops = Workshop.objects.all()
+    workshops = list(Workshop.objects.all())
     context = {
         "workshops": workshops,
         "workshop_data": {},
@@ -363,86 +487,19 @@ def hod_dashboard(request):
     per_workshop_monthly_by_key = {}  # workshop.name -> {"YYYY-MM": count}
     month_label_by_key = {}  # "YYYY-MM" -> "Mon YYYY", for chronological sorting
 
+    today = timezone.now().date()
     for workshop in workshops:
-        # ---- Job card counts ----
-        if workshop.category == "calibration_center":
-            job_cards_count = jobcard.objects.filter(workshop=workshop).count()
-            waiting_approval_count = jobcard.objects.filter(
-                workshop=workshop, status="Waiting Approval"
-            ).count()
-            approved_count = jobcard.objects.filter(workshop=workshop, status="Approved").count()
-            declined_count = jobcard.objects.filter(workshop=workshop, status="Declined").count()
-        else:
-            job_cards_count = (
-                jobcard.objects.filter(department__workshop=workshop)
-                .exclude(workshop__category="calibration_center")
-                .count()
-            )
-            waiting_approval_count = (
-                jobcard.objects.filter(department__workshop=workshop, status="Waiting Approval")
-                .exclude(workshop__category="calibration_center")
-                .count()
-            )
-            approved_count = (
-                jobcard.objects.filter(department__workshop=workshop, status="Approved")
-                .exclude(workshop__category="calibration_center")
-                .count()
-            )
-            declined_count = (
-                jobcard.objects.filter(department__workshop=workshop, status="Declined")
-                .exclude(workshop__category="calibration_center")
-                .count()
-            )
-            calibration_work_count = jobcard.objects.filter(
-                department__workshop=workshop, workshop__category="calibration_center"
-            ).count()
-
-        # ---- PPM monthly breakdown (completed only) ----
-        ppm_schedules = PPMSchedule.objects.filter(workshop=workshop)
-        monthly_completed = (
-            ppm_schedules.filter(status="completed")
-            .values("scheduled_month")
-            .annotate(count=Count("id"))
-            .order_by("scheduled_month")
+        stats = aggregate_cache.get_or_compute(
+            "dash", ["hod", workshop.id, today], lambda: _hod_workshop_stats(workshop)
         )
-        workshop_monthly = {}
-        workshop_monthly_by_key = {}
-        for item in monthly_completed:
-            dt = item["scheduled_month"]
-            key = dt.strftime("%b %Y")
-            workshop_monthly[key] = item["count"]
-
-            sort_key = dt.strftime("%Y-%m")
-            workshop_monthly_by_key[sort_key] = item["count"]
-            month_label_by_key[sort_key] = key
-
-        per_workshop_monthly_by_key[workshop.name] = workshop_monthly_by_key
-
-        # Aggregate totals
-        for key, count in workshop_monthly.items():
+        per_workshop_monthly_by_key[workshop.name] = stats["monthly_by_key"]
+        month_label_by_key.update(stats["month_labels"])
+        for key, count in stats["info"]["ppm_monthly_breakdown"].items():
             total_monthly_breakdown[key] = total_monthly_breakdown.get(key, 0) + count
-
-        # ---- Workshop info ----
-        workshop_info = {
-            "equipment_count": Equipment.objects.filter(
-                department__workshop=workshop, active_status=True
-            ).count(),
-            "departments_count": Department.objects.filter(workshop=workshop).count(),
-            "ppms_count": ppm_schedules.count(),
-            "reports_count": Report.objects.filter(workshop=workshop).count(),
-            "accessories_count": Accessories.objects.filter(workshop=workshop).count(),
-            "tools_count": Tools.objects.filter(workshop=workshop).count(),
-            "job_cards_count": job_cards_count,
-            "waiting_approval_count": waiting_approval_count,
-            "approved_count": approved_count,
-            "declined_count": declined_count,
-            "is_calibration_center": workshop.category == "calibration_center",
-            "ppm_monthly_breakdown": workshop_monthly,
-        }
-        if workshop.category != "calibration_center":
-            workshop_info["calibration_work_count"] = calibration_work_count
-
-        context["workshop_data"][workshop.id] = workshop_info
+        context["workshop_data"][workshop.id] = stats["info"]
+        # Attached so the template can read `workshop.stats.equipment_count`
+        # instead of scanning workshop_data for its own row inside every stat.
+        workshop.stats = stats["info"]
 
     context["totals"] = {
         "total_equipment": sum(
@@ -468,22 +525,18 @@ def hod_dashboard(request):
         "total_ppm_monthly_breakdown": total_monthly_breakdown,
     }
 
-    context["jobcard_status_json"] = json.dumps(
-        {
-            "Approved": context["totals"]["total_approved"],
-            "Waiting Approval": context["totals"]["total_waiting_approval"],
-            "Declined": context["totals"]["total_declined"],
-        }
-    )
-    context["ppm_monthly_json"] = json.dumps(total_monthly_breakdown)
+    # The chart data below is rendered with |json_script (escaped for <script>).
+    context["jobcard_status"] = {
+        "Approved": context["totals"]["total_approved"],
+        "Waiting Approval": context["totals"]["total_waiting_approval"],
+        "Declined": context["totals"]["total_declined"],
+    }
 
     # Per-workshop PPM completions, one colour-coded series per workshop,
     # sharing a single chronologically-sorted month axis.
     sorted_month_keys = sorted(month_label_by_key.keys())
-    context["ppm_monthly_labels_json"] = json.dumps(
-        [month_label_by_key[k] for k in sorted_month_keys]
-    )
-    context["ppm_monthly_by_workshop_json"] = json.dumps(
+    context["ppm_monthly_labels"] = [month_label_by_key[k] for k in sorted_month_keys]
+    context["ppm_monthly_by_workshop"] = (
         {
             name: [counts.get(k, 0) for k in sorted_month_keys]
             for name, counts in per_workshop_monthly_by_key.items()

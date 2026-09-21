@@ -3,7 +3,7 @@
 sync_status.py — one-glance sync health for a client.
 
 Combines the agent's status file (agent_status.json) with live counts from the
-local diagnostic tables (outbox backlog, quarantined conflicts, schema drift).
+local diagnostic tables (quarantined conflicts, schema drift).
 Credentials come from .env / config.json (no secrets here).
 
 Usage:
@@ -52,7 +52,6 @@ def _db_metrics():
             user=LOCAL_DB["user"], password=LOCAL_DB["password"], connect_timeout=5,
         )
         cur = conn.cursor()
-        m["outbox_backlog"] = _table_count(cur, "sync_outbox")
         m["conflicts_unreviewed"] = _table_count(cur, "sync_conflicts", "WHERE reviewed = FALSE")
         m["schema_drift_unresolved"] = _table_count(cur, "sync_schema_drift", "WHERE resolved = FALSE")
         conn.close()
@@ -103,7 +102,6 @@ def main():
 
     print("-" * 56)
     if metrics.get("db_reachable"):
-        print(f"  Outbox backlog      : {fmt(metrics.get('outbox_backlog'))}")
         print(f"  Conflicts (unrev.)  : {fmt(metrics.get('conflicts_unreviewed'))}")
         print(f"  Schema drift (open) : {fmt(metrics.get('schema_drift_unresolved'))}")
     else:

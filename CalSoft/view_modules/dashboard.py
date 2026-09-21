@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 from django.utils import timezone
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
+from core import aggregate_cache
 from django.shortcuts import render, get_object_or_404
 from django.contrib import messages
 from django.db import transaction
@@ -18,6 +19,8 @@ from CalSoft.models import (
 )
 
 User = get_user_model()
+from calSchedules.grouping import is_overdue, month_end
+
 logger = logging.getLogger(__name__)
 
 
@@ -50,6 +53,7 @@ def generate_greeting(user_first_name):
 
         return random.choice(messages_list)
     except Exception:
+        logger.debug("Greeting fallback used: %s", e)
         return f"Hello, {user_first_name}!"
 
 
@@ -82,11 +86,10 @@ def api_dashboard_metrics(request):
         for schedule in CalibrationSchedule.objects.filter(
             status__in=["pending", "pushed"], equipment__active_status=True
         ):
-            if schedule.scheduled_month:
-                last_day = schedule.scheduled_month + timezone.timedelta(days=32)
-                last_day = last_day.replace(day=1) - timezone.timedelta(days=1)
-                if last_day < current_date:
-                    overdue_count += 1
+            if schedule.scheduled_month and is_overdue(
+                month_end(schedule.scheduled_month), current_date
+            ):
+                overdue_count += 1
 
         in_progress_count = CalibrationSchedule.objects.filter(
             status="in_progress", equipment__active_status=True
@@ -169,6 +172,7 @@ def api_dashboard_metrics(request):
             }
         )
     except Exception as e:
+        logger.exception("%s failed: %s", "api_dashboard_metrics", e)
         return JsonResponse({"success": False, "error": str(e)}, status=500)
 
 
@@ -184,134 +188,139 @@ def api_dashboard_data(request):
     - recent_sessions: latest 5 approved sessions for the table
     """
     try:
-        current_date = timezone.now().date()
-
-        # ── Schedule-based counts ──────────────────────────────────────────────
-        pending_count = CalibrationSchedule.objects.filter(
-            status="pending", equipment__active_status=True
-        ).count()
-        pushed_count = CalibrationSchedule.objects.filter(
-            status="pushed", equipment__active_status=True
-        ).count()
-
-        # Overdue = pending or pushed schedules whose end-of-month deadline has passed
-        overdue_count = 0
-        for schedule in CalibrationSchedule.objects.filter(
-            status__in=["pending", "pushed"], equipment__active_status=True
-        ):
-            if schedule.scheduled_month:
-                next_month = schedule.scheduled_month.replace(day=28) + timezone.timedelta(days=4)
-                last_day = next_month - timezone.timedelta(days=next_month.day)
-                if last_day < current_date:
-                    overdue_count += 1
-
-        # ── Session-based counts ───────────────────────────────────────────────
-        APPROVED_STATUSES = ["approved", "approved_pending_certificate"]
-
-        approved_sessions = CalibrationSession.objects.filter(
-            status__in=APPROVED_STATUSES,
-            active_status=True,
+        # Global (not per-workshop) figures, cached per day; schedule, session and
+        # equipment saves invalidate the "cal" namespace.
+        today = timezone.now().date()
+        data = aggregate_cache.get_or_compute(
+            "cal", ["dashboard", today], lambda: _calibration_dashboard_data(today)
         )
-
-        # completed = sessions that have a certificate number generated
-        completed_count = (
-            approved_sessions.filter(
-                certificate_number__isnull=False,
-            )
-            .exclude(certificate_number="")
-            .count()
-        )
-
-        # Pass rates scoped to current week and current month
-        week_start = current_date - timezone.timedelta(days=current_date.weekday())
-        month_start = current_date.replace(day=1)
-
-        week_sessions = approved_sessions.filter(timestamp__date__gte=week_start)
-        month_sessions = approved_sessions.filter(timestamp__date__gte=month_start)
-
-        week_total = week_sessions.count()
-        month_total = month_sessions.count()
-
-        week_pass_rate = round(
-            (
-                week_sessions.filter(overall_pass=True).count() / week_total * 100
-                if week_total > 0
-                else 0
-            ),
-            1,
-        )
-        month_pass_rate = round(
-            (
-                month_sessions.filter(overall_pass=True).count() / month_total * 100
-                if month_total > 0
-                else 0
-            ),
-            1,
-        )
-
-        # ── Equipment ──────────────────────────────────────────────────────────
-        total_equipment = Equipment.objects.filter(active_status=True).count()
-        equipment_needing_calibration = (
-            CalibrationSchedule.objects.filter(
-                status__in=["pending", "pushed"], equipment__active_status=True
-            )
-            .values("equipment")
-            .distinct()
-            .count()
-        )
-
-        # ── Pending approval badge ─────────────────────────────────────────────
-        pending_approval_count = CalibrationSession.objects.filter(
-            status="pending_review", active_status=True
-        ).count()
-
-        # ── Recent approved sessions (latest 5) ────────────────────────────────
-        recent_qs = approved_sessions.select_related("procedure", "performed_by").order_by(
-            "-timestamp"
-        )[:5]
-        recent_sessions = [
-            {
-                "id": str(s.id),
-                "certificate_number": s.certificate_number,
-                "device_model": s.device_model,
-                "device_serial": s.device_serial,
-                "procedure_name": s.procedure.name if s.procedure else "Unknown",
-                "performed_by": (
-                    (s.performed_by.get_full_name() or s.performed_by.username)
-                    if s.performed_by
-                    else "Unknown"
-                ),
-                "timestamp": s.timestamp.isoformat(),
-                "overall_pass": s.overall_pass,
-            }
-            for s in recent_qs
-        ]
-
-        return JsonResponse(
-            {
-                "success": True,
-                "schedule_counts": {
-                    "pending": pending_count,
-                    "pushed": pushed_count,
-                    "overdue": overdue_count,
-                    "completed": completed_count,
-                },
-                "week_pass_rate": week_pass_rate,
-                "month_pass_rate": month_pass_rate,
-                "week_total": week_total,
-                "month_total": month_total,
-                "equipment_needing_calibration": equipment_needing_calibration,
-                "total_equipment": total_equipment,
-                "total_sessions": completed_count,
-                "pending_approval_count": pending_approval_count,
-                "current_month": current_date.strftime("%B %Y"),
-                "recent_sessions": recent_sessions,
-            }
-        )
+        return JsonResponse(data)
 
     except Exception as e:
         logger.error(f"api_dashboard_data error: {e}", exc_info=True)
         return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+def _calibration_dashboard_data(current_date):
+    # ── Schedule-based counts ──────────────────────────────────────────────
+    pending_count = CalibrationSchedule.objects.filter(
+        status="pending", equipment__active_status=True
+    ).count()
+    pushed_count = CalibrationSchedule.objects.filter(
+        status="pushed", equipment__active_status=True
+    ).count()
+
+    # Overdue = pending or pushed schedules whose end-of-month deadline has passed
+    overdue_count = 0
+    for schedule in CalibrationSchedule.objects.filter(
+        status__in=["pending", "pushed"], equipment__active_status=True
+    ):
+        if schedule.scheduled_month and is_overdue(
+            month_end(schedule.scheduled_month), current_date
+        ):
+            overdue_count += 1
+
+    # ── Session-based counts ───────────────────────────────────────────────
+    APPROVED_STATUSES = ["approved", "approved_pending_certificate"]
+
+    approved_sessions = CalibrationSession.objects.filter(
+        status__in=APPROVED_STATUSES,
+        active_status=True,
+    )
+
+    # completed = sessions that have a certificate number generated
+    completed_count = (
+        approved_sessions.filter(
+            certificate_number__isnull=False,
+        )
+        .exclude(certificate_number="")
+        .count()
+    )
+
+    # Pass rates scoped to current week and current month
+    week_start = current_date - timezone.timedelta(days=current_date.weekday())
+    month_start = current_date.replace(day=1)
+
+    week_sessions = approved_sessions.filter(timestamp__date__gte=week_start)
+    month_sessions = approved_sessions.filter(timestamp__date__gte=month_start)
+
+    week_total = week_sessions.count()
+    month_total = month_sessions.count()
+
+    week_pass_rate = round(
+        (
+            week_sessions.filter(overall_pass=True).count() / week_total * 100
+            if week_total > 0
+            else 0
+        ),
+        1,
+    )
+    month_pass_rate = round(
+        (
+            month_sessions.filter(overall_pass=True).count() / month_total * 100
+            if month_total > 0
+            else 0
+        ),
+        1,
+    )
+
+    # ── Equipment ──────────────────────────────────────────────────────────
+    total_equipment = Equipment.objects.filter(active_status=True).count()
+    equipment_needing_calibration = (
+        CalibrationSchedule.objects.filter(
+            status__in=["pending", "pushed"], equipment__active_status=True
+        )
+        .values("equipment")
+        .distinct()
+        .count()
+    )
+
+    # ── Pending approval badge ─────────────────────────────────────────────
+    pending_approval_count = CalibrationSession.objects.filter(
+        status="pending_review", active_status=True
+    ).count()
+
+    # ── Recent approved sessions (latest 5) ────────────────────────────────
+    recent_qs = approved_sessions.select_related("procedure", "performed_by").order_by(
+        "-timestamp"
+    )[:5]
+    recent_sessions = [
+        {
+            "id": str(s.id),
+            "certificate_number": s.certificate_number,
+            "device_model": s.device_model,
+            "device_serial": s.device_serial,
+            "procedure_name": s.procedure.name if s.procedure else "Unknown",
+            "performed_by": (
+                (s.performed_by.get_full_name() or s.performed_by.username)
+                if s.performed_by
+                else "Unknown"
+            ),
+            "timestamp": s.timestamp.isoformat(),
+            "overall_pass": s.overall_pass,
+        }
+        for s in recent_qs
+    ]
+
+    return {
+        "success": True,
+        "schedule_counts": {
+            "pending": pending_count,
+            "pushed": pushed_count,
+            "overdue": overdue_count,
+            "completed": completed_count,
+        },
+        "week_pass_rate": week_pass_rate,
+        "month_pass_rate": month_pass_rate,
+        "week_total": week_total,
+        "month_total": month_total,
+        "equipment_needing_calibration": equipment_needing_calibration,
+        "total_equipment": total_equipment,
+        "total_sessions": completed_count,
+        "pending_approval_count": pending_approval_count,
+        "current_month": current_date.strftime("%B %Y"),
+        "recent_sessions": recent_sessions,
+    }
 
 
 @login_required

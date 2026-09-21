@@ -36,8 +36,9 @@ time, doubling DB load on every poll of every table. Now:
   `sync.explain_queries=true`), not the log level.
 * It uses plain `EXPLAIN` (no `ANALYZE`), so it never executes the query.
 
-The structural fix for polling load is the **outbox** (Phase 2): enable it and
-change detection is event-driven instead of scanning ~40 tables every second.
+An event-driven alternative (trigger-based outbox CDC, Phase 2) was built but
+never wired into the running agent, and has since been removed; change
+detection is the timestamp poller.
 
 ## 4.14 — Observability (DONE)
 
@@ -47,28 +48,22 @@ python3 helper_scripts/sync_status.py --json    # machine-readable
 ```
 
 Combines `agent_status.json` (online, last sync, pending, conflicts, drift) with
-live local-DB counts (outbox backlog, unreviewed conflicts, open schema drift).
+live local-DB counts (unreviewed conflicts, open schema drift).
 Exits non-zero when something needs attention (conflicts or drift present), so it
 can be dropped into a cron/monitoring check.
 
 ## 4.15 — Idempotency + backpressure (DONE)
 
-* **Idempotency keys.** Every outbox event carries a deterministic
-  `idempotency_key = "<client_id>:<seq>"` (stable across retries, since `seq` is
-  immutable), and each upload batch carries a `sha256` batch key derived from
-  them. HQ can dedupe on these so at-least-once delivery is safe. *(HQ must honor
-  the key for full dedupe — client half is done here.)*
+* **Idempotency keys.** Upload batches carry deterministic idempotency keys
+  (`upload_batch`, `sync_agent_3.py`) so HQ can dedupe retried batches.
+  *(HQ must honor the key for full dedupe.)*
 * **Backpressure.** `upload_batch` detects HTTP **429/503** and returns a
-  `throttled:<code>:<retry_after>` signal; the outbox loop then backs off
-  (honoring `Retry-After`, else exponential 1→60s) instead of hammering a
-  struggling HQ. A per-cycle cap (`outbox_max_batches_per_cycle`, default 20)
-  keeps a large backlog from monopolizing the loop.
+  `throttled:<code>:<retry_after>` signal; the upload loop
+  (`upload_loop_with_background_init`, `sync_agent_8.py`) honors `Retry-After`
+  before its normal backoff instead of hammering a struggling HQ.
 
 ## New config knobs (all optional, sane defaults)
 
 | Key / env | Default | Meaning |
 |---|---|---|
 | `SYNC_EXPLAIN` / `sync.explain_queries` | off | Capture query plans (debug only) |
-| `sync.outbox_max_batches_per_cycle` | 20 | Backpressure cap per online cycle |
-| `sync.use_outbox` | false | Enable trigger-based CDC (Phase 2) |
-| `sync.outbox_prune` | true | Delete acknowledged outbox rows |

@@ -103,10 +103,16 @@
 {% endblock %}
 
 {% block extra_js %}
-  <script src="{% static 'js/chart.min.js' %}"></script>
+  <script src="{% static 'js/chart.umd.min.js' %}"></script>
   <script src="{% static 'dashboards/cmms-dashboard.js' %}"></script>
+  {{ equipment_status|json_script:"equipment-status-data" }}
+  {{ jobcard_status|json_script:"jobcard-status-data" }}
   <script>
     (function () {
+      function readJson(id) {
+        return JSON.parse(document.getElementById(id).textContent);
+      }
+
       function cssVar(name, fallback) {
         var v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
         return v || fallback;
@@ -155,8 +161,8 @@
         });
       }
 
-      renderDoughnut('chart-equipment-status', {{ equipment_status_json|safe }});
-      renderDoughnut('chart-jobcard-status', {{ jobcard_status_json|safe }});
+      renderDoughnut('chart-equipment-status', readJson('equipment-status-data'));
+      renderDoughnut('chart-jobcard-status', readJson('jobcard-status-data'));
     })();
   </script>
 {% endblock %}
