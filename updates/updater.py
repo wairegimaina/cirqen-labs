@@ -163,6 +163,10 @@ def recover_if_needed(progress_queue: "Optional[queue.Queue]" = None) -> bool:
         return False
     logger.warning("Detected interrupted update (phase=%s, v=%s) — rolling back", phase, version)
     ok = rollback(version, progress_queue)
+    # rollback() asks for a restart, but this runs at startup, before the
+    # restored code is loaded. Left in place, the sentinel makes the app
+    # relaunch itself the next time the user closes it.
+    SENTINEL_FILE.unlink(missing_ok=True)
     _clear_state()
     _release_lock()
     return ok
@@ -256,13 +260,19 @@ class Updater:
         self.backup_dir = (
             UPDATE_BACKUPS / f"v{version}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         )
+        # Outcome of run(), for callers that decide whether to restart. None
+        # until run() finishes; an update that rolled back must not restart
+        # into the same offer again.
+        self.succeeded: Optional[bool] = None
+        self.error: str = ""
 
     # ── Public entry point ────────────────────────────────────────────────────
 
     def run(self):
         # #5 — single-flight: never let two updates apply files concurrently.
         if not _acquire_lock():
-            self._emit("error", {"message": "Another update is already in progress."})
+            self.succeeded, self.error = False, "Another update is already in progress."
+            self._emit("error", {"message": self.error})
             return
         try:
             self._emit("started", {"message": f"Starting update to v{self.version}"})
@@ -290,6 +300,7 @@ class Updater:
 
             _write_state("complete", self.version)
             self._signal_restart()
+            self.succeeded = True
             self._report("success")                             # #8
             self._emit("complete", {
                 "message": f"Update to v{self.version} applied. Restart required.",
@@ -298,6 +309,7 @@ class Updater:
 
         except Exception as exc:
             logger.exception("Update failed — attempting rollback")
+            self.succeeded, self.error = False, str(exc)
             self._emit("error", {"message": str(exc)})
             rolled = self._rollback(str(exc))                   # #2 auto-rollback
             self._report("rolled_back" if rolled else "failed", str(exc))  # #8

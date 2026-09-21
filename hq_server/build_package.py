@@ -211,7 +211,16 @@ def build_package_if_needed(
     meta_path = packages_dir / f"cirqen_update_v{version}.json"
 
     if zip_path.exists() and meta_path.exists():
-        return {"built": False, "path": str(zip_path)}
+        # A package built before HQ_SIGNING_PRIVATE_KEY was set stays unsigned
+        # forever otherwise, and desktops that ship the public key refuse it on
+        # every attempt. Rebuild it once a key is available.
+        try:
+            signed = json.loads(meta_path.read_text()).get("signed", False)
+        except (OSError, ValueError):
+            signed = False
+        if signed or _load_private_key() is None:
+            return {"built": False, "path": str(zip_path)}
+        print(f"🔏 Package v{version} is unsigned and a signing key is now set — rebuilding")
 
     print(f"📦 Building update package v{version}...")
 
