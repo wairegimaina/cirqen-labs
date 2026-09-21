@@ -28,7 +28,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # settings.py reads config from here; CI gets a throwaway directory.
-      CIRQEN_DATA_DIR: ${{ runner.temp }}/cirqen-data
+      # The runner context is not available in job-level env (only in steps),
+      # and using it here made GitHub reject the whole workflow.
+      CIRQEN_DATA_DIR: /tmp/cirqen-data
       DJANGO_SECRET_KEY: ci-only-not-a-secret
     steps:
       - uses: actions/checkout@v4

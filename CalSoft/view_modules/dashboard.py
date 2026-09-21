@@ -52,7 +52,7 @@ def generate_greeting(user_first_name):
             ]
 
         return random.choice(messages_list)
-    except Exception:
+    except Exception as e:
         logger.debug("Greeting fallback used: %s", e)
         return f"Hello, {user_first_name}!"
 
