@@ -652,6 +652,11 @@ class MainWindow(QMainWindow):
     def _on_update_error(self, message: str):
         self._set_update_label("⚠️ Update failed", "#f97316", message)
         self._reset_check_button()
+        # A failed apply rolls back and no longer restarts, so the button that
+        # started it must not stay stuck on "Applying…".
+        self.restart_update_btn.setEnabled(True)
+        self.restart_update_btn.setText("↺ Restart & Update")
+        self.restart_update_btn.setVisible(False)
 
     def _set_update_label(self, text: str, color: str, tip: str = ""):
         self.update_status_label.setText(text)

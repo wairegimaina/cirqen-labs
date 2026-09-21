@@ -224,9 +224,45 @@ class AppUpdateService(QObject):
         logger.info("AppUpdateService stopped")
 
     def check_now(self):
-        """Trigger an immediate check (call from UI 'Check Now' button)."""
+        """Trigger an immediate check (call from UI 'Check Now' button).
+
+        A manual check also retries a package that failed to install before.
+        """
         logger.info("AppUpdateService: manual check triggered")
+        self._clear_failed()
         self._check_event.set()
+
+    # ------------------------------------------------------------------
+    # Failed-install memory
+    # ------------------------------------------------------------------
+    # Without this, a package that rolls back is offered again on the next
+    # check, the user clicks Restart again, and it fails the same way — a loop
+    # across restarts. A failure is remembered per package checksum, so a
+    # rebuilt package (e.g. re-signed by HQ) under the same version is retried.
+
+    def _failed_path(self) -> Path:
+        return self._status_dir / "update_failed.json"
+
+    def _read_failed(self) -> dict:
+        try:
+            return json.loads(self._failed_path().read_text())
+        except Exception:
+            return {}
+
+    def _record_failed(self, version: str, checksum: str, error: str):
+        try:
+            self._failed_path().write_text(json.dumps({
+                "version": version, "checksum": checksum, "error": error,
+                "at": datetime.now(timezone.utc).isoformat(),
+            }, indent=2))
+        except Exception as exc:
+            logger.warning("Cannot record failed update: %s", exc)
+
+    def _clear_failed(self):
+        try:
+            self._failed_path().unlink(missing_ok=True)
+        except Exception:
+            pass
 
     def get_status(self) -> dict:
         return dict(self._status)
@@ -313,6 +349,18 @@ class AppUpdateService(QObject):
                 logger.info("Updater event: %s — %s", evt.get("event"), evt.get("data", {}).get("message", ""))
             except Exception:
                 break
+
+        # Restarting after a failed (rolled-back) update relaunches straight
+        # into the same offer, and the user is asked to install it again.
+        if getattr(updater, "succeeded", True) is not True:
+            error = getattr(updater, "error", "") or "unknown error"
+            logger.error("AppUpdateService: v%s was not installed: %s", version, error)
+            self._record_failed(version, _sha256(staged_zip), error)
+            self._write_status(update_ready=False, new_version=version,
+                               error=f"v{version} failed to install: {error}")
+            self.error_occurred.emit(f"Update v{version} failed and was rolled back: {error}")
+            return
+        self._clear_failed()
 
         if change_type == "frontend":
             # Hot-reload: run collectstatic then signal the web view to refresh
@@ -482,6 +530,18 @@ class AppUpdateService(QObject):
         checksum     = data.get("checksum", "")
         changes      = data.get("changes", "")
         critical     = data.get("critical", False)
+
+        failed = self._read_failed()
+        if failed.get("version") == new_version and failed.get("checksum") in ("", checksum):
+            # This exact package already failed to install here. Offering it
+            # again would only restart the app into the same failure.
+            msg = (f"v{new_version} failed to install: {failed.get('error', 'unknown error')}. "
+                   "It will be retried when HQ publishes a new package, or on Check Now.")
+            logger.warning("AppUpdateService: %s", msg)
+            self._write_status(checking=False, server_available=True,
+                               update_available=True, update_ready=False,
+                               new_version=new_version, error=msg)
+            return
 
         self._write_status(checking=False, server_available=True,
                            update_available=True, new_version=new_version,

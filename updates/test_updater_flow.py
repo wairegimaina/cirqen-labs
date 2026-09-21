@@ -96,8 +96,10 @@ class UpdaterFlowTests(SimpleTestCase):
             zf.writestr("files/core/new_module.py", new_module)
 
     def _run(self, healthy=True):
+        u = updater.Updater(str(self.package), "1.6.0", queue.Queue(), is_local_file=True)
         with mock.patch.object(updater.Updater, "_health_check", return_value=healthy):
-            updater.Updater(str(self.package), "1.6.0", queue.Queue(), is_local_file=True).run()
+            u.run()
+        return u
 
     def _assert_original(self):
         self.assertEqual((self.install / "templates" / "page.html").read_text(), "old page")
@@ -114,6 +116,24 @@ class UpdaterFlowTests(SimpleTestCase):
     def test_failed_health_check_rolls_back_automatically(self):
         self._run(healthy=False)
         self._assert_original()
+
+    def test_outcome_is_reported_so_a_failed_update_does_not_restart(self):
+        """The desktop shell restarts only when succeeded is True. Before this,
+        it restarted after a rollback too, straight into the same offer."""
+        self.assertIs(self._run(healthy=True).succeeded, True)
+        failed = self._run(healthy=False)
+        self.assertIs(failed.succeeded, False)
+        self.assertIn("health check", failed.error)
+
+    def test_startup_recovery_does_not_leave_a_restart_request(self):
+        """Recovery runs before the app is up; a leftover sentinel made the app
+        relaunch itself the next time the user closed it."""
+        self._run(healthy=True)
+        updater._write_state("migrating", "1.6.0")  # as if the app died mid-update
+        self.assertTrue(updater.recover_if_needed())
+        self._assert_original()
+        self.assertFalse(updater.SENTINEL_FILE.exists())
+        self.assertFalse(updater.STATE_FILE.exists())
 
     def test_manual_rollback_restores_the_previous_version(self):
         self._run(healthy=True)
@@ -134,8 +154,10 @@ class UpdaterFlowTests(SimpleTestCase):
         with zipfile.ZipFile(self.package, "w") as zf:
             for name, data in entries.items():
                 zf.writestr(name, data)
-        self._run(healthy=True)
+        u = self._run(healthy=True)
         self._assert_original()
+        self.assertIs(u.succeeded, False)
+        self.assertIn("unsigned", u.error)
 
     def test_package_signed_by_another_key_is_refused(self):
         """A package from a server that is not ours — the fleet-takeover case."""
