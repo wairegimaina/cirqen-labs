@@ -96,6 +96,3 @@ sentry-sdk>=2.0
 pytest>=8.0
 pytest-django>=4.9
 chartjs
-
-# ── Scheduling (required by calSchedules app — see calSchedules/tests.py) ──
-django-scheduler>=2.0
