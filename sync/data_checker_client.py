@@ -349,20 +349,32 @@ class DataCheckerClient:
                 # Discover JSON/JSONB columns once
                 cur.execute(
                     """
-                    SELECT column_name
+                    SELECT column_name, data_type
                     FROM information_schema.columns
                     WHERE table_schema = %s AND table_name = %s
-                      AND data_type IN ('json', 'jsonb')
                     """,
                     (schema, tbl),
                 )
-                json_cols = {r[0] for r in cur.fetchall()}
+                col_types = dict(cur.fetchall())
+                json_cols = {c for c, t in col_types.items() if t in ("json", "jsonb")}
+
+            # HQ can send columns this client has no migration for (e.g.
+            # source_updated_at). Skip them, or every row of the table fails
+            # with UndefinedColumn and a fresh install boots with no data.
+            dropped = sorted({k for r in decoded_rows for k in r if not k.startswith("_")} - set(col_types))
+            if col_types and dropped:
+                self.logger.warning(
+                    "%s: skipping column(s) HQ has but this client does not: %s",
+                    table, ", ".join(dropped),
+                )
 
             for row in decoded_rows:
                 try:
                     processed: Dict[str, Any] = {}
                     for k, v in row.items():
                         if k.startswith("_"):
+                            continue
+                        if col_types and k not in col_types:
                             continue
                         if v is None:
                             processed[k] = None
@@ -405,7 +417,10 @@ class DataCheckerClient:
                     ok += 1
                 except Exception as exc:
                     failed += 1
-                    self.logger.debug("Upsert failed for row in %s: %s", table, exc)
+                    # First failure per batch at WARNING: at DEBUG a whole
+                    # table could fail to bootstrap without a trace in the log.
+                    log = self.logger.warning if failed == 1 else self.logger.debug
+                    log("Upsert failed for row in %s: %s", table, exc)
                     conn.rollback()
 
         except Exception as exc:

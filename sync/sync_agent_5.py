@@ -126,9 +126,23 @@ class ParentRecoveryMixin(SmartDeleteMixin):
                         LOG.info(f"   ℹ️  Parent already exists locally (race condition)")
                         return True
 
+                    # HQ can carry columns this client has no migration for
+                    # (e.g. source_updated_at). Drop them as the main apply
+                    # path does; otherwise every recovery fails with
+                    # UndefinedColumn and the child rows never land.
+                    local_columns = self.get_table_schema_info(f"{schema}.{tbl}").get("columns", set())
+                    if local_columns:
+                        drifted = [c for c in parent_data if c not in local_columns]
+                        if drifted:
+                            self.record_schema_drift(f"{schema}.{tbl}", drifted, row_id=parent_id)
+                            parent_data = {k: v for k, v in parent_data.items() if k in local_columns}
+
                     # Prepare insert
                     cols = list(parent_data.keys())
-                    vals = [parent_data[c] for c in cols]
+                    vals = [
+                        Json(parent_data[c]) if isinstance(parent_data[c], (dict, list)) else parent_data[c]
+                        for c in cols
+                    ]
 
                     col_list = ", ".join([f'"{c}"' for c in cols])
                     placeholders = ", ".join(["%s"] * len(cols))
