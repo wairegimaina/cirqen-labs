@@ -103,7 +103,7 @@ document.addEventListener('DOMContentLoaded', function () {
           labels: ['Waiting Approval', 'Approved', 'Declined'],
           datasets: [
             {
-              label: 'Job Cards',
+              label: 'Work Orders',
               data: [totalWaiting, totalApproved, totalDeclined],
               backgroundColor: ['#fbbf24', '#27c24c', '#e55353'],
               borderColor: ['#f59e0b', '#1e8e3e', '#b32d2d'],
@@ -136,7 +136,7 @@ document.addEventListener('DOMContentLoaded', function () {
               beginAtZero: true,
               title: {
                 display: true,
-                text: 'Number of Job Cards',
+                text: 'Number of Work Orders',
                 font: { size: 12, weight: 'bold' },
               },
               ticks: { precision: 0 },
@@ -288,7 +288,7 @@ document.addEventListener('DOMContentLoaded', function () {
               beginAtZero: true,
               title: {
                 display: true,
-                text: 'Number of Job Cards',
+                text: 'Number of Work Orders',
                 font: { size: 12, weight: 'bold' },
               },
               ticks: {
@@ -500,7 +500,7 @@ document.addEventListener('DOMContentLoaded', function () {
           labels: ['Waiting Approval', 'Approved', 'Declined'],
           datasets: [
             {
-              label: 'Job Cards',
+              label: 'Work Orders',
               data: [totalWaiting, totalApproved, totalDeclined],
               backgroundColor: ['#fbbf24', '#27c24c', '#e55353'],
               borderColor: ['#f59e0b', '#1e8e3e', '#b32d2d'],
@@ -533,7 +533,7 @@ document.addEventListener('DOMContentLoaded', function () {
               beginAtZero: true,
               title: {
                 display: true,
-                text: 'Number of Job Cards',
+                text: 'Number of Work Orders',
                 font: { size: 12, weight: 'bold' },
               },
               ticks: { precision: 0 },
@@ -683,7 +683,7 @@ document.addEventListener('DOMContentLoaded', function () {
             beginAtZero: true,
             title: {
               display: true,
-              text: 'Number of Job Cards',
+              text: 'Number of Work Orders',
               font: { size: 12, weight: 'bold' },
             },
             ticks: {

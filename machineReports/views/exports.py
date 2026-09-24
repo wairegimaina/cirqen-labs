@@ -94,7 +94,7 @@ def export_equipment_history(request, equipment_id):
     # Repair History Sheet with complete costs
     ws_repairs = wb.create_sheet("Repair History")
     ws_repairs.append([
-        "Date", "Job Card ID", "Description", "Action Taken", "Performed By",
+        "Date", "Work Order ID", "Description", "Action Taken", "Performed By",
         "Time Started", "Time Completed", "Downtime (Hours)",
         "Labor Cost (KSh)", "Parts Cost (KSh)", "Additional Costs (KSh)",
         "Additional Costs Description", "Total Cost (KSh)", "Spare Parts Details"

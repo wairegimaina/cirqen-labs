@@ -609,7 +609,7 @@ def global_search(request):
     )[:8]:
         results["jobcards"].append(
             {
-                "title": f"{jc.get_action_taken_display()} — {jc.equipment.description.name if jc.equipment and jc.equipment.description else 'Job card'}",
+                "title": f"{jc.get_action_taken_display()} — {jc.equipment.description.name if jc.equipment and jc.equipment.description else 'Work order'}",
                 "subtitle": f"{jc.status} · {jc.equipment.serial_number if jc.equipment else ''}",
                 "url": reverse("jobcard:download_jobcard_pdf", args=[jc.id]),
             }

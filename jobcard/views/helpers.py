@@ -234,6 +234,7 @@ def generate_docx(job_card, workshop):
             'priority_level': job_card.priority_level or 'N/A',
             'status': job_card.status or 'N/A',
             'job_description': job_card.job_description or 'N/A',
+            'remarks': job_card.remarks or '',
             'action_taken': job_card.action_taken or 'N/A',
             'time_started': format_time(job_card.time_started),
             'time_completed': format_time(job_card.time_completed),

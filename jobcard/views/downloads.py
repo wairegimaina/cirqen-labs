@@ -53,18 +53,18 @@ def download_jobcard_docx(request, jobcard_id: UUID):
     profile, department, workshop, role = get_user_context(request)
 
     if not profile:
-        messages.error(request, "User profile not found or incomplete. Cannot download job card.")
+        messages.error(request, "User profile not found or incomplete. Cannot download work order.")
         return redirect('jobcard:create_job_card')
 
     job_card = get_object_or_404(jobcard, id=jobcard_id)
 
     if role == 'NIC':
         if not department or job_card.department != department:
-            messages.error(request, "You can only download job cards from your department.")
+            messages.error(request, "You can only download work orders from your department.")
             return redirect('jobcard:waiting_jobcards')
     elif role == 'Tech':
         if not workshop or job_card.workshop != workshop:
-            messages.error(request, "You can only download job cards from your workshop.")
+            messages.error(request, "You can only download work orders from your workshop.")
             return redirect('jobcard:waiting_jobcards')
     elif role == 'HOD':
         pass
@@ -84,7 +84,7 @@ def download_jobcard_pdf(request, jobcard_id):
     profile, department, workshop, role = get_user_context(request)
 
     if not profile:
-        messages.error(request, "User profile not found or incomplete. Cannot download job card.")
+        messages.error(request, "User profile not found or incomplete. Cannot download work order.")
         return redirect('jobcard:create_job_card')
 
     job_card = get_object_or_404(
@@ -96,11 +96,11 @@ def download_jobcard_pdf(request, jobcard_id):
     # Permission check
     if role == 'NIC':
         if not department or job_card.department != department:
-            messages.error(request, "You can only download job cards from your department.")
+            messages.error(request, "You can only download work orders from your department.")
             return redirect('jobcard:waiting_jobcards')
     elif role == 'Tech':
         if not workshop or job_card.workshop != workshop:
-            messages.error(request, "You can only download job cards from your workshop.")
+            messages.error(request, "You can only download work orders from your workshop.")
             return redirect('jobcard:waiting_jobcards')
     elif role == 'HOD':
         pass  # HOD can download all
@@ -184,7 +184,7 @@ def bulk_download_approved_jobcards(request):
         job_cards = jobcard.objects.none()
 
     if not job_cards.exists():
-        messages.warning(request, "No approved job cards found in this date range.", extra_tags="jobcard")
+        messages.warning(request, "No approved work orders found in this date range.", extra_tags="jobcard")
         if role == 'HOD':
             return _hod_redirect(request)
         elif role == 'NIC':
@@ -267,7 +267,7 @@ def bulk_download_waiting_jobcards(request):
         job_cards = jobcard.objects.none()
 
     if not job_cards.exists():
-        messages.warning(request, "No waiting approval job cards found in this date range.", extra_tags="jobcard")
+        messages.warning(request, "No waiting approval work orders found in this date range.", extra_tags="jobcard")
         if role == 'HOD':
             return _hod_redirect(request)
         elif role == 'NIC':
@@ -349,7 +349,7 @@ def bulk_download_declined_jobcards(request):
         job_cards = jobcard.objects.none()
 
     if not job_cards.exists():
-        messages.warning(request, "No declined job cards found in this date range.", extra_tags="jobcard")
+        messages.warning(request, "No declined work orders found in this date range.", extra_tags="jobcard")
         if role == 'HOD':
             return _hod_redirect(request)
         elif role == 'NIC':

@@ -53,7 +53,7 @@ class JobCardManager {
     if (searchTerm) {
       this.resultsText.textContent = `Found ${finalCount} matches for "${searchTerm}" on this page.`;
     } else {
-      this.resultsText.textContent = `Showing ${finalCount} approved job cards.`;
+      this.resultsText.textContent = `Showing ${finalCount} approved work orders.`;
     }
   }
 }

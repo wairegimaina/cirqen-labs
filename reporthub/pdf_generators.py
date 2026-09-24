@@ -311,7 +311,7 @@ class PDFReportGenerator:
         canvas.drawCentredString(
             width / 2,
             height - 1.7*cm,
-            "Equipment Management System - Job Card Report"
+            "Equipment Management System - Work Order Report"
         )
 
         # Workshop info
@@ -377,7 +377,7 @@ class PDFReportGenerator:
         """Create the main title and subtitle section"""
         elements = []
 
-        title_text = f"{self.report_type.upper()} TECHNICIAN JOB CARD REPORT"
+        title_text = f"{self.report_type.upper()} TECHNICIAN WORK ORDER REPORT"
         title = Paragraph(title_text, self.styles['MainTitle'])
         elements.append(title)
 
@@ -439,7 +439,7 @@ class PDFReportGenerator:
             ['Jobs Waiting Approval', f'{total_waiting:,}', f'{(total_waiting/total_jobs*100) if total_jobs > 0 else 0:.1f}%'],
             ['Jobs Approved', f'{total_approved:,}', f'{(total_approved/total_jobs*100) if total_jobs > 0 else 0:.1f}%'],
             ['Jobs Declined', f'{total_declined:,}', f'{(total_declined/total_jobs*100) if total_jobs > 0 else 0:.1f}%'],
-            ['Total Job Cards', f'{total_jobs:,}', '100.0%'],
+            ['Total Work Orders', f'{total_jobs:,}', '100.0%'],
             ['Active Technicians', f'{len(users_data):,}', '-']
         ]
 
@@ -538,7 +538,7 @@ class PDFReportGenerator:
 
         # Add axis labels
         drawing.add(String(240, 20, "Month", fontName="Helvetica-Bold", fontSize=10))
-        drawing.add(String(15, 150, "Job Cards", fontName="Helvetica-Bold", fontSize=10, angle=90))
+        drawing.add(String(15, 150, "Work Orders", fontName="Helvetica-Bold", fontSize=10, angle=90))
 
         drawing.add(chart)
         drawing.add(legend)
@@ -698,7 +698,7 @@ class PDFReportGenerator:
         # Add page break before chart
         elements.append(PageBreak())
 
-        header_text = f"JOB CARD STATUS VISUALIZATION - {period_name}" if period_name else "JOB CARD STATUS VISUALIZATION"
+        header_text = f"WORK ORDER STATUS VISUALIZATION - {period_name}" if period_name else "WORK ORDER STATUS VISUALIZATION"
         header = Paragraph(header_text, self.styles['SectionHeader'])
         elements.append(header)
         elements.append(Spacer(1, 15))
@@ -773,7 +773,7 @@ class PDFReportGenerator:
         else:
             # Show message when no data
             no_data_text = String(250, 30,
-                                "No job card data available for this period",
+                                "No work order data available for this period",
                                 fontName='Helvetica-Oblique', fontSize=9, textAnchor='middle')
             no_data_text.fillColor = self.COLOR_PALETTE['text_secondary']
             drawing.add(no_data_text)

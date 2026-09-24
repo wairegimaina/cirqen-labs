@@ -47,6 +47,7 @@ def _read_form(request):
         "department": post.get("department"),
         "equipment": post.get("equipment"),
         "job_description": post.get("job_description"),
+        "remarks": post.get("remarks", ""),
         "action_taken": post.get("action_taken"),
         "time_started": post.get("time_started"),
         "time_completed": post.get("time_completed"),
@@ -109,7 +110,7 @@ def _usable_ppm_schedule_id(request, workshop, form):
     if workshop.category != "maintenance":
         messages.warning(
             request,
-            "PPM schedules can only be linked in maintenance workshops. Creating job card without PPM link.",
+            "PPM schedules can only be linked in maintenance workshops. Creating work order without PPM link.",
             extra_tags="jobcard",
         )
         return None
@@ -119,11 +120,11 @@ def _usable_ppm_schedule_id(request, workshop, form):
     try:
         PPMSchedule.objects.get(id=UUID(schedule_id), active_status=True)
     except (ValueError, AttributeError):
-        messages.warning(request, "Invalid PPM schedule format. Creating job card without PPM link.",
+        messages.warning(request, "Invalid PPM schedule format. Creating work order without PPM link.",
                          extra_tags="jobcard")
         return None
     except PPMSchedule.DoesNotExist:
-        messages.warning(request, "Selected PPM schedule not found or inactive. Creating job card without PPM link.",
+        messages.warning(request, "Selected PPM schedule not found or inactive. Creating work order without PPM link.",
                          extra_tags="jobcard")
         return None
     return schedule_id
@@ -131,7 +132,7 @@ def _usable_ppm_schedule_id(request, workshop, form):
 
 def _department_and_equipment(workshop, form):
     if not workshop:
-        raise FormRejected("Technician's workshop not found. Cannot create job card.")
+        raise FormRejected("Technician's workshop not found. Cannot create work order.")
     try:
         department_uuid = UUID(form["department"])
         equipment_uuid = UUID(form["equipment"])
@@ -209,7 +210,7 @@ def _eligible_ppm_schedule(request, workshop, equipment, schedule_id):
         messages.warning(
             request,
             f"PPM schedule {schedule.scheduled_month.strftime('%B %Y')} is already linked to an approved "
-            "job card. Creating job card without PPM link.",
+            "work order. Creating work order without PPM link.",
             extra_tags="jobcard",
         )
         return None
@@ -284,7 +285,7 @@ def _record_parts(job_card, workshop, rows):
 
 def _success_message(job_card, workshop, ppm_schedule, action_taken):
     message = (
-        f"Job card #{job_card.id} created successfully by {workshop.name} "
+        f"Work order #{job_card.id} created successfully by {workshop.name} "
         f"and is waiting for approval. Total cost: KSh {job_card.get_total_cost():,.2f}."
     )
     if ppm_schedule:
@@ -328,6 +329,7 @@ def handle_technician_job_card(request, workshop):
                 workshop=workshop,
                 priority_level=form["priority_level"],
                 job_description=form["job_description"],
+                remarks=(form["remarks"] or "").strip() or None,
                 action_taken=form["action_taken"],
                 time_started=form["time_started"],
                 time_completed=form["time_completed"] or None,
@@ -353,10 +355,10 @@ def handle_technician_job_card(request, workshop):
 
     except ValidationError as exc:
         logger.error("Validation error creating job card: %s", exc)
-        messages.error(request, f"Cannot create job card: {exc}", extra_tags="jobcard")
+        messages.error(request, f"Cannot create work order: {exc}", extra_tags="jobcard")
     except Exception as exc:
         logger.error("Unexpected error creating job card: %s", exc, exc_info=True)
-        messages.error(request, f"Error creating job card: {exc}", extra_tags="jobcard")
+        messages.error(request, f"Error creating work order: {exc}", extra_tags="jobcard")
 
     request.session["jobcard_form_data"] = form
     return _render_form(request, workshop, form, **no_signature)

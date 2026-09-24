@@ -77,11 +77,11 @@ def _validate(form):
     if not form["use_auto_signature"] and not form["nurse_signature_data"]:
         raise FormRejected("Please provide a signature or enable auto-signature.")
     if not (form["jobcard_id"] and form["nurse_name"]):
-        raise FormRejected("Job card and nurse name are required.")
+        raise FormRejected("Work order and nurse name are required.")
     try:
         return UUID(form["jobcard_id"])
     except (ValueError, AttributeError):
-        raise FormRejected("Invalid job card ID format.")
+        raise FormRejected("Invalid work order ID format.")
 
 
 def _sign(request, job_card, form):
@@ -112,7 +112,7 @@ def _check_linked_ppm(job_card):
     if schedule.equipment != job_card.equipment:
         raise FormRejected(
             f"PPM schedule equipment mismatch. Schedule is for {schedule.equipment.description}, "
-            f"job card is for {job_card.equipment.description}.",
+            f"work order is for {job_card.equipment.description}.",
             job_card,
         )
 
@@ -123,7 +123,7 @@ def _approve(request, job_card, form):
         job_card.deduct_stock()
     except ValidationError as exc:
         logger.error("Validation error approving job card #%s: %s", job_card.id, exc)
-        raise FormRejected(f"Cannot approve job card: {exc}", job_card)
+        raise FormRejected(f"Cannot approve work order: {exc}", job_card)
     job_card.status = "Approved"
     job_card.decline_reason = None
     job_card.save()
@@ -131,7 +131,7 @@ def _approve(request, job_card, form):
     ppm_updated = bool(job_card.related_ppm_schedule) and job_card.update_ppm_status_if_applicable()
 
     message = (
-        f"Job card #{job_card.id} approved successfully. "
+        f"Work order #{job_card.id} approved successfully. "
         f"Total cost: KSh {job_card.get_total_cost():,.2f}. Stock has been updated."
     )
     schedule = job_card.related_ppm_schedule
@@ -162,7 +162,7 @@ def _decline(request, job_card, form):
     job_card.status = "Declined"
     job_card.decline_reason = form["decline_reason"]
     job_card.save()
-    messages.success(request, f"Job card #{job_card.id} declined successfully. No stock changes made.",
+    messages.success(request, f"Work order #{job_card.id} declined successfully. No stock changes made.",
                      extra_tags="jobcard")
     logger.info("Job card #%s declined by %s (%s): %s",
                 job_card.id, request.user.get_full_name(), form["nurse_name"], form["decline_reason"][:100])
@@ -178,7 +178,7 @@ def handle_nurse_approval(request, nurse_department):
         with transaction.atomic():
             job_card = jobcard.objects.select_for_update().get(id=jobcard_uuid, status="Waiting Approval")
             if job_card.department != nurse_department:
-                raise FormRejected("You can only approve/decline job cards for your department.", job_card)
+                raise FormRejected("You can only approve/decline work orders for your department.", job_card)
             _sign(request, job_card, form)
             if "approve" in request.POST:
                 return _approve(request, job_card, form)
@@ -191,11 +191,11 @@ def handle_nurse_approval(request, nurse_department):
         return _render_form(request, nurse_department, form, rejection.job_card or selected_job_card)
     except jobcard.DoesNotExist:
         messages.error(request,
-                       "Job card not found, already processed, or you don't have permission to access it.",
+                       "Work order not found, already processed, or you don't have permission to access it.",
                        extra_tags="jobcard")
         logger.warning("Job card not found or inaccessible: %s", form["jobcard_id"])
     except Exception as exc:
         logger.error("Error in nurse approval/decline for jobcard_id %s: %s", form["jobcard_id"], exc,
                      exc_info=True)
-        messages.error(request, f"Error processing job card: {exc}", extra_tags="jobcard")
+        messages.error(request, f"Error processing work order: {exc}", extra_tags="jobcard")
     return _render_form(request, nurse_department, form, selected_job_card)

@@ -14,7 +14,7 @@
 
   const GROUP_LABELS = {
     equipment: "Equipment",
-    jobcards: "Job Cards",
+    jobcards: "Work Orders",
     standards: "Calibration Standards",
   };
   const GROUP_ICONS = {
@@ -43,7 +43,7 @@
     input.value = "";
     activeIndex = -1;
     flatResults = [];
-    resultsEl.innerHTML = '<div class="cmdk-empty">Start typing to search — equipment, job cards, and calibration standards.</div>';
+    resultsEl.innerHTML = '<div class="cmdk-empty">Start typing to search — equipment, work orders, and calibration standards.</div>';
     setTimeout(() => input.focus(), 0);
   }
 

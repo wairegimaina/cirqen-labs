@@ -132,7 +132,7 @@ def _compute_annual_data(workshop, year):
         if annual_data['total_waiting'] > annual_data['total_approved'] * 0.3:
             annual_data['recommendations'] = "Consider reviewing approval processes to reduce backlog."
         elif decline_rate > 15:
-            annual_data['recommendations'] = "High decline rate indicates need for quality improvement in job card preparation."
+            annual_data['recommendations'] = "High decline rate indicates need for quality improvement in work order preparation."
         else:
             annual_data['recommendations'] = "Maintain current operational efficiency levels."
 

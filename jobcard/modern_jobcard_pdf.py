@@ -13,6 +13,7 @@ from reportlab.pdfgen import canvas as rl_canvas
 from django.http import HttpResponse
 from django.conf import settings
 from io import BytesIO
+from xml.sax.saxutils import escape
 import os
 import base64
 from PIL import Image as PILImage
@@ -249,7 +250,7 @@ class ModernJobCardPDFGenerator:
         canvas.drawCentredString(
             width / 2,
             height - 1.2*cm,
-            "EQUIPMENT MAINTENANCE JOB CARD"
+            "EQUIPMENT MAINTENANCE WORK ORDER"
         )
 
         # Department name
@@ -357,7 +358,7 @@ class ModernJobCardPDFGenerator:
 
         # Card ID line - Show only first 8 characters
         short_id = str(self.job_card.id)[:8]
-        card_id_para = Paragraph(f"<b>Card No:</b> {short_id}", self.styles['NormalText'])
+        card_id_para = Paragraph(f"<b>Work Order No:</b> {short_id}", self.styles['NormalText'])
         elements.append(card_id_para)
         elements.append(Spacer(1, 5))
 
@@ -648,6 +649,21 @@ class ModernJobCardPDFGenerator:
 
         elements.append(desc_table)
         elements.append(Spacer(1, 12))
+
+        if self.job_card.remarks:
+            elements.append(Paragraph("<b>Remarks</b>", self.styles['BoldText']))
+            elements.append(Spacer(1, 5))
+            remarks_table = Table([[Paragraph(escape(self.job_card.remarks), self.styles['NormalText'])]], colWidths=[7*inch])
+            remarks_table.setStyle(TableStyle([
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('GRID', (0, 0), (-1, -1), 0.5, self.COLOR_PALETTE['border']),
+                ('LEFTPADDING', (0, 0), (-1, -1), 8),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+                ('TOPPADDING', (0, 0), (-1, -1), 8),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ]))
+            elements.append(remarks_table)
+            elements.append(Spacer(1, 12))
 
         return elements
 
