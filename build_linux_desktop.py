@@ -13,7 +13,7 @@ HOW TO USE
   Options:
     --skip-pyinstaller    Skip the PyInstaller build (use existing dist/Cirqen)
     --skip-appdir         Skip creating the AppDir / AppImage structure
-    --version X.Y.Z       Override the app version string (default: 1.0.0)
+    --version X.Y.Z       Override the app version string (default: version.txt)
 
 WHAT THIS SCRIPT DOES
 ──────────────────────
@@ -24,7 +24,7 @@ WHAT THIS SCRIPT DOES
   Step 5   Create the .desktop entry file  (app menu integration)
   Step 6   Create install.sh   (system-wide install to /opt/Cirqen)
   Step 7   Create uninstall.sh (clean removal)
-  Step 8   Create AppDir       (ready for appimagetool → .AppImage)
+  Step 8   Create AppDir and build Cirqen-<version>-<arch>.AppImage
   Step 9   Create README_LINUX.txt  (per-distro install instructions)
   Step 10  Package everything into Cirqen_linux_<version>.tar.gz
 
@@ -39,8 +39,8 @@ OUTPUT
     uninstall.sh                            ← clean removal
     resources/icon.png                      ← best icon found in static/images/
     README_LINUX.txt                        ← per-distro instructions
-  dist/Cirqen.AppDir/                       ← AppImage source folder
-  dist/Cirqen_linux_1.0.0.tar.gz           ← final distributable archive
+  dist/Cirqen-<version>-x86_64.AppImage     ← single-file app (recommended)
+  dist/Cirqen_linux_<version>.tar.gz        ← /opt install archive
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -75,8 +75,10 @@ _parser.add_argument("--skip-pyinstaller", action="store_true",
                      help="Skip PyInstaller build – use an existing dist/Cirqen")
 _parser.add_argument("--skip-appdir", action="store_true",
                      help="Skip AppDir / AppImage structure creation")
-_parser.add_argument("--version", default="1.0.0",
-                     help="App version string  (default: 1.0.0)")
+_VERSION_FILE = Path(__file__).parent / "version.txt"
+_parser.add_argument("--version",
+                     default=_VERSION_FILE.read_text().strip() if _VERSION_FILE.exists() else "1.0.0",
+                     help="App version string  (default: contents of version.txt)")
 ARGS = _parser.parse_args()
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -401,6 +403,20 @@ def step_run_pyinstaller_build() -> bool:
     files  = list(DIST_APP.rglob("*"))
     size   = sum(f.stat().st_size for f in files if f.is_file()) / (1024*1024)
     ok(f"PyInstaller build complete: {len(files)} files, {size:.1f} MB")
+    return _check_no_dev_data()
+
+
+def _check_no_dev_data() -> bool:
+    """Refuse to package a bundle that carries this machine's own instance
+    data (live database, config.json with HQ credentials, secret.key)."""
+    leaked = [p for p in (DIST_APP / "_internal" / "data", DIST_APP / "data")
+              if (p / "config.json").exists() or (p / "postgres").exists()
+              or (p / "secret.key").exists()]
+    if leaked:
+        for p in leaked:
+            fail(f"Bundle contains machine-local data: {p}")
+        fail("Remove it from the PyInstaller datas (see DEV_ONLY_DIRS in build.py).")
+        return False
     return True
 
 
@@ -682,82 +698,9 @@ def step_create_launcher() -> bool:
         export XDG_CONFIG_HOME="${{XDG_CONFIG_HOME:-$HOME/.config}}"
         export XDG_CACHE_HOME="${{XDG_CACHE_HOME:-$HOME/.cache}}"
 
-        # ── Tails / live-system note ──────────────────────────────────────────
-        # On Tails, $HOME is /home/amnesia. Data is lost on reboot unless
-        # Persistent Storage is enabled and includes ~/.local/share/cirqen
-        if [ "${{USER:-}}" = "amnesia" ] || [ "${{HOME:-}}" = "/home/amnesia" ]; then
-            echo "ℹ️   Running on Tails. Enable Persistent Storage to keep data across reboots."
-        fi
-
-        # ── PostgreSQL run-directory permission fix ───────────────────────────
-        # /var/run/postgresql is owned by the system 'postgres' user (mode 2775).
-        # Our embedded PostgreSQL runs as the logged-in user and cannot write its
-        # lock file there → FATAL crash before the app even opens.
-        # We fix this once per machine using a flag file so the user is only
-        # ever asked for their password a single time.
-        _PG_RUN_DIR="/var/run/postgresql"
-        _PG_FLAG="$XDG_DATA_HOME/cirqen/.pg_perms_ok"
-
-        _fix_pg_permissions() {{
-            # Already fixed on this machine?
-            [ -f "$_PG_FLAG" ] && return 0
-            # Already writable (e.g. root or group postgres already set)?
-            [ -w "$_PG_RUN_DIR" ] && {{ mkdir -p "$(dirname "$_PG_FLAG")"; touch "$_PG_FLAG"; return 0; }}
-
-            echo ""
-            echo "┌──────────────────────────────────────────────────────────┐"
-            echo "│  {APP_NAME} – One-time setup  (requires administrator)   │"
-            echo "│                                                           │"
-            echo "│  {APP_NAME} needs a small system tweak so its built-in   │"
-            echo "│  database can start. This will only happen once.         │"
-            echo "└──────────────────────────────────────────────────────────┘"
-            echo ""
-
-            # Write the fix to a temp script so we can pass it cleanly to
-            # pkexec / sudo without shell-quoting nightmares.
-            local _HELPER
-            _HELPER=$(mktemp /tmp/cirqen_setup_XXXXXX.sh)
-            cat > "$_HELPER" <<'__HELPER__'
-#!/bin/bash
-chmod 1777 /var/run/postgresql
-echo "d /var/run/postgresql 1777 root root -" > /etc/tmpfiles.d/cirqen-postgresql.conf
-__HELPER__
-            chmod +x "$_HELPER"
-
-            local _RC=0
-            if command -v pkexec &>/dev/null; then
-                # pkexec shows a native GUI password dialog — ideal for non-technical users
-                pkexec bash "$_HELPER" || _RC=$?
-            elif command -v sudo &>/dev/null; then
-                echo "  Please enter your system password to complete setup:"
-                sudo bash "$_HELPER" || _RC=$?
-            else
-                echo "  ❌  Could not apply setup (pkexec and sudo not found)."
-                echo "     Ask your administrator to run once:"
-                echo "       sudo chmod 1777 /var/run/postgresql"
-                rm -f "$_HELPER"
-                return 1
-            fi
-            rm -f "$_HELPER"
-
-            if [ "$_RC" -eq 0 ]; then
-                mkdir -p "$(dirname "$_PG_FLAG")"
-                touch "$_PG_FLAG"
-                echo "  ✅  Setup complete — you will not be asked again."
-            else
-                echo "  ⚠️   Setup was cancelled or failed. {APP_NAME} may not start correctly."
-                echo "      If the database fails to start, run install.sh as administrator."
-            fi
-        }}
-
-        _fix_pg_permissions
-
         # ── Launch ────────────────────────────────────────────────────────────
-        echo "🚀  Starting {APP_NAME} {APP_VERSION} …"
-        echo "    Data : $XDG_DATA_HOME/cirqen"
-        echo "    Logs : $XDG_DATA_HOME/cirqen/logs"
-        echo ""
-
+        # The app writes its output to $XDG_DATA_HOME/cirqen/logs/launcher.log;
+        # run with CIRQEN_DEBUG=1 to see it in the terminal instead.
         exec "$EXECUTABLE" "$@"
     """))
 
@@ -971,36 +914,7 @@ def step_create_install_script() -> bool:
             info "On Alpine: sudo apk add gtk+3.0"
         fi
 
-        # ── STEP 3: Fix PostgreSQL run-directory permissions ─────────────────
-        # The embedded PostgreSQL starts as the logged-in user, not the system
-        # 'postgres' account. On a fresh Linux install /var/run/postgresql is
-        # mode 2775 (group postgres), so the lock-file write fails instantly:
-        #   FATAL: could not create lock file "...": Permission denied
-        # chmod 1777 (world-writable + sticky) fixes this, and the tmpfiles.d
-        # rule re-applies it automatically on every boot.
-        echo "🗄️   Configuring database run directory …"
-        if [ -d "/var/run/postgresql" ]; then
-            chmod 1777 /var/run/postgresql
-            echo "d /var/run/postgresql 1777 root root -" > /etc/tmpfiles.d/cirqen-postgresql.conf
-            ok "PostgreSQL run directory configured (permissions will survive reboots)"
-        else
-            warn "/var/run/postgresql not found — it may be created automatically on first run"
-        fi
-
-        # Mark as done so start_cirqen.sh never shows the permission dialog again.
-        # We write into each existing user's home directory.
-        for _U_HOME in /home/*/; do
-            _FLAG="$_U_HOME/.local/share/cirqen/.pg_perms_ok"
-            _U="$(basename "$_U_HOME")"
-            mkdir -p "$(dirname "$_FLAG")"
-            touch "$_FLAG"
-            chown "$_U:$_U" "$_FLAG" 2>/dev/null || true
-        done
-        # Also mark for root, just in case
-        mkdir -p /root/.local/share/cirqen
-        touch /root/.local/share/cirqen/.pg_perms_ok
-
-        # ── STEP 4: Install .desktop entry ───────────────────────────────────
+        # ── STEP 3: Install .desktop entry ───────────────────────────────────
         echo "📋  Installing desktop entry …"
         DESKTOP_SRC="$INSTALL_DIR/{APP_ID}.desktop"
         if [ -f "$DESKTOP_SRC" ]; then
@@ -1021,12 +935,12 @@ def step_create_install_script() -> bool:
             warn "Desktop file not found – app menu entry will be skipped"
         fi
 
-        # ── STEP 5: /usr/local/bin symlink ───────────────────────────────────
+        # ── STEP 4: /usr/local/bin symlink ───────────────────────────────────
         echo "🔗  Creating command-line shortcut (cirqen) …"
         ln -sf "$INSTALL_DIR/start_cirqen.sh" "$BIN_LINK"
         ok "Shortcut created: cirqen → $INSTALL_DIR/start_cirqen.sh"
 
-        # ── STEP 6: Distro-specific notes ────────────────────────────────────
+        # ── STEP 5: Distro-specific notes ────────────────────────────────────
         case "$DISTRO_ID" in
             fedora|rhel|centos|rocky|alma)
                 echo ""
@@ -1104,11 +1018,12 @@ def step_create_uninstall_script() -> bool:
         echo "══════════════════════════════════════════════════════════════"
         echo ""
 
-        # Stop any running Cirqen processes first
+        # Stop any running Cirqen processes first. Match only programs run
+        # from the install dir: a bare "cirqen" pattern also hits anything
+        # under a home dir like /home/cirqen, and an unanchored path would
+        # match this script's own command line and kill it.
         echo "  Stopping running Cirqen processes …"
-        pkill -f "{APP_NAME}"          2>/dev/null || true
-        pkill -f "cirqen"              2>/dev/null || true
-        pkill -f "start_cirqen.sh"     2>/dev/null || true
+        pkill -f "^$INSTALL_DIR/(Cirqen|runtime/)" 2>/dev/null || true
         sleep 1
         ok "Processes stopped"
 
@@ -1131,6 +1046,7 @@ def step_create_uninstall_script() -> bool:
         rm -f "/usr/share/applications/$APP_ID.desktop"
         rm -f "/usr/share/pixmaps/$APP_ID.png"
         rm -f "$BIN_LINK"
+        rm -f /etc/tmpfiles.d/cirqen-postgresql.conf
         ok "Removed desktop entry, pixmap and symlink"
 
         # Refresh caches
@@ -1158,103 +1074,227 @@ def step_create_uninstall_script() -> bool:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Step 8 – AppDir  (foundation for an AppImage)
+# Step 8 – AppDir + AppImage
+#
+# The AppImage is the recommended way to ship Cirqen on Linux: one file, no
+# root needed. On first launch AppRun adds Cirqen to the user's app menu
+# (pointing at wherever the .AppImage file lives) and refreshes that entry if
+# the file is moved. `Cirqen.AppImage --remove-shortcut` takes it out again.
 # ─────────────────────────────────────────────────────────────────────────────
 
+APPIMAGETOOL_URL = ("https://github.com/AppImage/appimagetool/releases/download/"
+                    "continuous/appimagetool-{arch}.AppImage")
+APPIMAGE_ARCH    = {"x86_64": "x86_64", "amd64": "x86_64",
+                    "aarch64": "aarch64", "arm64": "aarch64"}.get(platform.machine().lower(),
+                                                                   platform.machine())
+APPIMAGE_PATH    = DIST_DIR / f"{APP_NAME}-{APP_VERSION}-{APPIMAGE_ARCH}.AppImage"
+
+# Written with plain placeholders rather than an f-string so the shell's own
+# ${...} syntax needs no brace-doubling.
+APPRUN_TEMPLATE = r'''#!/bin/bash
+# @APP_NAME@ AppImage entry point – run by the AppImage runtime on launch.
+HERE="$(dirname "$(readlink -f "$0")")"
+APP="$HERE/usr/lib/@APP_DIR@"
+APP_ID="@APP_ID@"
+DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+MENU_ENTRY="$DATA_HOME/applications/$APP_ID.desktop"
+ICON_ROOT="$DATA_HOME/icons/hicolor"
+
+remove_shortcut() {
+    rm -f "$MENU_ENTRY"
+    rm -f "$ICON_ROOT"/*/apps/"$APP_ID".png
+    update-desktop-database "$DATA_HOME/applications" >/dev/null 2>&1 || true
+    echo "@APP_NAME@ removed from the app menu. Your data in $DATA_HOME/cirqen was kept."
+}
+
+# Add (or re-point) the app-menu entry at this .AppImage file. Idempotent:
+# does nothing when the entry already points here.
+add_shortcut() {
+    [ -n "${APPIMAGE:-}" ] || return 0
+    [ "${CIRQEN_NO_DESKTOP_INTEGRATION:-}" = "1" ] && return 0
+    grep -qxF "Exec=\"$APPIMAGE\"" "$MENU_ENTRY" 2>/dev/null && return 0
+
+    mkdir -p "$DATA_HOME/applications"
+    for dir in "$HERE"/usr/share/icons/hicolor/*/apps; do
+        size="$(basename "$(dirname "$dir")")"
+        mkdir -p "$ICON_ROOT/$size/apps"
+        cp -f "$dir/$APP_ID.png" "$ICON_ROOT/$size/apps/" 2>/dev/null
+    done
+    { grep -v '^Exec=' "$HERE/$APP_ID.desktop"; printf 'Exec="%s"\n' "$APPIMAGE"; } \
+        > "$MENU_ENTRY.tmp" && mv -f "$MENU_ENTRY.tmp" "$MENU_ENTRY"
+    update-desktop-database "$DATA_HOME/applications" >/dev/null 2>&1 || true
+    gtk-update-icon-cache -q -t "$ICON_ROOT" >/dev/null 2>&1 || true
+}
+
+case "${1:-}" in
+    --remove-shortcut) remove_shortcut; exit 0 ;;
+    --add-shortcut)    rm -f "$MENU_ENTRY"; add_shortcut; echo "@APP_NAME@ added to the app menu."; exit 0 ;;
+esac
+
+add_shortcut
+
+# Prefer X11/XWayland for QtWebEngine stability; native Wayland only when
+# there is no X server at all.
+if [ -n "${WAYLAND_DISPLAY:-}" ] && [ -z "${DISPLAY:-}" ]; then
+    export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-wayland}"
+else
+    export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-xcb}"
+fi
+
+export QTWEBENGINE_CHROMIUM_FLAGS="--no-sandbox --disable-gpu --disable-software-rasterizer --disable-gpu-sandbox --single-process --disable-dev-shm-usage --disable-setuid-sandbox --no-first-run --no-zygote"
+export QTWEBENGINE_DISABLE_SANDBOX=1
+export QT_LOGGING_RULES="*.debug=false;qt.webenginecontext.info=false"
+
+PG_LIB="$APP/runtime/postgresql/lib"
+[ -d "$PG_LIB" ] && export LD_LIBRARY_PATH="$PG_LIB:${LD_LIBRARY_PATH:-}"
+
+export LANG="${LANG:-en_US.UTF-8}"
+export LC_ALL="${LC_ALL:-en_US.UTF-8}"
+export XDG_DATA_HOME="$DATA_HOME"
+
+# The app's own dir is inside the read-only AppImage mount; run from $HOME.
+cd "$HOME" || true
+exec "$APP/@APP_NAME@" "$@"
+'''
+
+# Files in dist/Cirqen that only make sense for the /opt install.
+_APPDIR_SKIP = ("install.sh", "uninstall.sh", "start_cirqen.sh", "*.desktop",
+                "README_LINUX.txt", "QUICK_START.txt")
+
+
+def _link_or_copy(src, dst):
+    """Hard-link into the AppDir (instant, no extra disk) and copy if the
+    filesystem refuses."""
+    try:
+        os.link(src, dst)
+    except OSError:
+        shutil.copy2(src, dst)
+
+
 def step_create_appdir() -> bool:
-    section("Step 8 – Creating AppDir structure  (AppImage-ready)")
+    section("Step 8 – Creating AppDir  (AppImage source)")
 
     if ARGS.skip_appdir:
-        warn("--skip-appdir: skipping AppDir creation")
+        warn("--skip-appdir: skipping AppDir / AppImage")
         return True
 
     appdir = DIST_DIR / f"{APP_NAME}.AppDir"
     if appdir.exists():
-        logger.info(f"  Removing existing AppDir …")
+        logger.info("  Removing existing AppDir …")
         shutil.rmtree(appdir)
-    appdir.mkdir(parents=True)
 
-    # Standard FHS layout inside AppDir
-    usr_bin = appdir / "usr" / "bin"
-    usr_bin.mkdir(parents=True)
-    (appdir / "usr" / "lib").mkdir(parents=True)
+    app_dest = appdir / "usr" / "lib" / APP_NAME.lower()
+    app_dest.parent.mkdir(parents=True)
+    logger.info(f"  Linking dist/{APP_NAME} → AppDir/usr/lib/{APP_NAME.lower()}/ …")
+    shutil.copytree(DIST_APP, app_dest, symlinks=True,
+                    ignore=shutil.ignore_patterns(*_APPDIR_SKIP),
+                    copy_function=_link_or_copy)
+    ok("App files placed in AppDir")
 
-    # Copy entire dist/Cirqen into AppDir/usr/bin/Cirqen/
-    app_dest = usr_bin / APP_NAME
-    logger.info(f"  Copying Cirqen → AppDir/usr/bin/Cirqen/  (may take a minute) …")
-    shutil.copytree(DIST_APP, app_dest, symlinks=True)
-    ok(f"App files copied to AppDir")
-
-    # ── AppRun ────────────────────────────────────────────────────────────────
     apprun = appdir / "AppRun"
-    apprun.write_text(textwrap.dedent(f"""\
-        #!/bin/bash
-        # AppImage entry point – executed by the AppImage runtime on launch
-        SELF="$(readlink -f "$0")"
-        HERE="$(dirname "$SELF")"
-
-        # QtWebEngine flags (same as start_cirqen.sh)
-        export QTWEBENGINE_CHROMIUM_FLAGS="\\
-            --no-sandbox --disable-gpu --disable-software-rasterizer \\
-            --disable-gpu-sandbox --single-process --disable-dev-shm-usage \\
-            --disable-setuid-sandbox --no-first-run --no-zygote"
-        export QTWEBENGINE_DISABLE_SANDBOX=1
-        export QT_LOGGING_RULES="*.debug=false;qt.webenginecontext.info=false"
-
-        # Embedded PostgreSQL library path
-        PG_LIB="$HERE/usr/bin/{APP_NAME}/runtime/postgresql/lib"
-        [ -d "$PG_LIB" ] && export LD_LIBRARY_PATH="$PG_LIB:${{LD_LIBRARY_PATH:-}}"
-
-        export LANG="${{LANG:-en_US.UTF-8}}"
-        export LC_ALL="${{LC_ALL:-en_US.UTF-8}}"
-        export XDG_DATA_HOME="${{XDG_DATA_HOME:-$HOME/.local/share}}"
-
-        exec "$HERE/usr/bin/{APP_NAME}/{APP_NAME}" "$@"
-    """))
+    apprun.write_text(APPRUN_TEMPLATE
+                      .replace("@APP_NAME@", APP_NAME)
+                      .replace("@APP_DIR@", APP_NAME.lower())
+                      .replace("@APP_ID@", APP_ID))
     apprun.chmod(0o755)
     ok("Created AppRun")
 
-    # ── .desktop in AppDir root  (required by appimagetool) ──────────────────
+    # .desktop in the AppDir root (required by appimagetool) and in
+    # usr/share/applications (used by AppImage-aware launchers). Exec is
+    # rewritten by AppRun to the real .AppImage path when it adds the shortcut.
     desktop_src = DIST_APP / f"{APP_ID}.desktop"
-    if desktop_src.exists():
-        dst = appdir / f"{APP_ID}.desktop"
-        content = desktop_src.read_text()
-        # AppImage context: Exec = app binary name, Icon = app-id (no path/extension)
-        lines = []
-        for line in content.splitlines():
-            if line.startswith("Exec="):
-                lines.append(f"Exec={APP_NAME}")
-            elif line.startswith("Icon="):
-                lines.append(f"Icon={APP_ID}")
-            else:
-                lines.append(line)
-        dst.write_text("\n".join(lines) + "\n")
-        ok("Adjusted .desktop entry placed in AppDir root")
+    if not desktop_src.exists():
+        fail(f"Desktop entry not found: {desktop_src}")
+        return False
+    lines = []
+    for line in desktop_src.read_text().splitlines():
+        if line.startswith("Exec="):
+            line = f"Exec={APP_NAME}"
+        elif line.startswith("Icon="):
+            line = f"Icon={APP_ID}"
+        elif line.strip() == "MimeType=":
+            continue                       # empty key fails desktop-file-validate
+        lines.append(line)
+    lines.append(f"X-AppImage-Version={APP_VERSION}")
+    desktop_text = "\n".join(lines) + "\n"
+    (appdir / f"{APP_ID}.desktop").write_text(desktop_text)
+    share_apps = appdir / "usr" / "share" / "applications"
+    share_apps.mkdir(parents=True)
+    (share_apps / f"{APP_ID}.desktop").write_text(desktop_text)
+    ok("Desktop entry placed in AppDir")
 
-    # ── Icons in AppDir root  (multiple names required by the AppImage spec) ──
-    # appimagetool expects both <APP_ID>.png and .DirIcon in the root.
-    # We use the best available size (prefer 256x256 from the hicolor tree).
-    hicolor_256 = DIST_APP / "resources" / "hicolor" / "256x256" / "apps" / f"{APP_ID}.png"
-    fallback_icon = DIST_APP / "resources" / "icon.png"
-    appimage_icon = hicolor_256 if hicolor_256.exists() else fallback_icon
+    # Icons: full hicolor tree (copied into the user's theme by AppRun) plus
+    # the root icon + .DirIcon the AppImage spec requires.
+    hicolor_src = DIST_APP / "resources" / "hicolor"
+    if hicolor_src.exists():
+        shutil.copytree(hicolor_src, appdir / "usr" / "share" / "icons" / "hicolor")
+    root_icon = hicolor_src / "256x256" / "apps" / f"{APP_ID}.png"
+    if not root_icon.exists():
+        root_icon = DIST_APP / "resources" / "icon.png"
+    shutil.copy2(root_icon, appdir / f"{APP_ID}.png")
+    shutil.copy2(root_icon, appdir / ".DirIcon")
+    ok(f"Icons placed in AppDir (root icon: {root_icon.name})")
 
-    if appimage_icon.exists():
-        for name in (f"{APP_ID}.png", f"{APP_NAME}.png", ".DirIcon"):
-            shutil.copy2(appimage_icon, appdir / name)
-        ok(f"Icons placed in AppDir root (source: {appimage_icon.name})")
+    ok(f"AppDir ready: dist/{appdir.name}/")
+    return True
 
-    ok(f"AppDir ready: dist/{APP_NAME}.AppDir/")
-    logger.info("")
-    logger.info("  ── To build an AppImage ──────────────────────────────────────")
-    logger.info("  # Download appimagetool (once):")
-    logger.info("  wget https://github.com/AppImage/AppImageKit/releases/latest/download/appimagetool-x86_64.AppImage")
-    logger.info("  chmod +x appimagetool-x86_64.AppImage")
-    logger.info("")
-    logger.info("  # Build:")
-    logger.info(f"  ARCH=x86_64 ./appimagetool-x86_64.AppImage \\")
-    logger.info(f"      {appdir} \\")
-    logger.info(f"      {DIST_DIR}/{APP_NAME}-{APP_VERSION}-x86_64.AppImage")
-    logger.info("  ─────────────────────────────────────────────────────────────")
+
+def _get_appimagetool() -> Path | None:
+    """appimagetool from PATH, else a cached download."""
+    found = shutil.which("appimagetool")
+    if found:
+        return Path(found)
+
+    cached = Path.home() / ".cache" / "cirqen-build" / f"appimagetool-{APPIMAGE_ARCH}.AppImage"
+    if cached.exists() and cached.stat().st_size > 1_000_000:
+        return cached
+
+    url = APPIMAGETOOL_URL.format(arch=APPIMAGE_ARCH)
+    logger.info(f"  Downloading appimagetool: {url}")
+    try:
+        import urllib.request
+        cached.parent.mkdir(parents=True, exist_ok=True)
+        tmp = cached.with_suffix(".part")
+        with urllib.request.urlopen(url, timeout=120) as resp, open(tmp, "wb") as out:
+            shutil.copyfileobj(resp, out)
+        tmp.chmod(0o755)
+        tmp.rename(cached)
+        return cached
+    except Exception as exc:
+        fail(f"Could not download appimagetool: {exc}")
+        return None
+
+
+def step_build_appimage() -> bool:
+    section("Step 8b – Building the AppImage")
+
+    if ARGS.skip_appdir:
+        warn("--skip-appdir: skipping AppImage")
+        return True
+
+    appdir = DIST_DIR / f"{APP_NAME}.AppDir"
+    tool = _get_appimagetool()
+    if tool is None:
+        fail("appimagetool unavailable – install it or check your internet connection.")
+        return False
+
+    APPIMAGE_PATH.unlink(missing_ok=True)
+    env = os.environ.copy()
+    env["ARCH"] = APPIMAGE_ARCH
+    # Lets appimagetool (itself an AppImage) run on machines without FUSE.
+    env["APPIMAGE_EXTRACT_AND_RUN"] = "1"
+    if not run_cmd([str(tool), "--no-appstream", str(appdir), str(APPIMAGE_PATH)],
+                   cwd=str(DIST_DIR), timeout=3600, env=env):
+        return False
+    if not APPIMAGE_PATH.exists():
+        fail("appimagetool finished but produced no AppImage.")
+        return False
+
+    APPIMAGE_PATH.chmod(0o755)
+    ok(f"AppImage: dist/{APPIMAGE_PATH.name}  "
+       f"({APPIMAGE_PATH.stat().st_size / (1024 * 1024):.0f} MB)")
+    # The AppDir is only an intermediate; it's hard links, so this is cheap.
+    shutil.rmtree(appdir, ignore_errors=True)
     return True
 
 
@@ -1425,7 +1465,8 @@ def step_create_readme(distro: dict) -> bool:
           celery.log          Celery background worker
           celery_beat.log     Celery Beat scheduler
           sync_agent.log      HQ sync agent
-          update_manager.log  Auto-update system
+          errors.log          Errors from every part of the app
+          launcher.log        Everything the app prints (not shown in the terminal)
 
         ──────────────────────────────────────────────────────────────────────
         TROUBLESHOOTING
@@ -1505,7 +1546,6 @@ def step_package_distributable() -> bool:
 
 def print_final_summary(icon_path: Path):
     archive = DIST_DIR / f"{APP_NAME}_linux_{APP_VERSION}.tar.gz"
-    appdir  = DIST_DIR / f"{APP_NAME}.AppDir"
 
     section("Build complete 🎉")
 
@@ -1527,7 +1567,7 @@ def print_final_summary(icon_path: Path):
   │  Icon (primary)    resources/icon.png                              │
   │  Icon (hicolor)    resources/hicolor/<size>/apps/{APP_ID}.png      │
   │  Readme            dist/Cirqen/README_LINUX.txt                    │
-  │  AppDir            dist/{APP_NAME}.AppDir/                         │
+  │  AppImage          dist/{APPIMAGE_PATH.name:<48}│
   │  Archive           dist/{APP_NAME}_linux_{APP_VERSION}.tar.gz      │
   │                                                                    │
   │  Total build size  {total_mb:.1f} MB                              │
@@ -1550,12 +1590,11 @@ def print_final_summary(icon_path: Path):
       cd Cirqen
       sudo ./install.sh     # or just:  ./start_cirqen.sh
 
-  ── BUILD AN AppImage (optional, needs appimagetool) ─────────────────
-    wget https://github.com/AppImage/AppImageKit/releases/latest/download/appimagetool-x86_64.AppImage
-    chmod +x appimagetool-x86_64.AppImage
-    ARCH=x86_64 ./appimagetool-x86_64.AppImage \\
-        {appdir} \\
-        {DIST_DIR}/{APP_NAME}-{APP_VERSION}-x86_64.AppImage
+  ── AppImage (recommended – one file, no root needed) ────────────────
+    chmod +x {APPIMAGE_PATH.name}
+    ./{APPIMAGE_PATH.name}
+    # First launch adds Cirqen to the app menu. To take it out again:
+    ./{APPIMAGE_PATH.name} --remove-shortcut
 """)
 
 
@@ -1590,6 +1629,7 @@ def main() -> int:
         ("Create install.sh",                    step_create_install_script),
         ("Create uninstall.sh",                  step_create_uninstall_script),
         ("Create AppDir",                        step_create_appdir),
+        ("Build AppImage",                       step_build_appimage),
         ("Create README_LINUX.txt",              lambda: step_create_readme(distro)),
         ("Package distributable (.tar.gz)",      step_package_distributable),
     ]

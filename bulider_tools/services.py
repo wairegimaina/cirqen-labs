@@ -702,7 +702,7 @@ class ServiceManager(QObject):
         rotate_log_if_large(pg_log)
         log_fh = open(pg_log, 'a')
         process = subprocess.Popen(
-            [str(pg_bin), '-D', str(pg_data)],
+            [str(pg_bin), '-D', str(pg_data), '-p', str(port), '-k', str(pg_data)],
             stdout=log_fh, stderr=log_fh, env=env
         )
         self.processes.append(('postgres_local', process, log_fh))
@@ -920,7 +920,7 @@ class ServiceManager(QObject):
                 rotate_log_if_large(pg_log)
                 log_file = open(pg_log, 'a')
                 process = subprocess.Popen(
-                    [str(pg_bin), '-D', str(pg_data_hq), '-p', str(port)],
+                    [str(pg_bin), '-D', str(pg_data_hq), '-p', str(port), '-k', str(pg_data_hq)],
                     stdout=log_file,
                     stderr=log_file
                 )

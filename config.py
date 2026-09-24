@@ -102,6 +102,9 @@ REMOTE_ENDPOINTS_FILE = "endpoints.json"
 # config.json, so the environment stays the source.
 PLAIN_ENV = {
     "update.public_key": "UPDATE_PUBLIC_KEY",
+    # The desktop launcher moves the embedded DB off the configured port when
+    # another postgres holds it, and hands the live port to its children here.
+    "local_db.port": "POSTGRES_LOCAL_PORT",
 }
 
 ENDPOINT_MARKER = "_endpoints_v"
@@ -867,6 +870,8 @@ class CirqenConfig:
         for dotted, env_name in PLAIN_ENV.items():
             value = (os.getenv(env_name) or "").strip()
             if value:
+                if dotted.endswith(".port") and value.isdigit():
+                    value = int(value)
                 _put_path(cfg, dotted, value)
                 self._plain_env_keys.add(dotted)
 

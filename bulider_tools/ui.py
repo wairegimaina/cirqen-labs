@@ -617,7 +617,9 @@ class MainWindow(QMainWindow):
                 return ""
             try:
                 from datetime import datetime as _dt
-                return _dt.fromisoformat(iso).strftime("%H:%M")
+                from zoneinfo import ZoneInfo
+                # last_check is stored in UTC; show Nairobi time.
+                return _dt.fromisoformat(iso).astimezone(ZoneInfo("Africa/Nairobi")).strftime("%H:%M")
             except Exception:
                 return ""
 
@@ -851,7 +853,8 @@ class MainWindow(QMainWindow):
                     return ''
                 try:
                     from datetime import datetime as _dt
-                    return _dt.fromisoformat(iso_str).strftime('%H:%M')
+                    from zoneinfo import ZoneInfo
+                    return _dt.fromisoformat(iso_str).astimezone(ZoneInfo("Africa/Nairobi")).strftime('%H:%M')
                 except Exception:
                     return ''
 
@@ -939,14 +942,23 @@ class MainWindow(QMainWindow):
 
                     self.status_label.setText(f"⬇️ Downloading {Path(save_path).name}...")
 
-                    def on_progress(bytes_received, bytes_total):
+                    # Qt 6's receivedBytesChanged carries no arguments; read the
+                    # counts from the request itself.
+                    def on_progress():
+                        bytes_total = download.totalBytes()
                         if bytes_total > 0:
-                            progress = int((bytes_received / bytes_total) * 100)
+                            progress = int((download.receivedBytes() / bytes_total) * 100)
                             self.status_label.setText(
                                 f"⬇️ {Path(save_path).name} - {progress}%"
                             )
 
                     def on_finished():
+                        # isFinishedChanged also fires on failure and cancel.
+                        if download.state() != QWebEngineDownloadRequest.DownloadState.DownloadCompleted:
+                            reason = download.interruptReasonString() or "cancelled"
+                            self.status_label.setText(f"❌ Download failed: {reason}")
+                            logger.warning(f"Download failed: {save_path} ({reason})")
+                            return
                         self.status_label.setText("✅ Download complete")
                         logger.info(f"✅ Download complete: {save_path}")
 
