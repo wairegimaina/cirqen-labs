@@ -20,6 +20,7 @@ from CalSoft.models import (
     StandardParameter,
     SetValue,
 )
+from core.eat import fmt_eat
 
 logger = logging.getLogger(__name__)
 
@@ -396,7 +397,7 @@ def api_session_details(request, session_id):
         "status": session.status,
         "procedure": session.procedure.name if session.procedure else "Unknown",
         "performed_by": session.performed_by.get_full_name() or session.performed_by.username,
-        "timestamp": session.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+        "timestamp": fmt_eat(session.timestamp, "%Y-%m-%d %H:%M:%S"),
         "device": {
             "model": session.device_model,
             "serial": session.device_serial,

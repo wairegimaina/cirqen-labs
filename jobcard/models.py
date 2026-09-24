@@ -3,7 +3,7 @@ import logging
 from django.db import models
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from django.utils.timezone import now
+from django.utils.timezone import localdate, now
 from decimal import Decimal
 
 User = get_user_model()
@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 from parts_tools.models import Accessories
 from Inventory.models import Department, Equipment
 from workshop.models import Workshop
+from core.eat import fmt_eat
 
 
 class jobcard(models.Model):
@@ -275,7 +276,7 @@ class jobcard(models.Model):
             # Update PPM schedule to completed
             old_status = ppm_schedule.status
             ppm_schedule.status = 'completed'
-            ppm_schedule.completed_date = now().date()
+            ppm_schedule.completed_date = localdate()
             ppm_schedule.completed_by = self.performed_by
             ppm_schedule.updated_at = now()
             ppm_schedule.needs_sync = True
@@ -292,7 +293,7 @@ class jobcard(models.Model):
                 f"   Workshop: {self.workshop.name}\n"
                 f"   Job Card: #{self.id}\n"
                 f"   Approved by: {self.verified_by_nurse.get_full_name() if self.verified_by_nurse else 'N/A'}\n"
-                f"   Approved on: {self.nurse_signed_date.strftime('%Y-%m-%d %H:%M') if self.nurse_signed_date else 'N/A'}"
+                f"   Approved on: {fmt_eat(self.nurse_signed_date)}"
             )
 
             return True

@@ -10,6 +10,7 @@ from django.conf import settings
 from Inventory.models import Equipment
 from workshop.models import Workshop
 from CalSoft.models import CalibrationProcedure
+from core.eat import now_eat
 
 STATUS_CHOICES = [
     ("pending", "Pending"),
@@ -249,7 +250,7 @@ class CalibrationSchedule(models.Model):
                     self.logic_change_warning = (
                         f"⚠️ LOGIC CHANGE DETECTED: Planning logic changed from "
                         f"'{original.planning_logic}' → '{self.planning_logic}' "
-                        f"on {timezone.now().strftime('%Y-%m-%d %H:%M')}. "
+                        f"on {now_eat().strftime('%Y-%m-%d %H:%M')}. "
                         f"Run smart_reorganize_on_logic_change to realign all schedules "
                         f"to the new logic. Scheduled month has NOT been changed — "
                         f"realignment is required."
@@ -373,7 +374,7 @@ class CalibrationSchedule(models.Model):
             return False
         if self.status == "overdue":
             return True
-        return timezone.now().date() > self.due_date
+        return timezone.localdate() > self.due_date
 
     @property
     def days_until_due(self):
@@ -382,7 +383,7 @@ class CalibrationSchedule(models.Model):
             return None
         from django.utils import timezone
 
-        return (self.due_date - timezone.now().date()).days
+        return (self.due_date - timezone.localdate()).days
 
     @property
     def protection_status(self):

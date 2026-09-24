@@ -642,7 +642,7 @@ async function loadCurrentSignature(userId) {
                     <p><strong>ID:</strong> ${escapeHTML(data.signatureId)}</p>
                     <p><strong>Last Updated:</strong> ${new Date(
                       data.updatedAt,
-                    ).toLocaleString()}</p>
+                    ).toLocaleString("en-KE", { timeZone: "Africa/Nairobi" })}</p>
                 </div>
             `;
     } else {

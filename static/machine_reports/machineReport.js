@@ -410,7 +410,7 @@ function escapeHtml(text) {
 function formatDate(dateString) {
   if (!dateString) return 'N/A';
   const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'Africa/Nairobi' });
 }
 
 // --- MANUFACTURER CHART ---

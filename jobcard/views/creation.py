@@ -2,7 +2,7 @@
 from locale import D_T_FMT
 from uuid import UUID
 import zipfile
-from django.utils.timezone import now
+from django.utils.timezone import localdate, now
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.http import FileResponse, HttpResponse, JsonResponse
@@ -36,7 +36,7 @@ from django.utils.dateparse import parse_date
 from decimal import Decimal, InvalidOperation
 import json
 from uuid import UUID
-from django.utils.timezone import now
+from django.utils.timezone import localdate, now
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.contrib import messages
@@ -83,7 +83,7 @@ def get_pending_ppm_schedules(request):
         ).select_related('equipment', 'equipment__description').order_by('scheduled_month')
 
         data = []
-        today = now().date()
+        today = localdate()
 
         for schedule in schedules:
             # Check if overdue - use LAST DAY of scheduled month

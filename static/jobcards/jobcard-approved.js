@@ -40,7 +40,7 @@ class JobCardManager {
     }
 
     if (todayElement) {
-      const today = new Date().toISOString().split('T')[0];
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Nairobi' });
       const todayCount = this.allCards.filter(card => card.dataset.date === today).length;
       todayElement.textContent = todayCount;
     }

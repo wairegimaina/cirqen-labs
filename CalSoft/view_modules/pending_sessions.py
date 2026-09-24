@@ -23,6 +23,7 @@ from CalSoft.models import (
     CalibrationReading,
 )
 from calSchedules.models import CalibrationSchedule
+from core.eat import fmt_eat
 
 
 def is_ajax(request):
@@ -534,7 +535,7 @@ def download_declined_certificate(request, pk):
             else "Unknown"
         ),
         "rejected_at": (
-            session.rejected_at.strftime("%Y-%m-%d %H:%M") if session.rejected_at else "Unknown"
+            fmt_eat(session.rejected_at, default="Unknown")
         ),
     }
 

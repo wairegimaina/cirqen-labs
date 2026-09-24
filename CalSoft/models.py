@@ -8,7 +8,7 @@ User = get_user_model()
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.forms import IntegerField
 from django.urls import reverse
-from django.utils.timezone import now
+from django.utils.timezone import localdate
 import json
 import math
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
@@ -986,13 +986,13 @@ class CalibrationSchedule(models.Model):
     def days_until_due(self):
         from calSchedules.grouping import days_until_due as _days_until_due
 
-        return _days_until_due(self.due_date, now().date())
+        return _days_until_due(self.due_date, localdate())
 
     @property
     def is_overdue(self):
         from calSchedules.grouping import is_overdue as _is_overdue
 
-        return _is_overdue(self.due_date, now().date())
+        return _is_overdue(self.due_date, localdate())
 
     def __str__(self):
         return f"Calibration Schedule for {self.equipment.description} on {self.scheduled_month}"

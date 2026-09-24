@@ -203,7 +203,7 @@ def calibration_dashboard(request):
         unscheduled_equipment = unscheduled_paginator.page(unscheduled_paginator.num_pages)
 
     # ── Completed schedules — last 30 days only (for the Completed tab) ──
-    thirty_days_ago = timezone.now().date() - timedelta(days=30)
+    thirty_days_ago = timezone.localdate() - timedelta(days=30)
 
     completed_list_qs = CalibrationSchedule.objects.select_related(
         "equipment__department", "equipment__description"
@@ -438,7 +438,7 @@ def calibration_by_department(request, dept_id):
         unscheduled_equipment = unscheduled_paginator.page(unscheduled_paginator.num_pages)
 
     # ── Completed schedules — last 30 days only (for the Completed tab) ──
-    thirty_days_ago = timezone.now().date() - timedelta(days=30)
+    thirty_days_ago = timezone.localdate() - timedelta(days=30)
     completed_list_qs = CalibrationSchedule.objects.select_related(
         "equipment__department", "equipment__description"
     ).filter(

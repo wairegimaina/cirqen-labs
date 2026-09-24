@@ -53,6 +53,7 @@ from Inventory.models import Equipment, Workshop
 # sibling modules in this package
 from .helpers import calculate_manufacturer_performance, get_user_workshop_context
 from core.branding import contact_line
+from core.eat import fmt_eat
 
 
 @login_required
@@ -211,7 +212,7 @@ def export_equipment_history(request, equipment_id):
 
     for cal in calibrations:
         ws_calibrations.append([
-            cal.timestamp.strftime('%Y-%m-%d %H:%M'),
+            fmt_eat(cal.timestamp),
             cal.certificate_number,
             cal.procedure.name,
             cal.performed_by.get_full_name(),

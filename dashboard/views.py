@@ -177,7 +177,7 @@ def Dashboard(request):
         workshop = None
 
     if workshop:
-        today = timezone.now().date()
+        today = timezone.localdate()
         analytics_data = aggregate_cache.get_or_compute(
             "dash", [workshop.id, today, "analytics"], lambda: _equipment_analytics(workshop)
         )
@@ -487,7 +487,7 @@ def hod_dashboard(request):
     per_workshop_monthly_by_key = {}  # workshop.name -> {"YYYY-MM": count}
     month_label_by_key = {}  # "YYYY-MM" -> "Mon YYYY", for chronological sorting
 
-    today = timezone.now().date()
+    today = timezone.localdate()
     for workshop in workshops:
         stats = aggregate_cache.get_or_compute(
             "dash", ["hod", workshop.id, today], lambda: _hod_workshop_stats(workshop)

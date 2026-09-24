@@ -1,6 +1,7 @@
 """calSchedules.instant_reconciliation.signals — post_save receivers (reschedule, complete, align)."""
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from django.utils.timezone import localdate
 from django.db import transaction
 from datetime import date, datetime, timezone
 from dateutil.relativedelta import relativedelta
@@ -218,7 +219,7 @@ def auto_complete_on_certificate(sender, instance, created, **kwargs):
         return
 
     # actual calibration date from the certificate/session
-    cal_date = instance.timestamp.date()
+    cal_date = localdate(instance.timestamp)
 
     logger.info(
         f"[CERT] 📜 Certificate {instance.certificate_number} assigned to session "

@@ -7,7 +7,7 @@ from django.http import JsonResponse, HttpResponse
 from core import aggregate_cache
 from django.contrib import messages
 from django.core.exceptions import ValidationError
-from django.utils.timezone import now
+from django.utils.timezone import localdate
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 from ..models import PPMSchedule
@@ -35,7 +35,7 @@ def get_analytics_data(request):
     if not access_context:
         return JsonResponse({'error': 'Access denied'}, status=403)
 
-    today = now().date()
+    today = localdate()
     # Cached per access scope and day; PPM and equipment saves invalidate it.
     scope = [access_context['access_type'], access_context['workshop_id'],
              access_context['department_id'], today]
@@ -178,7 +178,7 @@ def _ppm_analytics(access_context, today):
             last_day = monthrange(schedule.scheduled_month.year, schedule.scheduled_month.month)[1]
             month_end_date = schedule.scheduled_month.replace(day=last_day)
             # Completed on time if done before or on the last day of scheduled month
-            if schedule.updated_at and schedule.updated_at.date() <= month_end_date:
+            if schedule.updated_at and timezone.localdate(schedule.updated_at) <= month_end_date:
                 completed_on_time += 1
 
     compliance_rate = (completed_on_time / total_scheduled * 100) if total_scheduled > 0 else 0

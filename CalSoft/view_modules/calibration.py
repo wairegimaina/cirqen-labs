@@ -123,7 +123,7 @@ def _handle_calibration_post(request):
     schedule_was_created = False
     if not schedule:
         grouped_schedule = _find_grouped_schedule_for_equipment(equipment)
-        scheduled_month = grouped_schedule.scheduled_month if grouped_schedule else timezone.now().date()
+        scheduled_month = grouped_schedule.scheduled_month if grouped_schedule else timezone.localdate()
         schedule, created = CalibrationSchedule.objects.get_or_create(
             equipment=equipment,
             scheduled_month=scheduled_month,
@@ -177,7 +177,7 @@ def _ensure_saved_schedule(schedule, equipment, procedure):
     if not schedule:
         return None
 
-    scheduled_month = getattr(schedule, "scheduled_month", None) or timezone.now().date()
+    scheduled_month = getattr(schedule, "scheduled_month", None) or timezone.localdate()
     schedule_pk = getattr(schedule, "pk", None)
 
     if schedule_pk:
@@ -292,7 +292,7 @@ def _process_readings(request, session, procedure, equipment, schedule, return_d
         or 12
     )
     session.next_calibration_due = next_due_date(
-        session.timestamp.date() if session.timestamp else timezone.now().date(),
+        timezone.localdate(session.timestamp) if session.timestamp else timezone.localdate(),
         interval_months,
     )
     session.save()

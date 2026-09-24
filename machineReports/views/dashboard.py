@@ -291,7 +291,7 @@ def equipment_dashboard(request):
         "is_hod": is_hod,
         "current_user": request.user.username,
         "current_date": timezone.now(),
-        "years": range(2020, timezone.now().year + 1),
+        "years": range(2020, timezone.localdate().year + 1),
         "months": [
             (1, "January"), (2, "February"), (3, "March"), (4, "April"),
             (5, "May"), (6, "June"), (7, "July"), (8, "August"),

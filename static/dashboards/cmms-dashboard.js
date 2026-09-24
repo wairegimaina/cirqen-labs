@@ -53,6 +53,7 @@ function updateClock() {
     day: "numeric",
     month: "short",
     year: "numeric",
+    timeZone: "Africa/Nairobi",
   };
   const el = $("live-time");
   if (el) el.textContent = now.toLocaleString("en-KE", opts);

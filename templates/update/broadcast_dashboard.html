@@ -192,8 +192,9 @@ function renderMachines() {
       ? '<span class="badge bg-info">Online</span>'
       : `<span class="badge bg-secondary">Offline · ${escapeHTML(m.minutes_since_seen != null ? m.minutes_since_seen + 'm ago' : 'unknown')}</span>`;
 
-    const seen = m.last_seen ? new Date(m.last_seen).toLocaleString() : '?';
-    const updated = m.last_updated ? new Date(m.last_updated).toLocaleDateString() : '—';
+    const eat = { timeZone: 'Africa/Nairobi' };
+    const seen = m.last_seen ? new Date(m.last_seen).toLocaleString('en-KE', eat) : '?';
+    const updated = m.last_updated ? new Date(m.last_updated).toLocaleDateString('en-KE', eat) : '—';
 
     return `
     <div class="machine-card ${escapeHTML(cls)} ${escapeHTML(offlineCls)}">

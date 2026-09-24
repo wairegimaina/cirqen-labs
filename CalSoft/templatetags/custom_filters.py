@@ -1,4 +1,5 @@
 # CalSoft/templatetags/custom_filters.py
+from core.eat import to_eat
 from django import template
 from decimal import Decimal, InvalidOperation
 
@@ -83,5 +84,6 @@ def default_if_none(value, default):
 def format_date(value, format_str='%Y-%m-%d'):
     """Format date using given format string"""
     if hasattr(value, 'strftime'):
-        return value.strftime(format_str)
+        # Model timestamps arrive in UTC; show them in EAT.
+        return to_eat(value).strftime(format_str)
     return value
