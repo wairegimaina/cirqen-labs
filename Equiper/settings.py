@@ -496,6 +496,9 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # 🔐 AUTHENTICATION & SESSIONS
 # ============================================================
 AUTHENTICATION_BACKENDS = [
+    # Username or email; see the class for how shared emails are handled.
+    "users.backends.EmailOrUsernameBackend",
+    # Kept so sessions signed in before this change stay valid.
     "django.contrib.auth.backends.ModelBackend",
 ]
 

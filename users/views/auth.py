@@ -133,8 +133,11 @@ def custom_login_view(request):
             if username:
                 # Try to log failed login attempt
                 try:
-                    if User.objects.filter(username=username).exists():
-                        user = User.objects.get(username=username)
+                    ident = username.strip()
+                    lookup = 'email__iexact' if '@' in ident else 'username__iexact'
+                    named = list(User.objects.filter(**{lookup: ident})[:2])
+                    if len(named) == 1:  # a shared email names no single account
+                        user = named[0]
                         UserSecurityLog.log_event(
                             user=user,
                             event_type='LOGIN_FAILURE',
