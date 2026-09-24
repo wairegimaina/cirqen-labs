@@ -1,5 +1,5 @@
 // ==========================================
-// Job Cards Logic — Fixed & Refactored
+// Work Orders Logic — Fixed & Refactored
 // ==========================================
 
 $(document).ready(function () {
@@ -348,7 +348,7 @@ $(document).ready(function () {
 
     var useAuto = $('#use_auto_signature_tech').is(':checked');
     if (!useAuto && window.techSignaturePad && window.techSignaturePad.isEmpty()) {
-      alert('Please sign the job card.');
+      alert('Please sign the work order.');
       e.preventDefault();
       return false;
     }

@@ -374,7 +374,7 @@ class FirstRunSetup(QObject):
                 env['LD_LIBRARY_PATH'] = f"{pg_lib}:{current_ld}" if current_ld else str(pg_lib)
 
             pg_process = subprocess.Popen(
-                [str(postgres_bin), '-D', str(self.pg_data)],
+                [str(postgres_bin), '-D', str(self.pg_data), '-k', str(self.pg_data)],
                 stdout=log_file,
                 stderr=log_file,
                 env=env
@@ -544,7 +544,7 @@ class FirstRunSetup(QObject):
             port = self.db_config['port']
 
             process = subprocess.Popen(
-                [str(pg_bin), '-D', str(self.pg_data), '-p', str(port)],
+                [str(pg_bin), '-D', str(self.pg_data), '-p', str(port), '-k', str(self.pg_data)],
                 stdout=log_file,
                 stderr=log_file
             )

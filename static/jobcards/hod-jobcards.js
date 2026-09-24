@@ -1,5 +1,5 @@
 /**
- * HOD Job Card Manager
+ * HOD Work Order Manager
  * Handles client-side searching, filtering, and UI updates.
  * Fully adaptive to theme.css variables.
  */
@@ -65,7 +65,7 @@ window.viewJobCardDetails = function (id) {
   const modalTitle = document.getElementById('jobcardModalLabel');
 
   // Set loading state
-  modalTitle.textContent = `Job Card #${id}`;
+  modalTitle.textContent = `Work Order #${id}`;
   modalBody.innerHTML = `
         <div class="text-center py-5">
             <div class="spinner-border text-primary" role="status"></div>

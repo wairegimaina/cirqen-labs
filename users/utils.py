@@ -5,6 +5,7 @@ import uuid
 import logging
 import traceback
 from datetime import datetime
+from core.eat import now_eat
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
@@ -502,7 +503,7 @@ This is an automated message. Please do not reply to this email.
                 <div class="footer">
                     <p>This is an automated security message. Please do not reply to this email.</p>
                     <p>© {datetime.now().year} Btwelve Technologies. All rights reserved.</p>
-                    <p><small>Request IP: {getattr(settings, 'REQUEST_IP', 'Unknown')} | Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}</small></p>
+                    <p><small>Request IP: {getattr(settings, 'REQUEST_IP', 'Unknown')} | Time: {now_eat().strftime('%Y-%m-%d %H:%M:%S EAT')}</small></p>
                 </div>
             </div>
         </body>
@@ -534,7 +535,7 @@ SECURITY TIPS:
 - Use a strong, unique password
 - If you didn't request this, contact support immediately
 
-Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+Generated: {now_eat().strftime('%Y-%m-%d %H:%M:%S EAT')}
 
 Best regards,
 System Administrator

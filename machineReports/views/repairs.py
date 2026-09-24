@@ -50,6 +50,7 @@ from ..equipment_pdf_generator import create_equipment_pdf_response
 from Inventory.models import Equipment, Workshop
 from ..manufacturer_performance_pdf_generator import create_manufacturer_pdf_response
 from Inventory.models import Equipment, Workshop
+from core.eat import fmt_eat
 
 
 @require_http_methods(["GET"])
@@ -91,7 +92,7 @@ def equipment_repair_details(request, equipment_id):
             calibration_certificates.append({
                 'id': str(session.id),
                 'certificate_number': session.certificate_number or 'Pending',
-                'date': session.timestamp.strftime('%Y-%m-%d'),
+                'date': fmt_eat(session.timestamp, '%Y-%m-%d'),
                 'next_due': session.next_calibration_due.strftime('%Y-%m-%d') if session.next_calibration_due else 'Not Set',
                 'procedure_name': session.procedure.name if session.procedure else 'N/A',
                 'performed_by': session.performed_by.get_full_name() or session.performed_by.username,

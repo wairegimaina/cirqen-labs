@@ -1,6 +1,5 @@
 """Excel / PDF exports for tools and accessories."""
 import logging
-from datetime import datetime
 
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse
@@ -9,6 +8,7 @@ from openpyxl import Workbook
 from parts_tools.pdf_generators import AccessoriesPDFReport, ToolsPDFGenerator
 from ..models import Tools, Accessories
 from workshop.models import Workshop
+from core.eat import now_eat
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +99,7 @@ def export_pdf_tools(request):
     pdf_generator = ToolsPDFGenerator(tools, workshop_name)
     buffer = pdf_generator.generate_pdf()
 
-    timestamp = datetime.now().strftime('%Y%m%d')
+    timestamp = now_eat().strftime('%Y%m%d')
     safe_name = workshop_name.replace(' ', '_') if workshop_name else 'report'
     filename = f"tools_report_{safe_name}_{timestamp}.pdf"
 
@@ -135,7 +135,7 @@ def export_pdf_accessories(request):
     pdf_generator = AccessoriesPDFReport(accessories, workshop_name)
     buffer = pdf_generator.generate_pdf()
 
-    timestamp = datetime.now().strftime('%Y%m%d')
+    timestamp = now_eat().strftime('%Y%m%d')
     safe_name = workshop_name.replace(' ', '_') if workshop_name else 'report'
     filename = f"accessories_report_{safe_name}_{timestamp}.pdf"
 

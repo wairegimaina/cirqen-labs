@@ -6,7 +6,6 @@ Matches PPM Schedule styling with professional header/footer and watermark
 import io
 import os
 import logging
-from datetime import datetime
 from django.conf import settings
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -16,6 +15,7 @@ from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
 from reportlab.pdfgen import canvas as rl_canvas
 from core.branding import contact_line
+from core.eat import fmt_eat, now_eat
 
 logger = logging.getLogger(__name__)
 
@@ -329,7 +329,7 @@ class ModernPDFReportBase:
         # Left footer text - Generated timestamp
         canvas.setFillColor(self.COLOR_PALETTE['text_secondary'])
         canvas.setFont("Helvetica-Oblique", 8)
-        timestamp = datetime.now().strftime('%B %d, %Y at %I:%M %p')
+        timestamp = now_eat().strftime('%B %d, %Y at %I:%M %p')
         canvas.drawString(1*cm, 0.7*cm, f"Generated: {timestamp}")
 
         # Center watermark text
@@ -452,7 +452,7 @@ class ToolsPDFGenerator(ModernPDFReportBase):
                 manufacturer[:20],
                 tool.serial_number[:15] if tool.serial_number else '-',
                 workshop[:20],
-                tool.created_at.strftime("%b %d, %Y")
+                fmt_eat(tool.created_at, "%b %d, %Y")
             ])
 
         # Create table with appropriate column widths
@@ -568,7 +568,7 @@ class AccessoriesPDFReport(ModernPDFReportBase):
                 manufacturer[:20],
                 str(accessory.stock_count),
                 workshop[:20],
-                accessory.created_at.strftime("%b %d, %Y")
+                fmt_eat(accessory.created_at, "%b %d, %Y")
             ])
 
         # Create table with appropriate column widths

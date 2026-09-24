@@ -62,6 +62,10 @@ IS_LINUX = platform.system() == "Linux"
 IS_MAC = platform.system() == "Darwin"
 
 PROJECT_ROOT = Path(__file__).parent.resolve()
+
+# Machine-local folders that must never be bundled: data/ is the dev instance's
+# live database, logs and config.json (HQ credentials, tokens, secret.key).
+DEV_ONLY_DIRS = {'data', 'venv', '.venv', 'build_logs', 'build', 'dist', 'runtime', '__pycache__'}
 RUNTIME_DIR = PROJECT_ROOT / "runtime"
 BUILD_DIR = PROJECT_ROOT / "build"
 DIST_DIR = PROJECT_ROOT / "dist"
@@ -330,7 +334,7 @@ def find_django_apps():
     # Method 1: Check for directories with apps.py or models.py
     logger.info("Method 1: Scanning for app directories...")
     for item in PROJECT_ROOT.iterdir():
-        if item.is_dir() and not item.name.startswith('.') and item.name not in ['build', 'dist', 'runtime', '__pycache__']:
+        if item.is_dir() and not item.name.startswith('.') and item.name not in DEV_ONLY_DIRS:
             # Check if it's a Django app
             has_apps_py = (item / 'apps.py').exists()
             has_models_py = (item / 'models.py').exists()
@@ -357,7 +361,13 @@ def find_django_apps():
                     # Check if it's a local app
                     if '.' not in match and match not in ['django', 'rest_framework', 'corsheaders', 'celery']:
                         app_dir = PROJECT_ROOT / match
-                        if app_dir.exists() and match not in apps:
+                        # The pattern matches every quoted word in settings.py, so a
+                        # string like "data" would pull the dev data dir (live DB,
+                        # config.json secrets) into the bundle. Only take real
+                        # Python packages.
+                        is_package = any((app_dir / f).exists()
+                                         for f in ('__init__.py', 'apps.py', 'models.py'))
+                        if is_package and match not in DEV_ONLY_DIRS and match not in apps:
                             apps.append(match)
                             logger.info(f"  ✓ Found app from settings: {match}")
         except Exception as e:
@@ -752,97 +762,6 @@ def copy_system_postgresql():
             logger.info("="*70)
             return True
 
-def fix_postgresql_run_permissions():
-    """
-    Fix /var/run/postgresql permissions on Linux so that the embedded
-    PostgreSQL process (running as a normal user, not the system 'postgres'
-    account) can create its lock file there.
-
-    Root cause
-    ----------
-    Ubuntu (and most Debian-based distros) ships /var/run/postgresql owned
-    by the 'postgres' system user with mode 2775.  When Cirqen's embedded
-    PostgreSQL starts as a regular user it cannot write the lock file
-      /var/run/postgresql/.s.PGSQL.<port>.lock
-    and immediately exits with:
-      FATAL: could not create lock file "...": Permission denied
-
-    Fix applied
-    -----------
-    1. chmod 1777 /var/run/postgresql   (world-writable + sticky bit)
-       ← takes effect immediately for this session.
-    2. echo "d /var/run/postgresql 1777 root root -"
-           > /etc/tmpfiles.d/postgresql.conf
-       ← makes the fix survive reboots via systemd-tmpfiles.
-
-    Both operations require root (sudo).  If sudo is unavailable or the
-    user declines, a clear warning is printed and the build continues —
-    the fix can be applied manually before running the app.
-    """
-    if not IS_LINUX:
-        return True
-
-    print_banner("Fixing /var/run/postgresql Permissions (Linux)")
-
-    run_dir = Path("/var/run/postgresql")
-
-    # ── Check current state ────────────────────────────────────────────────
-    if run_dir.exists():
-        current_mode = oct(run_dir.stat().st_mode)
-        logger.info(f"  Current /var/run/postgresql mode: {current_mode}")
-
-        # Already world-writable?  (mode & 0o002 != 0)
-        if run_dir.stat().st_mode & 0o002:
-            logger.info("  ✅ /var/run/postgresql is already world-writable — no fix needed")
-            return True
-    else:
-        logger.warning("  ⚠️  /var/run/postgresql does not exist — PostgreSQL may create it")
-        return True
-
-    # ── Apply immediate fix ────────────────────────────────────────────────
-    logger.info("  Applying chmod 1777 /var/run/postgresql …")
-    chmod_ok = run_cmd(
-        ["sudo", "chmod", "1777", str(run_dir)],
-        description="Make /var/run/postgresql world-writable (sticky bit)"
-    )
-
-    if chmod_ok:
-        logger.info("  ✅ chmod 1777 applied successfully")
-    else:
-        logger.warning("  ⚠️  chmod failed — sudo may not be available")
-        logger.warning("     Run manually before starting the app:")
-        logger.warning("       sudo chmod 1777 /var/run/postgresql")
-
-    # ── Apply persistent fix via systemd-tmpfiles ──────────────────────────
-    tmpfiles_conf = Path("/etc/tmpfiles.d/postgresql.conf")
-    tmpfiles_line = "d /var/run/postgresql 1777 root root -\n"
-
-    logger.info(f"  Writing systemd-tmpfiles rule → {tmpfiles_conf} …")
-
-    write_ok = run_cmd(
-        ["sudo", "bash", "-c",
-         f"echo 'd /var/run/postgresql 1777 root root -' > {tmpfiles_conf}"],
-        description="Persist /var/run/postgresql permissions across reboots"
-    )
-
-    if write_ok:
-        logger.info("  ✅ Persistent fix written — permissions will survive reboots")
-        logger.info(f"     Rule: {tmpfiles_line.strip()}")
-        logger.info(f"     File: {tmpfiles_conf}")
-    else:
-        logger.warning("  ⚠️  Could not write tmpfiles rule — sudo may not be available")
-        logger.warning("     To make the fix permanent, run once as root:")
-        logger.warning(f"       sudo bash -c \"echo '{tmpfiles_line.strip()}'"
-                       f" > {tmpfiles_conf}\"")
-
-    # ── Verify ────────────────────────────────────────────────────────────
-    if run_dir.exists():
-        new_mode = oct(run_dir.stat().st_mode)
-        logger.info(f"  Verified /var/run/postgresql mode after fix: {new_mode}")
-
-    # Non-fatal — the app may still work if the user has other permissions
-    return True
-
 
 def setup_postgresql():
     """Setup PostgreSQL with multiple download sources"""
@@ -872,10 +791,9 @@ def setup_postgresql():
 
         if source_url == 'system' and IS_LINUX:
             if copy_system_postgresql():
-                # Fix /var/run/postgresql permissions so the embedded
-                # PostgreSQL process (running as a normal user) can create
-                # its lock file there without a "Permission denied" error.
-                fix_postgresql_run_permissions()
+                # No /var/run/postgresql permission change needed: the app
+                # starts postgres with -k <data dir>, so its socket and lock
+                # file never go there.
                 return True
             continue
 
@@ -1577,10 +1495,7 @@ def generate_spec():
     core_files = [
         'manage.py',
         'config.py',
-        'django_runner.py',
         'main.py',             # Main application entry point
-        'update_manager.py',   # UPDATE MANAGER - Non-blocking updates with reconnection
-        'update_client.py'     # UPDATE CLIENT - Server communication
     ]
     for file in core_files:
         file_path = PROJECT_ROOT / file
@@ -1588,9 +1503,7 @@ def generate_spec():
             datas_collected.append((str(file), '.'))
             logger.info(f"  ✓ {file}")
         else:
-            # Warn if update files are missing
-            if 'update' in file:
-                logger.warning(f"  ⚠️  {file} not found - update functionality may not work")
+            logger.warning(f"  ⚠️  {file} not found")
 
     # ── CRITICAL: bulider_tools package ──────────────────────────────────
     # app_updates.py is a new file added after initial build — must be
@@ -1945,8 +1858,13 @@ def generate_spec():
     'bulider_tools.setup_ui',
 
     # ===== UPDATE SYSTEM =====
-    'update_manager',       # Update manager with reconnection support
-    'update_client',        # Update client for server communication
+    # AppUpdateService polls HQ; the updates app downloads, verifies and
+    # applies packages. (builder/update_manager.py and update_client.py are
+    # the retired first version and are not shipped.)
+    'bulider_tools.app_updates',
+    'updates',
+    'updates.updater',
+    'updates.tasks',
 
     # ===== DATABASE =====
     'django.db.backends.postgresql',
@@ -2672,7 +2590,7 @@ def generate_spec():
 """
 Cirqen Desktop - Complete PyInstaller Spec (Auto-Generated)
 INCLUDES: Django + Celery + PySide6 + All Dependencies + NumPy + Templates + Static
-CRITICAL: Includes django_runner.py for Django subprocess
+CRITICAL: Includes the update system (bulider_tools/app_updates.py + updates/)
 Generated by: build_cirqen.py
 """
 
@@ -2789,7 +2707,6 @@ print(f"\\nDjango Apps: {len({repr(django_apps)})}")
 print(f"Data Files: {{len(datas)}}")
 print(f"Hidden Imports: {{len(hiddenimports)}}")
 print("\\nCritical Components:")
-print("  ✅ django_runner.py")
 print("  ✅ Templates (project + apps)")
 print("  ✅ Static files (project + apps)")
 print("  ✅ NumPy (complete stack)")
@@ -3050,142 +2967,33 @@ if errorlevel 1 (
         launcher = dist_dir / "start_cirqen.sh"
         launcher.write_text('''\
 #!/bin/bash
-# ============================================================
-# Cirqen Desktop Launcher Script
-# Fixed for Linux (Ubuntu/Debian) - QtWebEngine + PostgreSQL fix
-# ============================================================
-cd "$(dirname "$0")"
+# Cirqen launcher. The app writes its output to
+# ~/.local/share/cirqen/logs/launcher.log; run with CIRQEN_DEBUG=1 to see it
+# in the terminal instead. No admin step is needed: the embedded database
+# keeps its socket in its own data folder.
+HERE="$(dirname "$(readlink -f "$0")")"
 
-APP_NAME="Cirqen"
-SETUP_FLAG="$HOME/.local/share/cirqen/.pg_perms_ok"
-PG_RUN_DIR="/var/run/postgresql"
-
-# ── PostgreSQL run-directory permission fix ──────────────────
-# /var/run/postgresql is owned by the system 'postgres' user (mode 2775).
-# Our embedded PostgreSQL runs as the logged-in user and cannot create
-# its lock file there, causing an immediate FATAL crash.
-# We fix this once per machine; the flag file records success so we
-# never ask for a password again.
-fix_pg_permissions() {
-    # Already fixed on this machine?
-    if [ -f "$SETUP_FLAG" ]; then
-        return 0
-    fi
-
-    # Check whether the fix is actually needed
-    if [ -w "$PG_RUN_DIR" ]; then
-        mkdir -p "$(dirname "$SETUP_FLAG")"
-        touch "$SETUP_FLAG"
-        return 0
-    fi
-
-    echo ""
-    echo "┌──────────────────────────────────────────────────────┐"
-    echo "│  Cirqen — One-time setup (requires administrator)    │"
-    echo "│                                                       │"
-    echo "│  Cirqen needs a small system tweak so its database   │"
-    echo "│  can start correctly. This only happens once.        │"
-    echo "└──────────────────────────────────────────────────────┘"
-    echo ""
-
-    # Helper script we'll run as root — written to a temp file so
-    # pkexec can reference it without quoting nightmares.
-    HELPER=$(mktemp /tmp/cirqen_setup_XXXXXX.sh)
-    cat > "$HELPER" <<'HELPER_EOF'
-#!/bin/bash
-chmod 1777 /var/run/postgresql
-echo "d /var/run/postgresql 1777 root root -" > /etc/tmpfiles.d/cirqen-postgresql.conf
-HELPER_EOF
-    chmod +x "$HELPER"
-
-    # Try pkexec first (shows a GUI password dialog — friendly for non-technical users).
-    # Fall back to sudo (terminal prompt) if pkexec is unavailable.
-    if command -v pkexec &>/dev/null; then
-        pkexec bash "$HELPER"
-        RESULT=$?
-    elif command -v sudo &>/dev/null; then
-        echo "Please enter your system password to complete setup:"
-        sudo bash "$HELPER"
-        RESULT=$?
-    else
-        echo "❌  Could not apply setup — neither pkexec nor sudo found."
-        echo "    Ask your system administrator to run:"
-        echo "      sudo chmod 1777 /var/run/postgresql"
-        rm -f "$HELPER"
-        return 1
-    fi
-
-    rm -f "$HELPER"
-
-    if [ $RESULT -eq 0 ]; then
-        mkdir -p "$(dirname "$SETUP_FLAG")"
-        touch "$SETUP_FLAG"
-        echo "✅  Setup complete — you will not be asked again."
-    else
-        echo "⚠️   Setup was cancelled or failed. Cirqen may not start correctly."
-        echo "    If it fails, run install.sh once as administrator."
-    fi
-}
-
-# ── Qt / Chromium sandbox fix ────────────────────────────────
 export QTWEBENGINE_CHROMIUM_FLAGS="--no-sandbox --disable-gpu --disable-software-rasterizer --disable-gpu-sandbox --single-process"
 export QTWEBENGINE_DISABLE_SANDBOX=1
 export QT_LOGGING_RULES="*.debug=false;qt.webenginecontext.info=false"
 
-# ── Run setup if needed, then launch ────────────────────────
-fix_pg_permissions
-python3 launch_cirqen.py
+PG_LIB="$HERE/runtime/postgresql/lib"
+[ -d "$PG_LIB" ] && export LD_LIBRARY_PATH="$PG_LIB:${LD_LIBRARY_PATH:-}"
+
+exec "$HERE/Cirqen" "$@"
 ''')
         launcher.chmod(0o755)
         print("✅ Created start_cirqen.sh")
 
-        # ── One-time install helper (clients run this once after extracting) ──
+        # ── Optional helper: desktop shortcut for this extracted copy ──
         install_sh = dist_dir / "install.sh"
         install_sh.write_text('''\
 #!/bin/bash
-# ============================================================
-# Cirqen — First-time installation helper
-# Run this ONCE after extracting Cirqen. It makes one small
-# system change so the built-in database can start correctly.
-# ============================================================
-
-echo ""
-echo "╔══════════════════════════════════════════════════╗"
-echo "║        Cirqen — First-time Setup                ║"
-echo "╚══════════════════════════════════════════════════╝"
-echo ""
-echo "This script will:"
-echo "  1. Allow Cirqen's database to start without errors"
-echo "  2. Make the change permanent (survives reboots)"
-echo "  3. Create a desktop shortcut for Cirqen"
-echo ""
-echo "You will be asked for your system password once."
-echo ""
-read -rp "Press ENTER to continue, or Ctrl+C to cancel..."
-echo ""
-
-# ── Fix PostgreSQL run directory permissions ─────────────
-echo "→  Configuring database permissions..."
-sudo chmod 1777 /var/run/postgresql
-echo "d /var/run/postgresql 1777 root root -" | sudo tee /etc/tmpfiles.d/cirqen-postgresql.conf > /dev/null
-
-if [ $? -eq 0 ]; then
-    echo "   ✅  Database permissions configured."
-else
-    echo "   ❌  Failed. Please contact Cirqen support."
-    exit 1
-fi
-
-# ── Mark as done so start_cirqen.sh never asks again ────
-SETUP_FLAG="$HOME/.local/share/cirqen/.pg_perms_ok"
-mkdir -p "$(dirname "$SETUP_FLAG")"
-touch "$SETUP_FLAG"
-
-# ── Make launcher executable ─────────────────────────────
+# Cirqen: add a desktop shortcut for this extracted copy. No admin rights
+# needed. (For a system-wide install use the build_linux_desktop.py output.)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-chmod +x "$SCRIPT_DIR/start_cirqen.sh"
+chmod +x "$SCRIPT_DIR/start_cirqen.sh" "$SCRIPT_DIR/Cirqen"
 
-# ── Optional: install desktop shortcut ──────────────────
 DESKTOP_FILE="$HOME/Desktop/Cirqen.desktop"
 cat > "$DESKTOP_FILE" <<DESK
 [Desktop Entry]
@@ -3201,15 +3009,7 @@ DESK
 chmod +x "$DESKTOP_FILE"
 gio set "$DESKTOP_FILE" metadata::trusted true 2>/dev/null  # Mark trusted on GNOME
 
-echo ""
-echo "╔══════════════════════════════════════════════════╗"
-echo "║   ✅  Cirqen is ready!                          ║"
-echo "║                                                  ║"
-echo "║   To start: double-click the Cirqen icon        ║"
-echo "║             on your Desktop, or run:             ║"
-echo "║             ./start_cirqen.sh                   ║"
-echo "╚══════════════════════════════════════════════════╝"
-echo ""
+echo "Cirqen shortcut added to your Desktop."
 ''')
         install_sh.chmod(0o755)
         print("✅ Created install.sh")
@@ -3977,8 +3777,9 @@ def verify_update_files_in_dist():
     internal_dir = DIST_DIR / "Cirqen" / "_internal"
 
     update_files = {
-        "update_manager.py": "Update manager with reconnection support",
-        "update_client.py": "Update client for server communication",
+        "bulider_tools/app_updates.py": "Update service (checks HQ, applies frontend hot-reloads)",
+        "updates/updater.py": "Package download, signature check, apply and rollback",
+        "updates/tasks.py": "Scheduled update checks",
     }
 
     all_present = True
@@ -4276,7 +4077,6 @@ def main():
         ("Setup Configuration", setup_config),
         ("Create Resources", create_resources),
         ("Setup PostgreSQL", setup_postgresql),
-        ("Fix PostgreSQL Run Permissions (Linux)", fix_postgresql_run_permissions),
         ("Setup Redis", setup_redis),
         ("Install Dependencies", install_dependencies),
         ("Verify Installation", verify_requirements),
@@ -4320,7 +4120,7 @@ def main():
     print(f"   • {len(django_apps)} Django apps (auto-detected)")
     print(f"   • Configuration manager (config.py)")
     print(f"   • Enhanced main.py with UpdateManager")  # ← CHANGED
-    print(f"   • Update system (update_manager.py + update_client.py)")  # ← ADD THIS
+    print(f"   • Update system (bulider_tools/app_updates.py + updates/)")
     print(f"   • Cleanup utility (cleanup_cirqen.py)")  # ← ADD THIS
     print(f"   • Launch scripts")  # ← ADD THIS
     print(f"   • Embedded PostgreSQL ✅ FIXED")

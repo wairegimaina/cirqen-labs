@@ -136,6 +136,11 @@ class ConflictQuarantineMixin:
         try:
             conn = self.pool.getconn()
             with conn.cursor() as cur:
+                # The table is created on the first conflict; until then a
+                # count would log an error in postgres on every status write.
+                cur.execute("SELECT to_regclass('public.sync_conflicts')")
+                if cur.fetchone()[0] is None:
+                    return 0
                 if unreviewed_only:
                     cur.execute("SELECT count(*) FROM sync_conflicts WHERE reviewed = FALSE")
                 else:

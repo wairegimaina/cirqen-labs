@@ -44,7 +44,7 @@
     </a>
     <a href="{% url 'jobcard:waiting_jobcards' %}" class="ql-card">
       <span class="ql-icon"><i class="fas fa-clipboard-list" aria-hidden="true"></i></span>
-      <span class="ql-text"><strong>Job cards</strong><span>Create and track maintenance tasks</span></span>
+      <span class="ql-text"><strong>Work orders</strong><span>Create and track maintenance tasks</span></span>
       <i class="fas fa-chevron-right ql-arrow" aria-hidden="true"></i>
     </a>
     <a href="{% url 'inventory' %}" class="ql-card">
@@ -73,7 +73,7 @@
       <div class="kpi-meta">Active equipment</div>
     </div>
     <div class="kpi-card">
-      <div class="kpi-label"><i class="fas fa-clipboard-list" aria-hidden="true"></i> Job cards</div>
+      <div class="kpi-label"><i class="fas fa-clipboard-list" aria-hidden="true"></i> Work orders</div>
       <div class="kpi-value">{{ jobcards.count }}</div>
       <div class="kpi-meta">Total work orders</div>
     </div>
@@ -91,7 +91,7 @@
 
     <div class="panel">
       <div class="panel-title">
-        <span>Job card status</span>
+        <span>Work order status</span>
         <span class="panel-sub">Department</span>
       </div>
       <canvas id="chart-jobcard-status"></canvas>

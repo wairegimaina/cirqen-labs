@@ -51,7 +51,7 @@
                         <input type="date" id="waiting_start_date" name="start_date" class="form-control w-auto" required>
                         <label for="waiting_end_date" class="visually-hidden">End date</label>
                         <input type="date" id="waiting_end_date" name="end_date" class="form-control w-auto" required>
-                        <button class="btn btn-secondary" aria-label="Download job cards"><i class="fas fa-download"></i></button>
+                        <button class="btn btn-secondary" aria-label="Download work orders"><i class="fas fa-download"></i></button>
                     </form>
                 </div>
             </div>
@@ -89,7 +89,7 @@
                         Review & Approve
                     </a>
                     {% else %}
-                    <a href="{% url 'jobcard:download_jobcard_pdf' card.id %}" class="btn btn-sm btn-secondary" aria-label="Download job card">
+                    <a href="{% url 'jobcard:download_jobcard_pdf' card.id %}" class="btn btn-sm btn-secondary" aria-label="Download work order">
                         <i class="fas fa-download text-muted"></i>
                     </a>
                     {% endif %}
@@ -98,7 +98,7 @@
         </div>
         {% empty %}
         <div class="col-12">
-            {% include 'includes/empty_state.html' with icon="fa-check" title="All caught up!" message="No job cards are waiting for approval." %}
+            {% include 'includes/empty_state.html' with icon="fa-check" title="All caught up!" message="No work orders are waiting for approval." %}
         </div>
         {% endfor %}
     </div>

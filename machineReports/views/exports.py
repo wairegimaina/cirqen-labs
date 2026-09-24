@@ -53,6 +53,7 @@ from Inventory.models import Equipment, Workshop
 # sibling modules in this package
 from .helpers import calculate_manufacturer_performance, get_user_workshop_context
 from core.branding import contact_line
+from core.eat import fmt_eat
 
 
 @login_required
@@ -93,7 +94,7 @@ def export_equipment_history(request, equipment_id):
     # Repair History Sheet with complete costs
     ws_repairs = wb.create_sheet("Repair History")
     ws_repairs.append([
-        "Date", "Job Card ID", "Description", "Action Taken", "Performed By",
+        "Date", "Work Order ID", "Description", "Action Taken", "Performed By",
         "Time Started", "Time Completed", "Downtime (Hours)",
         "Labor Cost (KSh)", "Parts Cost (KSh)", "Additional Costs (KSh)",
         "Additional Costs Description", "Total Cost (KSh)", "Spare Parts Details"
@@ -211,7 +212,7 @@ def export_equipment_history(request, equipment_id):
 
     for cal in calibrations:
         ws_calibrations.append([
-            cal.timestamp.strftime('%Y-%m-%d %H:%M'),
+            fmt_eat(cal.timestamp),
             cal.certificate_number,
             cal.procedure.name,
             cal.performed_by.get_full_name(),

@@ -78,6 +78,17 @@ class JobCardFlowTests(TestCase):
         self.assertEqual(card.department, self.department)
         self.assertTrue(card.tech_signature)
 
+    def test_remarks_are_saved_and_optional(self):
+        card = self.raise_job_card(remarks="  Recommend replacing the battery next visit  ")
+        self.assertEqual(card.remarks, "Recommend replacing the battery next visit")
+        card.delete()
+        self.assertIsNone(self.raise_job_card().remarks)
+
+    def test_pdf_renders_with_remarks(self):
+        from jobcard.modern_jobcard_pdf import generate_jobcard_pdf
+        card = self.raise_job_card(remarks="Check <alarm> & battery")
+        self.assertTrue(generate_jobcard_pdf(card).getvalue().startswith(b"%PDF"))
+
     def test_in_charge_approval_records_who_and_when(self):
         card = self.raise_job_card()
         self.decide(card, self.nic, "approve")

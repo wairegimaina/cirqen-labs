@@ -185,7 +185,7 @@
     // Default calibration date to today, but only when creating a new
     // standard (don't clobber an existing date when editing).
     if (!calDateInput.value) {
-      calDateInput.value = new Date().toISOString().split("T")[0];
+      calDateInput.value = new Date().toLocaleDateString("en-CA", { timeZone: "Africa/Nairobi" });
       calDateInput.dispatchEvent(new Event("change"));
     }
 

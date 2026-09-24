@@ -1,7 +1,6 @@
 import io
 import os
 import logging
-from datetime import datetime
 
 from django.conf import settings
 from reportlab.lib.pagesizes import letter, A4, landscape
@@ -18,6 +17,7 @@ from reportlab.pdfgen import canvas as rl_canvas
 from collections import Counter
 from django.db.models import Count, Q
 from core.branding import contact_line
+from core.eat import now_eat, to_eat
 
 logger = logging.getLogger(__name__)
 
@@ -400,7 +400,7 @@ class EquipmentPDFGenerator:
         # Left footer text - Generated timestamp
         canvas.setFillColor(self.COLOR_PALETTE['text_secondary'])
         canvas.setFont("Helvetica-Oblique", 8)
-        timestamp = datetime.now().strftime('%B %d, %Y at %I:%M %p')
+        timestamp = now_eat().strftime('%B %d, %Y at %I:%M %p')
         canvas.drawString(1*cm, 0.7*cm, f"Generated: {timestamp}")
 
         # Center watermark text
@@ -1506,7 +1506,7 @@ class EquipmentPDFGenerator:
         # Age analysis for preventive maintenance
         old_equipment = [
             eq for eq in equipments
-            if eq.created_at and (datetime.now().date() - eq.created_at.date()).days > 1095
+            if eq.created_at and (now_eat().date() - to_eat(eq.created_at).date()).days > 1095
         ]
         if old_equipment:
             insights.append(
@@ -1784,7 +1784,7 @@ def get_pdf_filename(workshop, report_type, department=None, status_filter=None,
     Returns:
         String filename for the PDF
     """
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    timestamp = now_eat().strftime('%Y%m%d_%H%M%S')
 
     # Safely get workshop name
     try:

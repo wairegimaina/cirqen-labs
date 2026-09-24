@@ -40,7 +40,7 @@ class JobCardManager {
     }
 
     if (todayElement) {
-      const today = new Date().toISOString().split('T')[0];
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Nairobi' });
       const todayCount = this.allCards.filter(card => card.dataset.date === today).length;
       todayElement.textContent = todayCount;
     }
@@ -53,7 +53,7 @@ class JobCardManager {
     if (searchTerm) {
       this.resultsText.textContent = `Found ${finalCount} matches for "${searchTerm}" on this page.`;
     } else {
-      this.resultsText.textContent = `Showing ${finalCount} approved job cards.`;
+      this.resultsText.textContent = `Showing ${finalCount} approved work orders.`;
     }
   }
 }

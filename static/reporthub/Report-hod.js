@@ -208,7 +208,7 @@ document.addEventListener('DOMContentLoaded', function () {
           labels: ['Waiting Approval', 'Approved'],
           datasets: [
             {
-              label: 'Job Cards',
+              label: 'Work Orders',
               data: [cfg.totalWaitingApproval, cfg.totalApproved],
               backgroundColor: ['#e55353', '#27c24c'],
               borderColor: ['#b32d2d', '#1e8e3e'],
@@ -222,7 +222,7 @@ document.addEventListener('DOMContentLoaded', function () {
           maintainAspectRatio: true,
           plugins: { legend: { display: false } },
           scales: {
-            y: { beginAtZero: true, title: { display: true, text: 'Number of Job Cards' } },
+            y: { beginAtZero: true, title: { display: true, text: 'Number of Work Orders' } },
             x: { title: { display: true, text: 'Status' } },
           },
         },

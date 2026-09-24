@@ -161,6 +161,13 @@ def get_restart_command():
     frozen = getattr(sys, 'frozen', False)
     bundle_dir = Path(exe).parent.absolute()
 
+    # -- 0. AppImage -------------------------------------------------------
+    # sys.executable lives in the AppImage's temporary mount, which is torn
+    # down when this process exits — relaunch the .AppImage file itself.
+    appimage = os.environ.get('APPIMAGE')
+    if appimage and os.path.isfile(appimage):
+        return ([appimage], False, str(Path.home()), None)
+
     # -- 1. DEB / system-installed ----------------------------------------
     # Look for the launcher wrapper that the .desktop file or Debian
     # package installs alongside the binary.
@@ -321,13 +328,21 @@ class PortManager:
         start_port, end_port = self.PORT_RANGES[service]
         default_port = self.DEFAULT_PORTS[service]
 
+        if service == 'postgresql_local':
+            own = own_postgres_port()
+            if own:
+                self.logger.info(f"[port] {service}: This install's postgres already on {own} - reusing.")
+                return own
+
         # Try default first
         if self.is_port_free(default_port):
             self.logger.info(f"[port] {service}: Using default port {default_port}")
             return default_port
 
-        # Default port is busy - if it's already postgres, reuse it (don't fight it)
-        if service in ('postgresql_local', 'postgresql_hq') and self._port_owner_is_postgres(default_port):
+        # Default port is busy - if it's already postgres, reuse it (don't fight it).
+        # Not for the local DB: a postgres there that isn't ours (checked above)
+        # is another cluster, e.g. a dev checkout's, and would reject our login.
+        if service == 'postgresql_hq' and self._port_owner_is_postgres(default_port):
             self.logger.info(
                 f"[port] {service}: Port {default_port} already owned by postgres - reusing."
             )
@@ -478,6 +493,17 @@ logging.getLogger().handlers = [
 logger = logging.getLogger('Cirqen')
 logger.propagate = False
 
+def own_postgres_port():
+    """Port of the postgres running on this install's own data dir, or None."""
+    try:
+        lines = (DATA_PATH / 'postgres' / 'postmaster.pid').read_text().splitlines()
+        if psutil.pid_exists(int(lines[0])):
+            return int(lines[3])
+    except (OSError, ValueError, IndexError):
+        pass
+    return None
+
+
 # Initialize port manager
 SESSION_FILE = DATA_PATH / 'session.json'
 port_manager = PortManager(SESSION_FILE)
@@ -508,7 +534,17 @@ class PostgresSystemdManager:
 
     @property
     def is_installed(self) -> bool:
-        return self.SERVICE_FILE.exists()
+        """True only for a unit that serves this install's data dir. A unit
+        left by another checkout or an old install runs a different cluster;
+        starting or reusing it would hand this app someone else's database."""
+        if not self.SERVICE_FILE.exists():
+            return False
+        try:
+            r = subprocess.run(['systemctl', 'show', self.SERVICE_NAME, '-p', 'ExecStart', '--value'],
+                               capture_output=True, text=True, timeout=5)
+        except (OSError, subprocess.SubprocessError):
+            return False
+        return f"-D {self.pg_data} " in r.stdout
 
     @property
     def is_active(self) -> bool:
@@ -562,6 +598,11 @@ class PostgresSystemdManager:
     def install(self) -> bool:
         """Write unit file and enable+start service. Called once at first run."""
         if sys.platform != 'linux':
+            return False
+        if os.environ.get('APPIMAGE'):
+            # The binary sits in the AppImage's per-launch mount, so a unit
+            # pointing at it breaks as soon as the app exits.
+            self._log.info("Running as AppImage — systemd service not installed.")
             return False
         if not self.pg_binary.exists():
             self._log.warning(f"Binary not found: {self.pg_binary}")
@@ -712,7 +753,9 @@ class PostgresSystemdManager:
             # Remove stale postmaster.pid before each start to avoid startup failures
             f"ExecStartPre=/bin/bash -c 'rm -f {self.pg_data}/postmaster.pid'\n"
             # Explicitly pass -p PORT so postgres always binds to port 2215
-            f"ExecStart={self.pg_binary} -D {self.pg_data} -p {self.port}\n"
+            # -k: keep the socket/lock file in the data dir; the bundled binary
+            # defaults to /var/run/postgresql, which normal users can't write.
+            f"ExecStart={self.pg_binary} -D {self.pg_data} -p {self.port} -k {self.pg_data}\n"
             "Restart=on-failure\n"
             "RestartSec=5\n"
             "KillMode=process\n"

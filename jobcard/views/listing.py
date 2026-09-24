@@ -125,7 +125,7 @@ def approved_jobcards(request):
     elif role == 'HOD':
         pass
     else:
-        messages.error(request, "You don't have permission to view approved job cards.")
+        messages.error(request, "You don't have permission to view approved work orders.")
         return redirect('jobcard:create_job_card')
 
     # Captured before search/date filters below, so the KPI strip stays a
@@ -237,7 +237,7 @@ def declined_jobcards(request):
 
 
 @login_required
-@role_required('HOD', redirect_to='jobcard:create_job_card', message='Access denied. Only HODs can view workshop job cards.')
+@role_required('HOD', redirect_to='jobcard:create_job_card', message='Access denied. Only HODs can view workshop work orders.')
 def hod_workshop_jobcards(request, workshop_id):
     profile, _, _, role = get_user_context(request)
 
@@ -251,7 +251,7 @@ def hod_workshop_jobcards(request, workshop_id):
             status=status_filter
         )
         context_type = 'calibration_center'
-        context_description = f"Job cards performed by {workshop.name} (calibration center)"
+        context_description = f"Work orders performed by {workshop.name} (calibration center)"
 
     else:
         job_cards_queryset = jobcard.objects.filter(
@@ -261,7 +261,7 @@ def hod_workshop_jobcards(request, workshop_id):
             workshop__category='calibration_center'
         )
         context_type = 'regular_workshop'
-        context_description = f"Job cards for equipment in {workshop.name}'s departments (excluding calibration center work)"
+        context_description = f"Work orders for equipment in {workshop.name}'s departments (excluding calibration center work)"
 
     job_cards_queryset = job_cards_queryset.select_related(
         'department',
@@ -344,7 +344,7 @@ def hod_calibration_work_on_equipment(request, workshop_id):
     workshop = get_object_or_404(Workshop, id=workshop_id)
 
     if workshop.category == 'calibration_center':
-        messages.error(request, "Calibration centers should use the main job cards view.")
+        messages.error(request, "Calibration centers should use the main work orders view.")
         return redirect('jobcard:hod_workshop_jobcards', workshop_id=workshop_id)
 
     status_filter = request.GET.get('status_filter', 'Waiting Approval')

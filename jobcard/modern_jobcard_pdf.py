@@ -13,12 +13,13 @@ from reportlab.pdfgen import canvas as rl_canvas
 from django.http import HttpResponse
 from django.conf import settings
 from io import BytesIO
+from xml.sax.saxutils import escape
 import os
-from datetime import datetime
 import base64
 from PIL import Image as PILImage
 import logging
 from core.branding import contact_line
+from core.eat import fmt_eat, now_eat
 
 logger = logging.getLogger(__name__)
 
@@ -249,7 +250,7 @@ class ModernJobCardPDFGenerator:
         canvas.drawCentredString(
             width / 2,
             height - 1.2*cm,
-            "EQUIPMENT MAINTENANCE JOB CARD"
+            "EQUIPMENT MAINTENANCE WORK ORDER"
         )
 
         # Department name
@@ -294,7 +295,7 @@ class ModernJobCardPDFGenerator:
         # Left footer text - Generated timestamp
         canvas.setFillColor(self.COLOR_PALETTE['text_secondary'])
         canvas.setFont("Helvetica-Oblique", 8)
-        timestamp = datetime.now().strftime('%B %d, %Y at %I:%M %p')
+        timestamp = now_eat().strftime('%B %d, %Y at %I:%M %p')
         canvas.drawString(1*cm, 0.7*cm, f"Generated: {timestamp}")
 
         # Center watermark text
@@ -357,7 +358,7 @@ class ModernJobCardPDFGenerator:
 
         # Card ID line - Show only first 8 characters
         short_id = str(self.job_card.id)[:8]
-        card_id_para = Paragraph(f"<b>Card No:</b> {short_id}", self.styles['NormalText'])
+        card_id_para = Paragraph(f"<b>Work Order No:</b> {short_id}", self.styles['NormalText'])
         elements.append(card_id_para)
         elements.append(Spacer(1, 5))
 
@@ -649,6 +650,21 @@ class ModernJobCardPDFGenerator:
         elements.append(desc_table)
         elements.append(Spacer(1, 12))
 
+        if self.job_card.remarks:
+            elements.append(Paragraph("<b>Remarks</b>", self.styles['BoldText']))
+            elements.append(Spacer(1, 5))
+            remarks_table = Table([[Paragraph(escape(self.job_card.remarks), self.styles['NormalText'])]], colWidths=[7*inch])
+            remarks_table.setStyle(TableStyle([
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('GRID', (0, 0), (-1, -1), 0.5, self.COLOR_PALETTE['border']),
+                ('LEFTPADDING', (0, 0), (-1, -1), 8),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+                ('TOPPADDING', (0, 0), (-1, -1), 8),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ]))
+            elements.append(remarks_table)
+            elements.append(Spacer(1, 12))
+
         return elements
 
     def create_decline_section(self):
@@ -730,8 +746,8 @@ class ModernJobCardPDFGenerator:
         sig_data.append([tech_name, nurse_name])
 
         # Dates
-        tech_date = self.job_card.technician_signed_date.strftime('%Y-%m-%d %H:%M') if self.job_card.technician_signed_date else 'N/A'
-        nurse_date = self.job_card.nurse_signed_date.strftime('%Y-%m-%d %H:%M') if self.job_card.nurse_signed_date else 'N/A'
+        tech_date = fmt_eat(self.job_card.technician_signed_date)
+        nurse_date = fmt_eat(self.job_card.nurse_signed_date)
         sig_data.append([f"Date: {tech_date}", f"Date: {nurse_date}"])
 
         sig_table = Table(sig_data, colWidths=[3.5*inch, 3.5*inch], rowHeights=[25, 60, 20, 20])

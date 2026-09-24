@@ -95,7 +95,7 @@ def main():
     print("\n=== Cirqen DB Row-Count Comparison ===\n")
 
     print("Connecting to LOCAL  DB …")
-    local_conn = connect(LOCAL_DB, "LOCAL (127.0.0.1:2215/cirqen1)")
+    local_conn = connect(LOCAL_DB, "LOCAL (127.0.0.1:2216/cirqen1)")
 
     print("Connecting to HQ     DB …")
     hq_conn = connect(HQ_DB, "HQ    (render.com/cirqen_hq_db1)")

@@ -73,7 +73,7 @@ def calsoft_dashboard(request):
 @login_required
 def api_dashboard_metrics(request):
     try:
-        current_date = timezone.now().date()
+        current_date = timezone.localdate()
 
         pending_count = CalibrationSchedule.objects.filter(
             status="pending", equipment__active_status=True
@@ -190,7 +190,7 @@ def api_dashboard_data(request):
     try:
         # Global (not per-workshop) figures, cached per day; schedule, session and
         # equipment saves invalidate the "cal" namespace.
-        today = timezone.now().date()
+        today = timezone.localdate()
         data = aggregate_cache.get_or_compute(
             "cal", ["dashboard", today], lambda: _calibration_dashboard_data(today)
         )

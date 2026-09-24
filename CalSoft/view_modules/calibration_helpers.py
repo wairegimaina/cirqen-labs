@@ -75,7 +75,7 @@ def _find_grouped_schedule_for_equipment(equipment):
 
 def _create_next_schedule(equipment, procedure):
     try:
-        today = timezone.now().date()
+        today = timezone.localdate()
         interval_months = getattr(procedure, "interval_months", None) or getattr(procedure, "calibration_period", 12) or 12
         # Calendar months, ending on the last day of the due month.
         # `today + timedelta(days=30 * months)` treated every month as 30 days,

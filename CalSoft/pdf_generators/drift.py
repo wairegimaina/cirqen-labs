@@ -18,6 +18,7 @@ import logging
 import matplotlib.pyplot as plt
 import numpy as np
 import qrcode
+from core.eat import fmt_eat
 from django.conf import settings
 from django.core.files.storage import default_storage
 from django.utils import timezone
@@ -308,7 +309,7 @@ class DriftMixin:
             b_sub       = "Pass/fail outcome was not recorded on the most recent historical session."
 
         last_cert_shown = all_metrics[0]['last_cert']
-        last_date_shown = all_metrics[0]['last_date'].strftime('%d %b %Y')
+        last_date_shown = fmt_eat(all_metrics[0]['last_date'], '%d %b %Y')
 
         b_title_s = ParagraphStyle('_bt', fontSize=10, fontName='Helvetica-Bold',
                                    textColor=b_tc, leading=14)
@@ -398,7 +399,7 @@ class DriftMixin:
             Paragraph(f"{total_fails} / {total_readings}", fval_s),
             Paragraph(summary_value, val_s),
             Paragraph(ovr_label, oval_s),
-            Paragraph(f"{earliest.strftime('%d %b %y')} \u2192 {latest.strftime('%d %b %y')}", val_s),
+            Paragraph(f"{fmt_eat(earliest, '%d %b %y')} \u2192 {fmt_eat(latest, '%d %b %y')}", val_s),
         ]
 
         strip = Table([strip_top, strip_bot], colWidths=[strip_w] * 6)

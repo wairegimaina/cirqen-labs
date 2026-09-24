@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}Job Cards - Medical Equipment Management{% endblock %}
+{% block title %}Work Orders - Medical Equipment Management{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{% static 'css/select2.min.css' %}" />
@@ -17,7 +17,7 @@
 
         {% if is_technician %}
         <div class="section-header">
-            <h2><i class='fas fa-tools'></i> Job Card - Technician</h2>
+            <h2><i class='fas fa-tools'></i> Work Order - Technician</h2>
             <div class="job-nav">
                 <a href="{% url 'jobcard:waiting_jobcards' %}" class="btn btn-sm btn-outline-primary">
                     <i class='fas fa-clock'></i> Waiting
@@ -84,6 +84,13 @@
                 <label for="job_description"><i class='fas fa-edit'></i> Job Description</label>
                 <textarea name="job_description" id="job_description" class="form-control" rows="3"
                           placeholder="Describe the work performed..." required>{{ form_data.job_description|default:"" }}</textarea>
+            </div>
+
+            <!-- Remarks -->
+            <div class="form-group">
+                <label for="remarks"><i class='fas fa-comment-alt'></i> Remarks</label>
+                <textarea name="remarks" id="remarks" class="form-control" rows="2"
+                          placeholder="Observations, follow-up needed, recommendations (optional)">{{ form_data.remarks|default:"" }}</textarea>
             </div>
 
             <!-- Action & Times Row -->
@@ -218,7 +225,7 @@
 
             <div class="form-actions">
                 <button type="submit" name="submit" class="btn btn-primary full-width-btn">
-                    <i class='fas fa-check'></i> Submit Job Card
+                    <i class='fas fa-check'></i> Submit Work Order
                 </button>
             </div>
         </form>
@@ -227,7 +234,7 @@
         <!-- Technician Read-Only View -->
         {% if selected_job_card %}
         <div class="section-header">
-            <h2><i class='fas fa-eye'></i> Job Card Details</h2>
+            <h2><i class='fas fa-eye'></i> Work Order Details</h2>
         </div>
 
         <div class="info-box">
@@ -248,6 +255,10 @@
                 <div class="row full">
                     <strong>Description:</strong>
                     <span>{{ selected_job_card.job_description|default:"N/A" }}</span>
+                </div>
+                <div class="row full">
+                    <strong>Remarks:</strong>
+                    <span>{{ selected_job_card.remarks|default:"None" }}</span>
                 </div>
                 <div class="row">
                     <strong>Technician:</strong>
@@ -281,7 +292,7 @@
         {% else %}
         <div class="empty-state">
             <i class='fas fa-info-circle'></i>
-            <p>Select a job card to view details</p>
+            <p>Select a work order to view details</p>
         </div>
         {% endif %}
         {% endif %}
@@ -308,9 +319,9 @@
 
             {% if selected_job_card %}
             <div class="info-summary info-box">
-                <h5>Job Card Summary</h5>
+                <h5>Work Order Summary</h5>
                 <div class="info-row">
-                    <strong>Job Card ID:</strong>
+                    <strong>Work Order ID:</strong>
                     <span>JC-{{ selected_job_card.id }}</span>
                 </div>
                 <div class="info-row">
@@ -325,9 +336,13 @@
                     <strong>Technician:</strong>
                     <span>{{ selected_job_card.performed_by.get_full_name|default:"N/A" }}</span>
                 </div>
-                <div class="info-row" style="border: none;">
+                <div class="info-row">
                     <strong>Job Description:</strong>
                     <span>{{ selected_job_card.job_description|default:"N/A" }}</span>
+                </div>
+                <div class="info-row" style="border: none;">
+                    <strong>Remarks:</strong>
+                    <span>{{ selected_job_card.remarks|default:"None" }}</span>
                 </div>
             </div>
 
@@ -416,7 +431,7 @@
             {% else %}
             <div class="empty-state">
                 <i class='fas fa-clipboard-list'></i>
-                <p>Select a job card from 'Waiting Approval' to review</p>
+                <p>Select a work order from 'Waiting Approval' to review</p>
             </div>
             {% endif %}
         </form>

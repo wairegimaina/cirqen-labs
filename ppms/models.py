@@ -4,6 +4,7 @@ from django.conf import settings
 from Inventory.models import Equipment
 from django.utils.timezone import now
 from workshop.models import Workshop
+from core.eat import now_eat
 
 STATUS_CHOICES = [
     ('pending', 'Pending'),
@@ -184,7 +185,7 @@ class PPMSchedule(models.Model):
                     self.logic_change_warning = (
                         f"Logic change detected: planning logic changed from "
                         f"'{original.planning_logic}' to '{self.planning_logic}' "
-                        f"on {now().strftime('%Y-%m-%d %H:%M')}. "
+                        f"on {now_eat().strftime('%Y-%m-%d %H:%M')}. "
                         f"Run smart_reorganize_ppm_schedules to realign all schedules "
                         f"to the new logic. Scheduled month has NOT been changed — "
                         f"realignment is required."
@@ -233,7 +234,7 @@ class PPMSchedule(models.Model):
         from django.utils import timezone
         if not self.scheduled_month or self.status == 'completed':
             return False
-        return timezone.now().date() > self.due_date
+        return timezone.localdate() > self.due_date
 
     @property
     def protection_status(self):

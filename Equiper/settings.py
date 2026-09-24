@@ -469,6 +469,8 @@ TIME_ZONE = "Africa/Nairobi"
 # if a second language is ever needed (IMPROVEMENT_PLAN.md section 8).
 USE_I18N = False
 USE_TZ = True
+# Celery defaults to UTC, so crontab(hour=8) ran at 11:00 in Nairobi.
+CELERY_TIMEZONE = TIME_ZONE
 
 # Static files — source dirs stay in BASE_DIR (read-only OK), output goes to DATA_PATH
 STATIC_URL = "/static/"

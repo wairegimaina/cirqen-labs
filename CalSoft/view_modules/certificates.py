@@ -29,6 +29,7 @@ from CalSoft.pdf_generators import BtwelveHospitalCertificateGenerator, generate
 
 from calSchedules.grouping import days_until_due, is_overdue, next_due_date
 from users.control import get_user_role
+from core.eat import fmt_eat, now_eat
 
 logger = logging.getLogger(__name__)
 
@@ -217,9 +218,9 @@ def certificate_list(request):
             # comes from the schedule where there is one, rather than assuming
             # every device is annual.
             interval = getattr(session.schedule, "calibration_period", None) or 12
-            cal_due_date = next_due_date(session.timestamp.date(), interval)
+            cal_due_date = next_due_date(timezone.localdate(session.timestamp), interval)
             session.cal_due_date = cal_due_date
-            current_date = timezone.now().date()
+            current_date = timezone.localdate()
             session.days_until_due = days_until_due(cal_due_date, current_date)
             session.is_overdue = is_overdue(cal_due_date, current_date)
 
@@ -310,7 +311,7 @@ def generate_comprehensive_certificate(request, session_pk):
 
         context = {
             "certificate_number": session.certificate_number
-            or f"CAL-{session.pk}-{timezone.now().strftime('%Y%m%d')}",
+            or f"CAL-{session.pk}-{now_eat().strftime('%Y%m%d')}",
             "location": department_name,
             "workshop": workshop_name,
             "generation_timestamp": timezone.now(),
@@ -371,7 +372,7 @@ def download_declined_certificate(request, pk):
             else "Unknown"
         ),
         "rejected_at": (
-            session.rejected_at.strftime("%Y-%m-%d %H:%M") if session.rejected_at else "Unknown"
+            fmt_eat(session.rejected_at, default="Unknown")
         ),
     }
 
@@ -465,7 +466,7 @@ def bulk_certificates_download(request):
     from django.http import StreamingHttpResponse
     from zipstream import ZipFile
 
-    today = timezone.now().date()
+    today = timezone.localdate()
     week_start = today - timedelta(days=today.weekday())
     week_end = week_start + timedelta(days=6)
 
@@ -518,7 +519,7 @@ def bulk_certificates_download(request):
 
                 context = {
                     "certificate_number": session.certificate_number
-                    or f"CAL-{session.pk}-{timezone.now().strftime('%Y%m%d')}",
+                    or f"CAL-{session.pk}-{now_eat().strftime('%Y%m%d')}",
                     "location": department_name,
                     "workshop": workshop_name,
                     "generation_timestamp": timezone.now(),

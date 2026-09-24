@@ -32,6 +32,7 @@ import requests
 from celery import shared_task
 from django.conf import settings
 from django.utils import timezone
+from core.eat import fmt_eat
 
 logger = logging.getLogger(__name__)
 
@@ -105,8 +106,8 @@ def check_and_apply_updates(self):
         if timezone.now() < next_check:
             logger.info(
                 "[updates] Skipping — last checked %s, next check at %s.",
-                us.last_check.strftime("%Y-%m-%d %H:%M"),
-                next_check.strftime("%Y-%m-%d %H:%M"),
+                fmt_eat(us.last_check),
+                fmt_eat(next_check),
             )
             return
 

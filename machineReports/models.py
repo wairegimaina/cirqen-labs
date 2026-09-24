@@ -10,6 +10,7 @@ from django.core.exceptions import ValidationError
 from Inventory.models import Equipment, Department, Workshop
 from CalSoft.models import CalibrationSession
 from jobcard.models import jobcard, SparePartUsed
+from core.eat import fmt_eat
 
 
 class EquipmentCategory(models.Model):
@@ -117,7 +118,7 @@ class EquipmentStatusReport(models.Model):
 
 
     def __str__(self):
-        return f"Equipment Status Report - {self.timestamp.strftime('%Y-%m-%d %H:%M')}"
+        return f"Equipment Status Report - {fmt_eat(self.timestamp)}"
 
 class MachineRepairHistory(models.Model):
     """Aggregated repair history for equipment"""
@@ -253,7 +254,7 @@ class WorkshopEquipmentReport(models.Model):
     @classmethod
     def generate_workshop_report(cls, workshop_id=None, date=None):
         """Generate workshop equipment report"""
-        date = date or timezone.now().date()
+        date = date or timezone.localdate()
         last_month = date - timezone.timedelta(days=30)
 
         if workshop_id:

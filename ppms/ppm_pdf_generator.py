@@ -14,9 +14,9 @@ from django.http import HttpResponse
 from django.conf import settings
 from io import BytesIO
 import os
-from datetime import datetime
 import logging
 from core.branding import contact_line
+from core.eat import now_eat
 
 logger = logging.getLogger(__name__)
 
@@ -241,7 +241,7 @@ class ModernPPMPDFGenerator:
         # Left footer text - Generated timestamp
         canvas.setFillColor(self.COLOR_PALETTE['text_secondary'])
         canvas.setFont("Helvetica-Oblique", 8)
-        timestamp = datetime.now().strftime('%B %d, %Y at %I:%M %p')
+        timestamp = now_eat().strftime('%B %d, %Y at %I:%M %p')
         canvas.drawString(1*cm, 0.7*cm, f"Generated: {timestamp}")
 
         # Center watermark text
@@ -514,7 +514,7 @@ def create_ppm_pdf_response(schedules, department=None, workshop=None):
         response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
 
         # Generate filename
-        timestamp = datetime.now().strftime('%Y%m%d')
+        timestamp = now_eat().strftime('%Y%m%d')
         if department:
             filename = f"ppm_schedule_{department.name}_{timestamp}.pdf"
         elif workshop:

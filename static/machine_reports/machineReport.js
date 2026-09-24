@@ -203,7 +203,7 @@ function populateRepairModal(data) {
         <div class="card-body p-3">
           <div class="d-flex justify-content-between align-items-start mb-2">
             <div>
-              <h6 class="mb-1 fw-bold text-primary">Job Card #${escapeHTML(repair.id.substring(0, 8))}</h6>
+              <h6 class="mb-1 fw-bold text-primary">Work Order #${escapeHTML(repair.id.substring(0, 8))}</h6>
               <small class="text-muted">
                 <i class="fas fa-calendar me-1"></i>${escapeHTML(formatDate(repair.date))}
                 ${repair.time_started ? `<span class="mx-1">•</span>${repair.time_started} - ${repair.time_completed || 'Ongoing'}` : ''}
@@ -410,7 +410,7 @@ function escapeHtml(text) {
 function formatDate(dateString) {
   if (!dateString) return 'N/A';
   const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'Africa/Nairobi' });
 }
 
 // --- MANUFACTURER CHART ---

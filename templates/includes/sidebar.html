@@ -216,14 +216,14 @@
     {% endif %}
     {% endwith %}
 
-    <!-- Job Cards (Tech & NIC) -->
+    <!-- Work Orders (Tech & NIC) -->
     <li class="menu-entry" role="none">
       <a href="#" class="menu-link {% if 'jobcard' in request.path %}active-link{% endif %}" data-toggle="submenu"
         role="menuitem" aria-haspopup="true" aria-expanded="false">
         <div class="link-icon" aria-hidden="true">
           <i class="fas fa-file-alt"></i>
         </div>
-        <span class="link-label">Job Cards</span>
+        <span class="link-label">Work Orders</span>
         <i class="fas fa-chevron-down submenu-toggle-arrow" aria-hidden="true"></i>
       </a>
       <ul class="dropdown-menu" role="menu">
@@ -233,7 +233,7 @@
             class="dropdown-link {% if request.resolver_match.url_name == 'create_job_card' %}active-dropdown{% endif %}"
             role="menuitem">
             <i class="fas fa-plus-circle" aria-hidden="true"></i>
-            <span class="link-label">Create Job Card</span>
+            <span class="link-label">Create Work Order</span>
           </a>
         </li>
 
@@ -242,7 +242,7 @@
             class="dropdown-link {% if request.resolver_match.url_name == 'waiting_jobcards' %}active-dropdown{% endif %}"
             role="menuitem">
             <i class="fas fa-hourglass-half" aria-hidden="true"></i>
-            <span class="link-label">Waiting Job Cards</span>
+            <span class="link-label">Waiting Work Orders</span>
             {% if nav.job_cards_waiting_count %}
             <span class="queue-badge">{{ nav.job_cards_waiting_count }}</span>
             {% endif %}
@@ -254,7 +254,7 @@
             class="dropdown-link {% if request.resolver_match.url_name == 'approved_jobcards' %}active-dropdown{% endif %}"
             role="menuitem">
             <i class="fas fa-check-circle" aria-hidden="true"></i>
-            <span class="link-label">Approved Job Cards</span>
+            <span class="link-label">Approved Work Orders</span>
           </a>
         </li>
 
@@ -263,7 +263,7 @@
             class="dropdown-link {% if request.resolver_match.url_name == 'declined_jobcards' %}active-dropdown{% endif %}"
             role="menuitem">
             <i class="fas fa-times-circle" aria-hidden="true"></i>
-            <span class="link-label">Declined Job Cards</span>
+            <span class="link-label">Declined Work Orders</span>
           </a>
         </li>
 

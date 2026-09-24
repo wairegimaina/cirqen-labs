@@ -1,5 +1,5 @@
 /**
- * Unified Job Card Manager
+ * Unified Work Order Manager
  * Handles search and stats for both Waiting and Declined views.
  */
 class JobCardListManager {

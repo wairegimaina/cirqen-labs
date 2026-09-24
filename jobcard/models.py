@@ -3,7 +3,7 @@ import logging
 from django.db import models
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from django.utils.timezone import now
+from django.utils.timezone import localdate, now
 from decimal import Decimal
 
 User = get_user_model()
@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 from parts_tools.models import Accessories
 from Inventory.models import Department, Equipment
 from workshop.models import Workshop
+from core.eat import fmt_eat
 
 
 class jobcard(models.Model):
@@ -69,6 +70,7 @@ class jobcard(models.Model):
     )
 
     decline_reason = models.TextField(blank=True, null=True)
+    remarks = models.TextField(blank=True, null=True)
     nurse_signed_date = models.DateTimeField(null=True, blank=True)
     nurse_name = models.CharField(max_length=100, null=True, blank=True)
     verified_by_nurse = models.ForeignKey(
@@ -183,10 +185,10 @@ class jobcard(models.Model):
         Approve the job card with nurse verification
         """
         if self.status == 'Approved':
-            raise ValidationError("Job card is already approved.")
+            raise ValidationError("Work order is already approved.")
 
         if self.status == 'Declined':
-            raise ValidationError("Cannot approve a declined job card.")
+            raise ValidationError("Cannot approve a declined work order.")
 
         # Deduct stock
         self.deduct_stock()
@@ -215,7 +217,7 @@ class jobcard(models.Model):
         Decline the job card with reason
         """
         if self.status == 'Declined':
-            raise ValidationError("Job card is already declined.")
+            raise ValidationError("Work order is already declined.")
 
         if self.status == 'Approved':
             # If it was previously approved, restore stock
@@ -275,7 +277,7 @@ class jobcard(models.Model):
             # Update PPM schedule to completed
             old_status = ppm_schedule.status
             ppm_schedule.status = 'completed'
-            ppm_schedule.completed_date = now().date()
+            ppm_schedule.completed_date = localdate()
             ppm_schedule.completed_by = self.performed_by
             ppm_schedule.updated_at = now()
             ppm_schedule.needs_sync = True
@@ -290,9 +292,9 @@ class jobcard(models.Model):
                 f"(SN: {self.equipment.serial_number})\n"
                 f"   Scheduled: {ppm_schedule.scheduled_month.strftime('%B %Y')}\n"
                 f"   Workshop: {self.workshop.name}\n"
-                f"   Job Card: #{self.id}\n"
+                f"   Work Order: #{self.id}\n"
                 f"   Approved by: {self.verified_by_nurse.get_full_name() if self.verified_by_nurse else 'N/A'}\n"
-                f"   Approved on: {self.nurse_signed_date.strftime('%Y-%m-%d %H:%M') if self.nurse_signed_date else 'N/A'}"
+                f"   Approved on: {fmt_eat(self.nurse_signed_date)}"
             )
 
             return True
@@ -316,22 +318,22 @@ class jobcard(models.Model):
                     'related_ppm_schedule':
                     f"PPM schedule is for different equipment. "
                     f"Schedule equipment: {self.related_ppm_schedule.equipment.description}, "
-                    f"Job card equipment: {self.equipment.description}"
+                    f"Work order equipment: {self.equipment.description}"
                 })
 
             # Verify workshop matches (if PPM schedule has workshop field)
             if hasattr(self.related_ppm_schedule, 'workshop') and self.related_ppm_schedule.workshop != self.workshop:
                 raise ValidationError({
                     'related_ppm_schedule':
-                    f"PPM schedule workshop doesn't match job card workshop. "
+                    f"PPM schedule workshop doesn't match work order workshop. "
                     f"Schedule workshop: {self.related_ppm_schedule.workshop.name}, "
-                    f"Job card workshop: {self.workshop.name}"
+                    f"Work order workshop: {self.workshop.name}"
                 })
 
         # If action is PPM, recommend linking to a schedule (warning, not error)
         if self.action_taken == 'PPM' and not self.related_ppm_schedule:
             logger.warning(
-                f"Job card #{self.id} has action='PPM' but no linked PPM schedule. "
+                f"Work order #{self.id} has action='PPM' but no linked PPM schedule. "
                 f"Consider linking to track completion properly."
             )
 
@@ -398,8 +400,8 @@ class jobcard(models.Model):
 
     class Meta:
         ordering = ['-nurse_signed_date', '-date_issued']
-        verbose_name = 'Job Card'
-        verbose_name_plural = 'Job Cards'
+        verbose_name = 'Work Order'
+        verbose_name_plural = 'Work Orders'
         indexes = [
             models.Index(fields=['status', 'date_issued']),
             models.Index(fields=['equipment', 'status']),

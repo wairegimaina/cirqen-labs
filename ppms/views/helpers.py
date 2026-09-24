@@ -6,7 +6,7 @@ from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, HttpResponse
 from django.contrib import messages
 from django.core.exceptions import ValidationError
-from django.utils.timezone import now
+from django.utils.timezone import localdate
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 from ..models import PPMSchedule
@@ -178,7 +178,7 @@ def calculate_ppm_statistics(schedules, equipment_queryset):
     Calculate real PPM statistics based on actual data
     Returns dict with all necessary statistics
     """
-    today = now().date()
+    today = localdate()
     total_equipment = equipment_queryset.count()
     total_scheduled = schedules.count()
 
@@ -207,7 +207,7 @@ def calculate_ppm_statistics(schedules, equipment_queryset):
                 total_due += 1
                 if schedule.status == 'completed':
                     # Check if completed on time (before or on the last day of scheduled month)
-                    if schedule.updated_at and schedule.updated_at.date() <= month_end_date:
+                    if schedule.updated_at and timezone.localdate(schedule.updated_at) <= month_end_date:
                         completed_on_time += 1
 
     completion_rate = (completed_on_time / total_due * 100) if total_due > 0 else 0
