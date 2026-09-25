@@ -177,7 +177,7 @@ def plan_new(request):
     _require_manage(scope)
     logic = request.POST.get("logic")
     source = request.POST.get("source", "copy")
-    if logic not in dict(SchedulingPlan.LOGIC_CHOICES) or source not in ("copy", "adopt", "blank"):
+    if logic not in dict(SchedulingPlan.LOGIC_CHOICES) or source not in ("copy", "adopt", "spread", "blank"):
         messages.error(request, "Choose a grouping and a starting point.")
         return redirect(reverse("scheduling:plans") + scope.query())
     existing = SchedulingPlan.objects.filter(

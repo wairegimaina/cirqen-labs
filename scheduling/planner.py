@@ -530,6 +530,72 @@ def explain(equipment, program):
 
 # ── Drafts ───────────────────────────────────────────────────────────────────
 
+def typical_intervals(workshop, program):
+    """{description_id: months}: the interval most of that type's devices use.
+
+    Each device counts once, with the interval of its latest schedule; a tie
+    goes to the shorter interval, the safer of the two.
+    """
+    from collections import Counter
+
+    prog = PROGRAMS[program]
+    latest = {}
+    for eq_id, desc_id, period in prog.model.objects.filter(
+        equipment__department__workshop=workshop, equipment__active_status=True,
+    ).order_by("equipment_id", "-scheduled_month").values_list(
+        "equipment_id", "equipment__description_id", prog.period_field,
+    ):
+        if period and eq_id not in latest:
+            latest[eq_id] = (desc_id, period)
+    votes = {}
+    for desc_id, period in latest.values():
+        votes.setdefault(desc_id, Counter())[period] += 1
+    return {d: min(c, key=lambda p: (-c[p], p)) for d, c in votes.items()}
+
+
+def spread_evenly(workshop, program, logic, user=None, default_interval=None):
+    """A draft whose months share the year's work out evenly (engine.spread_layout).
+
+    For a workshop whose schedules have piled into a month or two, today's
+    layout is the problem, not a starting point.
+    """
+    from math import gcd
+
+    default = default_interval or (6 if program == SchedulingPlan.PROGRAM_PPM else 12)
+    plan = SchedulingPlan.objects.create(
+        workshop=workshop, program=program, logic=logic, version=next_version(workshop, program),
+        default_interval_months=default, created_by=user,
+        notes="Months spread evenly across the year",
+    )
+    intervals = typical_intervals(workshop, program)
+    plan.intervals.model.objects.bulk_create([
+        plan.intervals.model(plan=plan, description_id=d, interval_months=p) for d, p in intervals.items()
+    ])
+
+    by_department = logic == SchedulingPlan.LOGIC_DEPARTMENT
+    groups = {}
+    for dept, desc in Equipment.objects.filter(
+        department__workshop=workshop, active_status=True,
+    ).values_list("department_id", "description_id"):
+        key = dept if by_department else desc
+        devices, step_ = groups.get(key, (0, 12))
+        groups[key] = (devices + 1, gcd(step_, intervals.get(desc) or default))
+    # A group's cycle must fit every interval in it: spread on the shared step.
+    layout = engine.spread_layout([(k, n, g) for k, (n, g) in groups.items() if k])
+
+    rules = []
+    for key, months in layout.items():
+        rule = plan.rules.model(plan=plan)
+        rule.months = months
+        if by_department:
+            rule.department_id = key
+        else:
+            rule.description_id = key
+        rules.append(rule)
+    plan.rules.model.objects.bulk_create(rules)
+    logger.info(f"[PLAN] Spread {plan}: {len(rules)} rules")
+    return plan
+
 def next_version(workshop, program):
     last = SchedulingPlan.objects.filter(workshop=workshop, program=program).order_by("-version").first()
     return (last.version + 1) if last else 1
@@ -541,6 +607,8 @@ def new_draft(workshop, program, logic, user=None, source="copy", default_interv
     A copy keeps the active plan's intervals, and its months when the logic
     is unchanged (months per department mean nothing per description).
     """
+    if source == "spread":
+        return spread_evenly(workshop, program, logic, user, default_interval)
     if source == "adopt":
         plan = adopt_current_layout(workshop, program, logic, user)
         if default_interval:
@@ -595,14 +663,7 @@ def adopt_current_layout(workshop, program, logic, user=None):
         created_by=user, notes="Adopted from the current schedule layout",
     )
 
-    intervals = {}
-    for desc_id, period in model.objects.filter(
-        equipment__department__workshop=workshop,
-    ).order_by("equipment__description_id", "-scheduled_month").values_list(
-        "equipment__description_id", prog.period_field,
-    ):
-        if period and desc_id not in intervals:
-            intervals[desc_id] = period
+    intervals = typical_intervals(workshop, program)
     plan.intervals.model.objects.bulk_create([
         plan.intervals.model(plan=plan, description_id=d, interval_months=p)
         for d, p in intervals.items()

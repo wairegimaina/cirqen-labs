@@ -67,7 +67,12 @@
           </div>
           {% endif %}
           <div class="form-check">
-            <input class="form-check-input" type="radio" name="source" id="src-adopt" value="adopt" {% if not active %}checked{% endif %}>
+            <input class="form-check-input" type="radio" name="source" id="src-spread" value="spread" {% if not active %}checked{% endif %}>
+            <label class="form-check-label" for="src-spread">Spread evenly across the year</label>
+            <div class="form-text mt-0">Best when schedules have piled into a month or two.</div>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="source" id="src-adopt" value="adopt">
             <label class="form-check-label" for="src-adopt">Today's layout (the months schedules are in now)</label>
           </div>
           <div class="form-check">

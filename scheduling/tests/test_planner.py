@@ -415,3 +415,31 @@ class AdoptAndCommandTests(PlanTestBase):
         out = StringIO()
         call_command("scheduling_plan", "explain", eq.serial_number, "--program", "ppm", stdout=out)
         self.assertIn("Why: first visit", out.getvalue())
+
+
+class SpreadTests(PlanTestBase):
+    def test_spread_draft_breaks_up_a_one_month_pile(self):
+        # Everything piled into one month, as the old aligner left Renal.
+        descs = [EquipmentDescription.objects.create(name=f"Type {i}") for i in range(12)]
+        devices = [self.equipment(desc=descs[i % 12]) for i in range(48)]
+        for eq in devices:
+            CalibrationSchedule.objects.create(equipment=eq, workshop=self.ws, scheduled_month=d(2026, 9),
+                                               calibration_period=12, generation_source="signal")
+        draft = planner.new_draft(self.ws, "calibration", "description", source="spread")
+        months = sorted(m for r in draft.rules.all() for m in r.months)
+        self.assertEqual(months, list(range(1, 13)))       # one type per month
+
+        planner.activate(draft, today=TODAY)
+        per_month = {}
+        for m in CalibrationSchedule.open_schedules().values_list("scheduled_month", flat=True):
+            per_month[m] = per_month.get(m, 0) + 1
+        self.assertEqual(len(per_month), 12)
+        self.assertEqual(set(per_month.values()), {4})
+        self.assertEqual(CalibrationSchedule.open_schedules().count(), 48)
+
+    def test_typical_interval_is_the_most_common_one(self):
+        a, b, c = self.equipment(), self.equipment(), self.equipment()
+        for eq, period in ((a, 3), (b, 6), (c, 6)):
+            PPMSchedule.objects.create(equipment=eq, workshop=self.ws, scheduled_month=d(2026, 10),
+                                       maintenance_period=period)
+        self.assertEqual(planner.typical_intervals(self.ws, "ppm"), {self.monitor.id: 6})

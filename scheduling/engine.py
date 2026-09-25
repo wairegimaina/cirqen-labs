@@ -210,3 +210,40 @@ def place(*, group_name, months, interval, last=None, start, load=None, policy=N
     facts.update(slot=list(slot), due=month_name(month))
     message = f"{reason} → {month_name(month)} ({group_name}: {months_label(months)}, every {interval} months)"
     return Placement(month=month, slot=slot, message=message, facts=facts)
+
+
+def spread_layout(groups):
+    """Months for each group so the year's workload comes out even.
+
+    ``groups`` is a list of ``(key, devices, interval)``. Heaviest groups are
+    placed first, each on the cycle(s) whose months are least loaded so far.
+    A group heavier than one month's fair share gets several cycles (the
+    engine then divides its devices between them); a group can never be
+    given months its interval cannot keep. Deterministic: ties go to the
+    lighter total, then the earlier cycle.
+
+    Returns ``{key: [months]}``.
+    """
+    from math import ceil
+
+    load = {m: 0.0 for m in range(1, 13)}
+    visits = sum(devices * 12 / interval for _, devices, interval in groups if interval)
+    target = visits / 12 or 1.0
+    layout = {}
+    order = sorted((g for g in groups if g[2]), key=lambda g: (-g[1] * 12 / g[2], str(g[0])))
+    for key, devices, interval in order:
+        g = step(interval)
+        # Load each month of one cycle would carry if the whole group sat on it.
+        per_month = devices * g / interval
+        cycles = min(g, max(1, ceil(per_month / target - 1e-9)))
+        share = per_month / cycles
+        chosen = []
+        for _ in range(cycles):
+            free = [r for r in range(g) if r not in chosen]
+            best = min(free, key=lambda r: (max(load[m] for m in range(r + 1, 13, g)),
+                                            sum(load[m] for m in range(r + 1, 13, g)), r))
+            chosen.append(best)
+            for m in range(best + 1, 13, g):
+                load[m] += share
+        layout[key] = sorted(m for r in chosen for m in range(r + 1, 13, g))
+    return layout

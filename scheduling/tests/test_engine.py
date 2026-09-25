@@ -131,3 +131,36 @@ class RealignTests(SimpleTestCase):
         p = place(group_name="Analyser", months=[6], interval=12, last=(d(2026, 9), d(2026, 9)),
                   start=self.start, policy=WITHIN_INTERVAL)
         self.assertEqual(p.month, d(2027, 6))
+
+
+class SpreadLayoutTests(SimpleTestCase):
+    def test_twelve_month_groups_fill_the_year_evenly(self):
+        groups = [(f"g{i}", 10, 12) for i in range(12)]
+        layout = engine.spread_layout(groups)
+        self.assertEqual(sorted(m for months in layout.values() for m in months), list(range(1, 13)))
+
+    def test_a_heavy_group_gets_more_than_one_month(self):
+        # 95 devices a year: about 8 a month. 40 of one kind can't all go in one.
+        groups = [("big", 40, 12)] + [(f"s{i}", 5, 12) for i in range(11)]
+        layout = engine.spread_layout(groups)
+        self.assertEqual(len(layout["big"]), 6)
+        self.assertTrue(all(len(layout[f"s{i}"]) == 1 for i in range(11)))
+
+    def test_months_always_fit_the_interval(self):
+        layout = engine.spread_layout([("q", 8, 3), ("h", 8, 6), ("t", 8, 4), ("y", 8, 12)])
+        for key, interval in (("q", 3), ("h", 6), ("t", 4), ("y", 12)):
+            self.assertTrue(engine.slots(interval, layout[key]), (key, layout[key]))
+
+    def test_deterministic(self):
+        groups = [("a", 7, 6), ("b", 7, 6), ("c", 3, 3), ("d", 11, 12)]
+        self.assertEqual(engine.spread_layout(groups), engine.spread_layout(list(reversed(groups))))
+
+    def test_the_busiest_month_stays_close_to_the_average(self):
+        groups = [(f"g{i}", n, 12) for i, n in enumerate([19, 16, 14, 14, 12, 12, 10, 10, 9, 9, 9, 8,
+                                                          8, 8, 7, 6, 6, 6, 6, 4, 4, 2])]
+        layout = engine.spread_layout(groups)
+        per_month = {m: 0.0 for m in range(1, 13)}
+        for key, n, _ in groups:
+            for m in layout[key]:
+                per_month[m] += n / len(layout[key])
+        self.assertLess(max(per_month.values()), 1.35 * sum(per_month.values()) / 12)
