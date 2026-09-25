@@ -34,7 +34,8 @@ ROOT = Path(__file__).resolve().parent.parent
 BUILD = ROOT / "data" / "marketing_build"
 OUT = ROOT / "data" / "Cirqen_Marketing.mp4"
 TTS_DIR = Path(os.environ.get("CIRQEN_TTS_DIR", "/tmp/claude-0/tts"))
-LOGO_WIDE = ROOT / "static" / "images" / "white.png"          # full logo, for dark backgrounds
+LOGO_SVG = ROOT / "static" / "images" / "white.svg"            # the vector logo the desktop app shows
+LOGO_PNG = ROOT / "static" / "images" / "white.png"            # small raster fallback
 LOGO_DARK = ROOT / "static" / "images" / "equiper-logo.png"   # full logo, for light backgrounds
 LOGO_ICON = ROOT / "static" / "images" / "logo-1024x1024.png"  # the CQ app icon
 FONT_DIR = Path(os.environ.get("CIRQEN_FONT_DIR", "/tmp/claude-0/tts/fonts/inter/extras/ttf"))
@@ -433,6 +434,24 @@ def qr(c, xy, size, col, a=1.0, bg=PAPER, prog=1.0, seed=7):
 _logo_cache = {}
 
 
+def wide_logo():
+    """The full logo, rendered sharp from white.svg (needs resvg-py); white.png otherwise."""
+    out = BUILD / "logo_wide.png"
+    if not out.exists():
+        try:
+            import io
+
+            import resvg_py
+
+            png = resvg_py.svg_to_bytes(svg_path=str(LOGO_SVG), width=2400)
+            BUILD.mkdir(parents=True, exist_ok=True)
+            Image.open(io.BytesIO(bytes(png))).save(out)
+        except Exception as exc:  # resvg missing or the SVG failed to render
+            print(f"logo: using {LOGO_PNG.name} ({exc})")
+            return LOGO_PNG
+    return out
+
+
 def _brand(path, height):
     key = (path, height)
     if key not in _logo_cache:
@@ -523,7 +542,7 @@ def s_hook(c, t, dur, b):
 
 def s_brand(c, t, dur, b):
     a = appear(t, 0.3, 1.2)
-    logo(c, LOGO_WIDE, (960, 470 + 30 * (1 - a)), 300, a)
+    logo(c, wide_logo(), (960, 470 + 30 * (1 - a)), 300, a)
 
 
 def s_hospital(c, t, dur, b):
@@ -945,7 +964,7 @@ def s_trust(c, t, dur, b):
 
 
 def s_close(c, t, dur, b):
-    logo(c, LOGO_WIDE, (960, 330), 250, appear(t, 0.2, 1.0))
+    logo(c, wide_logo(), (960, 330), 250, appear(t, 0.2, 1.0))
     lines = ["Every machine ready.", "Every record signed.", "Across your whole hospital."]
     for k, ln in enumerate(lines):
         c.text((960, 560 + k * 56), ln, 40, MUTED if k < 2 else WHITE, "Regular" if k < 2 else "SemiBold", "mm",
@@ -1018,6 +1037,11 @@ def music_bed(seconds):
     out[:fade_n] *= np.linspace(0, 1, fade_n)
     out[-fade_n:] *= np.linspace(1, 0, fade_n)
     return out / (np.max(np.abs(out)) + 1e-9)
+
+
+def fit(x, n):
+    """Pad or trim x to exactly n samples (float rounding can leave them one apart)."""
+    return np.pad(x, (0, max(0, n - len(x))))[:n]
 
 
 # ---- render ------------------------------------------------------------------
@@ -1099,7 +1123,7 @@ def main():
 
     track = np.concatenate([voice[n][0] for n in ORDER])
     total = len(track) / SR
-    music = music_bed(total)
+    music = fit(music_bed(total), len(track))
     mixed = track / (np.max(np.abs(track)) + 1e-9) * 0.9 + music * 0.11
     mixed /= max(1.0, np.max(np.abs(mixed)) / 0.98)
     wav = BUILD / "soundtrack.wav"
