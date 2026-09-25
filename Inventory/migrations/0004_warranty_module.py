@@ -12,9 +12,13 @@ def equipment_warranty_to_rows(apps, schema_editor):
     """Equipment.warranty_expiry (and its supplier / purchase date) becomes a Warranty row."""
     Equipment = apps.get_model('Inventory', 'Equipment')
     Warranty = apps.get_model('Inventory', 'Warranty')
-    for eq in Equipment.objects.filter(warranty_expiry__isnull=False):
+    # The database being migrated, not the router's default: the desktop also
+    # runs `migrate --database=hq`, and a bare .objects query would read the
+    # local database instead.
+    db = schema_editor.connection.alias
+    for eq in Equipment.objects.using(db).filter(warranty_expiry__isnull=False):
         start = eq.purchase_date or eq.warranty_expiry
-        Warranty.objects.create(
+        Warranty.objects.using(db).create(
             equipment=eq, supplier=eq.supplier, start_date=start, expiry_date=eq.warranty_expiry,
             terms=eq.supplier.warranty_terms if eq.supplier else '',
         )

@@ -9,7 +9,11 @@ def backfill_entries(apps, schema_editor):
     """Entries saved before this migration: link their checklist and record the
     work order's technician and sign-off time as who completed them and when."""
     Entry = apps.get_model('jobcard', 'WorkOrderChecklistEntry')
-    for entry in Entry.objects.select_related('item', 'job_card'):
+    # The database being migrated, not the router's default: the desktop also
+    # runs `migrate --database=hq`, and a bare .objects query would read the
+    # local database instead.
+    db = schema_editor.connection.alias
+    for entry in Entry.objects.using(db).select_related('item', 'job_card'):
         entry.template_id = entry.item.template_id if entry.item_id else None
         entry.completed_by_id = entry.job_card.performed_by_id
         entry.completed_at = entry.job_card.technician_signed_date or entry.created_at
