@@ -11,9 +11,15 @@ Entry points
   new group works in different months.
 * :func:`explain`: why a device is due when it is.
 
-This is the only scheduler for PPM and calibration. Every workshop has an
-active plan per program; :func:`ensure_plan` gives it one (grouped by
-description, months spread evenly) the first time it is needed.
+This is the only scheduler for PPM and calibration. Who plans what:
+
+* PPM: each maintenance workshop, for the equipment in its departments.
+* Calibration: the calibration center, for every device in the hospital,
+  whichever workshop's department it sits in.
+
+A calibration center has no PPM plan and a maintenance workshop has no
+calibration plan. :func:`ensure_plan` gives the owning workshop its plan
+(grouped by description, months spread evenly) the first time it is needed.
 """
 import logging
 import uuid
@@ -51,6 +57,8 @@ class Program:
         return CalibrationSchedule
 
 
+PROGRAM_NAMES = {SchedulingPlan.PROGRAM_PPM: "PPM", SchedulingPlan.PROGRAM_CALIBRATION: "calibration"}
+
 PROGRAMS = {
     SchedulingPlan.PROGRAM_PPM: Program(
         SchedulingPlan.PROGRAM_PPM, "maintenance_period", engine.NEXT_SLOT, ("pending", "pushed"),
@@ -60,6 +68,65 @@ PROGRAMS = {
         ("pending", "pushed", "overdue"),
     ),
 }
+
+
+# ── Who plans what ───────────────────────────────────────────────────────────
+
+CALIBRATION_CENTER = "calibration_center"
+
+
+def programs_for(workshop):
+    """The programs a workshop plans: calibration centers calibrate, the rest maintain."""
+    if workshop is None:
+        return []
+    if workshop.category == CALIBRATION_CENTER:
+        return [SchedulingPlan.PROGRAM_CALIBRATION]
+    return [SchedulingPlan.PROGRAM_PPM]
+
+
+def calibration_center():
+    """The workshop that calibrates the whole hospital.
+
+    With more than one calibration center, the oldest keeps the plan so the
+    hospital is never calibrated twice.
+    """
+    from workshop.models import Workshop
+
+    return Workshop.objects.filter(
+        active_status=True, category=CALIBRATION_CENTER,
+    ).order_by("created_at", "name").first()
+
+
+def owns(workshop, program):
+    """Does ``workshop`` keep the plan for ``program``?"""
+    if program not in programs_for(workshop):
+        return False
+    if program == SchedulingPlan.PROGRAM_CALIBRATION:
+        center = calibration_center()
+        return center is not None and center.id == workshop.id
+    return True
+
+
+def plan_workshop(equipment, program):
+    """The workshop whose ``program`` plan covers ``equipment``, or None."""
+    if program == SchedulingPlan.PROGRAM_CALIBRATION:
+        return calibration_center()
+    workshop = equipment.department.workshop if equipment.department_id else None
+    return workshop if workshop is not None and owns(workshop, program) else None
+
+
+def plan_for(equipment, program, user=None):
+    """The active plan covering ``equipment`` for ``program`` (created if needed)."""
+    workshop = plan_workshop(equipment, program)
+    return ensure_plan(workshop, program, user) if workshop is not None else None
+
+
+def scope_equipment(workshop, program):
+    """The active equipment a workshop's ``program`` plan covers."""
+    qs = Equipment.objects.filter(active_status=True, department__isnull=False)
+    if program == SchedulingPlan.PROGRAM_CALIBRATION:
+        return qs if owns(workshop, program) else qs.none()
+    return qs.filter(department__workshop=workshop)
 
 
 def schedule_id(program, equipment_id, month):
@@ -122,14 +189,14 @@ class PlanView:
         return engine.slot_of(month.month, interval) in engine.slots(interval, months)
 
 
-def _equipment_rows(workshop_id, equipment_ids=None):
-    qs = Equipment.objects.filter(department__workshop_id=workshop_id, active_status=True)
+def _equipment_rows(plan, equipment_ids=None):
+    qs = scope_equipment(plan.workshop, plan.program)
     if equipment_ids is not None:
         qs = qs.filter(id__in=equipment_ids)
     # Stable order (serial numbers are unique) so balancing is reproducible.
     return list(qs.order_by("serial_number", "id").values(
         "id", "department_id", "description_id", "department__name", "description__name",
-        "serial_number",
+        "serial_number", "department__workshop_id",
     ))
 
 
@@ -216,7 +283,7 @@ def schedule(plan, equipment_ids=None, today=None, dry_run=False):
     model = view.program.model
     start = next_month(today)
 
-    rows = _equipment_rows(plan.workshop_id, equipment_ids)
+    rows = _equipment_rows(plan, equipment_ids)
     rows_by_id = {r["id"]: r for r in rows}
     result = RunResult(plan=plan, dry_run=dry_run)
 
@@ -225,7 +292,7 @@ def schedule(plan, equipment_ids=None, today=None, dry_run=False):
         SchedulingPlan.objects.select_for_update().filter(pk=plan.pk).first()
 
         open_rows = list(model.open_schedules().filter(
-            equipment__department__workshop_id=plan.workshop_id,
+            equipment__in=scope_equipment(plan.workshop, plan.program),
         ).values("equipment_id", "scheduled_month", "due_month"))
         open_ids = {r["equipment_id"] for r in open_rows}
         todo = [r for r in rows if r["id"] not in open_ids]
@@ -234,7 +301,7 @@ def schedule(plan, equipment_ids=None, today=None, dry_run=False):
             return result
 
         all_rows = rows_by_id if equipment_ids is None else {
-            r["id"]: r for r in _equipment_rows(plan.workshop_id)
+            r["id"]: r for r in _equipment_rows(plan)
         }
         _adopt_new_groups(view, all_rows.values(), write=not dry_run)
         load = _load(view, all_rows, open_rows)
@@ -355,7 +422,9 @@ def _write(view, placements, last, result):
             new_objects.append(model(
                 id=schedule_id(plan.program, row["id"], placement.month),
                 equipment_id=row["id"],
-                workshop_id=plan.workshop_id,
+                # Where the device sits (as the models' save() sets it); the
+                # plan field records who plans it.
+                workshop_id=row["department__workshop_id"],
                 **fields,
             ))
         result.created.append((row, placement))
@@ -370,9 +439,9 @@ def program_of(schedule_row):
 
 def on_completed(schedule_row):
     """A schedule was just completed: give its device the next one."""
-    equipment = schedule_row.equipment
-    workshop = equipment.department.workshop if equipment.department_id else schedule_row.workshop
-    plan = ensure_plan(workshop, program_of(schedule_row))
+    plan = plan_for(schedule_row.equipment, program_of(schedule_row))
+    if plan is None:
+        return False
     schedule(plan, equipment_ids=[schedule_row.equipment_id])
     return True
 
@@ -384,15 +453,18 @@ def schedule_by_hand(equipment_ids, program):
     Placement) created, ``problems`` a list of (equipment row, message) the
     plan could not place.
     """
-    from workshop.models import Workshop
-
-    rows = Equipment.objects.filter(id__in=equipment_ids).values_list("id", "department__workshop_id")
-    by_workshop = {}
-    for equipment_id, workshop_id in rows:
-        by_workshop.setdefault(workshop_id, []).append(equipment_id)
+    by_plan, plans = {}, {}
     done, problems = [], []
-    for workshop in Workshop.objects.filter(id__in=by_workshop):
-        run = schedule(ensure_plan(workshop, program), equipment_ids=by_workshop[workshop.id])
+    for equipment in Equipment.objects.filter(id__in=equipment_ids).select_related("department__workshop"):
+        plan = plan_for(equipment, program)
+        if plan is None:
+            problems.append(({"id": equipment.id, "serial_number": equipment.serial_number},
+                             f"No workshop plans {PROGRAM_NAMES[program]} for this device"))
+            continue
+        plans[plan.id] = plan
+        by_plan.setdefault(plan.id, []).append(equipment.id)
+    for plan_id, ids in by_plan.items():
+        run = schedule(plans[plan_id], equipment_ids=ids)
         done += run.created
         problems += [(row, p.message) for row, p in run.unschedulable]
     return done, problems
@@ -401,23 +473,50 @@ def schedule_by_hand(equipment_ids, program):
 def run_all(program=None, today=None, dry_run=False):
     """Schedule every workshop (the regular sweep).
 
-    Gives any workshop without a plan its first one, places every device that
-    has no open schedule, and catches completions that arrived through sync,
-    which writes with raw SQL and so never fires the completion signals.
-    A dry run creates nothing, not even plans.
+    Gives any owning workshop without a plan its first one, places every
+    device that has no open schedule, and catches completions that arrived
+    through sync, which writes with raw SQL and so never fires the completion
+    signals. Then it moves open schedules that sit outside their group's
+    months onto them, so a plan's groups never end up scattered (equipment
+    that changed description or department, rows that arrived by sync).
+    A dry run creates nothing, not even plans, and moves nothing.
     """
     from workshop.models import Workshop
 
     programs = [program] if program else list(PROGRAMS)
     results = []
+    if not dry_run:
+        stand_down_foreign_plans()
     for workshop in Workshop.objects.filter(active_status=True).order_by("name"):
-        if not Equipment.objects.filter(department__workshop=workshop, active_status=True).exists():
-            continue
         for key in programs:
+            if not owns(workshop, key) or not scope_equipment(workshop, key).exists():
+                continue
             plan = active_plan(workshop.id, key) if dry_run else ensure_plan(workshop, key)
-            if plan:
-                results.append(schedule(plan, today=today, dry_run=dry_run))
+            if not plan:
+                continue
+            results.append(schedule(plan, today=today, dry_run=dry_run))
+            if not dry_run:
+                realign(plan, today=today)
     return results
+
+
+def stand_down_foreign_plans():
+    """Supersede active plans kept by a workshop that doesn't plan that program.
+
+    Plans made before PPM and calibration were split by workshop category (a
+    maintenance workshop's calibration plan, a calibration center's PPM plan)
+    would otherwise keep placing devices another plan now covers.
+    """
+    stood_down = []
+    for plan in SchedulingPlan.objects.filter(
+        state=SchedulingPlan.STATE_ACTIVE, active_status=True,
+    ).select_related("workshop"):
+        if not owns(plan.workshop, plan.program):
+            plan.state = SchedulingPlan.STATE_SUPERSEDED
+            plan.save(update_fields=["state"])
+            stood_down.append(plan)
+            logger.info(f"[PLAN] {plan}: superseded, {plan.workshop} does not plan {plan.program}")
+    return stood_down
 
 
 # ── Changing the plan ────────────────────────────────────────────────────────
@@ -441,7 +540,7 @@ def _misfits(view, today=None):
     """Open schedules in the workshop that the plan would not have produced."""
     model = view.program.model
     report = ActivationReport(plan=view.plan)
-    rows = {r["id"]: r for r in _equipment_rows(view.plan.workshop_id)}
+    rows = {r["id"]: r for r in _equipment_rows(view.plan)}
     opens = list(model.open_schedules().filter(
         equipment_id__in=rows.keys(),
     ).order_by("equipment_id", "scheduled_month"))
@@ -566,16 +665,18 @@ def _move(view, sched, placement):
 def reassign(equipment, today=None):
     """After a transfer: move open schedules whose new group has other months."""
     moved = 0
-    workshop_id = equipment.department.workshop_id if equipment.department_id else None
     for key in PROGRAMS:
-        plan = active_plan(workshop_id, key)
+        workshop = plan_workshop(equipment, key)
+        plan = active_plan(workshop.id, key) if workshop else None
         if not plan:
             continue
         view = PlanView(plan)
-        rows = _equipment_rows(workshop_id, [equipment.id])
+        rows = _equipment_rows(plan, [equipment.id])
         if not rows:
             continue
         row = rows[0]
+        # Its new group may be one the plan has never seen.
+        _adopt_new_groups(view, _equipment_rows(plan), write=True)
         group_id, _ = view.group(row)
         interval = view.interval(row["description_id"])
         model = view.program.model
@@ -600,13 +701,14 @@ def explain(equipment, program):
         equipment=equipment, status="completed", pending_delete=False,
     ).order_by("scheduled_month").values("scheduled_month", "completed_date"))
     current = model.open_schedules().filter(equipment=equipment).order_by("scheduled_month").first()
-    plan = active_plan(equipment.department.workshop_id, program)
+    workshop = plan_workshop(equipment, program)
+    plan = active_plan(workshop.id, program) if workshop else None
     out = {"completed": history, "open": current, "plan": plan, "reason": None, "would_be": None}
     if current is not None:
         out["reason"] = current.schedule_reason or None
     if plan:
         view = PlanView(plan)
-        rows = _equipment_rows(plan.workshop_id, [equipment.id])
+        rows = _equipment_rows(plan, [equipment.id])
         if rows:
             last = _last_completed(model, [equipment.id]).get(equipment.id)
             out["would_be"] = _place(view, rows[0], last, next_month(), {})
@@ -629,7 +731,10 @@ def ensure_plan(workshop, program, user=None):
     Every workshop is always scheduled by a plan. The first one groups by
     description with months spread evenly across the year; the workshop can
     then change grouping or months at any time (a new version, previewed).
+    Returns None for a workshop that does not plan ``program``.
     """
+    if workshop is None or not owns(workshop, program):
+        return None
     plan = active_plan(workshop.id, program)
     if plan:
         return plan
@@ -672,7 +777,7 @@ def typical_intervals(workshop, program):
     prog = PROGRAMS[program]
     latest = {}
     for eq_id, desc_id, period in prog.model.objects.filter(
-        equipment__department__workshop=workshop, equipment__active_status=True,
+        equipment__in=scope_equipment(workshop, program),
     ).order_by("equipment_id", "-scheduled_month").values_list(
         "equipment_id", "equipment__description_id", prog.period_field,
     ):
@@ -705,9 +810,7 @@ def spread_evenly(workshop, program, logic, user=None, default_interval=None):
 
     by_department = logic == SchedulingPlan.LOGIC_DEPARTMENT
     groups = {}
-    for dept, desc in Equipment.objects.filter(
-        department__workshop=workshop, active_status=True,
-    ).values_list("department_id", "description_id"):
+    for dept, desc in scope_equipment(workshop, program).values_list("department_id", "description_id"):
         key = dept if by_department else desc
         devices, step_ = groups.get(key, (0, 12))
         groups[key] = (devices + 1, gcd(step_, intervals.get(desc) or default))
@@ -803,16 +906,14 @@ def adopt_current_layout(workshop, program, logic, user=None):
     by_department = logic == SchedulingPlan.LOGIC_DEPARTMENT
     group_of = (lambda dept, desc: dept) if by_department else (lambda dept, desc: desc)
     step_of = {}
-    for dept, desc in Equipment.objects.filter(
-        department__workshop=workshop, active_status=True,
-    ).values_list("department_id", "description_id"):
+    for dept, desc in scope_equipment(workshop, program).values_list("department_id", "description_id"):
         group = group_of(dept, desc)
         step_of[group] = gcd(step_of.get(group, 12), intervals.get(desc) or plan.default_interval_months)
 
     def month_counts(qs):
         counts = {}
         for dept, desc, month in qs.filter(
-            equipment__department__workshop=workshop, equipment__active_status=True,
+            equipment__in=scope_equipment(workshop, program),
         ).values_list("equipment__department_id", "equipment__description_id", "scheduled_month"):
             counts.setdefault(group_of(dept, desc), []).append(month.month)
         return counts

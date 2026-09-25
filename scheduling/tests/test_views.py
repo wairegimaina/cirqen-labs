@@ -23,6 +23,7 @@ class ViewTestBase(TestCase):
     def setUp(self):
         self.ws = Workshop.objects.create(name="Biomed")
         self.other_ws = Workshop.objects.create(name="Other")
+        self.cal_ws = Workshop.objects.create(name="Calibration", category="calibration_center")
         self.icu = Department.objects.create(name="ICU", workshop=self.ws)
         self.monitor = EquipmentDescription.objects.create(name="Patient Monitor")
         self.equipment = []
@@ -33,7 +34,7 @@ class ViewTestBase(TestCase):
             CalibrationSchedule.objects.filter(equipment=eq).delete()
             self.equipment.append(eq)
         # Tests set up their own plans: drop the ones given automatically.
-        SchedulingPlan.objects.filter(workshop=self.ws).delete()
+        SchedulingPlan.objects.filter(workshop__in=[self.ws, self.cal_ws]).delete()
         self.hod = self.user("hod", role="HOD")
         self.incharge = self.user("incharge", role="Tech", workshop=self.ws, level="Engineer Incharge")
         self.tech = self.user("tech", role="Tech", workshop=self.ws, level="Engineer")
@@ -84,6 +85,28 @@ class AccessTests(ViewTestBase):
     def test_technician_cannot_pick_another_workshop(self):
         response = self.get(self.outsider, "overview")
         self.assertEqual(response.context["scope"].workshop, self.other_ws)
+
+    def test_a_maintenance_workshop_has_no_calibration_scheduling(self):
+        response = self.get(self.incharge, "overview",
+                            query=f"?workshop={self.ws.id}&program=calibration")
+        scope = response.context["scope"]
+        self.assertEqual((scope.workshop, scope.program), (self.ws, "ppm"))
+        self.assertEqual([k for k, _ in scope.programs], ["ppm"])
+
+    def test_the_calibration_center_schedules_calibration_for_the_whole_hospital(self):
+        cal_tech = self.user("caltech", role="Tech", workshop=self.cal_ws, level="Engineer Incharge")
+        response = self.get(cal_tech, "overview", query=f"?workshop={self.cal_ws.id}&program=ppm")
+        scope = response.context["scope"]
+        self.assertEqual((scope.workshop, scope.program), (self.cal_ws, "calibration"))
+        self.assertEqual(response.context["figures"]["total"], 3)   # Biomed's devices
+        # Its device pages show calibration only.
+        page = self.get(cal_tech, "equipment", self.equipment[0].id, query="")
+        self.assertEqual([p["key"] for p in page.context["programs"]], ["calibration"])
+
+    def test_the_hod_toggle_goes_to_the_workshop_that_plans_it(self):
+        response = self.get(self.hod, "overview", query=f"?workshop={self.ws.id}&program=calibration")
+        scope = response.context["scope"]
+        self.assertEqual((scope.workshop, scope.program), (self.cal_ws, "calibration"))
 
 
 class PageTests(ViewTestBase):

@@ -9,7 +9,7 @@
   <div class="page-head">
     <div>
       <h2 class="page-heading">{% block heading %}Scheduling{% endblock %}</h2>
-      <p class="page-subtitle">{{ scope.workshop.name }} · {{ scope.program_label }}</p>
+      <p class="page-subtitle">{{ scope.workshop.name }} · {{ scope.program_label }}{% if scope.program == 'calibration' %} · whole hospital{% endif %}</p>
     </div>
     <form method="get" class="page-actions sched-scope" action="">
       {% if scope.workshops|length > 1 %}
@@ -22,10 +22,13 @@
       {% else %}
       <input type="hidden" name="workshop" value="{{ scope.workshop.id }}">
       {% endif %}
+      {% if scope.programs|length > 1 %}
       <div class="btn-group btn-group-sm" role="group" aria-label="Programme">
-        <button type="submit" name="program" value="ppm" class="btn {% if scope.program == 'ppm' %}btn-primary{% else %}btn-outline-secondary{% endif %}">PPM</button>
-        <button type="submit" name="program" value="calibration" class="btn {% if scope.program == 'calibration' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Calibration</button>
+        {% for key, label in scope.programs %}
+        <button type="submit" name="program" value="{{ key }}" class="btn {% if scope.program == key %}btn-primary{% else %}btn-outline-secondary{% endif %}">{% if key == 'ppm' %}PPM{% else %}Calibration{% endif %}</button>
+        {% endfor %}
       </div>
+      {% endif %}
     </form>
   </div>
 

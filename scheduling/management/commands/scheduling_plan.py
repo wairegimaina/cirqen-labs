@@ -84,6 +84,9 @@ class Command(BaseCommand):
                 ws = None
         if not ws:
             raise CommandError(f"No workshop {workshop!r}")
+        if not planner.owns(ws, program):
+            raise CommandError(f"{ws.name} does not plan {program} (PPM belongs to maintenance "
+                               "workshops, calibration to the calibration center)")
         plan = planner.adopt_current_layout(ws, program, logic)
         self._out(f"Draft {plan} created: {plan.id}")
         self._out("Review and edit it in the admin, then `preview` and `activate` it.")

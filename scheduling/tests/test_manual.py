@@ -65,7 +65,7 @@ class ManualCompletionTests(ViewTestBase):
         self.client.force_login(self.incharge)
 
     def _open_calibration(self):
-        planner.schedule(planner.ensure_plan(self.ws, "calibration"))
+        planner.schedule(planner.ensure_plan(self.cal_ws, "calibration"))
         return CalibrationSchedule.open_schedules().filter(equipment=self.equipment[0]).get()
 
     def test_calibration_needs_a_certificate(self):

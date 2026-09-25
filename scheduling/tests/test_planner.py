@@ -38,6 +38,8 @@ def imported(model, **fields):
 class PlanTestBase(TestCase):
     def setUp(self):
         self.ws = Workshop.objects.create(name="Biomed")
+        # Calibrates the whole hospital, including Biomed's equipment.
+        self.cal = Workshop.objects.create(name="Calibration", category="calibration_center")
         self.icu = Department.objects.create(name="ICU", workshop=self.ws)
         self.lab = Department.objects.create(name="Lab", workshop=self.ws)
         self.monitor = EquipmentDescription.objects.create(name="Patient Monitor")
@@ -47,11 +49,12 @@ class PlanTestBase(TestCase):
 
     def plan(self, program="ppm", logic="description", rules=None, intervals=None,
              default=None, state="active", version=1):
+        owner = self.cal if program == "calibration" else self.ws
         if version == 1:
             # Replace the plan the workshop may have been given automatically.
-            SchedulingPlan.objects.filter(workshop=self.ws, program=program).delete()
+            SchedulingPlan.objects.filter(workshop=owner, program=program).delete()
         plan = SchedulingPlan.objects.create(
-            workshop=self.ws, program=program, logic=logic, version=version,
+            workshop=owner, program=program, logic=logic, version=version,
             state=state, default_interval_months=default,
         )
         for group, months in (rules or {}).items():
@@ -289,19 +292,79 @@ class ScenarioTests(PlanTestBase):
 
 
 class RolloutTests(PlanTestBase):
-    def test_every_workshop_gets_a_plan_automatically(self):
+    def test_new_equipment_is_scheduled_by_the_plans_that_cover_it(self):
         other = Workshop.objects.create(name="Other")
         dept = Department.objects.create(name="Ward 1", workshop=other)
         eq = Equipment.objects.create(description=self.monitor, department=dept, workshop=other,
                                       model="M", serial_number="AUTO-1", status="Working")
-        for program, model in (("ppm", PPMSchedule), ("calibration", CalibrationSchedule)):
-            plan = planner.active_plan(other.id, program)
+        # PPM from its own maintenance workshop, calibration from the center.
+        for program, owner, model in (("ppm", other, PPMSchedule),
+                                      ("calibration", self.cal, CalibrationSchedule)):
+            plan = planner.active_plan(owner.id, program)
             self.assertIsNotNone(plan, program)
             self.assertEqual(plan.logic, "description")
             sched = model.open_schedules().get(equipment=eq)
             self.assertEqual(sched.plan, plan)
+            self.assertEqual(sched.workshop, other)       # where the device sits
             months = plan.rules.get(description=self.monitor).months
             self.assertIn(sched.scheduled_month.month, months)
+
+
+class CoverageTests(PlanTestBase):
+    """Maintenance workshops plan PPM; the calibration center calibrates the hospital."""
+
+    def test_each_workshop_plans_only_its_own_program(self):
+        self.equipment(clean=False)
+        self.assertIsNone(planner.ensure_plan(self.ws, "calibration"))
+        self.assertIsNone(planner.ensure_plan(self.cal, "ppm"))
+        self.assertIsNotNone(planner.active_plan(self.ws.id, "ppm"))
+        self.assertIsNotNone(planner.active_plan(self.cal.id, "calibration"))
+        self.assertIsNone(planner.active_plan(self.ws.id, "calibration"))
+        self.assertIsNone(planner.active_plan(self.cal.id, "ppm"))
+
+    def test_the_calibration_plan_covers_every_workshop(self):
+        ward = Department.objects.create(name="Ward", workshop=Workshop.objects.create(name="Other"))
+        mine = Department.objects.create(name="Cal lab", workshop=self.cal)
+        plan = self.plan(program="calibration", rules={self.monitor: [3]}, intervals={self.monitor: 12})
+        devices = [self.equipment(dept=dept) for dept in (self.icu, ward, mine)]
+        run = planner.schedule(plan, today=TODAY)
+        self.assertEqual(len(run.created), 3)
+        for eq in devices:
+            self.assertEqual(self.open_months(eq, "calibration"), [d(2027, 3)])
+
+    def test_a_calibration_centers_own_equipment_gets_no_ppm(self):
+        mine = Department.objects.create(name="Cal lab", workshop=self.cal)
+        eq = self.equipment(dept=mine, clean=False)
+        self.assertEqual(self.open_months(eq, "ppm"), [])
+        self.assertTrue(self.open_months(eq, "calibration"))
+
+    def test_the_sweep_stands_down_plans_on_the_wrong_workshop(self):
+        wrong = SchedulingPlan.objects.create(workshop=self.ws, program="calibration",
+                                              logic="description", version=9, state="active")
+        planner.run_all(today=TODAY)
+        wrong.refresh_from_db()
+        self.assertEqual(wrong.state, "superseded")
+
+    def test_the_sweep_pulls_scattered_schedules_onto_their_groups_months(self):
+        plan = self.plan(rules={self.monitor: [2, 8]}, intervals={self.monitor: 6}, default=6)
+        devices = [self.equipment() for _ in range(3)]
+        for eq, month in zip(devices, (d(2026, 10), d(2026, 12), d(2027, 5))):
+            imported(PPMSchedule, equipment=eq, workshop=self.ws, scheduled_month=month,
+                     due_month=month, status="pending")
+        planner.run_all(program="ppm", today=TODAY)
+        for eq in devices:
+            [month] = self.open_months(eq)
+            self.assertIn(month.month, (2, 8), eq.serial_number)
+        self.assertEqual(planner.realign(plan, today=TODAY).to_move, [])
+
+    def test_a_new_description_moves_the_device_to_its_new_groups_months(self):
+        self.plan(rules={self.monitor: [2, 8], self.pump: [5, 11]},
+                  intervals={self.monitor: 6, self.pump: 6}, default=6)
+        eq = self.equipment(clean=False)
+        self.assertIn(self.open_months(eq)[0].month, (2, 8))
+        eq.description = self.pump
+        eq.save()
+        self.assertIn(self.open_months(eq)[0].month, (5, 11))
 
     def test_a_new_kind_of_equipment_gets_months_of_its_own(self):
         self.plan(rules={self.monitor: [2, 8]}, intervals={self.monitor: 6}, default=6)
@@ -439,7 +502,7 @@ class SpreadTests(PlanTestBase):
         for eq in devices:
             CalibrationSchedule.objects.create(equipment=eq, workshop=self.ws, scheduled_month=d(2026, 9),
                                                calibration_period=12, generation_source="signal")
-        draft = planner.new_draft(self.ws, "calibration", "description", source="spread")
+        draft = planner.new_draft(self.cal, "calibration", "description", source="spread")
         months = sorted(m for r in draft.rules.all() for m in r.months)
         self.assertEqual(months, list(range(1, 13)))       # one type per month
 

@@ -5,6 +5,8 @@ Who sees what:
     HOD                        every workshop; may edit and activate plans
     Tech, Engineer Incharge    their workshop; may edit and activate plans
     other Tech                 their workshop; read only
+A maintenance workshop sees only its PPM plan; the calibration center sees
+only calibration, which covers the whole hospital (see ``planner``).
 Activating a plan moves open schedules, so it is always previewed first and
 confirmed on a separate POST.
 """
@@ -48,6 +50,12 @@ class Scope:
     def query(self):
         return f"?workshop={self.workshop.id}&program={self.program}"
 
+    @property
+    def programs(self):
+        """The programs someone in scope plans, for the PPM / Calibration toggle."""
+        return [(key, label) for key, label in SchedulingPlan.PROGRAM_CHOICES
+                if any(planner.owns(w, key) for w in self.workshops)]
+
 
 def can_manage(user):
     """May change scheduling plans: an HOD, or a workshop's Engineer in charge."""
@@ -76,10 +84,12 @@ def _scope(request):
     by_id = {str(w.id): w for w in workshops}
     wanted = request.GET.get("workshop") or request.session.get("scheduling_workshop")
     workshop = by_id.get(str(wanted)) or workshops[0]
-    program = request.GET.get("program") or request.session.get("scheduling_program")
-    if program not in planner.PROGRAMS:
-        program = (SchedulingPlan.PROGRAM_CALIBRATION if workshop.category == "calibration_center"
-                   else SchedulingPlan.PROGRAM_PPM)
+    # A workshop plans one program only. Asking for the other one (the toggle)
+    # goes to the workshop in scope that plans it.
+    program = request.GET.get("program")
+    if program in planner.PROGRAMS and not planner.owns(workshop, program):
+        workshop = next((w for w in workshops if planner.owns(w, program)), workshop)
+    program = (planner.programs_for(workshop) or [SchedulingPlan.PROGRAM_PPM])[0]
     request.session["scheduling_workshop"] = str(workshop.id)
     request.session["scheduling_program"] = program
     return Scope(workshops, workshop, program, can_manage(user))
@@ -210,7 +220,7 @@ def _int(value):
 def _editor_rows(plan):
     """Groups and descriptions the editor lists, with device counts and warnings."""
     ws = plan.workshop
-    equipment = Equipment.objects.filter(department__workshop=ws, active_status=True)
+    equipment = planner.scope_equipment(ws, plan.program)
     rules = {r.group_id: r for r in plan.rules.select_related("department", "description")}
     intervals = dict(plan.intervals.values_list("description_id", "interval_months"))
 
@@ -220,8 +230,10 @@ def _editor_rows(plan):
 
     if plan.is_department:
         dept_counts = dict(equipment.values_list("department_id").annotate(n=Count("id")))
-        groups = list(Department.objects.filter(
-            Q(workshop=ws, active_status=True) | Q(id__in=rules.keys())).order_by("name"))
+        # Calibration covers the hospital: every department is a group.
+        in_scope = (Q(active_status=True) if plan.program == SchedulingPlan.PROGRAM_CALIBRATION
+                    else Q(workshop=ws, active_status=True))
+        groups = list(Department.objects.filter(in_scope | Q(id__in=rules.keys())).order_by("name"))
         counts = dept_counts
     else:
         groups = descriptions
@@ -378,10 +390,14 @@ def equipment_history(request, equipment_id):
     scope = _scope(request)
     equipment = get_object_or_404(
         Equipment.objects.select_related("department__workshop", "description"), pk=equipment_id)
-    if equipment.department.workshop_id not in {w.id for w in scope.workshops}:
+    # Each program is shown to the workshop that plans it for this device.
+    visible = {w.id for w in scope.workshops}
+    keys = [(key, label) for key, label in SchedulingPlan.PROGRAM_CHOICES
+            if getattr(planner.plan_workshop(equipment, key), "id", None) in visible]
+    if not keys:
         raise Http404
     programs = []
-    for key, label in SchedulingPlan.PROGRAM_CHOICES:
+    for key, label in keys:
         info = planner.explain(equipment, key)
         model = planner.PROGRAMS[key].model
         info["completed"] = list(model.objects.filter(

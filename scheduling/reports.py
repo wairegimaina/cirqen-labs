@@ -28,8 +28,10 @@ def this_month(today=None):
     return (today or timezone.localdate()).replace(day=1)
 
 
-def workshop_equipment(workshop):
-    return Equipment.objects.filter(department__workshop=workshop, active_status=True)
+def workshop_equipment(workshop, program):
+    """The equipment ``workshop``'s ``program`` plan covers (the whole hospital
+    for the calibration center)."""
+    return planner.scope_equipment(workshop, program)
 
 
 # ── The panel on the PPM and calibration pages ──────────────────────────────
@@ -39,8 +41,10 @@ def panels(workshops, program):
     model = planner.PROGRAMS[program].model
     rows = []
     for workshop in workshops:
+        if not planner.owns(workshop, program):
+            continue
         plan = planner.active_plan(workshop.id, program)
-        equipment = workshop_equipment(workshop)
+        equipment = workshop_equipment(workshop, program)
         total = equipment.count()
         if not total and not plan:
             continue
@@ -74,7 +78,7 @@ class Audit:
 def audit(plan):
     view = planner.PlanView(plan)
     result = Audit()
-    rows = planner._equipment_rows(plan.workshop_id)
+    rows = planner._equipment_rows(plan)
     by_id = {r["id"]: r for r in rows}
     for row in rows:
         group_id, group_name = view.group(row)
@@ -112,7 +116,7 @@ def overview(workshop, program, today=None):
     model = planner.PROGRAMS[program].model
     month = this_month(today)
     next_month = engine.add_months(month, 1)
-    equipment = workshop_equipment(workshop)
+    equipment = workshop_equipment(workshop, program)
     open_qs = model.open_schedules().filter(equipment__in=equipment)
 
     total = equipment.count()
@@ -165,7 +169,7 @@ def year_months(workshop, program, year, today=None):
     model = planner.PROGRAMS[program].model
     current = this_month(today)
     rows = (model.objects.filter(
-        equipment__in=workshop_equipment(workshop), scheduled_month__year=year,
+        equipment__in=workshop_equipment(workshop, program), scheduled_month__year=year,
         active_status=True, pending_delete=False,
     ).values_list("scheduled_month", "status").annotate(n=Count("id")))
     months = {m: {"month": date(year, m, 1),
@@ -186,7 +190,7 @@ def year_months(workshop, program, year, today=None):
 def month_schedules(workshop, program, month):
     model = planner.PROGRAMS[program].model
     return (model.objects.filter(
-        equipment__in=workshop_equipment(workshop), scheduled_month=month,
+        equipment__in=workshop_equipment(workshop, program), scheduled_month=month,
         active_status=True, pending_delete=False,
     ).select_related("equipment__department", "equipment__description", "plan")
      .order_by("equipment__department__name", "equipment__description__name", "equipment__serial_number"))
@@ -210,7 +214,7 @@ def unscheduled(workshop, program, today=None):
 
     model = planner.PROGRAMS[program].model
     open_ids = model.open_schedules().values("equipment_id")
-    rows = list(workshop_equipment(workshop).exclude(id__in=open_ids).order_by("serial_number").values(
+    rows = list(workshop_equipment(workshop, program).exclude(id__in=open_ids).order_by("serial_number").values(
         "id", "serial_number", "department__name", "description__name"))
     return {"plan": None, "waiting": [], "blocked": [
         (row, "No plan yet", "The workshop's plan is created on the next scheduling run "
