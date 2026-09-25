@@ -317,6 +317,14 @@ class RolloutTests(PlanTestBase):
         self.assertEqual(self.open_months(eq), [])
         self.assertEqual(plan.rules.get(description=self.monitor).months, [])
 
+    def test_realign_moves_leftover_schedules_onto_the_plan(self):
+        plan = self.plan(rules={self.monitor: [2, 8]}, intervals={self.monitor: 6}, default=6)
+        eq = self.equipment()
+        imported(PPMSchedule, equipment=eq, workshop=self.ws, scheduled_month=d(2026, 10), status="pending")
+        report = planner.realign(plan, today=TODAY)
+        self.assertEqual(len(report.to_move), 1)
+        self.assertIn(self.open_months(eq)[0].month, (2, 8))
+
     def test_changing_the_grouping(self):
         self.plan(rules={self.monitor: [2, 8]}, intervals={self.monitor: 6}, default=6)
         eq = self.equipment(clean=False)

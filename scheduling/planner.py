@@ -518,6 +518,30 @@ def activate(draft, user=None, today=None):
     return report
 
 
+@transaction.atomic
+def realign(plan, today=None):
+    """Move open schedules that don't fit the active plan onto it.
+
+    What activation does, for the current version: schedules placed before
+    the plan (or left behind by old data) move to the plan's months.
+    Completed schedules and work under way never move; a pushed schedule
+    keeps its slot (its due month still fits).
+    """
+    view = PlanView(plan)
+    report = _misfits(view, today)
+    moved = []
+    for sched, row, placement in report.to_move:
+        if _move(view, sched, placement):
+            moved.append((sched, row, placement))
+        else:
+            report.stuck.append((sched, row, f"{engine.month_name(placement.month)} is already "
+                                             "taken by another schedule for this device"))
+    report.to_move = moved
+    report.applied = True
+    logger.info(f"[PLAN] Realigned: {report.summary()}")
+    return report
+
+
 def _move(view, sched, placement):
     model = view.program.model
     taken = model.objects.filter(
