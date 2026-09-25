@@ -183,3 +183,67 @@ def test_download_empty_is_noop(net_agent, jobcard_table, monkeypatch):
 
     monkeypatch.setattr(m4, "requests", type("R", (), {"get": staticmethod(fake_get)})())
     net_agent.download_updates()   # should simply return without error
+
+
+# ── per-table checkpoint (fresh edits must not queue behind old rows forever) ─
+
+def _insert(pool, rows):
+    conn = pool.getconn()
+    with conn.cursor() as cur:
+        # Change detection selects created_at, like every real app table has.
+        cur.execute("ALTER TABLE public.jobcard_jobcard "
+                    "ADD COLUMN IF NOT EXISTS created_at timestamptz")
+        for id_, ts in rows:
+            cur.execute("INSERT INTO public.jobcard_jobcard (id, status, updated_at) "
+                        "VALUES (%s, 'open', %s)", (id_, ts))
+    conn.commit()
+    pool.putconn(conn)
+
+
+def _ok_post(monkeypatch):
+    monkeypatch.setattr(m3, "requests", type("R", (), {
+        "post": staticmethod(lambda *a, **k: FakeResponse(200, {"deferred": 0})),
+        "RequestException": Exception})())
+
+
+def test_upload_advances_the_per_table_checkpoint_so_newer_rows_are_reached(
+        net_agent, jobcard_table, monkeypatch):
+    # Before the fix only the global checkpoint moved, so a table larger than
+    # one page re-sent its oldest page forever and newer edits never went up.
+    _insert(net_agent.pool, [(1, "2026-09-25T10:00:00+03:00"),
+                             (2, "2026-09-25T10:00:01+03:00"),
+                             (3, "2026-09-25T10:00:02+03:00")])
+    _ok_post(monkeypatch)
+    table = "public.jobcard_jobcard"
+
+    first = net_agent.fetch_recent_changes_for_table(table, net_agent.EPOCH, limit=2)
+    assert [e["row_id"] for e in first] == ["1", "2"]
+    assert net_agent.upload_batch(first) == (True, None)
+
+    second = net_agent.fetch_recent_changes_for_table(table, net_agent.EPOCH, limit=2)
+    assert [e["row_id"] for e in second] == ["3"]
+
+
+def test_full_page_does_not_split_rows_sharing_one_updated_at(
+        net_agent, jobcard_table, monkeypatch):
+    # A bulk UPDATE stamps every row with the same now(); cutting the page
+    # inside that group would strand the rest behind a `>` checkpoint.
+    same = "2026-09-25T10:00:05+03:00"
+    _insert(net_agent.pool, [(1, "2026-09-25T10:00:00+03:00"), (2, same), (3, same)])
+    _ok_post(monkeypatch)
+    table = "public.jobcard_jobcard"
+
+    first = net_agent.fetch_recent_changes_for_table(table, net_agent.EPOCH, limit=2)
+    assert [e["row_id"] for e in first] == ["1"]
+    net_agent.upload_batch(first)
+
+    second = net_agent.fetch_recent_changes_for_table(table, net_agent.EPOCH, limit=5)
+    assert sorted(e["row_id"] for e in second) == ["2", "3"]
+
+
+def test_per_table_checkpoint_compares_instants_not_strings(net_agent):
+    table = "public.jobcard_jobcard"
+    net_agent.set_last_upload_time("2026-09-25T20:00:00+00:00", table=table)
+    # 22:00+03:00 is 19:00 UTC — earlier, although it sorts later as text.
+    net_agent.set_last_upload_time("2026-09-25T22:00:00+03:00", table=table)
+    assert net_agent.get_last_upload_time(table) == "2026-09-25T20:00:00+00:00"

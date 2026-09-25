@@ -25,6 +25,16 @@ try:
 except ImportError:  # loaded as a top-level module with sync/ on sys.path
     from sql_ident import qualified
 
+
+def _ts_key(ts) -> datetime:
+    """An aware datetime for comparing checkpoint timestamps as instants."""
+    if isinstance(ts, datetime):
+        dt = ts
+    else:
+        dt = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
 class UploadMixin(SmartDeleteMixin):
     """Upload path: event construction, upload_batch (with idempotency + backpressure), and upload/download checkpoints."""
 
@@ -251,6 +261,25 @@ class UploadMixin(SmartDeleteMixin):
                             self.set_last_upload_time(latest_event_time)
                             LOG.info(f"   📅 Updated checkpoint to: {latest_event_time}")
 
+                    # Change detection reads the PER-TABLE checkpoint, so that is
+                    # the one that must move. Advancing only the global value
+                    # left every table at its seed (1970): each poll re-sent the
+                    # table's 500 OLDEST rows, and any fresh edit — which sorts
+                    # last by updated_at — never reached HQ once a table held
+                    # more than 500 rows. The recovery mirror then pulled HQ's
+                    # stale copy back down and silently undid the edit.
+                    # Restores come from audit_log time, not row time, so they
+                    # must not push a table past rows it has not sent yet.
+                    per_table = {}
+                    for event in events:
+                        ts = event.get("created_at") or event.get("updated_at")
+                        if not event.get("table") or not ts or event.get("operation") == "activate":
+                            continue
+                        if event["table"] not in per_table or _ts_key(ts) > _ts_key(per_table[event["table"]]):
+                            per_table[event["table"]] = ts
+                    for table, ts in per_table.items():
+                        self.set_last_upload_time(ts, table=table)
+
                     deferred_count = resp_json.get("deferred", 0)
                     if deferred_count > 0:
                         LOG.warning(f"   ⏸️ Server deferred {deferred_count} events (missing parent records)")
@@ -431,7 +460,9 @@ class UploadMixin(SmartDeleteMixin):
                 # strictly ordered, so a late-arriving older batch must not drag
                 # a table's checkpoint backwards and cause endless re-uploads.
                 current = self.state.get(f"last_upload_time:{table}")
-                if current and ts < current:
+                # Compare as instants: rows carry the session offset (+03:00),
+                # so string order is not time order.
+                if current and _ts_key(ts) < _ts_key(current):
                     LOG.debug("Ignoring backwards checkpoint for %s (%s < %s)", table, ts, current)
                     return
                 self.state.set(f"last_upload_time:{table}", ts)

@@ -667,13 +667,34 @@ class SchemaAndChangeDetectionMixin(SmartDeleteMixin):
                     except Exception:
                         pass
 
-                cur.execute(query, (since_dt, limit))
+                # One row past the page tells us whether the page ends mid-group.
+                cur.execute(query, (since_dt, limit + 1))
                 rows = cur.fetchall()
 
                 query_time = time.time() - start_time
 
                 if not rows:
                     return []
+
+                # The checkpoint advances to the last row sent and the next scan
+                # asks for `updated_at >` it. A full page that ends partway
+                # through rows sharing one updated_at (a bulk UPDATE stamps them
+                # all with the same now()) would strand the rest of the group,
+                # so hold the whole group back for the next page instead.
+                if len(rows) > limit:
+                    peek, rows = rows[limit], rows[:limit]
+                    last_ts = rows[-1]["updated_at"]
+                    whole = [r for r in rows if r["updated_at"] != last_ts]
+                    if peek["updated_at"] != last_ts:
+                        pass  # page ends on a group boundary
+                    elif whole:
+                        rows = whole
+                    else:
+                        LOG.warning(
+                            "⚠️  %s: %d+ rows share updated_at %s — sending one page; "
+                            "the rest wait for a later edit or checkpoint reset",
+                            table, len(rows), last_ts,
+                        )
 
                 # 🎯 Load soft delete tracking state once
                 state_key = f"synced_soft_deletes_{table}"
