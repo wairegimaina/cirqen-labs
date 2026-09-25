@@ -71,7 +71,7 @@ def check_group_waiting_status(schedule):
         return {'is_waiting': False}
 
     try:
-        from .instant_reconciliation import check_group_completion_status
+        from ..instant_reconciliation import check_group_completion_status
 
         planning_logic = schedule.planning_logic or 'department'
 

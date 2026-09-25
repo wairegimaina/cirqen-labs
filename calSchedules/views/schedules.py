@@ -471,60 +471,64 @@ def schedule_calibration_equipment(request, equipment_id):
 
         try:
             equipment = get_object_or_404(Equipment, **filter_kwargs)
-            scheduled_month = datetime.today().replace(day=1) + relativedelta(months=1)
+            name = equipment.description.name if equipment.description else "N/A"
 
-            # Check if already scheduled
-            if CalibrationSchedule.objects.filter(equipment=equipment).exists():
+            # Completed history doesn't make a device scheduled; an open schedule does.
+            if CalibrationSchedule.open_schedules().filter(equipment=equipment).exists():
                 messages.error(
                     request,
-                    f"Equipment {equipment.description.name if equipment.description else 'N/A'} is already scheduled for calibration.",
+                    f"Equipment {name} is already scheduled for calibration.",
                     extra_tags="schedule conflict",
                 )
                 return redirect("schedule:calibration_dashboard")
 
-            # ✅ ENHANCED: Get planning logic from system
-            common_logic = CalibrationSchedule.objects.filter(
-                active_status=True,
-                planning_logic__isnull=False
-            ).values('planning_logic').annotate(
-                count=Count('id')
-            ).order_by('-count').first()
-
-            planning_logic = common_logic['planning_logic'] if common_logic else 'department'
-
-            # ✅ ENHANCED: USE GROUP-AWARE INITIALIZATION
-            try:
-                from .instant_reconciliation import initialize_new_equipment_schedule
-
-                schedule = initialize_new_equipment_schedule(
-                    equipment,
-                    planning_logic=planning_logic,
-                    period=12
-                )
-
-                if schedule:
-                    messages.success(
-                        request,
-                        f"Equipment {equipment.description.name if equipment.description else 'N/A'} "
-                        f"scheduled for {schedule.scheduled_month.strftime('%B %Y')} "
-                        f"(aligned with group).",
-                        extra_tags="schedule"
-                    )
-                    logger.info(
-                        f"Equipment {equipment.id} scheduled for {schedule.scheduled_month} "
-                        f"by user {request.user.username}"
-                    )
+            # Planned workshop: the plan decides the month.
+            from scheduling.planner import schedule_by_hand
+            done, problems, unplanned = schedule_by_hand([equipment.id], "calibration")
+            if done or problems:
+                if done:
+                    messages.success(request, f"Equipment {name} scheduled: {done[0][1].message}.",
+                                     extra_tags="schedule")
                 else:
-                    messages.error(request, "Failed to create schedule.")
+                    messages.error(request, f"Equipment {name} cannot be scheduled: {problems[0][1]}.",
+                                   extra_tags="schedule create error")
+                return redirect("schedule:calibration_dashboard")
 
-            except ImportError:
-                # Fallback to old method if instant_reconciliation not available
-                schedule = CalibrationSchedule.objects.create(
-                    equipment=equipment,
-                    scheduled_month=date.today().replace(day=1),
-                    status='pending'
+            # No plan. A device with history continues its own cycle; a new one
+            # joins its group's month. (This used to import a function that
+            # does not exist, fall back, and schedule every device for the
+            # current month, so it was due the day it was scheduled.)
+            if CalibrationSchedule.objects.filter(equipment=equipment, status="completed").exists():
+                from calSchedules.tasks.maintenance import _resume_calibration_chains
+                _resume_calibration_chains([equipment.id])
+                schedule = CalibrationSchedule.open_schedules().filter(equipment=equipment).first()
+                note = "continuing its calibration cycle"
+            else:
+                common_logic = CalibrationSchedule.objects.filter(
+                    active_status=True,
+                    planning_logic__isnull=False
+                ).values('planning_logic').annotate(
+                    count=Count('id')
+                ).order_by('-count').first()
+                planning_logic = common_logic['planning_logic'] if common_logic else 'department'
+                from calSchedules import grouping
+                from ..instant_reconciliation import initialize_schedule_for_equipment
+                schedule = initialize_schedule_for_equipment(
+                    equipment, planning_logic=grouping.canonical_logic(planning_logic))
+                note = "aligned with its group"
+
+            if schedule:
+                messages.success(
+                    request,
+                    f"Equipment {name} scheduled for {schedule.scheduled_month.strftime('%B %Y')} ({note}).",
+                    extra_tags="schedule"
                 )
-                messages.success(request, f"Equipment scheduled.")
+                logger.info(
+                    f"Equipment {equipment.id} scheduled for {schedule.scheduled_month} "
+                    f"by user {request.user.username}"
+                )
+            else:
+                messages.error(request, "Failed to create schedule.")
 
         except Exception as e:
             logger.error(f"Error scheduling equipment {equipment_id} for calibration for user {request.user.username}: {e}")

@@ -455,18 +455,36 @@ def bulk_schedule_unscheduled_calibration(request):
             )
             return redirect("schedule:calibration_dashboard")
 
+        # Planned workshops: the plan places them now.
+        from scheduling.planner import schedule_by_hand
+        done, problems, unplanned = schedule_by_hand(equipment_ids, "calibration")
+        if done:
+            messages.success(request, f"{len(done)} equipment scheduled by the workshop's plan.",
+                             extra_tags="schedule bulk create")
+        if problems:
+            messages.warning(request, f"{len(problems)} equipment could not be placed by the plan; "
+                                      "see Scheduling > Unscheduled for the reasons.",
+                             extra_tags="schedule bulk create")
+        equipment_ids = [str(i) for i in unplanned]
+        if not equipment_ids:
+            return redirect("schedule:calibration_dashboard")
+
         try:
+            # Keywords: the task is not bound, and a leading None used to shift
+            # every argument (planning_logic became None, calibration_period
+            # 'department'). normalize_existing=False: scheduling a few devices
+            # must not repack every other schedule.
             task = initialize_calibration_schedule_with_logic.delay(
-                None,  # workshop not restricted anymore
-                planning_logic,
-                calibration_period,
-                base_month,
-                base_year,
-                max_departments,
-                max_descriptions,
-                [],
-                False,
-                equipment_ids,
+                planning_logic=planning_logic,
+                calibration_period=calibration_period,
+                base_month=base_month,
+                base_year=base_year,
+                max_departments=max_departments,
+                max_descriptions=max_descriptions,
+                selected_descriptions=[],
+                preserve_existing=True,
+                specific_equipment_ids=equipment_ids,
+                normalize_existing=False,
             )
             messages.info(
                 request,

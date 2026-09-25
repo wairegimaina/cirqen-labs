@@ -228,6 +228,23 @@ def bulk_schedule_unscheduled(request):
                 active_status=True
             ).values_list('id', flat=True)
             equipment_ids = list(valid_equipment_ids)
+        else:
+            equipment_ids = list(Equipment.objects.filter(
+                id__in=equipment_ids,
+                department__workshop_id=access_context['workshop_id'],
+                active_status=True
+            ).values_list('id', flat=True))
+
+        # Planned workshops: the plan places them now.
+        from scheduling.planner import schedule_by_hand
+        done, problems, equipment_ids = schedule_by_hand(equipment_ids, 'ppm')
+        if done:
+            messages.success(request, f"{len(done)} equipment scheduled by the workshop's plan.")
+        if problems:
+            messages.warning(request, f"{len(problems)} equipment could not be placed by the plan; "
+                                      "see Scheduling > Unscheduled for the reasons.")
+        if not equipment_ids:
+            return redirect('ppm_dashboard')
 
         try:
             task = initialize_ppm_schedule_with_logic.delay(
@@ -240,7 +257,7 @@ def bulk_schedule_unscheduled(request):
                 max_descriptions,
                 [],
                 False,
-                equipment_ids
+                [str(i) for i in equipment_ids]
             )
             messages.info(request, f"Bulk scheduling started (Task ID: {task.id}). Please check back later.")
         except Exception as e:

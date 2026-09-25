@@ -24,7 +24,7 @@ from django.utils import timezone
 from Inventory.models import Equipment
 
 from . import engine
-from .models import SchedulingPlan, mask_to_months, months_label
+from .models import SchedulingPlan, mask_to_months
 
 logger = logging.getLogger(__name__)
 
@@ -323,6 +323,30 @@ def on_completed(schedule_row):
     return True
 
 
+def schedule_by_hand(equipment_ids, program):
+    """The manual "schedule" buttons: place devices through their plan.
+
+    Returns ``(done, problems, unplanned_ids)``: ``done`` is a list of
+    (equipment row, Placement) created, ``problems`` a list of (equipment row,
+    message) the plan could not place, and ``unplanned_ids`` the devices in
+    workshops without a plan, which the caller schedules the legacy way.
+    """
+    rows = Equipment.objects.filter(id__in=equipment_ids).values_list("id", "department__workshop_id")
+    by_workshop = {}
+    for equipment_id, workshop_id in rows:
+        by_workshop.setdefault(workshop_id, []).append(equipment_id)
+    done, problems, unplanned = [], [], []
+    for workshop_id, ids in by_workshop.items():
+        plan = active_plan(workshop_id, program)
+        if not plan:
+            unplanned += ids
+            continue
+        run = schedule(plan, equipment_ids=ids)
+        done += run.created
+        problems += [(row, p.message) for row, p in run.unschedulable]
+    return done, problems, unplanned
+
+
 def run_all(program=None, today=None, dry_run=False):
     """Schedule every workshop that has an active plan (the nightly sweep).
 
@@ -550,13 +574,18 @@ def new_draft(workshop, program, logic, user=None, source="copy", default_interv
 # ── Bootstrapping ────────────────────────────────────────────────────────────
 
 def adopt_current_layout(workshop, program, logic, user=None):
-    """A draft plan that reproduces the months schedules are in today.
+    """A draft plan that follows the cycle each group mostly keeps today.
 
-    Each group gets the months its open schedules currently fall in, and each
-    description the interval its latest schedule used. It is a starting point
-    to review and edit, not something to activate unread: current months are
-    often scattered, which is the problem the plan exists to fix.
+    Intervals: each description gets the interval its latest schedule used.
+    Months: for each group, the months its devices' intervals share (the
+    gcd of those intervals with 12, so the result fits every one of them),
+    choosing the cycle that most of the group's open schedules already fall
+    in; groups with nothing open fall back to their completed history.
+    Today's months are usually scattered across the year, so this is a
+    starting point to review and edit, not something to activate unread.
     """
+    from math import gcd
+
     prog = PROGRAMS[program]
     model = prog.model
     plan = SchedulingPlan.objects.create(
@@ -565,25 +594,6 @@ def adopt_current_layout(workshop, program, logic, user=None):
         default_interval_months=6 if program == SchedulingPlan.PROGRAM_PPM else 12,
         created_by=user, notes="Adopted from the current schedule layout",
     )
-    group_field = "equipment__department_id" if logic == SchedulingPlan.LOGIC_DEPARTMENT \
-        else "equipment__description_id"
-    months = {}
-    for group_id, month in model.open_schedules().filter(
-        equipment__department__workshop=workshop, equipment__active_status=True,
-    ).values_list(group_field, "scheduled_month"):
-        if group_id:
-            months.setdefault(group_id, set()).add(month.month)
-
-    rules = []
-    for group_id, ms in months.items():
-        rule = plan.rules.model(plan=plan, month_mask=0)
-        rule.months = sorted(ms)
-        if logic == SchedulingPlan.LOGIC_DEPARTMENT:
-            rule.department_id = group_id
-        else:
-            rule.description_id = group_id
-        rules.append(rule)
-    plan.rules.model.objects.bulk_create(rules)
 
     intervals = {}
     for desc_id, period in model.objects.filter(
@@ -597,6 +607,44 @@ def adopt_current_layout(workshop, program, logic, user=None):
         plan.intervals.model(plan=plan, description_id=d, interval_months=p)
         for d, p in intervals.items()
     ])
-    logger.info(f"[PLAN] Adopted {plan}: {len(rules)} rules, {len(intervals)} intervals "
-                f"({', '.join(months_label(sorted(m)) for m in list(months.values())[:3])}...)")
+
+    by_department = logic == SchedulingPlan.LOGIC_DEPARTMENT
+    group_of = (lambda dept, desc: dept) if by_department else (lambda dept, desc: desc)
+    step_of = {}
+    for dept, desc in Equipment.objects.filter(
+        department__workshop=workshop, active_status=True,
+    ).values_list("department_id", "description_id"):
+        group = group_of(dept, desc)
+        step_of[group] = gcd(step_of.get(group, 12), intervals.get(desc) or plan.default_interval_months)
+
+    def month_counts(qs):
+        counts = {}
+        for dept, desc, month in qs.filter(
+            equipment__department__workshop=workshop, equipment__active_status=True,
+        ).values_list("equipment__department_id", "equipment__description_id", "scheduled_month"):
+            counts.setdefault(group_of(dept, desc), []).append(month.month)
+        return counts
+
+    current = month_counts(model.open_schedules())
+    history = month_counts(model.objects.filter(status="completed", pending_delete=False))
+
+    rules = []
+    for group, g in step_of.items():
+        seen = current.get(group) or history.get(group)
+        if not group or not seen:
+            continue  # nothing to go on: left for the administrator
+        tally = {}
+        for m in seen:
+            tally[(m - 1) % g] = tally.get((m - 1) % g, 0) + 1
+        residue = min(tally, key=lambda r: (-tally[r], r))
+        rule = plan.rules.model(plan=plan)
+        rule.months = list(range(residue + 1, 13, g))
+        if by_department:
+            rule.department_id = group
+        else:
+            rule.description_id = group
+        rules.append(rule)
+    plan.rules.model.objects.bulk_create(rules)
+
+    logger.info(f"[PLAN] Adopted {plan}: {len(rules)} rules, {len(intervals)} intervals")
     return plan

@@ -379,10 +379,34 @@ class AdoptAndCommandTests(PlanTestBase):
                                    maintenance_period=3)
         plan = planner.adopt_current_layout(self.ws, "ppm", "department")
         self.assertEqual(plan.state, "draft")
+        # Each department gets the whole cycle its interval implies, around
+        # the month its schedules are in now: ICU 6-monthly from February,
+        # Lab 3-monthly from May.
         rules = {r.department_id: r.months for r in plan.rules.all()}
-        self.assertEqual(rules, {self.icu.id: [2], self.lab.id: [5]})
+        self.assertEqual(rules, {self.icu.id: [2, 8], self.lab.id: [2, 5, 8, 11]})
         intervals = dict(plan.intervals.values_list("description_id", "interval_months"))
         self.assertEqual(intervals, {self.monitor.id: 6, self.pump.id: 3})
+
+    def test_adopt_picks_the_cycle_most_of_the_group_follows(self):
+        devices = [self.equipment() for _ in range(5)]
+        months = [d(2027, 3), d(2027, 9), d(2027, 3), d(2027, 1), d(2027, 7)]  # 3 on Mar/Sep, 2 on Jan/Jul
+        for eq, m in zip(devices, months):
+            PPMSchedule.objects.create(equipment=eq, workshop=self.ws, scheduled_month=m,
+                                       maintenance_period=6)
+        plan = planner.adopt_current_layout(self.ws, "ppm", "description")
+        self.assertEqual(plan.rules.get(description=self.monitor).months, [3, 9])
+
+    def test_adopt_uses_the_strictest_interval_in_a_department(self):
+        self.equipment(desc=self.monitor)
+        pump = self.equipment(desc=self.pump)
+        PPMSchedule.objects.create(equipment=pump, workshop=self.ws, scheduled_month=d(2027, 1),
+                                   maintenance_period=3)
+        PPMSchedule.objects.create(equipment=self.equipment(desc=self.monitor), workshop=self.ws,
+                                   scheduled_month=d(2027, 4), maintenance_period=6)
+        plan = planner.adopt_current_layout(self.ws, "ppm", "department")
+        # Pumps every 3 months need a quarterly cycle; monitors fit inside it.
+        self.assertEqual(plan.rules.get(department=self.icu).months, [1, 4, 7, 10])
+        self.assertEqual(planner.schedule(plan, today=TODAY, dry_run=True).unschedulable, [])
 
     def test_command_explains_a_device(self):
         plan = self.plan(rules={self.monitor: [2, 8]}, intervals={self.monitor: 6})
