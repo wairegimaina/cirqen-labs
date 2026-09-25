@@ -42,6 +42,13 @@ def uuid_routes():
     return list(dict.fromkeys(walk(get_resolver().url_patterns)))
 
 
+
+def _fresh_ppm(eq, ws, month):
+    """The equipment's only open PPM schedule (one per equipment): replace the
+    one the new-equipment signal made."""
+    PPMSchedule.objects.filter(equipment=eq).delete()
+    return PPMSchedule.objects.create(equipment=eq, workshop=ws, scheduled_month=month)
+
 class CrossWorkshopAccessTest(TestCase):
     def setUp(self):
         self.description = EquipmentDescription.objects.create(name="Pump")
@@ -69,7 +76,7 @@ class CrossWorkshopAccessTest(TestCase):
             })
             self.records[tag] = {
                 "ws": ws, "dept": dept, "eq": eq, "tech": tech, "nic": nic,
-                "ppm": PPMSchedule.objects.create(equipment=eq, workshop=ws, scheduled_month=month),
+                "ppm": _fresh_ppm(eq, ws, month),
                 "jc": jobcard.objects.create(
                     department=dept, equipment=eq, workshop=ws, priority_level="Low",
                     action_taken="Repair", job_description=f"JC-{mark}", status="Approved",

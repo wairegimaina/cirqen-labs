@@ -2,6 +2,7 @@ import uuid
 import logging
 from datetime import datetime
 from django.db import models
+from django.db.models import Q
 from django.core.exceptions import ValidationError
 
 logger = logging.getLogger(__name__)
@@ -225,6 +226,14 @@ class CalibrationSchedule(models.Model):
 
     class Meta:
         unique_together = ["equipment", "scheduled_month"]
+        # One open schedule per equipment (see sync/open_schedule_rule.py).
+        constraints = [
+            models.UniqueConstraint(
+                fields=["equipment"],
+                condition=Q(active_status=True, pending_delete=False) & ~Q(status="completed"),
+                name="calschedules_one_open_schedule",
+            ),
+        ]
         indexes = [
             models.Index(fields=["workshop", "scheduled_month"]),
             models.Index(fields=["equipment", "status"]),

@@ -63,6 +63,7 @@ class PPMFlowTests(TestCase):
         self.assertEqual(PPMSchedule.objects.filter(equipment=self.equipment).count(), 1)
 
     def test_in_charge_cannot_change_schedules(self):
+        PPMSchedule.objects.filter(equipment=self.equipment).delete()  # one open schedule per equipment
         schedule = PPMSchedule.objects.create(
             equipment=self.equipment, workshop=self.workshop,
             scheduled_month=datetime.date.today().replace(day=1),
@@ -73,6 +74,7 @@ class PPMFlowTests(TestCase):
         self.assertEqual(schedule.status, "pending")
 
     def test_other_workshop_cannot_change_schedules(self):
+        PPMSchedule.objects.filter(equipment=self.equipment).delete()  # one open schedule per equipment
         schedule = PPMSchedule.objects.create(
             equipment=self.equipment, workshop=self.workshop,
             scheduled_month=datetime.date.today().replace(day=1),

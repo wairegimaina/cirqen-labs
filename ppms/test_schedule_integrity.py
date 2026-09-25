@@ -19,6 +19,7 @@ from ppms.tasks import (
     periodic_cleanup_inactive_schedules,
     validate_ppm_schedules,
 )
+from scheduling.tests.legacy import LegacyDuplicatesAllowed
 from workshop.models import Workshop
 
 THIS_MONTH = date.today().replace(day=1)
@@ -118,7 +119,7 @@ class OverdueTests(PPMIntegrityBase):
         self.assertTrue(s.is_overdue)
 
 
-class CleanupKeepsHistoryTests(PPMIntegrityBase):
+class CleanupKeepsHistoryTests(LegacyDuplicatesAllowed, PPMIntegrityBase):
     def test_inactive_equipment_keeps_completed_history(self):
         eq = self.equipment()
         done = self.schedule(eq, THIS_MONTH - relativedelta(months=6), status="completed")

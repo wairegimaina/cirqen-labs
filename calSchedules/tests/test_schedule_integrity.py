@@ -22,6 +22,7 @@ from calSchedules.tasks import (
     validate_calibration_schedules,
 )
 from calSchedules.tests.test_cycle import NoSyncMixin
+from scheduling.tests.legacy import LegacyDuplicatesAllowed
 from workshop.models import Workshop
 
 THIS_MONTH = date.today().replace(day=1)
@@ -100,7 +101,7 @@ class OverdueTests(CalIntegrityBase):
         self.assertTrue(s.is_overdue)
 
 
-class CleanupKeepsHistoryTests(CalIntegrityBase):
+class CleanupKeepsHistoryTests(LegacyDuplicatesAllowed, CalIntegrityBase):
     def _inactive_with_history(self):
         eq = self.equipment()
         done = self.schedule(eq, THIS_MONTH - relativedelta(months=12), status="completed")
@@ -164,10 +165,12 @@ class NoSecondOpenScheduleTests(CalIntegrityBase):
     def test_completion_does_not_add_a_second_open_schedule(self):
         eq = self.equipment()
         s = self.schedule(eq, THIS_MONTH)
-        # Already has an open schedule elsewhere (e.g. resumed or manual).
+        # Completed quietly (as sync does), then the device got its next
+        # schedule some other way (resumed or manual) before the signal ran.
+        CalibrationSchedule.objects.filter(pk=s.pk).update(status="completed")
         self.schedule(eq, THIS_MONTH + relativedelta(months=5), generation_source="signal")
 
-        s.status = "completed"
+        s.refresh_from_db()
         s.save()
 
         self.assertEqual(len(self.open_months(eq)), 1)
