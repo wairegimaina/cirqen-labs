@@ -20,9 +20,10 @@ from django.utils import timezone
 
 from Inventory.models import Equipment
 
+from sync.open_schedule_rule import keeper_key
+
 from . import engine, planner
 
-UNDER_WAY = ("in_progress", "pending_approval")
 
 
 @dataclass
@@ -85,8 +86,8 @@ def audit(program, workshop=None, today=None):
 
 
 def _keep_first(rows):
-    """Which open schedule to keep: work under way first, then the earliest."""
-    return sorted(rows, key=lambda r: (r["status"] not in UNDER_WAY, r["scheduled_month"], str(r["id"])))
+    """Which open schedule to keep: the rule HQ and the sync agent also apply."""
+    return sorted(rows, key=lambda r: keeper_key(r["status"], r["scheduled_month"], r["id"]))
 
 
 @transaction.atomic
