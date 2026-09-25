@@ -12,7 +12,6 @@ from dateutil.relativedelta import relativedelta
 from workshop.models import Workshop
 from ..models import CalibrationSchedule
 from Inventory.models import Equipment, Department, EquipmentDescription
-from ..tasks import initialize_calibration_schedule_with_logic
 from openpyxl import Workbook
 from CalSoft.models import CalibrationSession
 from django.db import transaction
@@ -22,13 +21,12 @@ from django.db.models import Q, Case, When, IntegerField, Count
 logger = logging.getLogger(__name__)
 from django.utils import timezone
 from django.contrib.auth import get_user_model
-from ..tasks import initialize_calibration_schedule_with_logic, auto_advance_completed_calibrations, normalize_existing_schedules, smart_reorganize_on_logic_change
 import uuid
 User = get_user_model()
 from ..calibration_pdf_generator import create_calibration_pdf_response
 
 # sibling modules in this package
-from .helpers import check_group_waiting_status, get_user_access_context
+from .helpers import get_user_access_context
 
 
 @login_required
@@ -72,81 +70,34 @@ def mark_calibration_completed(request, schedule_id):
                 )
                 return redirect('schedule:calibration_dashboard')
 
-            old_status = schedule.status
-            old_month = schedule.scheduled_month
-
-            # ✅ NEW: CHECK FOR CERTIFICATE
-            session_exists = CalibrationSession.objects.filter(
-                equipment=schedule.equipment,
-                certificate__isnull=False,  # Must have certificate
-                is_approved=True  # Must be approved
-            ).exists()
-
-            if not session_exists:
+            # A calibration is complete when its session has an approved
+            # certificate. (This used to query fields CalibrationSession does
+            # not have, so it always failed; and on success it moved the same
+            # schedule forward a period instead of recording the completion.)
+            session = CalibrationSession.objects.filter(
+                schedule=schedule,
+                certificate_number__isnull=False,
+                status__in=("approved", "approved_pending_certificate"),
+            ).exclude(certificate_number="").order_by("-timestamp").first()
+            if session is None:
                 messages.error(
                     request,
-                    f"Cannot complete this calibration. Certificate must be generated and approved first. "
-                    f"Please generate the certificate in the workshop system.",
+                    "Cannot complete this calibration yet: it needs an approved calibration "
+                    "session with a certificate.",
                     extra_tags="certificate_required"
                 )
                 return redirect('schedule:calibration_dashboard')
 
-            # Get calibration period (default to 12 months if not set)
-            period = schedule.calibration_period or 12
-
-            # Calculate next scheduled month
-            next_month = schedule.scheduled_month + relativedelta(months=period)
-
-            # Check if next schedule already exists
-            existing = CalibrationSchedule.objects.filter(
-                equipment=schedule.equipment,
-                scheduled_month=next_month
-            ).exists()
-
-            if not existing:
-                # Auto-advance to next period
-                schedule.scheduled_month = next_month
-                schedule.status = 'pending'
-                schedule.save(update_fields=['scheduled_month', 'status'])
-
-                # ✅ NEW: Check group status
-                waiting_status = check_group_waiting_status(schedule)
-
-                if waiting_status['is_waiting']:
-                    messages.success(
-                        request,
-                        f"Calibration for {schedule.equipment.description.name if schedule.equipment.description else 'N/A'} "
-                        f"completed! Waiting for {waiting_status['total_count'] - waiting_status['completed_count']} "
-                        f"other equipment in {waiting_status['group_name']} to complete before rescheduling.",
-                        extra_tags="waiting_reschedule"
-                    )
-                else:
-                    messages.success(
-                        request,
-                        f"Calibration for {schedule.equipment.description.name if schedule.equipment.description else 'N/A'} "
-                        f"completed! All equipment in group completed! Group will be rescheduled automatically.",
-                        extra_tags="completed"
-                    )
-
-                logger.info(
-                    f"User {request.user.username} completed and advanced schedule {schedule_id} "
-                    f"from {old_month.strftime('%B %Y')} to {next_month.strftime('%B %Y')}"
-                )
-            else:
-                # Just mark as completed if next schedule exists
-                schedule.status = 'completed'
-                schedule.save(update_fields=['status'])
-
-                messages.warning(
-                    request,
-                    f"Calibration marked completed, but schedule for {next_month.strftime('%B %Y')} already exists. "
-                    f"Manual adjustment may be needed.",
-                    extra_tags="schedule complete warning"
-                )
-                logger.warning(
-                    f"Could not advance schedule {schedule_id} - "
-                    f"schedule for {next_month.strftime('%B %Y')} already exists"
-                )
+            schedule.status = 'completed'
+            schedule.completed_date = timezone.localdate(session.timestamp)
+            schedule.save()  # the plan gives the device its next schedule
+            name = schedule.equipment.description.name if schedule.equipment.description else 'N/A'
+            messages.success(
+                request,
+                f"Calibration for {name} recorded as done ({session.certificate_number}).",
+                extra_tags="completed"
+            )
+            logger.info(f"User {request.user.username} completed calibration schedule {schedule_id}")
 
         except Exception as e:
             logger.error(f"Error marking calibration schedule {schedule_id} as completed for user {request.user.username}: {e}")
@@ -482,53 +433,17 @@ def schedule_calibration_equipment(request, equipment_id):
                 )
                 return redirect("schedule:calibration_dashboard")
 
-            # Planned workshop: the plan decides the month.
+            # The workshop's scheduling plan decides the month.
             from scheduling.planner import schedule_by_hand
-            done, problems, unplanned = schedule_by_hand([equipment.id], "calibration")
-            if done or problems:
-                if done:
-                    messages.success(request, f"Equipment {name} scheduled: {done[0][1].message}.",
-                                     extra_tags="schedule")
-                else:
-                    messages.error(request, f"Equipment {name} cannot be scheduled: {problems[0][1]}.",
-                                   extra_tags="schedule create error")
-                return redirect("schedule:calibration_dashboard")
-
-            # No plan. A device with history continues its own cycle; a new one
-            # joins its group's month. (This used to import a function that
-            # does not exist, fall back, and schedule every device for the
-            # current month, so it was due the day it was scheduled.)
-            if CalibrationSchedule.objects.filter(equipment=equipment, status="completed").exists():
-                from calSchedules.tasks.maintenance import _resume_calibration_chains
-                _resume_calibration_chains([equipment.id])
-                schedule = CalibrationSchedule.open_schedules().filter(equipment=equipment).first()
-                note = "continuing its calibration cycle"
+            done, problems = schedule_by_hand([equipment.id], "calibration")
+            if done:
+                messages.success(request, f"Equipment {name} scheduled: {done[0][1].message}.",
+                                 extra_tags="schedule")
             else:
-                common_logic = CalibrationSchedule.objects.filter(
-                    active_status=True,
-                    planning_logic__isnull=False
-                ).values('planning_logic').annotate(
-                    count=Count('id')
-                ).order_by('-count').first()
-                planning_logic = common_logic['planning_logic'] if common_logic else 'department'
-                from calSchedules import grouping
-                from ..instant_reconciliation import initialize_schedule_for_equipment
-                schedule = initialize_schedule_for_equipment(
-                    equipment, planning_logic=grouping.canonical_logic(planning_logic))
-                note = "aligned with its group"
-
-            if schedule:
-                messages.success(
-                    request,
-                    f"Equipment {name} scheduled for {schedule.scheduled_month.strftime('%B %Y')} ({note}).",
-                    extra_tags="schedule"
-                )
-                logger.info(
-                    f"Equipment {equipment.id} scheduled for {schedule.scheduled_month} "
-                    f"by user {request.user.username}"
-                )
-            else:
-                messages.error(request, "Failed to create schedule.")
+                reason = problems[0][1] if problems else "it could not be placed"
+                messages.error(request, f"Equipment {name} cannot be scheduled: {reason}.",
+                               extra_tags="schedule create error")
+            return redirect("schedule:calibration_dashboard")
 
         except Exception as e:
             logger.error(f"Error scheduling equipment {equipment_id} for calibration for user {request.user.username}: {e}")

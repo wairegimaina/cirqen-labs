@@ -6,7 +6,7 @@ from django.core.management import call_command
 
 from ppms.models import PPMSchedule
 from scheduling import audit
-from scheduling.tests.test_planner import PlanTestBase, d
+from scheduling.tests.test_planner import PlanTestBase, d, imported
 
 
 class AuditTests(PlanTestBase):
@@ -16,13 +16,13 @@ class AuditTests(PlanTestBase):
         self.broken = self.equipment()
         self.never = self.equipment()
         self.pushed = self.equipment()
-        self.done = PPMSchedule.objects.create(equipment=self.dup, workshop=self.ws,
+        self.done = imported(PPMSchedule, equipment=self.dup, workshop=self.ws,
                                                scheduled_month=d(2026, 2), status="completed")
-        PPMSchedule.objects.create(equipment=self.dup, workshop=self.ws, scheduled_month=d(2026, 8))
-        PPMSchedule.objects.create(equipment=self.dup, workshop=self.ws, scheduled_month=d(2027, 2))
-        PPMSchedule.objects.create(equipment=self.broken, workshop=self.ws, scheduled_month=d(2026, 3),
+        imported(PPMSchedule, equipment=self.dup, workshop=self.ws, scheduled_month=d(2026, 8))
+        imported(PPMSchedule, equipment=self.dup, workshop=self.ws, scheduled_month=d(2027, 2))
+        imported(PPMSchedule, equipment=self.broken, workshop=self.ws, scheduled_month=d(2026, 3),
                                    status="completed")
-        PPMSchedule.objects.create(equipment=self.pushed, workshop=self.ws, scheduled_month=date(2026, 12, 31))
+        imported(PPMSchedule, equipment=self.pushed, workshop=self.ws, scheduled_month=date(2026, 12, 31))
 
     def test_audit_reports_every_problem(self):
         # Legacy rows: completed before completed_date was recorded.
@@ -53,8 +53,8 @@ class AuditTests(PlanTestBase):
         # Calibration has statuses for work under way (PPM's column can't hold them).
         from calSchedules.models import CalibrationSchedule
         eq = self.equipment()
-        CalibrationSchedule.objects.create(equipment=eq, workshop=self.ws, scheduled_month=d(2026, 11))
-        CalibrationSchedule.objects.create(equipment=eq, workshop=self.ws, scheduled_month=d(2027, 2),
+        imported(CalibrationSchedule, equipment=eq, workshop=self.ws, scheduled_month=d(2026, 11))
+        imported(CalibrationSchedule, equipment=eq, workshop=self.ws, scheduled_month=d(2027, 2),
                                            status="in_progress", generation_source="signal")
         decisions = audit.retire_duplicates("calibration")
         self.assertEqual(decisions, [(eq.serial_number, d(2027, 2), [d(2026, 11)])])
@@ -67,7 +67,7 @@ class AuditTests(PlanTestBase):
         self.assertTrue(PPMSchedule.objects.filter(equipment=self.pushed, scheduled_month=d(2026, 12)).exists())
 
     def test_floor_dates_never_collides(self):
-        PPMSchedule.objects.create(equipment=self.pushed, workshop=self.ws, scheduled_month=d(2026, 12),
+        imported(PPMSchedule, equipment=self.pushed, workshop=self.ws, scheduled_month=d(2026, 12),
                                    status="completed")
         moved, blocked = audit.floor_dates("ppm", apply=True)
         self.assertEqual(moved, [])

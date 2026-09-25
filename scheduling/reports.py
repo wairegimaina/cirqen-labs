@@ -32,6 +32,35 @@ def workshop_equipment(workshop):
     return Equipment.objects.filter(department__workshop=workshop, active_status=True)
 
 
+# ── The panel on the PPM and calibration pages ──────────────────────────────
+
+def panels(workshops, program):
+    """One summary per workshop: its plan, grouping and what needs attention."""
+    model = planner.PROGRAMS[program].model
+    rows = []
+    for workshop in workshops:
+        plan = planner.active_plan(workshop.id, program)
+        equipment = workshop_equipment(workshop)
+        total = equipment.count()
+        if not total and not plan:
+            continue
+        scheduled = model.open_schedules().filter(equipment__in=equipment).values("equipment_id").distinct().count()
+        month = this_month()
+        rows.append({
+            "workshop": workshop,
+            "plan": plan,
+            "draft": planner.SchedulingPlan.objects.filter(
+                workshop=workshop, program=program, state=planner.SchedulingPlan.STATE_DRAFT).first(),
+            "groups": plan.rules.exclude(month_mask=0).count() if plan else 0,
+            "total": total,
+            "unscheduled": total - scheduled,
+            "overdue": model.open_schedules().filter(equipment__in=equipment, scheduled_month__lt=month).count(),
+            "query": f"?workshop={workshop.id}&program={program}",
+            "other_logic": ("department" if not plan or plan.logic == "description" else "description"),
+        })
+    return rows
+
+
 # ── Plan health ──────────────────────────────────────────────────────────────
 
 @dataclass
@@ -169,8 +198,8 @@ def unscheduled(workshop, program, today=None):
     """Equipment without an open schedule, and why.
 
     With an active plan, a dry run says where each device will be placed on
-    the next run, or why it can't be. Without one, the legacy scheduler owns
-    the workshop and the only reason to give is that.
+    the next run, or why it can't be. A workshop with no plan yet gets one on
+    the next scheduling run.
     """
     plan = planner.active_plan(workshop.id, program)
     if plan:
@@ -184,5 +213,5 @@ def unscheduled(workshop, program, today=None):
     rows = list(workshop_equipment(workshop).exclude(id__in=open_ids).order_by("serial_number").values(
         "id", "serial_number", "department__name", "description__name"))
     return {"plan": None, "waiting": [], "blocked": [
-        (row, "No active plan", "This workshop has no active scheduling plan; the legacy "
-                                "scheduler will place it") for row in rows]}
+        (row, "No plan yet", "The workshop's plan is created on the next scheduling run "
+                             "(or set one up now under Plan); this device is placed then") for row in rows]}

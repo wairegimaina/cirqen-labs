@@ -1,0 +1,48 @@
+{% comment %}
+The one place PPM and calibration scheduling is set up. Every workshop has a
+plan: how equipment is grouped (department or description), the months each
+group is due in, and how often each type is serviced.
+
+Usage: {% include 'includes/scheduling_panel.html' with panels=scheduling_panels program="ppm" can_manage=scheduling_can_manage %}
+{% endcomment %}
+{% if panels %}
+<section class="section-card scheduling-panel mb-3" aria-labelledby="scheduling-panel-title">
+  <div class="section-card-head">
+    <div>
+      <h3 class="section-card-title" id="scheduling-panel-title"><i class="fas fa-calendar-alt" aria-hidden="true"></i> Scheduling</h3>
+      <p class="section-card-sub">Each workshop's plan decides when every device is due. Change the grouping or the months here; completed work is never moved.</p>
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm mb-0 align-middle">
+      <thead><tr><th>Workshop</th><th>Grouped by</th><th class="text-end">Groups</th><th class="text-end">Unscheduled</th><th class="text-end">Overdue</th><th></th></tr></thead>
+      <tbody>
+        {% for p in panels %}
+        <tr>
+          <td>{{ p.workshop.name }}</td>
+          <td>
+            {% if p.plan %}{{ p.plan.get_logic_display }} <span class="text-muted small">v{{ p.plan.version }}</span>
+            {% else %}<span class="text-muted">Set up on first use</span>{% endif %}
+            {% if p.draft %}<a class="badge bg-warning text-dark ms-1" href="{% url 'scheduling:plan_preview' p.draft.id %}">draft v{{ p.draft.version }} waiting</a>{% endif %}
+          </td>
+          <td class="text-end">{{ p.groups }}</td>
+          <td class="text-end">{% if p.unscheduled %}<a href="{% url 'scheduling:unscheduled' %}{{ p.query }}">{{ p.unscheduled }}</a>{% else %}0{% endif %}</td>
+          <td class="text-end">{{ p.overdue }}</td>
+          <td class="text-end text-nowrap">
+            <a class="btn btn-sm btn-outline-secondary" href="{% url 'scheduling:overview' %}{{ p.query }}">Overview</a>
+            {% if p.plan %}<a class="btn btn-sm btn-outline-secondary" href="{% url 'scheduling:plans' %}{{ p.query }}">Edit months</a>{% endif %}
+            {% if can_manage %}
+            <form method="post" action="{% url 'scheduling:change_logic' %}{{ p.query }}" class="d-inline">
+              {% csrf_token %}
+              <input type="hidden" name="logic" value="{{ p.other_logic }}">
+              <button type="submit" class="btn btn-sm btn-primary">Group by {{ p.other_logic }}</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}

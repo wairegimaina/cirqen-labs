@@ -11,7 +11,7 @@
 </div>
 
 <p class="sched-muted">
-  {% if report.previous %}Replaces v{{ report.previous.version }} ({{ report.previous.get_logic_display|lower }}).{% else %}This is the workshop's first plan: from now on the legacy scheduler leaves it alone.{% endif %}
+  {% if report.previous %}Replaces v{{ report.previous.version }} ({{ report.previous.get_logic_display|lower }}).{% else %}This is the workshop's first plan.{% endif %}
   Completed schedules are history and are never moved.
 </p>
 

@@ -12,7 +12,6 @@ from dateutil.relativedelta import relativedelta
 from workshop.models import Workshop
 from ..models import CalibrationSchedule
 from Inventory.models import Equipment, Department, EquipmentDescription
-from ..tasks import initialize_calibration_schedule_with_logic
 from openpyxl import Workbook
 from CalSoft.models import CalibrationSession
 from django.db import transaction
@@ -22,7 +21,6 @@ from django.db.models import Q, Case, When, IntegerField, Count
 logger = logging.getLogger(__name__)
 from django.utils import timezone
 from django.contrib.auth import get_user_model
-from ..tasks import initialize_calibration_schedule_with_logic, auto_advance_completed_calibrations, normalize_existing_schedules, smart_reorganize_on_logic_change
 import uuid
 User = get_user_model()
 from ..calibration_pdf_generator import create_calibration_pdf_response

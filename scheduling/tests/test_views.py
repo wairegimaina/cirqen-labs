@@ -9,6 +9,7 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from Inventory.models import Department, Equipment, EquipmentDescription
+from calSchedules.models import CalibrationSchedule
 from ppms.models import PPMSchedule
 from scheduling import planner
 from scheduling.models import SchedulingPlan
@@ -29,7 +30,10 @@ class ViewTestBase(TestCase):
             eq = Equipment.objects.create(description=self.monitor, department=self.icu, workshop=self.ws,
                                           model="M", serial_number=f"V-{i}", status="Working")
             PPMSchedule.objects.filter(equipment=eq).delete()
+            CalibrationSchedule.objects.filter(equipment=eq).delete()
             self.equipment.append(eq)
+        # Tests set up their own plans: drop the ones given automatically.
+        SchedulingPlan.objects.filter(workshop=self.ws).delete()
         self.hod = self.user("hod", role="HOD")
         self.incharge = self.user("incharge", role="Tech", workshop=self.ws, level="Engineer Incharge")
         self.tech = self.user("tech", role="Tech", workshop=self.ws, level="Engineer")
@@ -89,7 +93,7 @@ class PageTests(ViewTestBase):
             with self.subTest(name):
                 self.assertEqual(self.get(self.hod, name, *args).status_code, 200)
         response = self.get(self.hod, "unscheduled")
-        self.assertContains(response, "No active plan")
+        self.assertContains(response, "No plan yet")
 
     def test_every_page_renders_with_a_plan(self):
         plan = self.active_plan()
@@ -107,7 +111,10 @@ class PageTests(ViewTestBase):
         self.assertContains(response, month.strftime("%B %Y"))
 
     def test_overview_counts(self):
-        self.active_plan()
+        plan = self.active_plan()
+        # Report a group the plan has no months for (rather than adopt it).
+        plan.auto_new_groups = False
+        plan.save(update_fields=["auto_new_groups"])
         extra = Equipment.objects.create(description=EquipmentDescription.objects.create(name="Unruled"),
                                          department=self.icu, workshop=self.ws, model="M",
                                          serial_number="V-X", status="Working")

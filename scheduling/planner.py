@@ -11,11 +11,13 @@ Entry points
   new group works in different months.
 * :func:`explain`: why a device is due when it is.
 
-Workshops without an active plan are untouched: the legacy schedulers keep
-running for them (see :func:`planned_workshop_ids`).
+This is the only scheduler for PPM and calibration. Every workshop has an
+active plan per program; :func:`ensure_plan` gives it one (grouped by
+description, months spread evenly) the first time it is needed.
 """
 import logging
 import uuid
+from math import gcd
 from dataclasses import dataclass, field
 
 from django.db import transaction
@@ -24,7 +26,7 @@ from django.utils import timezone
 from Inventory.models import Equipment
 
 from . import engine
-from .models import SchedulingPlan, mask_to_months
+from .models import SchedulingPlan, mask_to_months, months_label
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +76,7 @@ def active_plan(workshop_id, program):
 
 
 def planned_workshop_ids(program):
-    """Workshops whose schedules this engine owns. Legacy code skips them."""
+    """Workshops that already have an active plan for ``program``."""
     return set(
         SchedulingPlan.objects.filter(
             program=program, state=SchedulingPlan.STATE_ACTIVE, active_status=True,
@@ -98,6 +100,7 @@ class PlanView:
         self.months = {}
         for rule in plan.rules.filter(active_status=True):
             self.months[rule.department_id or rule.description_id] = mask_to_months(rule.month_mask)
+        self.group_names = {}
         self.intervals = dict(
             plan.intervals.filter(active_status=True).values_list("description_id", "interval_months")
         )
@@ -233,6 +236,7 @@ def schedule(plan, equipment_ids=None, today=None, dry_run=False):
         all_rows = rows_by_id if equipment_ids is None else {
             r["id"]: r for r in _equipment_rows(plan.workshop_id)
         }
+        _adopt_new_groups(view, all_rows.values(), write=not dry_run)
         load = _load(view, all_rows, open_rows)
         last = _last_completed(model, [r["id"] for r in todo])
 
@@ -251,6 +255,57 @@ def schedule(plan, equipment_ids=None, today=None, dry_run=False):
         logger.info(f"[PLAN] {row['serial_number']}: not scheduled: {placement.message}")
     logger.info(f"[PLAN] {result.summary()}")
     return result
+
+
+def _adopt_new_groups(view, rows, write):
+    """Give groups the plan has never seen months where the year has room.
+
+    Only groups with no rule at all: a rule with no months is a deliberate
+    "not scheduled". ``write`` saves the new rules; otherwise they only
+    exist for this run (previews).
+    """
+    plan = view.plan
+    if not plan.auto_new_groups:
+        return []
+    counts, steps = {}, {}
+    known_load = {m: 0.0 for m in range(1, 13)}
+    for row in rows:
+        group_id, group_name = view.group(row)
+        if not group_id:
+            continue
+        interval = view.interval(row["description_id"])
+        if not interval:
+            continue
+        if group_id in view.months:
+            months = view.months[group_id]
+            # This device's visits a year, shared over its group's months.
+            for m in months:
+                known_load[m] += (12 / interval) / len(months)
+            continue
+        counts[group_id] = counts.get(group_id, 0) + 1
+        steps[group_id] = gcd(steps.get(group_id, 12), interval)
+        view.group_names[group_id] = group_name
+    if not counts:
+        return []
+    layout = engine.spread_layout([(g, counts[g], steps[g]) for g in counts], initial_load=known_load)
+    added = []
+    for group_id, months in layout.items():
+        view.months[group_id] = months
+        added.append((group_id, months))
+    if write:
+        rules = []
+        for group_id, months in added:
+            rule = plan.rules.model(plan=plan)
+            rule.months = months
+            if plan.is_department:
+                rule.department_id = group_id
+            else:
+                rule.description_id = group_id
+            rules.append(rule)
+        _bulk_create(plan.rules.model, rules)
+        logger.info(f"[PLAN] {plan}: gave {len(added)} new group(s) months: "
+                    + ", ".join(f"{view.group_names.get(g, g)} {months_label(m)}" for g, m in added))
+    return added
 
 
 def _write(view, placements, last, result):
@@ -308,17 +363,16 @@ def _write(view, placements, last, result):
     model.objects.bulk_create(new_objects)
 
 
-def on_completed(schedule_row):
-    """A schedule was just completed: give its device the next one, if planned.
+def program_of(schedule_row):
+    return (SchedulingPlan.PROGRAM_PPM if schedule_row._meta.app_label == "ppms"
+            else SchedulingPlan.PROGRAM_CALIBRATION)
 
-    Returns True when a plan handled it (the caller must then skip any legacy
-    rescheduling), False when the workshop has no plan.
-    """
-    program = (SchedulingPlan.PROGRAM_PPM if schedule_row._meta.app_label == "ppms"
-               else SchedulingPlan.PROGRAM_CALIBRATION)
-    plan = active_plan(schedule_row.workshop_id, program)
-    if not plan:
-        return False
+
+def on_completed(schedule_row):
+    """A schedule was just completed: give its device the next one."""
+    equipment = schedule_row.equipment
+    workshop = equipment.department.workshop if equipment.department_id else schedule_row.workshop
+    plan = ensure_plan(workshop, program_of(schedule_row))
     schedule(plan, equipment_ids=[schedule_row.equipment_id])
     return True
 
@@ -326,37 +380,44 @@ def on_completed(schedule_row):
 def schedule_by_hand(equipment_ids, program):
     """The manual "schedule" buttons: place devices through their plan.
 
-    Returns ``(done, problems, unplanned_ids)``: ``done`` is a list of
-    (equipment row, Placement) created, ``problems`` a list of (equipment row,
-    message) the plan could not place, and ``unplanned_ids`` the devices in
-    workshops without a plan, which the caller schedules the legacy way.
+    Returns ``(done, problems)``: ``done`` is a list of (equipment row,
+    Placement) created, ``problems`` a list of (equipment row, message) the
+    plan could not place.
     """
+    from workshop.models import Workshop
+
     rows = Equipment.objects.filter(id__in=equipment_ids).values_list("id", "department__workshop_id")
     by_workshop = {}
     for equipment_id, workshop_id in rows:
         by_workshop.setdefault(workshop_id, []).append(equipment_id)
-    done, problems, unplanned = [], [], []
-    for workshop_id, ids in by_workshop.items():
-        plan = active_plan(workshop_id, program)
-        if not plan:
-            unplanned += ids
-            continue
-        run = schedule(plan, equipment_ids=ids)
+    done, problems = [], []
+    for workshop in Workshop.objects.filter(id__in=by_workshop):
+        run = schedule(ensure_plan(workshop, program), equipment_ids=by_workshop[workshop.id])
         done += run.created
         problems += [(row, p.message) for row, p in run.unschedulable]
-    return done, problems, unplanned
+    return done, problems
 
 
 def run_all(program=None, today=None, dry_run=False):
-    """Schedule every workshop that has an active plan (the nightly sweep).
+    """Schedule every workshop (the regular sweep).
 
-    Also catches completions that arrived through sync, which writes with raw
-    SQL and so never fires the completion signals.
+    Gives any workshop without a plan its first one, places every device that
+    has no open schedule, and catches completions that arrived through sync,
+    which writes with raw SQL and so never fires the completion signals.
+    A dry run creates nothing, not even plans.
     """
-    plans = SchedulingPlan.objects.filter(state=SchedulingPlan.STATE_ACTIVE, active_status=True)
-    if program:
-        plans = plans.filter(program=program)
-    return [schedule(plan, today=today, dry_run=dry_run) for plan in plans.select_related("workshop")]
+    from workshop.models import Workshop
+
+    programs = [program] if program else list(PROGRAMS)
+    results = []
+    for workshop in Workshop.objects.filter(active_status=True).order_by("name"):
+        if not Equipment.objects.filter(department__workshop=workshop, active_status=True).exists():
+            continue
+        for key in programs:
+            plan = active_plan(workshop.id, key) if dry_run else ensure_plan(workshop, key)
+            if plan:
+                results.append(schedule(plan, today=today, dry_run=dry_run))
+    return results
 
 
 # ── Changing the plan ────────────────────────────────────────────────────────
@@ -530,6 +591,52 @@ def explain(equipment, program):
 
 # ── Drafts ───────────────────────────────────────────────────────────────────
 
+def _bulk_create(model, objects):
+    """bulk_create with each row's deterministic id (bulk_create skips save())."""
+    objects = list(objects)
+    for obj in objects:
+        obj.id = obj.natural_id()
+    return model.objects.bulk_create(objects)
+
+
+def ensure_plan(workshop, program, user=None):
+    """The workshop's active plan for ``program``, creating one if it has none.
+
+    Every workshop is always scheduled by a plan. The first one groups by
+    description with months spread evenly across the year; the workshop can
+    then change grouping or months at any time (a new version, previewed).
+    """
+    plan = active_plan(workshop.id, program)
+    if plan:
+        return plan
+    draft = SchedulingPlan.objects.filter(
+        workshop=workshop, program=program, state=SchedulingPlan.STATE_DRAFT,
+        notes__startswith="Created automatically",
+    ).first()
+    if not draft:
+        draft = spread_evenly(workshop, program, SchedulingPlan.LOGIC_DESCRIPTION, user)
+        draft.notes = "Created automatically: grouped by description, months spread evenly"
+        draft.save(update_fields=["notes"])
+    activate(draft, user)
+    schedule(draft)
+    logger.info(f"[PLAN] {workshop} {program}: created and activated {draft}")
+    return draft
+
+
+def change_logic(workshop, program, logic, user=None):
+    """A draft that groups by ``logic`` with months spread evenly.
+
+    Changing the grouping is a new plan version: this returns the draft for
+    preview; nothing moves until it is activated.
+    """
+    existing = SchedulingPlan.objects.filter(
+        workshop=workshop, program=program, state=SchedulingPlan.STATE_DRAFT).first()
+    if existing:
+        existing.delete()
+    return spread_evenly(workshop, program, logic, user)
+
+
+
 def typical_intervals(workshop, program):
     """{description_id: months}: the interval most of that type's devices use.
 
@@ -568,7 +675,7 @@ def spread_evenly(workshop, program, logic, user=None, default_interval=None):
         notes="Months spread evenly across the year",
     )
     intervals = typical_intervals(workshop, program)
-    plan.intervals.model.objects.bulk_create([
+    _bulk_create(plan.intervals.model, [
         plan.intervals.model(plan=plan, description_id=d, interval_months=p) for d, p in intervals.items()
     ])
 
@@ -592,7 +699,7 @@ def spread_evenly(workshop, program, logic, user=None, default_interval=None):
         else:
             rule.description_id = key
         rules.append(rule)
-    plan.rules.model.objects.bulk_create(rules)
+    _bulk_create(plan.rules.model, rules)
     logger.info(f"[PLAN] Spread {plan}: {len(rules)} rules")
     return plan
 
@@ -626,12 +733,12 @@ def new_draft(workshop, program, logic, user=None, source="copy", default_interv
     )
     if source == "copy" and active:
         if active.logic == logic:
-            plan.rules.model.objects.bulk_create([
+            _bulk_create(plan.rules.model, [
                 plan.rules.model(plan=plan, department_id=r.department_id,
                                  description_id=r.description_id, month_mask=r.month_mask)
                 for r in active.rules.filter(active_status=True)
             ])
-        plan.intervals.model.objects.bulk_create([
+        _bulk_create(plan.intervals.model, [
             plan.intervals.model(plan=plan, description_id=i.description_id,
                                  interval_months=i.interval_months)
             for i in active.intervals.filter(active_status=True)
@@ -664,7 +771,7 @@ def adopt_current_layout(workshop, program, logic, user=None):
     )
 
     intervals = typical_intervals(workshop, program)
-    plan.intervals.model.objects.bulk_create([
+    _bulk_create(plan.intervals.model, [
         plan.intervals.model(plan=plan, description_id=d, interval_months=p)
         for d, p in intervals.items()
     ])
@@ -705,7 +812,7 @@ def adopt_current_layout(workshop, program, logic, user=None):
         else:
             rule.description_id = group
         rules.append(rule)
-    plan.rules.model.objects.bulk_create(rules)
+    _bulk_create(plan.rules.model, rules)
 
     logger.info(f"[PLAN] Adopted {plan}: {len(rules)} rules, {len(intervals)} intervals")
     return plan

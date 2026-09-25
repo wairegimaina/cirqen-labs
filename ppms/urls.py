@@ -1,20 +1,10 @@
-# Complete PPM/urls.py with analytics endpoint and smart organizer views
 
 from django.urls import path
 from . import views
 
 urlpatterns = [
-    # Smart Reorganizer
-    path('smart-reorganize/', views.trigger_smart_reorganize_ppm, name='trigger_smart_reorganize_ppm'),
-
-    # Normalization
-    path('normalize/', views.trigger_normalize_ppm, name='trigger_normalize_ppm'),
-
     # Main dashboard
     path('', views.ppm_dashboard, name='ppm_dashboard'),
-
-    # Initialization
-    path('initialize/', views.trigger_initialization, name='trigger_initialization'),
 
     # UUID-based schedule actions
     path('push/<uuid:schedule_id>/', views.push_schedule, name='push_schedule'),
@@ -40,11 +30,6 @@ urlpatterns = [
 
     # Department filter (UUID)
     path('department/<uuid:dept_id>/', views.ppm_by_department, name='ppm_by_department'),
-    path('initialize-sync/', views.trigger_sync_initialization, name='trigger_sync_initialization'),
-
-    # Debug/test endpoints
-    path('test-celery/', views.test_celery_connection, name='test_celery'),
-    path('task-status/<str:task_id>/', views.check_task_status, name='check_task_status'),
 
     path('api/analytics/', views.get_analytics_data, name='get_analytics_data'),
     path('api/summary/', views.get_ppm_summary_api, name='ppm_summary_api'),

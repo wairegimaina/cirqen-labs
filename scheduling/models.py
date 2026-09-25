@@ -23,6 +23,11 @@ from django.db.models import Q
 from Inventory.models import Department, EquipmentDescription
 from workshop.models import Workshop
 
+# Plans, rules and intervals get ids derived from what they are, so two
+# desktops that create "the same" plan produce the same rows and sync merges
+# them instead of holding two versions of one workshop's plan.
+ID_NAMESPACE = uuid.UUID("0e6c7a5e-9d2b-4f3a-8c1e-5b7d2f4a9c30")
+
 MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
@@ -61,7 +66,15 @@ class SyncedModel(models.Model):
     class Meta:
         abstract = True
 
+    def natural_id(self):
+        """Deterministic id; subclasses define it."""
+        return None
+
     def save(self, *args, **kwargs):
+        if self._state.adding:
+            natural = self.natural_id()
+            if natural:
+                self.id = natural
         self.needs_sync = True
         update_fields = kwargs.get("update_fields")
         if update_fields is not None:
@@ -104,6 +117,12 @@ class SchedulingPlan(SyncedModel):
                   "reported as unschedulable instead of guessed.",
     )
     notes = models.TextField(blank=True, default="")
+    auto_new_groups = models.BooleanField(
+        default=True,
+        help_text="Give a group that appears later (a new description or department) months "
+                  "automatically, where the year has room. A group whose months are all "
+                  "unticked is left unscheduled on purpose.",
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
         related_name="scheduling_plans_created",
@@ -125,6 +144,9 @@ class SchedulingPlan(SyncedModel):
                 name="scheduling_one_active_plan",
             ),
         ]
+
+    def natural_id(self):
+        return uuid.uuid5(ID_NAMESPACE, f"plan:{self.workshop_id}:{self.program}:{self.version}")
 
     def __str__(self):
         return f"{self.workshop} {self.get_program_display()} v{self.version} ({self.state})"
@@ -157,6 +179,9 @@ class SchedulingRule(SyncedModel):
                 name="scheduling_rule_one_group",
             ),
         ]
+
+    def natural_id(self):
+        return uuid.uuid5(ID_NAMESPACE, f"rule:{self.plan_id}:{self.department_id or self.description_id}")
 
     @property
     def months(self):
@@ -202,6 +227,9 @@ class SchedulingInterval(SyncedModel):
                 name="scheduling_interval_range",
             ),
         ]
+
+    def natural_id(self):
+        return uuid.uuid5(ID_NAMESPACE, f"interval:{self.plan_id}:{self.description_id}")
 
     def __str__(self):
         return f"{self.description}: every {self.interval_months} months"

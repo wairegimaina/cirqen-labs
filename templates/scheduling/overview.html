@@ -7,7 +7,7 @@
   <div class="section-card-head">
     <div>
       <h3 class="section-card-title"><i class="fas fa-sliders-h" aria-hidden="true"></i> Scheduling plan</h3>
-      {% if not plan %}<p class="section-card-sub">No active plan: this workshop is still placed by the legacy scheduler.</p>{% endif %}
+      {% if not plan %}<p class="section-card-sub">No plan yet: one is created on the next scheduling run (grouped by description, months spread evenly), or set it up now.</p>{% endif %}
     </div>
     <div class="page-actions">
       {% if draft %}<a class="btn btn-sm btn-outline-secondary" href="{% url 'scheduling:plan' draft.id %}">Continue draft v{{ draft.version }}</a>{% endif %}

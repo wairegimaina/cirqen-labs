@@ -11,6 +11,7 @@ urlpatterns = [
     path("unscheduled/", views.unscheduled, name="unscheduled"),
     path("plans/", views.plans, name="plans"),
     path("plans/new/", views.plan_new, name="plan_new"),
+    path("plans/change-logic/", views.change_logic, name="change_logic"),
     path("plans/<uuid:plan_id>/", views.plan_detail, name="plan"),
     path("plans/<uuid:plan_id>/preview/", views.plan_preview, name="plan_preview"),
     path("plans/<uuid:plan_id>/activate/", views.plan_activate, name="plan_activate"),

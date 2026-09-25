@@ -70,141 +70,20 @@ app.conf.beat_schedule = {
         "options": {"expires": 6 * 3600},
     },
     # ============================================================================
-    # PPM (PREVENTIVE MAINTENANCE) TASKS - KEEP AS IS
+    # SCHEDULING (PPM and calibration): one planner for both, see scheduling/
     # ============================================================================
-    # Check and push overdue PPMs every day at 1:00 AM
-    "check-overdue-ppms": {
-        "task": "ppms.tasks.check_and_push_overdue_ppms",
-        "schedule": crontab(hour=1, minute=0),  # Daily at 1:00 AM
-        "options": {
-            "expires": 3600,
-        },
+    # Every workshop gets a plan; every device without an open schedule gets
+    # one; completions that arrived through sync (no signal) get their next.
+    "scheduling-run-plans": {
+        "task": "scheduling.tasks.run_plans",
+        "schedule": 1800.0,  # every 30 minutes
+        "options": {"expires": 1500},
     },
-    # Auto-schedule unscheduled equipment every day at 2:00 AM
-    "auto-schedule-unscheduled-ppm-equipment": {
-        "task": "ppms.tasks.auto_schedule_unscheduled_equipment",
-        "schedule": crontab(hour=2, minute=0),  # Daily at 2:00 AM
-        "kwargs": {
-            "planning_logic": "department",  # 'department' or 'description'
-            "maintenance_period": 6,  # 3, 6, 9, or 12 months
-            "max_departments": 100,
-            "max_descriptions": 100,
-        },
-        "options": {
-            "expires": 3600,
-        },
-    },
-    # Generate report of unscheduled equipment every day at 8:00 AM
-    "generate-unscheduled-ppm-report": {
-        "task": "ppms.tasks.generate_unscheduled_equipment_report",
-        "schedule": crontab(hour=8, minute=0),  # Daily at 8:00 AM
-        "options": {
-            "expires": 3600,
-        },
-    },
-    # Clean up orphaned PPM schedules every Sunday at 3:00 AM
-    "cleanup-orphaned-ppm-schedules": {
-        "task": "ppms.tasks.cleanup_orphaned_ppm_schedules",
-        "schedule": crontab(hour=3, minute=0, day_of_week=0),  # Weekly on Sunday
-        "options": {
-            "expires": 7200,  # 2 hours
-        },
-    },
-    # Remove inactive equipment schedules every day at 3:30 AM
-    "cleanup-inactive-ppm-schedules": {
-        "task": "ppms.tasks.periodic_cleanup_inactive_schedules",
-        "schedule": crontab(hour=3, minute=30),  # Daily at 3:30 AM
-        "options": {
-            "expires": 3600,
-        },
-    },
-    # ============================================================================
-    # CALIBRATION TASKS - AUTOMATIC RECONCILIATION SYSTEM
-    # ============================================================================
-    # Full reconciliation every 30 minutes (BACKUP/CLEANUP)
-    # Wraps full_reconciliation() from reconciliation.py via @shared_task in tasks.py
-    "calibration-full-reconciliation": {
-        "task": "calSchedules.tasks.run_calibration_reconciliation",
-        "schedule": 1800.0,  # Every 30 minutes (in seconds)
-        "kwargs": {
-            "planning_logic": None,  # None = auto-detect (department/description)
-            "fix_issues": True,  # Fix any problems found
-            "dry_run": False,  # Apply fixes (not a dry run)
-            "auto_reschedule": True,  # Catches any completions missed by signals
-            "check_hours": 1,  # Only look back 1 hour (signals handle most)
-        },
-        "options": {
-            "expires": 1500,  # Expires after 25 minutes
-        },
-    },
-    # Quick auto-reschedule every 15 minutes (BACKUP)
-    # Wraps auto_reschedule_completed_calibrations() from reconciliation.py via @shared_task
-    "calibration-quick-reschedule": {
-        "task": "calSchedules.tasks.auto_reschedule_completed_task",
-        "schedule": 900.0,  # Every 15 minutes (in seconds)
-        "kwargs": {
-            "check_hours": 0.5,  # Look back 30 minutes only
-        },
-        "options": {
-            "expires": 600,  # Expires after 10 minutes
-        },
-    },
-    # Grouping consistency check every 2 hours (MAINTENANCE)
-    # Wraps ensure_grouping_consistency() from reconciliation.py via @shared_task
-    "calibration-grouping-check": {
-        "task": "calSchedules.tasks.ensure_grouping_consistency_task",
-        "schedule": crontab(minute=0, hour="*/2"),  # Every 2 hours
-        "kwargs": {
-            "planning_logic": None,  # None = auto-detect
-            "fix_misalignments": True,
-            "dry_run": False,
-            "calibration_period": 12,
-        },
-        "options": {
-            "expires": 3600,
-        },
-    },
-    # Daily diagnostics at 7:00 AM
-    # Wraps diagnose_schedules() from reconciliation.py via @shared_task
-    "calibration-daily-diagnostics": {
-        "task": "calSchedules.tasks.diagnose_calibration_schedules",
-        "schedule": crontab(hour=7, minute=0),
-        "options": {
-            "expires": 3600,
-        },
-    },
-    # Cleanup orphaned calibration schedules weekly (Sunday at 4:00 AM)
-    # Fixed: was 'schedule.tasks.*' — correct app label is 'calSchedules'
-    "cleanup-orphaned-calibration-schedules": {
-        "task": "calSchedules.tasks.cleanup_orphaned_calibration_schedules",
-        "schedule": crontab(hour=4, minute=0, day_of_week=0),
-        "options": {
-            "expires": 7200,
-        },
-    },
-    # Remove inactive calibration schedules daily (4:30 AM)
-    # Fixed: was 'schedule.tasks.*' — correct app label is 'calSchedules'
-    "remove-inactive-calibration-schedules": {
-        "task": "calSchedules.tasks.remove_inactive_equipment_schedules",
-        "schedule": crontab(hour=4, minute=30),
-        "options": {
-            "expires": 3600,
-        },
-    },
-    # Auto-schedule unscheduled calibration equipment daily at 2:30 AM
-    # Fixed: was 'schedule.tasks.*' — correct app label is 'calSchedules'
-    "auto-schedule-unscheduled-calibration-equipment": {
-        "task": "calSchedules.tasks.auto_schedule_unscheduled_equipment",
-        "schedule": crontab(hour=2, minute=30),
-        "kwargs": {
-            "planning_logic": "department",
-            "calibration_period": 12,
-            "max_departments": 100,
-            "max_descriptions": 100,
-        },
-        "options": {
-            "expires": 3600,
-        },
+    # Open schedules of equipment taken out of service are retired (history kept).
+    "scheduling-retire-inactive": {
+        "task": "scheduling.tasks.retire_inactive_equipment_schedules",
+        "schedule": crontab(hour=3, minute=30),
+        "options": {"expires": 3600},
     },
 }
 

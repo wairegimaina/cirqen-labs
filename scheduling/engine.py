@@ -212,7 +212,7 @@ def place(*, group_name, months, interval, last=None, start, load=None, policy=N
     return Placement(month=month, slot=slot, message=message, facts=facts)
 
 
-def spread_layout(groups):
+def spread_layout(groups, initial_load=None):
     """Months for each group so the year's workload comes out even.
 
     ``groups`` is a list of ``(key, devices, interval)``. Heaviest groups are
@@ -222,12 +222,15 @@ def spread_layout(groups):
     given months its interval cannot keep. Deterministic: ties go to the
     lighter total, then the earlier cycle.
 
+    ``initial_load`` ({month: load}) is work already planned, so groups added
+    to an existing plan go where there is room.
+
     Returns ``{key: [months]}``.
     """
     from math import ceil
 
-    load = {m: 0.0 for m in range(1, 13)}
-    visits = sum(devices * 12 / interval for _, devices, interval in groups if interval)
+    load = {m: float((initial_load or {}).get(m, 0)) for m in range(1, 13)}
+    visits = sum(load.values()) + sum(devices * 12 / interval for _, devices, interval in groups if interval)
     target = visits / 12 or 1.0
     layout = {}
     order = sorted((g for g in groups if g[2]), key=lambda g: (-g[1] * 12 / g[2], str(g[0])))

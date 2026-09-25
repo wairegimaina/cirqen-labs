@@ -5,7 +5,6 @@
 * A transfer to another department can put a device in a group with other
   months (department plans); its open schedule is moved to match.
 
-Workshops without an active plan are left to the legacy signals.
 """
 import logging
 
@@ -33,11 +32,10 @@ def schedule_planned_equipment(sender, instance, created, raw=False, **kwargs):
     if raw or not instance.active_status or not instance.department_id:
         return
     try:
+        workshop = instance.department.workshop
         if created:
             for program in planner.PROGRAMS:
-                plan = planner.active_plan(instance.department.workshop_id, program)
-                if plan:
-                    planner.schedule(plan, equipment_ids=[instance.id])
+                planner.schedule(planner.ensure_plan(workshop, program), equipment_ids=[instance.id])
             return
 
         old = getattr(instance, "_scheduling_old_department_id", None)
@@ -45,10 +43,8 @@ def schedule_planned_equipment(sender, instance, created, raw=False, **kwargs):
             moved = planner.reassign(instance)
             if moved:
                 logger.info(f"[PLAN] {instance.serial_number} transferred: moved {moved} open schedule(s)")
-            # A transfer into a planned workshop may leave it unscheduled there.
+            # A transfer to another workshop may leave it unscheduled there.
             for program in planner.PROGRAMS:
-                plan = planner.active_plan(instance.department.workshop_id, program)
-                if plan:
-                    planner.schedule(plan, equipment_ids=[instance.id])
+                planner.schedule(planner.ensure_plan(workshop, program), equipment_ids=[instance.id])
     except Exception as exc:  # scheduling must never block saving equipment
         logger.error(f"[PLAN] Could not schedule equipment {instance.pk}: {exc}", exc_info=True)

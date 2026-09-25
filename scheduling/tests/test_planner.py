@@ -20,24 +20,23 @@ from workshop.models import Workshop
 
 TODAY = date(2026, 9, 15)          # plans place first visits from October 2026
 REAL_MONTH = date.today().replace(day=1)
-SYNC_TARGETS = (
-    "calSchedules.reconciliation.trigger_sync_for_changes",
-    "calSchedules.instant_reconciliation.helpers.trigger_sync_for_changes",
-    "calSchedules.instant_reconciliation.alignment.trigger_sync_for_changes",
-    "calSchedules.instant_reconciliation.signals.trigger_sync_for_changes",
-)
 
 
 def d(year, month):
     return date(year, month, 1)
 
 
+def imported(model, **fields):
+    """A row as an import or sync writes it: stored, no signals fired.
+
+    Saving a completed schedule now schedules the device's next one, which is
+    right for a live completion but not for seeding history in a test.
+    """
+    return model.objects.bulk_create([model(**fields)])[0]
+
+
 class PlanTestBase(TestCase):
     def setUp(self):
-        for target in SYNC_TARGETS:
-            patcher = patch(target, return_value=0)
-            patcher.start()
-            self.addCleanup(patcher.stop)
         self.ws = Workshop.objects.create(name="Biomed")
         self.icu = Department.objects.create(name="ICU", workshop=self.ws)
         self.lab = Department.objects.create(name="Lab", workshop=self.ws)
@@ -48,6 +47,9 @@ class PlanTestBase(TestCase):
 
     def plan(self, program="ppm", logic="description", rules=None, intervals=None,
              default=None, state="active", version=1):
+        if version == 1:
+            # Replace the plan the workshop may have been given automatically.
+            SchedulingPlan.objects.filter(workshop=self.ws, program=program).delete()
         plan = SchedulingPlan.objects.create(
             workshop=self.ws, program=program, logic=logic, version=version,
             state=state, default_interval_months=default,
@@ -118,8 +120,8 @@ class ScenarioTests(PlanTestBase):
         eq = self.equipment()
         history = [d(2025, 8), d(2026, 2), d(2026, 8)]
         for m in history:
-            PPMSchedule.objects.create(equipment=eq, workshop=self.ws, scheduled_month=m,
-                                       status="completed", completed_date=m)
+            imported(PPMSchedule, equipment=eq, workshop=self.ws, scheduled_month=m,
+                     status="completed", completed_date=m)
         before = list(PPMSchedule.objects.filter(status="completed").values_list("id", "scheduled_month", "updated_at"))
 
         planner.schedule(plan, today=TODAY)
@@ -209,8 +211,8 @@ class ScenarioTests(PlanTestBase):
     def test_8_changing_the_logic(self):
         v1 = self.plan(rules={self.monitor: [2, 8]}, intervals={self.monitor: 6})
         done_eq, open_eq = self.equipment(), self.equipment()
-        PPMSchedule.objects.create(equipment=done_eq, workshop=self.ws, scheduled_month=d(2026, 8),
-                                   status="completed", completed_date=d(2026, 8))
+        imported(PPMSchedule, equipment=done_eq, workshop=self.ws, scheduled_month=d(2026, 8),
+                 status="completed", completed_date=d(2026, 8))
         planner.schedule(v1, today=TODAY)
         completed = PPMSchedule.objects.get(status="completed")
         self.assertEqual(self.open_months(open_eq), [d(2027, 2)])
@@ -287,15 +289,44 @@ class ScenarioTests(PlanTestBase):
 
 
 class RolloutTests(PlanTestBase):
-    def test_unplanned_workshop_keeps_legacy_behaviour(self):
+    def test_every_workshop_gets_a_plan_automatically(self):
         other = Workshop.objects.create(name="Other")
         dept = Department.objects.create(name="Ward 1", workshop=other)
-        self.plan(rules={self.monitor: [2, 8]}, intervals={self.monitor: 6})
         eq = Equipment.objects.create(description=self.monitor, department=dept, workshop=other,
-                                      model="M", serial_number="LEGACY-1", status="Working")
-        sched = PPMSchedule.objects.get(equipment=eq)
-        self.assertEqual(sched.scheduled_month, REAL_MONTH + relativedelta(months=1))
-        self.assertIsNone(sched.plan)
+                                      model="M", serial_number="AUTO-1", status="Working")
+        for program, model in (("ppm", PPMSchedule), ("calibration", CalibrationSchedule)):
+            plan = planner.active_plan(other.id, program)
+            self.assertIsNotNone(plan, program)
+            self.assertEqual(plan.logic, "description")
+            sched = model.open_schedules().get(equipment=eq)
+            self.assertEqual(sched.plan, plan)
+            months = plan.rules.get(description=self.monitor).months
+            self.assertIn(sched.scheduled_month.month, months)
+
+    def test_a_new_kind_of_equipment_gets_months_of_its_own(self):
+        self.plan(rules={self.monitor: [2, 8]}, intervals={self.monitor: 6}, default=6)
+        eq = self.equipment(desc=self.pump, clean=False)
+        plan = planner.active_plan(self.ws.id, "ppm")
+        rule = plan.rules.get(description=self.pump)
+        self.assertTrue(rule.months)
+        self.assertIn(self.open_months(eq)[0].month, rule.months)
+
+    def test_a_group_with_no_months_is_left_unscheduled_on_purpose(self):
+        plan = self.plan(rules={self.monitor: []}, intervals={self.monitor: 6}, default=6)
+        eq = self.equipment(desc=self.monitor, clean=False)
+        self.assertEqual(self.open_months(eq), [])
+        self.assertEqual(plan.rules.get(description=self.monitor).months, [])
+
+    def test_changing_the_grouping(self):
+        self.plan(rules={self.monitor: [2, 8]}, intervals={self.monitor: 6}, default=6)
+        eq = self.equipment(clean=False)
+        draft = planner.change_logic(self.ws, "ppm", "department")
+        self.assertEqual(draft.logic, "department")
+        self.assertEqual(draft.state, "draft")
+        planner.activate(draft)
+        rule = draft.rules.get(department=self.icu)
+        self.assertIn(self.open_months(eq)[0].month, rule.months)
+        self.assertEqual(planner.active_plan(self.ws.id, "ppm"), draft)
 
     def test_group_members_do_not_wait_for_each_other(self):
         self.plan(logic="department", rules={self.icu: [2, 8]}, default=6)
@@ -333,34 +364,9 @@ class RolloutTests(PlanTestBase):
         CalibrationSchedule.objects.filter(equipment=eq).update(status="completed",
                                                                 completed_date=d(2027, 3))
         self.assertEqual(self.open_months(eq, "calibration"), [])
-        from calSchedules.tasks import auto_reschedule_completed_task
-        auto_reschedule_completed_task()
+        from scheduling.tasks import run_plans
+        run_plans()
         self.assertEqual(self.open_months(eq, "calibration"), [d(2028, 3)])
-
-    def test_calibration_aligner_leaves_plan_schedules_alone(self):
-        self.plan(program="calibration", rules={self.analyser: [3]}, intervals={self.analyser: 12})
-        eq = self.equipment(desc=self.analyser, clean=False)
-        month = self.open_months(eq, "calibration")[0]
-        # A legacy schedule for another device of the same department, in
-        # another month, used to pull every new save to the group's month.
-        other = self.equipment(desc=self.analyser)
-        CalibrationSchedule.objects.create(equipment=other, workshop=self.ws,
-                                           scheduled_month=REAL_MONTH, status="pending")
-        sched = CalibrationSchedule.open_schedules().get(equipment=eq)
-        sched.save()
-        sched.refresh_from_db()
-        self.assertEqual(sched.scheduled_month, month)
-
-    def test_legacy_normalization_skips_planned_workshops(self):
-        from ppms.tasks import normalize_ppm_schedules
-        self.plan(rules={self.monitor: [2, 8]}, intervals={self.monitor: 6})
-        eq = self.equipment()
-        legacy = PPMSchedule.objects.create(equipment=eq, workshop=self.ws,
-                                            scheduled_month=d(REAL_MONTH.year + 1, 5),
-                                            generation_source="initialization")
-        normalize_ppm_schedules(planning_logic="department")
-        legacy.refresh_from_db()
-        self.assertEqual(legacy.scheduled_month, d(REAL_MONTH.year + 1, 5))
 
     def test_ids_are_deterministic(self):
         plan = self.plan(rules={self.monitor: [2, 8]}, intervals={self.monitor: 6})

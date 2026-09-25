@@ -9,7 +9,7 @@
       <h3 class="section-card-title"><i class="fas fa-ban" aria-hidden="true"></i> Cannot be scheduled ({{ blocked|length }})</h3>
       <p class="section-card-sub">
         {% if plan %}These devices have no open schedule and plan v{{ plan.version }} cannot place them. Fix the reason in the plan and they are scheduled on the next run.
-        {% else %}This workshop has no active plan, so the legacy scheduler places these devices.{% endif %}
+        {% else %}This workshop has no plan yet: one is created on the next scheduling run, or set it up now under Plan.{% endif %}
       </p>
     </div>
     {% if plan and scope.can_manage %}<a class="btn btn-sm btn-primary" href="{% url 'scheduling:plans' %}{{ scope.query }}">Edit the plan</a>{% endif %}

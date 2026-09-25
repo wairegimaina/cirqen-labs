@@ -34,18 +34,6 @@ from .exports import (
     export_ppm_pdf,
     export_department_ppm_pdf,
 )
-from .tasks import (
-    trigger_initialization,
-    trigger_smart_reorganize_ppm,
-    _normalize_ppm_helper,
-    trigger_sync_initialization,
-    trigger_normalize_ppm,
-)
-from .diagnostics import (
-    test_celery_connection,
-    check_task_status,
-    view_logs,
-)
 
 __all__ = [
     "get_user_access_context",
@@ -68,12 +56,4 @@ __all__ = [
     "export_ppm_excel",
     "export_ppm_pdf",
     "export_department_ppm_pdf",
-    "trigger_initialization",
-    "trigger_smart_reorganize_ppm",
-    "_normalize_ppm_helper",
-    "trigger_sync_initialization",
-    "trigger_normalize_ppm",
-    "test_celery_connection",
-    "check_task_status",
-    "view_logs",
 ]

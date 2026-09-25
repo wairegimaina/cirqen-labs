@@ -12,7 +12,6 @@ from dateutil.relativedelta import relativedelta
 from workshop.models import Workshop
 from ..models import CalibrationSchedule
 from Inventory.models import Equipment, Department, EquipmentDescription
-from ..tasks import initialize_calibration_schedule_with_logic
 from openpyxl import Workbook
 from CalSoft.models import CalibrationSession
 from django.db import transaction
@@ -22,14 +21,28 @@ from django.db.models import Q, Case, When, IntegerField, Count
 logger = logging.getLogger(__name__)
 from django.utils import timezone
 from django.contrib.auth import get_user_model
-from ..tasks import initialize_calibration_schedule_with_logic, auto_advance_completed_calibrations, normalize_existing_schedules, smart_reorganize_on_logic_change
 import uuid
 User = get_user_model()
 from ..calibration_pdf_generator import create_calibration_pdf_response
 
 # sibling modules in this package
-from .helpers import _get_logic_change_context, check_group_waiting_status, check_overdue_schedules, get_current_month_year, get_user_access_context
+from .helpers import check_overdue_schedules, get_current_month_year, get_user_access_context
 
+
+
+def _scheduling_context(request, access_context):
+    """The Scheduling panel: each visible workshop's calibration plan."""
+    from scheduling.reports import panels
+    from scheduling.views import can_manage
+
+    if access_context.get("access_type") == "department" and access_context.get("workshop_id"):
+        workshops = Workshop.objects.filter(id=access_context["workshop_id"])
+    else:
+        workshops = Workshop.objects.filter(active_status=True).order_by("name")
+    return {
+        "scheduling_panels": panels(workshops, "calibration"),
+        "scheduling_can_manage": can_manage(request.user),
+    }
 
 @login_required
 def calibration_dashboard(request):
@@ -176,7 +189,6 @@ def calibration_dashboard(request):
     for schedule in schedules_list:
         schedule_dict = {
             'schedule': schedule,
-            'waiting_status': check_group_waiting_status(schedule),
             'is_overdue': schedule in overdue_info['overdue_schedules'],
             'is_warning': schedule in overdue_info['warning_schedules']
         }
@@ -282,23 +294,7 @@ def calibration_dashboard(request):
             'warning': overdue_info['warning_count']
         },
         'overdue_info': overdue_info,
-        **_get_logic_change_context(schedules_list),
-        # Full list of schedules flagged for smart reorganisation (shown in the modal)
-        'logic_change_schedules': CalibrationSchedule.objects.exclude(
-            logic_change_warning=''
-        ).exclude(
-            logic_change_warning__isnull=True
-        ).filter(
-            equipment__active_status=True,
-            **(
-                {'equipment__department_id': access_context['department_id']}
-                if access_context['access_type'] == 'department' else {}
-            )
-        ).select_related(
-            'equipment__description', 'equipment__department'
-        ).order_by(
-            'equipment__department__name', 'equipment__description__name'
-        )[:100],
+        **_scheduling_context(request, access_context),
     }
 
     return render(request, "Calibrition/calScheduels.html", context)
@@ -390,7 +386,6 @@ def calibration_by_department(request, dept_id):
     for schedule in schedules_list:
         schedule_dict = {
             'schedule': schedule,
-            'waiting_status': check_group_waiting_status(schedule),
             'is_overdue': schedule in overdue_info['overdue_schedules'],
             'is_warning': schedule in overdue_info['warning_schedules']
         }
@@ -508,20 +503,7 @@ def calibration_by_department(request, dept_id):
             'warning': overdue_info['warning_count']
         },
         'overdue_info': overdue_info,
-        **_get_logic_change_context(schedules_list),
-        # Full list of schedules flagged for smart reorganisation (shown in the modal)
-        'logic_change_schedules': CalibrationSchedule.objects.exclude(
-            logic_change_warning=''
-        ).exclude(
-            logic_change_warning__isnull=True
-        ).filter(
-            equipment__active_status=True,
-            equipment__department_id=dept_id,
-        ).select_related(
-            'equipment__description', 'equipment__department'
-        ).order_by(
-            'equipment__description__name'
-        )[:100],
+        **_scheduling_context(request, access_context),
     }
 
     return render(request, "Calibrition/calScheduels.html", context)

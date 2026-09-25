@@ -11,7 +11,6 @@ from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 from ..models import PPMSchedule
 from Inventory.models import Equipment, Department, EquipmentDescription
-from ..tasks import initialize_ppm_schedule_with_logic, normalize_ppm_schedules, smart_reorganize_ppm_schedules
 from openpyxl import Workbook
 from workshop.models import Workshop
 import logging
@@ -21,7 +20,7 @@ from celery.result import AsyncResult
 logger = logging.getLogger(__name__)
 
 # sibling modules in this package
-from .helpers import calculate_ppm_statistics, get_current_month_year, get_user_access_context
+from .helpers import scheduling_context, calculate_ppm_statistics, get_current_month_year, get_user_access_context
 
 
 @login_required
@@ -282,6 +281,7 @@ def ppm_by_department(request, dept_id):
     # ==================== RENDER HTML TEMPLATE ====================
     try:
         context = {
+            **scheduling_context(request, access_context),
             'schedules': schedules_filtered,
             'departments': departments,
             'selected_department': selected_department,

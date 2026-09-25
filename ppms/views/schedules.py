@@ -11,7 +11,6 @@ from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 from ..models import PPMSchedule
 from Inventory.models import Equipment, Department, EquipmentDescription
-from ..tasks import initialize_ppm_schedule_with_logic, normalize_ppm_schedules, smart_reorganize_ppm_schedules
 from openpyxl import Workbook
 from workshop.models import Workshop
 import logging
@@ -213,36 +212,15 @@ def schedule_equipment(request, equipment_id):
                 messages.error(request, f"Equipment {name} is already scheduled.")
                 return redirect('ppm_dashboard')
 
-            # Planned workshop: the plan decides the month.
+            # The workshop's scheduling plan decides the month.
             from scheduling.planner import schedule_by_hand
-            done, problems, unplanned = schedule_by_hand([equipment.id], 'ppm')
+            done, problems = schedule_by_hand([equipment.id], 'ppm')
             if done:
                 messages.success(request, f"Equipment {name} scheduled: {done[0][1].message}.")
-                return redirect('ppm_dashboard')
-            if problems:
-                messages.error(request, f"Equipment {name} cannot be scheduled: {problems[0][1]}.")
-                return redirect('ppm_dashboard')
-
-            # No plan: a device with history continues its own cycle.
-            if PPMSchedule.objects.filter(equipment=equipment, status='completed').exists():
-                from ppms.tasks.scheduling import _resume_ppm_chains
-                _resume_ppm_chains([equipment.id])
-                resumed = PPMSchedule.open_schedules().filter(equipment=equipment).first()
-                if resumed:
-                    messages.success(request, f"Equipment {name} scheduled for {resumed.scheduled_month.strftime('%B %Y')}, continuing its maintenance cycle.")
-                else:
-                    messages.error(request, f"Could not schedule equipment {name}.")
-                return redirect('ppm_dashboard')
-
-            scheduled_month = datetime.today().replace(day=1) + relativedelta(months=1)
-            PPMSchedule.objects.create(
-                equipment=equipment,
-                workshop=workshop,
-                scheduled_month=scheduled_month,
-                status='pending',
-                maintenance_period=6
-            )
-            messages.success(request, f"Equipment {name} scheduled successfully for {scheduled_month.strftime('%B %Y')}.")
+            else:
+                reason = problems[0][1] if problems else "it could not be placed"
+                messages.error(request, f"Equipment {name} cannot be scheduled: {reason}.")
+            return redirect('ppm_dashboard')
         except Exception as e:
             logger.error(f"Error scheduling equipment {equipment_id} for user {request.user.username}: {e}")
             messages.error(request, f"Failed to schedule equipment: {str(e)}")

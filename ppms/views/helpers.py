@@ -11,7 +11,6 @@ from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 from ..models import PPMSchedule
 from Inventory.models import Equipment, Department, EquipmentDescription
-from ..tasks import initialize_ppm_schedule_with_logic, normalize_ppm_schedules, smart_reorganize_ppm_schedules
 from openpyxl import Workbook
 from workshop.models import Workshop
 import logging
@@ -236,4 +235,16 @@ def calculate_ppm_statistics(schedules, equipment_queryset):
         'completed_percentage': round(completed_percentage, 1),
         'pushed_percentage': round(pushed_percentage, 1),
         'completion_rate': round(completion_rate, 1),
+    }
+
+
+def scheduling_context(request, access_context):
+    """The Scheduling panel on the PPM page: this workshop's PPM plan."""
+    from scheduling.reports import panels
+    from scheduling.views import can_manage
+    workshop_id = (access_context or {}).get('workshop_id')
+    workshops = Workshop.objects.filter(id=workshop_id) if workshop_id else Workshop.objects.none()
+    return {
+        'scheduling_panels': panels(workshops, 'ppm'),
+        'scheduling_can_manage': can_manage(request.user),
     }

@@ -24,7 +24,7 @@
           <div class="sched-reason">
             {% if s.schedule_reason.text %}{{ s.schedule_reason.text }}
               {% if s.schedule_reason.moved_from %}<br>Moved from {{ s.schedule_reason.moved_from }} when plan v{{ s.schedule_reason.plan_version }} was activated.{% endif %}
-            {% else %}Placed by the legacy scheduler ({{ s.get_generation_source_display|lower }}).{% endif %}
+            {% else %}Placed before scheduling plans ({{ s.get_generation_source_display|lower }}).{% endif %}
           </div>
         </div>
         {% if forloop.counter == 2 %}<div class="warn text-warning small"><i class="fas fa-exclamation-triangle" aria-hidden="true"></i> More than one open schedule: only one should exist.</div>{% endif %}

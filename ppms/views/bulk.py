@@ -11,7 +11,6 @@ from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 from ..models import PPMSchedule
 from Inventory.models import Equipment, Department, EquipmentDescription
-from ..tasks import initialize_ppm_schedule_with_logic, normalize_ppm_schedules, smart_reorganize_ppm_schedules
 from openpyxl import Workbook
 from workshop.models import Workshop
 import logging
@@ -214,12 +213,6 @@ def bulk_schedule_unscheduled(request):
             messages.error(request, "No equipment selected.")
             return redirect('ppm_dashboard')
 
-        planning_logic = request.POST.get('planning_logic', 'department')
-        maintenance_period = int(request.POST.get('maintenance_period', 6))
-        base_month = int(request.POST.get('base_month', datetime.today().month))
-        base_year = int(request.POST.get('base_year', datetime.today().year))
-        max_departments = int(request.POST.get('max_departments', 20))
-        max_descriptions = int(request.POST.get('max_descriptions', 20))
 
         if access_context['access_type'] == 'department':
             valid_equipment_ids = Equipment.objects.filter(
@@ -235,34 +228,14 @@ def bulk_schedule_unscheduled(request):
                 active_status=True
             ).values_list('id', flat=True))
 
-        # Planned workshops: the plan places them now.
+        # The workshop's scheduling plan places them.
         from scheduling.planner import schedule_by_hand
-        done, problems, equipment_ids = schedule_by_hand(equipment_ids, 'ppm')
+        done, problems = schedule_by_hand(equipment_ids, 'ppm')
         if done:
-            messages.success(request, f"{len(done)} equipment scheduled by the workshop's plan.")
+            messages.success(request, f"{len(done)} equipment scheduled.")
         if problems:
             messages.warning(request, f"{len(problems)} equipment could not be placed by the plan; "
                                       "see Scheduling > Unscheduled for the reasons.")
-        if not equipment_ids:
-            return redirect('ppm_dashboard')
-
-        try:
-            task = initialize_ppm_schedule_with_logic.delay(
-                str(access_context['workshop_id']),
-                planning_logic,
-                maintenance_period,
-                base_month,
-                base_year,
-                max_departments,
-                max_descriptions,
-                [],
-                False,
-                [str(i) for i in equipment_ids]
-            )
-            messages.info(request, f"Bulk scheduling started (Task ID: {task.id}). Please check back later.")
-        except Exception as e:
-            logger.error(f"Failed to trigger bulk_schedule_unscheduled for user {request.user.username}: {e}")
-            messages.error(request, f"Failed to schedule equipment: {str(e)}")
     else:
         logger.warning(f"Invalid request method for bulk_schedule_unscheduled by user {request.user.username}")
         messages.error(request, "Invalid request method.")

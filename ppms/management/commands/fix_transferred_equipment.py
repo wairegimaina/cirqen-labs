@@ -219,110 +219,32 @@ class Command(BaseCommand):
 
         self.stdout.write(f'\n📅 STEP 3: {"[DRY RUN] Would create" if dry_run else "Creating"} missing PPM schedules...')
 
-        # After fixing, find equipment in the target workshop(s) that have no PPM schedule
+        # After fixing, schedule anything left without an open PPM schedule
+        # through its workshop's scheduling plan (which decides the month).
         if workshop_id:
-            unscheduled_qs = Equipment.objects.filter(
-                workshop_id=workshop_id,
-                active_status=True,
-            )
+            candidates = Equipment.objects.filter(workshop_id=workshop_id, active_status=True)
         else:
-            # Re-fetch all equipment that was just fixed, using their new correct workshop
-            fixed_ids = [eq.id for eq in mismatched]
-            unscheduled_qs = Equipment.objects.filter(id__in=fixed_ids, active_status=True)
+            candidates = Equipment.objects.filter(id__in=[eq.id for eq in mismatched], active_status=True)
+        open_ids = PPMSchedule.open_schedules().filter(equipment__in=candidates).values('equipment_id')
+        unscheduled_ids = list(candidates.exclude(id__in=open_ids).values_list('id', flat=True))
 
-        # Exclude equipment that already has a PPM schedule
-        already_scheduled_ids = set(
-            PPMSchedule.objects.filter(
-                equipment__in=unscheduled_qs
-            ).values_list('equipment_id', flat=True)
-        )
-
-        unscheduled = list(
-            unscheduled_qs.exclude(id__in=already_scheduled_ids)
-            .select_related('department', 'department__workshop', 'description')
-            .order_by('department__name', 'description__name')
-        )
-
-        unscheduled_count = len(unscheduled)
-
-        if unscheduled_count == 0:
-            self.stdout.write(self.style.SUCCESS('   ✅ All equipment already has PPM schedules — nothing to create.'))
+        if not unscheduled_ids:
+            self.stdout.write(self.style.SUCCESS('   ✅ All equipment already has an open PPM schedule — nothing to create.'))
             self._print_summary(dry_run, fixed_count, fix_errors, 0, 0, 0)
             return
 
-        self.stdout.write(f'   ↳ {unscheduled_count} equipment item(s) need a PPM schedule\n')
+        self.stdout.write(f'   ↳ {len(unscheduled_ids)} equipment item(s) need a PPM schedule\n')
+        if dry_run:
+            self._print_summary(dry_run, fixed_count, fix_errors, len(unscheduled_ids), 0, 0)
+            return
 
-        start_date = date(base_year, base_month, 1)
-        month_count = defaultdict(int)
-
-        # Pre-load existing schedule counts per month for capacity tracking
-        all_schedules = PPMSchedule.objects.filter(
-            equipment__active_status=True
-        )
-        if workshop_id:
-            all_schedules = all_schedules.filter(workshop_id=workshop_id)
-
-        for sched in all_schedules:
-            month_key = sched.scheduled_month.replace(day=1)
-            month_count[month_key] += 1
-
-        created_count = 0
-        skipped_count = 0
-        ppm_errors = 0
-
-        for eq in unscheduled:
-            workshop = eq.department.workshop if eq.department else None
-            if not workshop:
-                self.stdout.write(self.style.WARNING(
-                    f'   ⚠️  Skipping {eq.serial_number} — no workshop on department'
-                ))
-                skipped_count += 1
-                continue
-
-            # Find the first month under capacity
-            month_offset = 0
-            max_attempts = 36
-            while month_offset < max_attempts:
-                candidate = start_date + relativedelta(months=month_offset)
-                if month_count[candidate] < max_per_month:
-                    break
-                month_offset += 1
-
-            scheduled_month = start_date + relativedelta(months=month_offset)
-
-            dept_name = eq.department.name if eq.department else 'No Dept'
-            desc_name = eq.description.name if eq.description else 'No Desc'
-
-            self.stdout.write(
-                f'   {"[WOULD CREATE]" if dry_run else "[CREATING]"} '
-                f'{eq.serial_number} ({desc_name}, {dept_name}) → {scheduled_month.strftime("%B %Y")} '
-                f'[{workshop.name}]'
-            )
-
-            if not dry_run:
-                try:
-                    PPMSchedule.objects.create(
-                        workshop=workshop,
-                        equipment=eq,
-                        scheduled_month=scheduled_month,
-                        status='pending',
-                        maintenance_period=maintenance_period,
-                        planning_logic='department',
-                    )
-                    created_count += 1
-                    month_count[scheduled_month] += 1
-                    logger.info(
-                        f'Created PPM schedule for {eq.serial_number} → {scheduled_month}'
-                    )
-                except Exception as e:
-                    ppm_errors += 1
-                    self.stdout.write(self.style.ERROR(f'      ❌ Failed: {e}'))
-                    logger.error(f'fix_transferred_equipment: PPM create failed for {eq.id}: {e}')
-            else:
-                created_count += 1
-                month_count[scheduled_month] += 1  # simulate capacity filling up
-
-        self._print_summary(dry_run, fixed_count, fix_errors, created_count, skipped_count, ppm_errors)
+        from scheduling.planner import schedule_by_hand
+        done, problems = schedule_by_hand(unscheduled_ids, 'ppm')
+        for row, placement in done:
+            self.stdout.write(f'   [CREATED] {row["serial_number"]} → {placement.month:%B %Y}')
+        for row, message in problems:
+            self.stdout.write(self.style.WARNING(f'   ⚠️  {row["serial_number"]}: {message}'))
+        self._print_summary(dry_run, fixed_count, fix_errors, len(done), len(problems), 0)
 
     # ------------------------------------------------------------------
     # Helpers

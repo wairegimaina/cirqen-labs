@@ -35,7 +35,7 @@
           </td>
           <td class="sched-reason">
             {% if s.schedule_reason.text %}{{ s.schedule_reason.text }}
-            {% else %}<span class="sched-muted">Placed by the legacy scheduler ({{ s.get_generation_source_display|lower }})</span>{% endif %}
+            {% else %}<span class="sched-muted">Placed before scheduling plans ({{ s.get_generation_source_display|lower }})</span>{% endif %}
           </td>
           <td class="text-end"><a class="btn btn-sm btn-link" href="{% url 'scheduling:equipment' s.equipment_id %}{{ scope.query }}">History</a></td>
         </tr>

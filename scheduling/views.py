@@ -49,17 +49,25 @@ class Scope:
         return f"?workshop={self.workshop.id}&program={self.program}"
 
 
+def can_manage(user):
+    """May change scheduling plans: an HOD, or a workshop's Engineer in charge."""
+    if not user.is_authenticated:
+        return False
+    if user.is_superuser or get_user_role(user) == "HOD":
+        return True
+    profile = getattr(user, "userprofile", None)
+    return get_user_role(user) == "Tech" and bool(profile) and profile.level == "Engineer Incharge"
+
+
 def _scope(request):
     user = request.user
     profile = getattr(user, "userprofile", None)
     role = get_user_role(user)
     if role == "HOD" or user.is_superuser:
         workshops = list(Workshop.objects.filter(active_status=True).order_by("name"))
-        can_manage = True
     elif role == "Tech" and profile:
         ws = profile.workshop or (profile.department.workshop if profile.department_id else None)
         workshops = [ws] if ws else []
-        can_manage = profile.level == "Engineer Incharge"
     else:
         raise PermissionDenied("Scheduling is available to HODs and technicians.")
     if not workshops:
@@ -74,7 +82,7 @@ def _scope(request):
                    else SchedulingPlan.PROGRAM_PPM)
     request.session["scheduling_workshop"] = str(workshop.id)
     request.session["scheduling_program"] = program
-    return Scope(workshops, workshop, program, can_manage)
+    return Scope(workshops, workshop, program, can_manage(user))
 
 
 def _plan_in_scope(request, plan_id):
@@ -330,6 +338,25 @@ def plan_activate(request, plan_id):
     )
     return redirect(reverse("scheduling:unscheduled") + scope.query()
                     if report.stuck or run.unschedulable else reverse("scheduling:overview") + scope.query())
+
+
+@login_required
+@require_POST
+def change_logic(request):
+    """One click: a new version grouped the other way, months spread evenly.
+
+    Opens its preview; nothing moves until it is activated there.
+    """
+    scope = _scope(request)
+    _require_manage(scope)
+    logic = request.POST.get("logic")
+    if logic not in dict(SchedulingPlan.LOGIC_CHOICES):
+        messages.error(request, "Choose department or description.")
+        return redirect(reverse("scheduling:plans") + scope.query())
+    draft = planner.change_logic(scope.workshop, scope.program, logic, request.user)
+    messages.info(request, f"Draft v{draft.version} groups {draft.get_logic_display().lower()} with "
+                           "months spread evenly. Check what moves, then activate.")
+    return redirect("scheduling:plan_preview", draft.id)
 
 
 @login_required
