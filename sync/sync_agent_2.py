@@ -33,6 +33,10 @@ try:
 except ImportError:  # loaded as a top-level module with sync/ on sys.path
     from sql_ident import qualified
 
+# Tables where active_status=False marks a retired row that stays as history
+# (the scheduling app's one-open-schedule rule), not a deletion.
+RETIRE_NOT_DELETE_TABLES = {"ppms_ppmschedule", "calSchedules_calibrationschedule"}
+
 
 class SchemaAndChangeDetectionMixin(SmartDeleteMixin):
     """DB pool/schema introspection, download checkpoint, and timestamp-based change detection (the legacy poller)."""
@@ -799,6 +803,13 @@ class SchemaAndChangeDetectionMixin(SmartDeleteMixin):
         """Process a batch of records efficiently"""
         changes = []
 
+        # On schedule tables active_status=False means "retired": the row is
+        # kept as history and HQ must store it as an ordinary edit. Sent as a
+        # delete, HQ only set pending_delete and left the row open there, and
+        # the next mirror copied it back down, undoing the retirement.
+        if table.split(".")[-1].strip('"') in RETIRE_NOT_DELETE_TABLES:
+            has_active_status = False
+
         for row in batch:
             event_timestamp = (
                 row.get("updated_at") or row.get("created_at") or datetime.now(timezone.utc)
@@ -810,7 +821,11 @@ class SchemaAndChangeDetectionMixin(SmartDeleteMixin):
                 row, has_pending_delete, has_active_status, has_deleted_at
             )
 
-            was_tracked = row_id in synced_soft_deletes
+            # Track row VERSIONS, not rows: keyed by id alone, a row deleted,
+            # restored by the mirror and deleted again was skipped as "already
+            # synced" and never reached HQ.
+            version_key = f"{row_id}@{event_timestamp.isoformat()}"
+            was_tracked = version_key in synced_soft_deletes
 
             # ⚡ Skip already-synced soft deletes (optimization)
             if is_soft_deleted and was_tracked:
@@ -828,7 +843,7 @@ class SchemaAndChangeDetectionMixin(SmartDeleteMixin):
                 change_event = self._create_soft_delete_event(
                     row, row_id, table, event_timestamp, conn, metrics
                 )
-                new_soft_deletes.append(row_id)
+                new_soft_deletes.append(version_key)
             else:
                 change_event = self._create_update_event(
                     row,

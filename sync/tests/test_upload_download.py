@@ -247,3 +247,62 @@ def test_per_table_checkpoint_compares_instants_not_strings(net_agent):
     # 22:00+03:00 is 19:00 UTC — earlier, although it sorts later as text.
     net_agent.set_last_upload_time("2026-09-25T22:00:00+03:00", table=table)
     assert net_agent.get_last_upload_time(table) == "2026-09-25T20:00:00+00:00"
+
+
+# ── retirement vs deletion ───────────────────────────────────────────────────
+
+def _make_table(pool, name):
+    conn = pool.getconn()
+    with conn.cursor() as cur:
+        cur.execute(f"""
+            CREATE TABLE IF NOT EXISTS public."{name}" (
+                id bigint PRIMARY KEY,
+                active_status boolean DEFAULT true,
+                pending_delete boolean DEFAULT false,
+                updated_at timestamptz,
+                created_at timestamptz
+            )
+        """)
+    conn.commit()
+    pool.putconn(conn)
+    return f"public.{name}"
+
+
+def _set(pool, table, id_, ts, active=True, pending=False):
+    conn = pool.getconn()
+    with conn.cursor() as cur:
+        cur.execute(
+            f'INSERT INTO public."{table.split(".")[1]}" (id, active_status, pending_delete, updated_at) '
+            "VALUES (%s, %s, %s, %s) ON CONFLICT (id) DO UPDATE SET active_status = EXCLUDED.active_status, "
+            "pending_delete = EXCLUDED.pending_delete, updated_at = EXCLUDED.updated_at",
+            (id_, active, pending, ts))
+    conn.commit()
+    pool.putconn(conn)
+
+
+def test_retired_schedule_uploads_as_an_ordinary_update(net_agent):
+    # HQ applied the old delete event as pending_delete only, leaving the row
+    # open there; the mirror then copied it back and undid the retirement.
+    table = _make_table(net_agent.pool, "ppms_ppmschedule")
+    _set(net_agent.pool, table, 1, "2026-09-26T00:14:41+03:00", active=False)
+
+    [event] = net_agent.fetch_recent_changes_for_table(table, net_agent.EPOCH)
+    assert event["operation"] == "u"
+    assert event["data"]["active_status"] is False
+
+
+def test_a_second_deletion_of_the_same_row_is_sent_again(net_agent, monkeypatch):
+    # Tracked by id alone, a row deleted, restored by the mirror and deleted
+    # again was skipped as "already synced" and never reached HQ.
+    monkeypatch.setattr(net_agent, "check_local_dependencies", lambda *a: True, raising=False)
+    _ok_post(monkeypatch)
+    table = _make_table(net_agent.pool, "jobcard_softdel")
+
+    _set(net_agent.pool, table, 1, "2026-09-25T20:00:00+03:00", active=False)
+    first = net_agent.fetch_recent_changes_for_table(table, net_agent.EPOCH)
+    assert [e["operation"] for e in first] == ["deactivate"]
+    net_agent.upload_batch(first)
+
+    _set(net_agent.pool, table, 1, "2026-09-26T00:14:41+03:00", active=False)
+    again = net_agent.fetch_recent_changes_for_table(table, net_agent.EPOCH)
+    assert [e["operation"] for e in again] == ["deactivate"]
