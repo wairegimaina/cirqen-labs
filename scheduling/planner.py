@@ -504,6 +504,49 @@ def explain(equipment, program):
     return out
 
 
+# ── Drafts ───────────────────────────────────────────────────────────────────
+
+def next_version(workshop, program):
+    last = SchedulingPlan.objects.filter(workshop=workshop, program=program).order_by("-version").first()
+    return (last.version + 1) if last else 1
+
+
+def new_draft(workshop, program, logic, user=None, source="copy", default_interval=None):
+    """Start a draft: a copy of the active plan, today's layout, or blank.
+
+    A copy keeps the active plan's intervals, and its months when the logic
+    is unchanged (months per department mean nothing per description).
+    """
+    if source == "adopt":
+        plan = adopt_current_layout(workshop, program, logic, user)
+        if default_interval:
+            plan.default_interval_months = default_interval
+            plan.save(update_fields=["default_interval_months"])
+        return plan
+
+    active = active_plan(workshop.id, program)
+    plan = SchedulingPlan.objects.create(
+        workshop=workshop, program=program, logic=logic,
+        version=next_version(workshop, program),
+        default_interval_months=default_interval or (active.default_interval_months if active else None),
+        created_by=user,
+        notes=f"Copied from v{active.version}" if source == "copy" and active else "",
+    )
+    if source == "copy" and active:
+        if active.logic == logic:
+            plan.rules.model.objects.bulk_create([
+                plan.rules.model(plan=plan, department_id=r.department_id,
+                                 description_id=r.description_id, month_mask=r.month_mask)
+                for r in active.rules.filter(active_status=True)
+            ])
+        plan.intervals.model.objects.bulk_create([
+            plan.intervals.model(plan=plan, description_id=i.description_id,
+                                 interval_months=i.interval_months)
+            for i in active.intervals.filter(active_status=True)
+        ])
+    return plan
+
+
 # ── Bootstrapping ────────────────────────────────────────────────────────────
 
 def adopt_current_layout(workshop, program, logic, user=None):
@@ -516,10 +559,9 @@ def adopt_current_layout(workshop, program, logic, user=None):
     """
     prog = PROGRAMS[program]
     model = prog.model
-    last = SchedulingPlan.objects.filter(workshop=workshop, program=program).order_by("-version").first()
     plan = SchedulingPlan.objects.create(
         workshop=workshop, program=program, logic=logic,
-        version=(last.version + 1) if last else 1,
+        version=next_version(workshop, program),
         default_interval_months=6 if program == SchedulingPlan.PROGRAM_PPM else 12,
         created_by=user, notes="Adopted from the current schedule layout",
     )

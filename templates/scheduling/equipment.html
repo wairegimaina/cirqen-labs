@@ -1,0 +1,59 @@
+{% extends 'scheduling/_layout.html' %}
+{% block sched_title %}{{ equipment.serial_number }}{% endblock %}
+{% block heading %}{{ equipment.description.name }} <span class="mono-chip">{{ equipment.serial_number }}</span>{% endblock %}
+
+{% block body %}
+<p class="sched-muted">{{ equipment.department.name }} · {{ equipment.department.workshop.name }}{% if not equipment.active_status %} · <strong>inactive</strong>{% endif %}</p>
+
+<div class="row g-3">
+  {% for p in programs %}
+  <div class="col-lg-6">
+    <section class="section-card h-100">
+      <div class="section-card-head">
+        <h3 class="section-card-title"><i class="fas {% if p.key == 'ppm' %}fa-tools{% else %}fa-balance-scale{% endif %}" aria-hidden="true"></i> {{ p.label }}</h3>
+        {% if p.plan %}<span class="sched-muted">Plan v{{ p.plan.version }}</span>{% endif %}
+      </div>
+      <div class="section-card-body">
+        <h4 class="fs-6 mb-2">Current</h4>
+        {% for s in p.opens %}
+        <div class="mb-2">
+          <strong>{{ s.scheduled_month|date:"F Y" }}</strong>
+          {% if s.is_overdue %}<span class="status-badge status-overdue">Overdue</span>
+          {% else %}<span class="status-badge status-{{ s.status }}">{{ s.get_status_display }}</span>{% endif %}
+          {% if s.due_month and s.due_month != s.scheduled_month %}<span class="sched-muted">(pushed; due in {{ s.due_month|date:"M Y" }})</span>{% endif %}
+          <div class="sched-reason">
+            {% if s.schedule_reason.text %}{{ s.schedule_reason.text }}
+              {% if s.schedule_reason.moved_from %}<br>Moved from {{ s.schedule_reason.moved_from }} when plan v{{ s.schedule_reason.plan_version }} was activated.{% endif %}
+            {% else %}Placed by the legacy scheduler ({{ s.get_generation_source_display|lower }}).{% endif %}
+          </div>
+        </div>
+        {% if forloop.counter == 2 %}<div class="warn text-warning small"><i class="fas fa-exclamation-triangle" aria-hidden="true"></i> More than one open schedule: only one should exist.</div>{% endif %}
+        {% empty %}
+        <p class="sched-muted mb-2">No open schedule.
+          {% if p.would_be %}{% if p.would_be.ok %}The plan will place it: {{ p.would_be.message }}.{% else %}The plan cannot place it: {{ p.would_be.message }}.{% endif %}{% endif %}
+        </p>
+        {% endfor %}
+
+        <h4 class="fs-6 mt-3 mb-2">Completed ({{ p.completed|length }})</h4>
+        {% if p.completed %}
+        <table class="table table-sm sched-table mb-0">
+          <thead><tr><th>Month</th><th>Done on</th><th>Placed by</th></tr></thead>
+          <tbody>
+            {% for s in p.completed %}
+            <tr>
+              <td>{{ s.scheduled_month|date:"F Y" }}</td>
+              <td>{{ s.completed_date|date:"d M Y"|default:"—" }}</td>
+              <td class="sched-muted">{% if s.plan %}Plan v{{ s.plan.version }}{% else %}{{ s.get_generation_source_display }}{% endif %}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="sched-muted mb-0">No completed {{ p.label|lower }} yet.</p>
+        {% endif %}
+      </div>
+    </section>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

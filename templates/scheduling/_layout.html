@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}{% block sched_title %}Scheduling{% endblock %} - {{ scope.workshop.name }} - Equiper{% endblock %}
+{% block page_title %}Scheduling{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'scheduling/scheduling.css' %}" />{% endblock %}
+
+{% block content %}
+<div class="page-wrap sched">
+  <div class="page-head">
+    <div>
+      <h2 class="page-heading">{% block heading %}Scheduling{% endblock %}</h2>
+      <p class="page-subtitle">{{ scope.workshop.name }} · {{ scope.program_label }}</p>
+    </div>
+    <form method="get" class="page-actions sched-scope" action="">
+      {% if scope.workshops|length > 1 %}
+      <label class="visually-hidden" for="sched-workshop">Workshop</label>
+      <select id="sched-workshop" name="workshop" class="form-select form-select-sm" onchange="this.form.submit()">
+        {% for w in scope.workshops %}
+        <option value="{{ w.id }}" {% if w.id == scope.workshop.id %}selected{% endif %}>{{ w.name }}</option>
+        {% endfor %}
+      </select>
+      {% else %}
+      <input type="hidden" name="workshop" value="{{ scope.workshop.id }}">
+      {% endif %}
+      <div class="btn-group btn-group-sm" role="group" aria-label="Programme">
+        <button type="submit" name="program" value="ppm" class="btn {% if scope.program == 'ppm' %}btn-primary{% else %}btn-outline-secondary{% endif %}">PPM</button>
+        <button type="submit" name="program" value="calibration" class="btn {% if scope.program == 'calibration' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Calibration</button>
+      </div>
+    </form>
+  </div>
+
+  <ul class="nav nav-tabs sched-tabs mb-3" role="tablist">
+    <li class="nav-item"><a class="nav-link {% if tab == 'overview' %}active{% endif %}" href="{% url 'scheduling:overview' %}{{ scope.query }}"><i class="fas fa-chart-bar" aria-hidden="true"></i> Overview</a></li>
+    <li class="nav-item"><a class="nav-link {% if tab == 'months' %}active{% endif %}" href="{% url 'scheduling:months' %}{{ scope.query }}"><i class="fas fa-calendar-alt" aria-hidden="true"></i> Months</a></li>
+    <li class="nav-item"><a class="nav-link {% if tab == 'unscheduled' %}active{% endif %}" href="{% url 'scheduling:unscheduled' %}{{ scope.query }}"><i class="fas fa-exclamation-circle" aria-hidden="true"></i> Unscheduled &amp; review</a></li>
+    <li class="nav-item"><a class="nav-link {% if tab == 'plans' %}active{% endif %}" href="{% url 'scheduling:plans' %}{{ scope.query }}"><i class="fas fa-sliders-h" aria-hidden="true"></i> Plan</a></li>
+  </ul>
+
+  {% block body %}{% endblock %}
+</div>
+{% endblock %}

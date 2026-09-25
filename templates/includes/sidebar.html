@@ -81,6 +81,19 @@
         </a>
       </li>
 
+      <!-- Scheduling plans: HOD and Tech -->
+      {% if nav.is_tech or nav.is_hod %}
+      <li class="menu-entry" role="none">
+        <a href="{% url 'scheduling:overview' %}"
+          class="menu-link {% if request.resolver_match.namespace == 'scheduling' %}active-link{% endif %}" role="menuitem">
+          <div class="link-icon" aria-hidden="true">
+            <i class="fas fa-calendar-alt"></i>
+          </div>
+          <span class="link-label">Scheduling</span>
+        </a>
+      </li>
+      {% endif %}
+
       <!-- ╔═══════════════════════════════════════════════════════╗ -->
       <!-- ║  HOD BLOCK                                            ║ -->
       <!-- ║  Visible to: HOD only                                 ║ -->

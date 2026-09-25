@@ -106,6 +106,36 @@ def next_due(prev_due, interval, slot, completed_month=None, policy=NEXT_SLOT):
     return first_in_slot(slot, max(base, after_done))
 
 
+def months_between(a, b):
+    return (b.year - a.year) * 12 + (b.month - a.month)
+
+
+def realign(prev_due, interval, slot, completed_month=None, policy=NEXT_SLOT, floor=None):
+    """Next due month in a *different* slot than the device was on.
+
+    Happens when the plan's months change under a device. Taking the next
+    slot month after due + interval could add most of a year (a 12-month
+    device moved from August to a May/November group would wait 21 months),
+    so this takes the slot month nearest to when it was due instead:
+    earlier is allowed, but never before ``floor`` (this month, so the move
+    itself doesn't make the device overdue) or before the work was done.
+    Calibration keeps its rule of never running past one interval.
+    """
+    if policy == WITHIN_INTERVAL:
+        return next_due(prev_due, interval, slot, completed_month, policy)
+    prev_due = month_floor(prev_due)
+    done = month_floor(completed_month) if completed_month else prev_due
+    base = add_months(prev_due, interval)
+    lowest = max(add_months(done, 1), month_floor(floor) if floor else add_months(done, 1))
+    after = first_in_slot(slot, max(base, lowest))
+    before = base
+    while before >= lowest and before.month not in slot:
+        before = add_months(before, -1)
+    if before >= lowest and months_between(before, base) <= months_between(base, after):
+        return before
+    return after
+
+
 @dataclass
 class Placement:
     """Where one device goes, and why."""
@@ -155,12 +185,18 @@ def place(*, group_name, months, interval, last=None, start, load=None, policy=N
         own = slot_of(prev_due.month, interval)
         if own in candidates:
             slot = own
+            month = next_due(prev_due, interval, slot, done, policy)
             reason = f"{interval} months after {month_name(prev_due)}"
         else:
-            slot = min(candidates, key=lambda s: (load.get(s, 0), s))
+            # Nearest month of any allowed cycle to when it was due; ties go
+            # to the less-loaded cycle, then the earlier one.
+            base = add_months(month_floor(prev_due), interval)
+            options = [(realign(prev_due, interval, s, done, policy, floor=add_months(start, -1)), s)
+                       for s in candidates]
+            month, slot = min(options, key=lambda o: (abs(months_between(base, o[0])),
+                                                     load.get(o[1], 0), o[1]))
             reason = (f"{month_name(prev_due)} is no longer one of {group_name}'s months; "
-                      f"moved to its {months_label(slot)} cycle")
-        month = next_due(prev_due, interval, slot, done, policy)
+                      f"due {month_name(base)}, nearest {months_label(slot)} month")
         if done and done > prev_due and month != add_months(prev_due, interval):
             reason += f" (done late, in {month_name(done)})"
     else:
@@ -172,5 +208,5 @@ def place(*, group_name, months, interval, last=None, start, load=None, policy=N
 
     load[slot] = load.get(slot, 0) + 1
     facts.update(slot=list(slot), due=month_name(month))
-    message = f"{reason} -> {month_name(month)} ({group_name}: {months_label(months)}, every {interval} months)"
+    message = f"{reason} → {month_name(month)} ({group_name}: {months_label(months)}, every {interval} months)"
     return Placement(month=month, slot=slot, message=message, facts=facts)

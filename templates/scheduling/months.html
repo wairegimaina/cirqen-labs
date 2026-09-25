@@ -1,0 +1,24 @@
+{% extends 'scheduling/_layout.html' %}
+{% block sched_title %}{{ year }}{% endblock %}
+{% block heading %}Months · {{ year }}{% endblock %}
+
+{% block body %}
+<div class="d-flex align-items-center gap-2 mb-3">
+  <a class="btn btn-sm btn-outline-secondary" href="{{ scope.query }}&year={{ year|add:'-1' }}" aria-label="Previous year"><i class="fas fa-chevron-left" aria-hidden="true"></i> {{ year|add:"-1" }}</a>
+  <a class="btn btn-sm btn-outline-secondary" href="{{ scope.query }}&year={{ year|add:'1' }}" aria-label="Next year">{{ year|add:"1" }} <i class="fas fa-chevron-right" aria-hidden="true"></i></a>
+  <span class="sched-muted ms-2">Each month counts every schedule due in it: done, still open, and overdue.</span>
+</div>
+
+<div class="sched-year">
+  {% for m in months %}
+  <a class="sched-month {% if m.month == current %}now{% endif %}" href="{% url 'scheduling:month' m.month.year m.month.month %}{{ scope.query }}">
+    <div class="name">{{ m.month|date:"F" }}</div>
+    <div class="total">{{ m.total }}</div>
+    <div class="split">
+      {{ m.completed }} done · {{ m.open }} open
+      {% if m.overdue %}<span class="late">· {{ m.overdue }} overdue</span>{% endif %}
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% endblock %}

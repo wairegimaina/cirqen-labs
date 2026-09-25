@@ -108,3 +108,26 @@ class PlaceTests(SimpleTestCase):
         p = place(months=[1, 7], interval=3, **self.common)
         self.assertEqual(p.problem, "interval_does_not_fit")
         self.assertIn("needs 4", p.message)
+
+
+class RealignTests(SimpleTestCase):
+    """A device whose old month is not in the new plan goes to the nearest month."""
+    start = d(2026, 10)  # "today" is September 2026
+
+    def test_twelve_month_device_moves_to_the_nearest_slot_not_a_year_later(self):
+        # Done August 2026, due August 2027; the group is now May/November.
+        p = place(group_name="Defibrillator", months=[5, 11], interval=12,
+                  last=(d(2026, 8), d(2026, 8)), start=self.start)
+        self.assertEqual(p.month, d(2027, 5))
+        self.assertIn("nearest", p.message)
+
+    def test_never_moved_into_the_past(self):
+        # Due October 2026; nearest Feb/Aug month is August 2026, already gone.
+        p = place(group_name="Patient Monitor", months=[2, 8], interval=6,
+                  last=(d(2026, 4), d(2026, 4)), start=self.start)
+        self.assertEqual(p.month, d(2027, 2))
+
+    def test_calibration_realign_stays_within_the_interval(self):
+        p = place(group_name="Analyser", months=[6], interval=12, last=(d(2026, 9), d(2026, 9)),
+                  start=self.start, policy=WITHIN_INTERVAL)
+        self.assertEqual(p.month, d(2027, 6))
