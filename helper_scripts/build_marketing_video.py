@@ -34,6 +34,9 @@ ROOT = Path(__file__).resolve().parent.parent
 BUILD = ROOT / "data" / "marketing_build"
 OUT = ROOT / "data" / "Cirqen_Marketing.mp4"
 TTS_DIR = Path(os.environ.get("CIRQEN_TTS_DIR", "/tmp/claude-0/tts"))
+LOGO_WIDE = ROOT / "static" / "images" / "white.png"          # full logo, for dark backgrounds
+LOGO_DARK = ROOT / "static" / "images" / "equiper-logo.png"   # full logo, for light backgrounds
+LOGO_ICON = ROOT / "static" / "images" / "logo-1024x1024.png"  # the CQ app icon
 FONT_DIR = Path(os.environ.get("CIRQEN_FONT_DIR", "/tmp/claude-0/tts/fonts/inter/extras/ttf"))
 
 W, H = 1920, 1080
@@ -53,7 +56,7 @@ PAPER = (244, 246, 243)
 INKDOC = (28, 42, 48)
 GREYDOC = (196, 204, 204)
 MUTED = (150, 172, 178)
-TEAL = (46, 196, 182)
+TEAL = (20, 184, 80)           # Cirqen brand green, sampled from the logo
 SKY = (96, 176, 240)
 AMBER = (246, 184, 76)
 CORAL = (240, 108, 96)
@@ -177,6 +180,7 @@ class Canvas:
     """
 
     def __init__(self, img):
+        self.img = img
         self.d = ImageDraw.Draw(img)
 
     @staticmethod
@@ -426,18 +430,28 @@ def qr(c, xy, size, col, a=1.0, bg=PAPER, prog=1.0, seed=7):
             c.rect((fx + 2 * cell, fy + 2 * cell, fx + 5 * cell, fy + 5 * cell), 0, fill=col, a=a, bg=bg)
 
 
-def logo(c, xy, s, a=1.0, prog=1.0, bg=BG, word=True):
-    """The Cirqen mark: an open ring with a node, then the wordmark."""
-    x, y = xy
-    r = 46 * s
-    end = -40 + 300 * clamp(prog)
-    c.arc((x - r, y - r, x + r, y + r), -40, end, TEAL, 14 * s, a, bg)
-    ang = math.radians(end)
-    if prog > 0.95:
-        c.circle((x + r * math.cos(ang), y + r * math.sin(ang)), 13 * s, fill=AMBER, a=a, bg=bg)
-    c.circle((x, y), 12 * s, fill=WHITE, a=a * clamp((prog - 0.5) * 2), bg=bg)
-    if word:
-        c.text((x + 80 * s, y + 2 * s), "Cirqen", 96 * s, WHITE, "Bold", "lm", a, bg)
+_logo_cache = {}
+
+
+def _brand(path, height):
+    key = (path, height)
+    if key not in _logo_cache:
+        im = Image.open(path).convert("RGBA")
+        im = im.crop(im.getbbox())
+        w = round(im.width * height * S / im.height)
+        _logo_cache[key] = im.resize((w, round(height * S)), Image.LANCZOS)
+    return _logo_cache[key]
+
+
+def logo(c, path, xy, height, a=1.0):
+    """Paste one of the Cirqen logo files centred on xy, faded to opacity a."""
+    if a <= 0:
+        return
+    im = _brand(path, height)
+    if a < 1:
+        im = im.copy()
+        im.putalpha(im.getchannel("A").point(lambda v: int(v * a)))
+    c.img.paste(im, (round(xy[0] * S - im.width / 2), round(xy[1] * S - im.height / 2)), im)
 
 
 # ---- scene frame ----------------------------------------------------------
@@ -508,12 +522,8 @@ def s_hook(c, t, dur, b):
 
 
 def s_brand(c, t, dur, b):
-    prog = ease_io((t - 0.3) / 1.6)
-    wa = appear(t, 1.2, 0.8)
-    logo(c, (640, 470), 1.25, a=1.0, prog=prog, word=False)
-    c.text((760, 476), "Cirqen", 130, WHITE, "Bold", "lm", wa)
-    ta = appear(t, 2.0, 0.8)
-    c.text((960, 680), "Biomedical engineering, organised.", 44, MUTED, "Regular", "mm", ta)
+    a = appear(t, 0.3, 1.2)
+    logo(c, LOGO_WIDE, (960, 470 + 30 * (1 - a)), 300, a)
 
 
 def s_hospital(c, t, dur, b):
@@ -783,7 +793,7 @@ def s_certificate(c, t, dur, b):
     if da <= 0:
         return
     c.rect((x + 18, y + 18, x + w - 18, y + h - 18), 10, outline=(210, 216, 214), w=2, a=da, bg=PAPER)
-    logo(c, (x + 80, y + 78), 0.42, da, 1.0, PAPER, word=False)
+    logo(c, LOGO_ICON, (x + 72, y + 80), 64, da)
     c.text((x + 120, y + 64), "CALIBRATION CERTIFICATE", 30, INKDOC, "Bold", a=da, bg=PAPER)
     c.text((x + 120, y + 100), "Infusion pump  ·  Ward 7", 22, (100, 114, 118), a=da, bg=PAPER)
     na = appear(t, b[2] + 0.4, 0.5)
@@ -838,8 +848,8 @@ def s_offline(c, t, dur, b):
     hub = (960, 330)
     ca = appear(t, 0.4, 0.6)
     cloud(c, hub, 180, CARD_HI, TEAL, ca)
-    logo(c, (hub[0] - 30, hub[1] + 6), 0.32, ca, 1.0, CARD_HI, word=False)
-    c.text((hub[0] + 10, hub[1] + 6), "Cirqen", 30, WHITE, "Bold", "lm", ca, CARD_HI)
+    logo(c, LOGO_ICON, (hub[0] - 62, hub[1] + 6), 54, ca)
+    c.text((hub[0] - 22, hub[1] + 6), "Cirqen", 34, WHITE, "Bold", "lm", ca, CARD_HI)
     off_start, off_end = b[2], b[3] + 0.3
     offline = off_start <= t < off_end
     for i, (name, col) in enumerate(WORKSHOPS):
@@ -935,12 +945,10 @@ def s_trust(c, t, dur, b):
 
 
 def s_close(c, t, dur, b):
-    prog = ease_io((t - 0.2) / 1.4)
-    logo(c, (700, 420), 1.1, 1.0, prog, word=False)
-    c.text((810, 426), "Cirqen", 120, WHITE, "Bold", "lm", appear(t, 0.9, 0.7))
+    logo(c, LOGO_WIDE, (960, 330), 250, appear(t, 0.2, 1.0))
     lines = ["Every machine ready.", "Every record signed.", "Across your whole hospital."]
     for k, ln in enumerate(lines):
-        c.text((960, 580 + k * 56), ln, 40, MUTED if k < 2 else WHITE, "Regular" if k < 2 else "SemiBold", "mm",
+        c.text((960, 560 + k * 56), ln, 40, MUTED if k < 2 else WHITE, "Regular" if k < 2 else "SemiBold", "mm",
                appear(t, 1.6 + k * 0.7, 0.6))
     ba = appear(t, b[1] - 0.2, 0.6)
     if ba > 0:
