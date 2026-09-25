@@ -8,6 +8,7 @@ import logging
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -15,7 +16,8 @@ from core.scoping import for_user, get_for_user_or_404
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
 
-from Inventory.models import Department, Equipment, EquipmentDescription, Manufacturer
+from Inventory.models import Department, Equipment, EquipmentDescription, Manufacturer, Warranty
+from Inventory.views.warranties import error_text as warranty_error_text, fill_warranty, warranty_form_present
 from audit_log.models import AuditLog
 from Inventory.equipment_dependencies import (
     get_equipment_dependencies_count,
@@ -26,6 +28,36 @@ from Inventory.equipment_dependencies import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _apply_procurement_fields(request, equipment):
+    """Copy the hospital asset number from POST, when the form has it.
+
+    Forms that don't show it (e.g. the In-Charge edit modal) leave the stored
+    value alone. Warranties are recorded separately (Inventory.views.warranties).
+    """
+    if 'asset_tag' in request.POST:
+        equipment.asset_tag = request.POST.get('asset_tag', '').strip()
+
+
+def _register_warranty(request, equipment):
+    """Save the Add Equipment form's optional warranty section as a Warranty.
+
+    The equipment is kept even when the warranty is invalid; the user is told
+    to finish it in the Warranties module.
+    """
+    if not warranty_form_present(request.POST):
+        return
+    warranty = Warranty(equipment=equipment, created_by=request.user)
+    try:
+        fill_warranty(warranty, request.POST)
+        warranty.save()
+    except ValidationError as exc:
+        messages.warning(request, f"The warranty was not saved: {warranty_error_text(exc)} "
+                                  "Add it from Warranties.")
+        return
+    messages.success(request, f"Warranty recorded: {warranty.period_display}, expires "
+                              f"{warranty.expiry_date:%d %b %Y}.", extra_tags="success")
 
 
 @login_required
@@ -214,6 +246,7 @@ def add_inventory(request):
                     existing_equipment.serial_number = serial_number
                     existing_equipment.department = department
                     existing_equipment.status = status
+                    _apply_procurement_fields(request, existing_equipment)
                     existing_equipment.active_status = True  # Reactivate
                     existing_equipment.pending_delete = False  # Remove deletion flag
                     existing_equipment.updated_at = timezone.now()
@@ -251,12 +284,14 @@ def add_inventory(request):
                 active_status=True,  # Ensure new equipment is active
                 pending_delete=False
             )
+            _apply_procurement_fields(request, equipment)
             equipment.save()
             messages.success(
                 request,
                 "Equipment added successfully.",
                 extra_tags="success create task"
             )
+            _register_warranty(request, equipment)
             logger.info(f"New equipment created by {request.user.username}: {serial_number} in {department.name}")
         except Exception as e:
             messages.error(request, f"Error adding equipment: {e}")
@@ -346,6 +381,7 @@ def edit_inventory(request, equipment_id):
             equipment.serial_number = serial_number
             equipment.department = department
             equipment.status = status
+            _apply_procurement_fields(request, equipment)
             equipment.save()
 
             messages.success(request, "Equipment updated successfully.", extra_tags="success  task created")

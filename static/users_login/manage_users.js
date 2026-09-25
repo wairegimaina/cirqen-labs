@@ -453,6 +453,8 @@ async function editUser(userId) {
   document.getElementById('editDepartment').value = user.department || '';
   document.getElementById('editWorkshop').value = user.workshop || '';
   document.getElementById('editLevel').value = user.level || '';
+  const deputyBox = document.getElementById('editIsDeputyHod');
+  if (deputyBox) deputyBox.checked = !!user.isDeputyHod;
 
   // Load current signature
   await loadCurrentSignature(userId);
@@ -594,6 +596,8 @@ async function saveUser() {
   appendIfValid('editDepartment', 'department');
   appendIfValid('editWorkshop', 'workshop');
   appendIfValid('editLevel', 'level');
+  const deputyBox = document.getElementById('editIsDeputyHod');
+  if (deputyBox) formData.append('isDeputyHod', deputyBox.checked ? 'true' : 'false');
 
   const signatureFile = document.getElementById('signatureUpload').files[0];
   if (signatureFile) {

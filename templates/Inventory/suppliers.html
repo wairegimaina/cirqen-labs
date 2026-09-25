@@ -1,0 +1,167 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Suppliers{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'Inventory/theme.css' %}" />
+{% endblock %}
+
+{% block page_title %}Suppliers{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    {% for message in messages %}
+    <div class="alert {% if 'success' in message.tags %}alert-success{% else %}alert-danger{% endif %} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endfor %}
+
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h5 class="mb-0"><i class="fas fa-truck me-2 text-muted"></i>Suppliers</h5>
+            <div class="d-flex gap-2">
+                <a href="{% url 'warranty_list' %}" class="btn btn-outline-secondary btn-sm"><i class="fas fa-shield-alt me-1"></i>Warranties</a>
+                <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#uploadSuppliersModal"><i class="fas fa-file-excel me-1"></i>Upload Excel</button>
+                <button type="button" class="btn btn-success btn-sm" id="addSupplierBtn"><i class="fas fa-plus me-1"></i>Add Supplier</button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Contact</th>
+                            <th>Phone / Email</th>
+                            <th>Default Warranty</th>
+                            <th>Warranties</th>
+                            <th>Status</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for s in suppliers %}
+                        <tr class="{% if not s.active_status %}text-muted{% endif %}">
+                            <td class="fw-bold">{{ s.name }}</td>
+                            <td>{{ s.contact_person|default:"-" }}</td>
+                            <td>{{ s.phone|default:"-" }}<div class="small">{{ s.email }}</div></td>
+                            <td>{% if s.default_warranty_months %}{{ s.default_warranty_months }} months{% else %}-{% endif %}</td>
+                            <td>{% if s.warranty_count %}<a href="{% url 'warranty_list' %}?supplier={{ s.id }}">{{ s.warranty_count }}</a>{% else %}0{% endif %}</td>
+                            <td><span class="badge {% if s.active_status %}badge-success{% else %}badge-secondary{% endif %}">{% if s.active_status %}Active{% else %}Inactive{% endif %}</span></td>
+                            <td class="text-end">
+                                <div class="btn-group btn-group-sm">
+                                    <button type="button" class="btn btn-outline-primary edit-supplier" title="Edit" aria-label="Edit"
+                                        data-url="{% url 'supplier_update' s.id %}"
+                                        data-name="{{ s.name }}"
+                                        data-contact_person="{{ s.contact_person }}"
+                                        data-phone="{{ s.phone }}"
+                                        data-email="{{ s.email }}"
+                                        data-address="{{ s.address }}"
+                                        data-default_warranty_months="{{ s.default_warranty_months|default_if_none:'' }}"
+                                        data-warranty_terms="{{ s.warranty_terms }}">
+                                        <i class="fas fa-pen"></i>
+                                    </button>
+                                    <form method="post" action="{% url 'supplier_toggle_active' s.id %}" class="d-inline">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-outline-{% if s.active_status %}danger{% else %}success{% endif %}"
+                                            title="{% if s.active_status %}Deactivate{% else %}Reactivate{% endif %}"
+                                            aria-label="{% if s.active_status %}Deactivate{% else %}Reactivate{% endif %}">
+                                            <i class="fas {% if s.active_status %}fa-ban{% else %}fa-undo{% endif %}"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="7" class="text-center text-muted py-5">No suppliers yet. Add one, or upload a list, then pick it when recording a warranty.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="supplierModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="post" id="supplierForm" action="{% url 'supplier_create' %}">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title" id="supplierModalTitle">Add Supplier</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label" for="sup_name">Name <span class="text-danger">*</span></label>
+                        <input type="text" name="name" id="sup_name" class="form-control" required maxlength="150">
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label" for="sup_contact_person">Contact Person</label>
+                            <input type="text" name="contact_person" id="sup_contact_person" class="form-control" maxlength="150">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label" for="sup_phone">Phone</label>
+                            <input type="text" name="phone" id="sup_phone" class="form-control" maxlength="30">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="sup_email">Email</label>
+                        <input type="email" name="email" id="sup_email" class="form-control">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="sup_address">Address</label>
+                        <textarea name="address" id="sup_address" class="form-control" rows="2"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="sup_default_warranty_months">Default Warranty (months)</label>
+                        <input type="number" min="0" name="default_warranty_months" id="sup_default_warranty_months" class="form-control">
+                        <div class="form-text">Pre-fills the period of new warranties from this supplier.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="sup_warranty_terms">Warranty Terms</label>
+                        <textarea name="warranty_terms" id="sup_warranty_terms" class="form-control" rows="3" placeholder="What is covered, exclusions, how to raise a claim"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% include 'includes/excel_import_modal.html' with modal_id='uploadSuppliersModal' title='Bulk Upload Suppliers' noun='supplier' template_url=supplier_template_url upload_url=supplier_upload_url help_text='Required column: Supplier Name. Contact Person, Phone, Email, Address, Default Warranty (Months) and Warranty Terms are optional.' %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/excel_import.js' %}"></script>
+<script>
+(function () {
+  const FIELDS = ['name', 'contact_person', 'phone', 'email', 'address', 'default_warranty_months', 'warranty_terms'];
+  const form = document.getElementById('supplierForm');
+  const modal = new bootstrap.Modal(document.getElementById('supplierModal'));
+  const createUrl = form.action;
+
+  document.getElementById('addSupplierBtn').addEventListener('click', () => {
+    form.reset();
+    form.action = createUrl;
+    document.getElementById('supplierModalTitle').textContent = 'Add Supplier';
+    modal.show();
+  });
+
+  document.querySelectorAll('.edit-supplier').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      FIELDS.forEach((f) => { document.getElementById('sup_' + f).value = btn.dataset[f] || ''; });
+      form.action = btn.dataset.url;
+      document.getElementById('supplierModalTitle').textContent = 'Edit Supplier';
+      modal.show();
+    });
+  });
+})();
+</script>
+{% endblock %}

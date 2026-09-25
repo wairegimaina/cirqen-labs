@@ -1,0 +1,12 @@
+{% extends "notifications/_base.html" %}
+{% block body %}
+<p>Good morning {{ name }},</p>
+<p>Here is what needs doing as of {{ today|date:"l j F Y" }}.</p>
+{% for s in sections %}
+<h3 style="font-size:15px;margin:20px 0 6px;border-bottom:1px solid #e5e7eb;padding-bottom:4px;">{{ s.title }} <span style="color:#6b7280;font-weight:normal;">({{ s.total }})</span></h3>
+<ul style="margin:0;padding-left:20px;">
+  {% for line in s.items %}<li style="margin-bottom:4px;">{% if line|slice:":8" == "OVERDUE " %}<strong style="color:#b42318;">Overdue</strong> {{ line|slice:"8:" }}{% else %}{{ line }}{% endif %}</li>{% endfor %}
+</ul>
+{% if s.total > s.items|length %}<p style="color:#6b7280;font-size:12px;">Showing {{ s.items|length }} of {{ s.total }}; see {{ app_name }} for the rest.</p>{% endif %}
+{% endfor %}
+{% endblock %}

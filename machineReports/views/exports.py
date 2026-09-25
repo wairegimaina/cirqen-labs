@@ -218,10 +218,33 @@ def export_equipment_history(request, equipment_id):
             cal.performed_by.get_full_name(),
             "PASS" if cal.overall_pass else "FAIL",
             cal.next_calibration_due.strftime('%Y-%m-%d') if cal.next_calibration_due else "N/A",
-            f"{cal.actual_temperature}Â°C" if cal.actual_temperature else "N/A",
+            f"{cal.actual_temperature}°C" if cal.actual_temperature else "N/A",
             f"{cal.actual_humidity}%RH" if cal.actual_humidity else "N/A",
             f"{cal.actual_pressure}kPa" if cal.actual_pressure else "N/A"
         ])
+
+    # Checklist sheets: same data as the Machine Reports history modal
+    from .repairs import checklist_history
+    work_history, task_last_done = checklist_history(equipment)
+
+    ws_tasks = wb.create_sheet("Checklist Tasks Last Done")
+    ws_tasks.append(["Task", "Checklist", "Last Done", "Action", "Result", "Reading", "Note", "Work Order"])
+    for t in task_last_done:
+        ws_tasks.append([t['task'], t['checklist'], t['date'], t['action'], t['result'],
+                         t['value'], t['note'], t['work_order']])
+
+    ws_checklist = wb.create_sheet("Checklist History")
+    ws_checklist.append(["Date", "Work Order", "Action", "Performed By", "Checklist", "Task",
+                         "Expected", "Result", "Reading", "Note"])
+    cards = jobcard.objects.filter(equipment=equipment, status='Approved', active_status=True) \
+        .select_related('performed_by').prefetch_related('checklist_entries').order_by('-date_issued')
+    for card in cards:
+        for e in card.checklist_entries.all():
+            ws_checklist.append([
+                card.date_issued.strftime('%Y-%m-%d'), str(card.id)[:8].upper(), card.action_taken,
+                card.performed_by.get_full_name() if card.performed_by else "N/A",
+                e.template_title, e.task, e.expected_result, e.get_result_display(), e.value, e.note,
+            ])
 
     # Prepare response
     response = HttpResponse(

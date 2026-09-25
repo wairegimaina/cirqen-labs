@@ -103,6 +103,7 @@ INSTALLED_APPS = [
     "CalSoft",
     "chartjs",
     "machineReports",
+    "notifications",
     "django_celery_beat",
     "updates",
 ]
@@ -543,9 +544,10 @@ PASSWORD_RESET_CODE_LENGTH = 6
 # 📧 EMAIL CONFIGURATION
 # ============================================================
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-EMAIL_HOST = "smtp.gmail.com"
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
+# From config so a hospital can use its own mail server, not only Gmail.
+EMAIL_HOST = config.get("email.host", "smtp.gmail.com")
+EMAIL_PORT = int(config.get("email.port", 587))
+EMAIL_USE_TLS = bool(config.get("email.use_tls", True))
 EMAIL_USE_SSL = False
 EMAIL_HOST_USER = config.get("email.host_user", "")
 EMAIL_HOST_PASSWORD = config.get("email.host_password", "")
@@ -555,6 +557,18 @@ DEFAULT_FROM_EMAIL = EMAIL_HOST_USER or "no-reply@example.com"
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
 EMAIL_TIMEOUT = 30
 EMAIL_MAX_RETRIES = 3
+
+# Notifications (notifications app). Event mail (work order submitted /
+# decided) is sent by the desktop where the event happened. The daily digest
+# must be sent by ONE machine per site: set notifications.digest_sender to
+# true on that machine only, or every user gets one copy per desktop.
+NOTIFICATIONS_EMAIL_ENABLED = bool(config.get("notifications.email_enabled", True))
+NOTIFICATIONS_DIGEST_SENDER = bool(config.get("notifications.digest_sender", False))
+NOTIFICATIONS_DIGEST_HOUR = int(config.get("notifications.digest_hour", 7))  # EAT
+NOTIFICATIONS_APP_NAME = "Cirqen"
+
+# Warranties within this many days of expiry show as "Expiring Soon".
+WARRANTY_EXPIRING_SOON_DAYS = int(config.get("warranty.expiring_soon_days", 60))
 
 # ============================================================
 # 🔄 CELERY & BACKGROUND TASKS

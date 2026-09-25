@@ -146,6 +146,36 @@
                 </div>
             </div>
 
+            <!-- Checklist Panel: select a checklist from the Checklists module, add steps for this job -->
+            <div class="card-panel" id="checklist-container" style="display: none;">
+                <div class="panel-header">
+                    <h5><i class='fas fa-clipboard-check'></i> Checklist</h5>
+                    <span class="badge badge-info" id="checklist-progress"></span>
+                </div>
+                <div class="form-group">
+                    <label for="checklist_template">Select Checklist</label>
+                    <select name="checklist_template" id="checklist_template" class="form-control">
+                        <option value="">— No checklist —</option>
+                    </select>
+                    <small class="text-muted" id="checklist-hint"></small>
+                </div>
+                <div id="checklist-body"></div>
+
+                <div class="mt-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="mb-0">Additional steps for this work order</h6>
+                        <button type="button" class="btn btn-outline-primary btn-sm" id="checklist-add-step">
+                            <i class="fas fa-plus"></i> Add step
+                        </button>
+                    </div>
+                    <div id="checklist-custom"></div>
+                </div>
+                <small class="text-muted">
+                    Steps marked <span class="text-danger">*</span> are required. A failed or skipped step needs a remark.
+                    Each answer is saved with your name and the time you ticked it.
+                </small>
+            </div>
+
             <!-- Spare Parts Panel -->
             <div class="card-panel">
                 <div class="panel-header">
@@ -279,6 +309,22 @@
             {% endfor %}
         </div>
         {% endif %}
+
+        <div class="card-panel">
+            <div class="panel-header">
+                <h5><i class='fas fa-clipboard-check'></i> Checklist</h5>
+                <a href="{% url 'jobcard:work_order_detail' selected_job_card.id %}" class="small">Open full work order</a>
+            </div>
+            {% for e in selected_job_card.checklist_entries.all %}
+            <div class="part-row{% if e.is_problem %} text-danger{% endif %}">
+                <span>{{ e.task }}</span>
+                <span><strong>{{ e.get_result_display|default:"—" }}</strong>{% if e.value %} ({{ e.value }}){% endif %}</span>
+                <span>{{ e.note|default:"" }}</span>
+            </div>
+            {% empty %}
+            <p class="text-muted small mb-0">No checklist was completed on this work order.</p>
+            {% endfor %}
+        </div>
 
         {% if selected_job_card.tech_signature %}
         <div class="signature-section">
@@ -455,6 +501,8 @@
     window.CHECK_STOCK_URL = "{% url 'jobcard:check_stock_availability' %}";
     window.GET_SIGNATURE_URL = "{% url 'jobcard:get_user_signature_data' %}";
     window.GET_PPM_SCHEDULES_URL = "{% url 'jobcard:get_pending_ppm_schedules' %}";
+    window.GET_CHECKLIST_URL = "{% url 'jobcard:checklist_for_work' %}";
+    window.CHECKLIST_DETAIL_URL = "{% url 'jobcard:checklist_detail' '00000000-0000-0000-0000-000000000000' %}";
     window.WORKSHOP_ID = "{{ workshop.id|default:'' }}";
 
     // Form Data
@@ -476,6 +524,7 @@
         {% endfor %}
     ];
 </script>
+{{ form_data.checklist_answers|default:None|json_script:"checklist-answers" }}
 {% endblock %}
 
 {% block extra_js %}
@@ -483,4 +532,5 @@
 <script src="{% static 'js/select2.min.js' %}"></script>
 <script src="{% static 'js/flatpickr.min.js' %}"></script>
 <script src="{% static 'jobcards/jobcards.js' %}"></script>
+<script src="{% static 'jobcards/checklist.js' %}"></script>
 {% endblock %}

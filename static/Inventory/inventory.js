@@ -210,6 +210,7 @@ const UI = {
                             data-manufacturer="${escapeHTML(item.manufacturer_id || '')}"
                             data-model="${escapeHtml(item.model || '')}"
                             data-serial="${escapeHtml(item.serial || '')}"
+                            data-asset-tag="${escapeHtml(item.asset_tag || '')}"
                             data-department="${escapeHTML(item.department_id)}"
                             data-status="${escapeHTML(item.status)}"
                             title="Edit">
@@ -332,7 +333,7 @@ const UI = {
 // ==========================================
 function initializeEventListeners() {
   // SPA Navigation
-  document.querySelectorAll('.spa-nav-item').forEach((btn) => {
+  document.querySelectorAll('.spa-nav-item[data-section]').forEach((btn) => {
     btn.addEventListener('click', (e) => {
       const section = btn.dataset.section;
       document.querySelectorAll('.spa-nav-item').forEach((b) => b.classList.remove('active'));
@@ -486,6 +487,7 @@ const Modals = {
     document.getElementById('edit_manufacturer').value = data.manufacturer || ''; // ✅ FIXED ID
     document.getElementById('edit_model').value = data.model || '';
     document.getElementById('edit_serial_number').value = data.serial || '';
+    document.getElementById('edit_asset_tag').value = data.assetTag || '';
     document.getElementById('edit_department').value = data.department;
     document.getElementById('edit_status').value = data.status;
 

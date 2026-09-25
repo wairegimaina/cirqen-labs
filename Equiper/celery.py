@@ -44,6 +44,23 @@ def config_loggers(*args, **kwargs):
 # ============================================================================
 
 app.conf.beat_schedule = {
+    # ============================================================================
+    # NOTIFICATIONS
+    # ============================================================================
+    # Send queued email (offline-safe: failures back off and retry).
+    "notifications-flush-outbox": {
+        "task": "notifications.tasks.flush_outbox",
+        "schedule": timedelta(minutes=1),
+        "options": {"expires": 50},
+    },
+    # Hourly; acts once the EAT hour reaches NOTIFICATIONS_DIGEST_HOUR and only
+    # on the machine with notifications.digest_sender set (hourly rather than a
+    # fixed crontab so a machine switched on late still sends that day's digest).
+    "notifications-daily-digest": {
+        "task": "notifications.tasks.send_daily_digests",
+        "schedule": crontab(minute=5),
+        "options": {"expires": 3000},
+    },
     # Local database backup (core.backups). Midday rather than overnight:
     # clinic machines are often switched off at night and beat does not
     # catch up on missed runs.
@@ -201,8 +218,10 @@ app.conf.update(
     task_serializer="json",
     accept_content=["json"],
     result_serializer="json",
-    # Timezone settings
-    timezone="UTC",
+    # Timezone settings: crontab hours in beat_schedule are East Africa Time
+    # (settings.CELERY_TIMEZONE). This used to force "UTC", so every job ran
+    # three hours later than written (the 12:30 backup ran at 15:30 EAT).
+    timezone="Africa/Nairobi",
     enable_utc=True,
     # Connection settings
     broker_connection_retry_on_startup=True,

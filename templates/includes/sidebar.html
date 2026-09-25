@@ -70,6 +70,75 @@
                 </a>
       </li>
 
+      {% if nav.is_tech or nav.is_nic %}
+      <!-- Work Orders (Tech & NIC) -->
+      <li class="menu-entry" role="none">
+        <a href="#" class="menu-link {% if 'jobcard' in request.path and '/checklists/' not in request.path %}active-link{% endif %}" data-toggle="submenu"
+          role="menuitem" aria-haspopup="true" aria-expanded="false">
+          <div class="link-icon" aria-hidden="true">
+            <i class="fas fa-file-alt"></i>
+          </div>
+          <span class="link-label">Work Orders</span>
+          <i class="fas fa-chevron-down submenu-toggle-arrow" aria-hidden="true"></i>
+        </a>
+        <ul class="dropdown-menu" role="menu">
+
+          <li class="dropdown-entry" role="none">
+            <a href="{% url 'jobcard:create_job_card' %}"
+              class="dropdown-link {% if request.resolver_match.url_name == 'create_job_card' %}active-dropdown{% endif %}"
+              role="menuitem">
+              <i class="fas fa-plus-circle" aria-hidden="true"></i>
+              <span class="link-label">Create Work Order</span>
+            </a>
+          </li>
+
+          <li class="dropdown-entry" role="none">
+            <a href="{% url 'jobcard:waiting_jobcards' %}"
+              class="dropdown-link {% if request.resolver_match.url_name == 'waiting_jobcards' %}active-dropdown{% endif %}"
+              role="menuitem">
+              <i class="fas fa-hourglass-half" aria-hidden="true"></i>
+              <span class="link-label">Waiting Work Orders</span>
+              {% if nav.job_cards_waiting_count %}
+              <span class="queue-badge">{{ nav.job_cards_waiting_count }}</span>
+              {% endif %}
+            </a>
+          </li>
+
+          <li class="dropdown-entry" role="none">
+            <a href="{% url 'jobcard:approved_jobcards' %}"
+              class="dropdown-link {% if request.resolver_match.url_name == 'approved_jobcards' %}active-dropdown{% endif %}"
+              role="menuitem">
+              <i class="fas fa-check-circle" aria-hidden="true"></i>
+              <span class="link-label">Approved Work Orders</span>
+            </a>
+          </li>
+
+          <li class="dropdown-entry" role="none">
+            <a href="{% url 'jobcard:declined_jobcards' %}"
+              class="dropdown-link {% if request.resolver_match.url_name == 'declined_jobcards' %}active-dropdown{% endif %}"
+              role="menuitem">
+              <i class="fas fa-times-circle" aria-hidden="true"></i>
+              <span class="link-label">Declined Work Orders</span>
+            </a>
+          </li>
+
+        </ul>
+      </li>
+      {% endif %}
+
+      <!-- Checklists (reusable; selected on work orders) -->
+      {% if nav.is_tech or nav.is_hod or nav.is_nic %}
+      <li class="menu-entry" role="none">
+        <a href="{% url 'jobcard:checklist_settings' %}"
+          class="menu-link {% if '/checklists/' in request.path %}active-link{% endif %}" role="menuitem">
+          <div class="link-icon" aria-hidden="true">
+            <i class="fas fa-clipboard-check"></i>
+          </div>
+          <span class="link-label">Checklists</span>
+        </a>
+      </li>
+      {% endif %}
+
       <!-- Inventory -->
       <li class="menu-entry" role="none">
         <a href="{% url 'inventory' %}" class="menu-link {% if 'inventory' in request.path %}active-link{% endif %}"
@@ -80,6 +149,74 @@
           <span class="link-label">Inventory</span>
         </a>
       </li>
+
+      <!-- Warranties (Equipment -> Warranty -> Supplier) -->
+      <li class="menu-entry" role="none">
+        <a href="{% url 'warranty_list' %}"
+          class="menu-link {% if '/warranties/' in request.path %}active-link{% endif %}" role="menuitem">
+          <div class="link-icon" aria-hidden="true">
+            <i class="fas fa-shield-alt"></i>
+          </div>
+          <span class="link-label">Warranties</span>
+        </a>
+      </li>
+
+      {% if nav.is_tech or nav.is_hod %}
+      <li class="menu-entry" role="none">
+        <a href="{% url 'supplier_list' %}"
+          class="menu-link {% if '/suppliers/' in request.path %}active-link{% endif %}" role="menuitem">
+          <div class="link-icon" aria-hidden="true">
+            <i class="fas fa-truck"></i>
+          </div>
+          <span class="link-label">Suppliers</span>
+        </a>
+      </li>
+      {% endif %}
+
+      <!-- Analytics: Machine Reports (maintenance technologists), Failure Risk -->
+      {% with ws=selected_workshop|default:user.userprofile.workshop %}
+      {% if nav.is_hod or nav.is_tech and ws.category == 'maintenance' or nav.is_tech and not ws %}
+      <li class="menu-section-header" role="none">
+        <span class="section-label">Analytics</span>
+      </li>
+      {% if nav.is_tech %}
+      <li class="menu-entry" role="none">
+        <a href="{% url 'equipment_dashboard' %}"
+          class="menu-link {% if 'equipment_dashboard' in request.path %}active-link{% endif %}" role="menuitem">
+          <div class="link-icon" aria-hidden="true">
+            <i class="fas fa-microchip"></i>
+          </div>
+          <span class="link-label">Machine Reports</span>
+        </a>
+      </li>
+      {% endif %}
+      <li class="menu-entry" role="none">
+        <a href="{% url 'failure_risk' %}"
+          class="menu-link {% if request.resolver_match.url_name == 'failure_risk' %}active-link{% endif %}" role="menuitem">
+          <div class="link-icon" aria-hidden="true">
+            <i class="fas fa-heartbeat"></i>
+          </div>
+          <span class="link-label">Failure Risk</span>
+        </a>
+      </li>
+      {% endif %}
+      {% endwith %}
+
+      <!-- Reports -->
+      {% if nav.is_tech %}
+      <li class="menu-section-header" role="none">
+        <span class="section-label">Reports</span>
+      </li>
+      <li class="menu-entry" role="none">
+        <a href="{% url 'report_hub:report_hub' %}"
+          class="menu-link {% if 'report_hub' in request.path %}active-link{% endif %}" role="menuitem">
+          <div class="link-icon" aria-hidden="true">
+            <i class="fas fa-chart-line"></i>
+          </div>
+          <span class="link-label">Report Hub</span>
+        </a>
+      </li>
+      {% endif %}
 
       <!-- Scheduling plans: HOD and Tech -->
       {% if nav.is_tech or nav.is_hod %}
@@ -179,43 +316,17 @@
     {# ── END SYSTEM BLOCK ── #}
 
     <!-- ╔═══════════════════════════════════════════════════════╗ -->
-    <!-- ║  MAINTENANCE BLOCK                                    ║ -->
-    <!-- ║  Visible to: Tech in maintenance workshop only        ║ -->
-    <!-- ╚═══════════════════════════════════════════════════════╝ -->
-    {% if nav.is_tech %}
-    {% with ws=selected_workshop|default:user.userprofile.workshop %}
-    {% if ws.category == 'maintenance' or not ws %}
-
-    <li class="menu-section-header" role="none">
-      <span class="section-label">Maintenance</span>
-    </li>
-
-    <li class="menu-entry" role="none">
-      <a href="{% url 'equipment_dashboard' %}"
-        class="menu-link {% if 'equipment_dashboard' in request.path %}active-link{% endif %}" role="menuitem">
-        <div class="link-icon" aria-hidden="true">
-          <i class="fas fa-microchip"></i>
-        </div>
-        <span class="link-label">Machine Reports</span>
-      </a>
-    </li>
-
-    {% endif %}
-    {% endwith %}
-    {% endif %}
-
-    <!-- ╔═══════════════════════════════════════════════════════╗ -->
     <!-- ║  OPERATIONS BLOCK                                     ║ -->
     <!-- ║  Visible to: Tech & NIC                               ║ -->
     <!-- ╚═══════════════════════════════════════════════════════╝ -->
     {% if nav.is_tech or nav.is_nic %}
+    {% with ws=selected_workshop|default:user.userprofile.workshop %}
+    {% if nav.is_nic or ws.category == 'maintenance' %}
 
     <li class="menu-section-header" role="none">
       <span class="section-label">Operations</span>
     </li>
 
-    {% with ws=selected_workshop|default:user.userprofile.workshop %}
-    {% if nav.is_nic or ws.category == 'maintenance' %}
     <li class="menu-entry" role="none">
       <a href="{% url 'ppm_dashboard' %}"
         class="menu-link {% if request.resolver_match.url_name == 'ppm_dashboard' %}active-dropdown{% endif %}"
@@ -228,73 +339,6 @@
     </li>
     {% endif %}
     {% endwith %}
-
-    <!-- Work Orders (Tech & NIC) -->
-    <li class="menu-entry" role="none">
-      <a href="#" class="menu-link {% if 'jobcard' in request.path %}active-link{% endif %}" data-toggle="submenu"
-        role="menuitem" aria-haspopup="true" aria-expanded="false">
-        <div class="link-icon" aria-hidden="true">
-          <i class="fas fa-file-alt"></i>
-        </div>
-        <span class="link-label">Work Orders</span>
-        <i class="fas fa-chevron-down submenu-toggle-arrow" aria-hidden="true"></i>
-      </a>
-      <ul class="dropdown-menu" role="menu">
-
-        <li class="dropdown-entry" role="none">
-          <a href="{% url 'jobcard:create_job_card' %}"
-            class="dropdown-link {% if request.resolver_match.url_name == 'create_job_card' %}active-dropdown{% endif %}"
-            role="menuitem">
-            <i class="fas fa-plus-circle" aria-hidden="true"></i>
-            <span class="link-label">Create Work Order</span>
-          </a>
-        </li>
-
-        <li class="dropdown-entry" role="none">
-          <a href="{% url 'jobcard:waiting_jobcards' %}"
-            class="dropdown-link {% if request.resolver_match.url_name == 'waiting_jobcards' %}active-dropdown{% endif %}"
-            role="menuitem">
-            <i class="fas fa-hourglass-half" aria-hidden="true"></i>
-            <span class="link-label">Waiting Work Orders</span>
-            {% if nav.job_cards_waiting_count %}
-            <span class="queue-badge">{{ nav.job_cards_waiting_count }}</span>
-            {% endif %}
-          </a>
-        </li>
-
-        <li class="dropdown-entry" role="none">
-          <a href="{% url 'jobcard:approved_jobcards' %}"
-            class="dropdown-link {% if request.resolver_match.url_name == 'approved_jobcards' %}active-dropdown{% endif %}"
-            role="menuitem">
-            <i class="fas fa-check-circle" aria-hidden="true"></i>
-            <span class="link-label">Approved Work Orders</span>
-          </a>
-        </li>
-
-        <li class="dropdown-entry" role="none">
-          <a href="{% url 'jobcard:declined_jobcards' %}"
-            class="dropdown-link {% if request.resolver_match.url_name == 'declined_jobcards' %}active-dropdown{% endif %}"
-            role="menuitem">
-            <i class="fas fa-times-circle" aria-hidden="true"></i>
-            <span class="link-label">Declined Work Orders</span>
-          </a>
-        </li>
-
-      </ul>
-    </li>
-
-    {% if nav.is_tech %}
-    <li class="menu-entry" role="none">
-      <a href="{% url 'report_hub:report_hub' %}"
-        class="menu-link {% if 'report_hub' in request.path %}active-link{% endif %}" role="menuitem">
-        <div class="link-icon" aria-hidden="true">
-          <i class="fas fa-chart-line"></i>
-        </div>
-        <span class="link-label">Report Hub</span>
-      </a>
-    </li>
-    {% endif %}
-
     {% endif %}
     {# ── END OPERATIONS BLOCK ── #}
 

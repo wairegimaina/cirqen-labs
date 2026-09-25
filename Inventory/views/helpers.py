@@ -67,6 +67,8 @@ def serialize_equipment(e):
         'workshop': e.department.workshop.name if e.department and e.department.workshop else "",
         'workshop_id': str(e.department.workshop.id) if e.department and e.department.workshop else "",
         'status': e.status,
+        # getattr: the unit tests serialize a lightweight stand-in object.
+        'asset_tag': getattr(e, 'asset_tag', '') or "",
     }
 
 

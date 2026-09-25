@@ -53,6 +53,68 @@ from Inventory.models import Equipment, Workshop
 from core.eat import fmt_eat
 
 
+def _checklist_rows(card):
+    return [
+        {
+            'task': e.task,
+            'checklist': e.template_title,
+            'expected': e.expected_result,
+            'result': e.get_result_display(),
+            'result_code': e.result,
+            'value': e.value,
+            'note': e.note,
+            'problem': e.is_problem,
+        }
+        for e in card.checklist_entries.all()
+        if e.active_status
+    ]
+
+
+def checklist_history(equipment):
+    """Approved non-repair work orders with their checklists, and when each task was last done.
+
+    Built the same way as the repair history: approved work orders only, newest
+    first. ``task_last_done`` answers questions like "when was the NIBP cuff
+    last changed?" from the checklist answers.
+    """
+    cards = (
+        jobcard.objects.filter(equipment=equipment, status='Approved', active_status=True)
+        .select_related('performed_by')
+        .prefetch_related('checklist_entries', 'spare_parts__part__name')
+        .order_by('-date_issued', '-created_at')
+    )
+    work, last_done = [], {}
+    for card in cards:
+        rows = _checklist_rows(card)
+        ref = str(card.id)[:8].upper()
+        for row in rows:
+            key = row['task'].strip().lower()
+            if key not in last_done:  # newest first, so the first seen is the latest
+                last_done[key] = {**row, 'date': card.date_issued.strftime('%Y-%m-%d'),
+                                  'action': card.action_taken, 'work_order': ref}
+        if card.action_taken == 'Repair':
+            continue  # listed under Repair History with its checklist
+        work.append({
+            'id': str(card.id),
+            'ref': ref,
+            'date': card.date_issued.strftime('%Y-%m-%d'),
+            'action': card.action_taken,
+            'description': card.job_description,
+            'remarks': card.remarks or '',
+            'performed_by': card.performed_by.get_full_name() if card.performed_by else 'N/A',
+            'total_cost': float(card.get_total_cost()),
+            'spare_parts': [
+                {'name': sp.part.name.name if sp.part and sp.part.name else 'Unknown Part', 'quantity': sp.quantity}
+                for sp in card.spare_parts.all()
+            ],
+            'checklist': rows,
+            'problems': sum(1 for r in rows if r['problem']),
+        })
+    tasks = sorted(last_done.values(), key=lambda r: (r['checklist'], r['task']))
+    return work, tasks
+
+
+@login_required
 @require_http_methods(["GET"])
 def equipment_repair_details(request, equipment_id):
     """
@@ -119,7 +181,7 @@ def equipment_repair_details(request, equipment_id):
             equipment=equipment,
             action_taken='Repair',
             status='Approved'
-        ).select_related('performed_by').prefetch_related('spare_parts__part').order_by('-date_issued')
+        ).select_related('performed_by').prefetch_related('spare_parts__part', 'checklist_entries').order_by('-date_issued')
 
         for repair in repairs_qs:
             # Calculate downtime
@@ -154,6 +216,7 @@ def equipment_repair_details(request, equipment_id):
                 'total_cost': float(repair.get_total_cost()),
                 'status': repair.status,
                 'spare_parts': spare_parts,
+                'checklist': _checklist_rows(repair),
             })
 
         # Calculate repair summary
@@ -168,6 +231,8 @@ def equipment_repair_details(request, equipment_id):
                 'total_labor_cost': sum(r['labor_cost'] for r in repairs),
                 'total_parts_cost': sum(r['total_parts_cost'] for r in repairs),
             }
+
+        work_history, task_last_done = checklist_history(equipment)
 
         # Prepare response data
         response_data = {
@@ -184,7 +249,9 @@ def equipment_repair_details(request, equipment_id):
             'repairs': repairs,
             'summary': repair_summary,
             'calibration_certificates': calibration_certificates,
-            'total_calibrations': len(calibration_certificates)
+            'total_calibrations': len(calibration_certificates),
+            'work_history': work_history,
+            'task_last_done': task_last_done,
         }
 
         return JsonResponse(response_data)

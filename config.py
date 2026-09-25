@@ -342,6 +342,13 @@ def resolve_endpoints(data_path=None, env=None) -> dict:
 
 
 
+
+# Tables whose app was removed. A config.json saved while they existed still
+# lists them; they are dropped instead of being carried along as "extra".
+RETIRED_SYNC_TABLES = {
+    "public.integrations_metcalresult",  # Fluke MET/CAL import, removed
+}
+
 class CirqenConfig:
     """
     Unified configuration manager with custom port configuration and update settings.
@@ -481,6 +488,7 @@ class CirqenConfig:
                 "public.CalSoft_subparameter",
                 "public.Inventory_department",
                 "public.Inventory_equipment",
+            "public.Inventory_warranty",
                 "public.Inventory_equipmentdescription",
                 "public.Inventory_manufacturer",
                 "public.calSchedules_calibrationauditlog",
@@ -525,6 +533,7 @@ class CirqenConfig:
             "public.Inventory_department",
             "public.Inventory_manufacturer",
             "public.Inventory_equipmentdescription",
+            "public.Inventory_supplier",
             "public.Inventory_equipment",
             # ── User tables (depend on accounts_customuser) ──────────────────
             "public.users_userprofile",
@@ -563,6 +572,10 @@ class CirqenConfig:
             # ── Job cards ────────────────────────────────────────────────────
             "public.jobcard_jobcard",
             "public.jobcard_sparepartused",
+            # ── Checklists (template → item → per-work-order entry) ──────────
+            "public.jobcard_checklisttemplate",
+            "public.jobcard_checklistitem",
+            "public.jobcard_workorderchecklistentry",
             # ── Machine reports ──────────────────────────────────────────────
             "public.machineReports_equipmentcategory",
             "public.machineReports_equipmentstatusreport",
@@ -600,6 +613,18 @@ class CirqenConfig:
             "use_tls": True,
             "host_user": "",
             "host_password": "",
+        },
+        # ===== NOTIFICATIONS =====
+        # digest_sender: true on exactly ONE machine per site (see settings.py).
+        "notifications": {
+            "email_enabled": True,
+            "digest_sender": False,
+            "digest_hour": 7,
+        },
+        # ===== WARRANTIES =====
+        # A warranty this many days (or fewer) from expiry shows as "Expiring Soon".
+        "warranty": {
+            "expiring_soon_days": 60,
         },
     }
 
@@ -837,6 +862,7 @@ class CirqenConfig:
                 if not isinstance(stored, dict):
                     raise ValueError("top level is not an object")
                 self._deep_merge(cfg, stored)
+                cfg["sync_tables"] = self._with_default_tables(cfg.get("sync_tables") or [])
                 print(f"✓ Configuration loaded from {self.config_file}")
             except Exception as exc:
                 print(f"⚠️  Error loading config.json: {exc}")
@@ -1069,6 +1095,16 @@ class CirqenConfig:
         import copy
 
         return copy.deepcopy(d)
+
+    def _with_default_tables(self, stored_tables: list) -> list:
+        """Every default sync table, in default (FK) order, then any extra stored ones.
+
+        config.json keeps a full copy of sync_tables, and a stored list used to
+        replace the default one wholesale, so a table added in a release never
+        synced on machines installed before it.
+        """
+        defaults = self.DEFAULT_CONFIG["sync_tables"]
+        return list(defaults) + [t for t in stored_tables if t not in defaults and t not in RETIRED_SYNC_TABLES]
 
     def _deep_merge(self, base: dict, override: dict):
         """Merge override into base in-place (recursive)."""

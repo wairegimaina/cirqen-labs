@@ -22,6 +22,9 @@
         <button class="spa-nav-item" data-section="analytics">
             <i class="fas fa-chart-line"></i> <span>Analytics & Reports</span>
         </button>
+        <a class="spa-nav-item" href="{% url 'warranty_list' %}">
+          <i class="fas fa-shield-alt"></i> <span>Warranties</span>
+        </a>
     </nav>
 
     <section id="inventorySection" class="content-section active fade-in">
@@ -130,6 +133,7 @@
                                         data-manufacturer="{{ equipment.manufacturer.id|default:'' }}"
                                         data-model="{{ equipment.model|default:'' }}"
                                         data-serial="{{ equipment.serial_number|default:'' }}"
+                                        data-asset-tag="{{ equipment.asset_tag|default:'' }}"
                                         data-department="{{ equipment.department.id }}"
                                         data-status="{{ equipment.status }}"
                                         title="Edit" aria-label="Edit">
@@ -461,6 +465,11 @@
                         <input type="text" name="serial_number" id="add_serial_number" class="form-control text-uppercase font-monospace" required>
                     </div>
 
+                    <div class="mb-3">
+                        <label class="form-label" for="add_asset_tag">Hospital Asset No.</label>
+                        <input type="text" name="asset_tag" id="add_asset_tag" class="form-control font-monospace" placeholder="Barcode used by the hospital asset register">
+                    </div>
+
                     <div class="row g-2">
                         <div class="col-6">
                             <label class="form-label" for="add_department">Department</label>
@@ -479,6 +488,13 @@
                             </select>
                         </div>
                     </div>
+                    <details class="mt-3 border rounded p-2" id="addWarrantySection">
+                        <summary class="fw-semibold"><i class="fas fa-shield-alt me-1 text-muted"></i>Warranty (optional)</summary>
+                        <div class="pt-3">
+                            {% include "Inventory/_warranty_fields.html" with prefix="add_warranty" %}
+                            <div class="form-text">Shown in <a href="{% url 'warranty_list' %}">Warranties</a>, not in the inventory table.</div>
+                        </div>
+                    </details>
                     <button type="submit" class="btn btn-primary w-100 mt-3">Save Equipment</button>
                 </form>
             </div>
@@ -642,6 +658,13 @@
                         <input type="text" name="serial_number" id="edit_serial_number" class="form-control text-uppercase font-monospace" required>
                     </div>
 
+                    <div class="mb-3">
+                        <label class="form-label" for="edit_asset_tag">Hospital Asset No.</label>
+                        <input type="text" name="asset_tag" id="edit_asset_tag" class="form-control font-monospace" placeholder="Barcode used by the hospital asset register">
+                    </div>
+
+                    <div class="form-text mb-3"><i class="fas fa-shield-alt me-1"></i>Warranty details are kept in
+                        <a href="{% url 'warranty_list' %}">Warranties</a>.</div>
                     <div class="row g-2">
                         <div class="col-6">
                             <label class="form-label" for="edit_department">Department</label>
@@ -850,6 +873,7 @@
 }
 </script>
 <script src="{% static 'js/table-sort.js' %}"></script>
+<script src="{% static 'Inventory/warranty-form.js' %}"></script>
 <script src="{% static 'Inventory/inventory.js' %}"></script>
 <script src="{% static 'js/chart.umd.min.js' %}"></script>
 {% endblock %}

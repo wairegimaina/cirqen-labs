@@ -41,6 +41,18 @@ from .ajax import (
     load_equipment,
 )
 
+from .checklist_views import (
+    checklist_for_work,
+    checklist_list,
+    checklist_detail,
+    checklist_edit,
+    checklist_toggle_active,
+    checklist_from_starter,
+    checklist_import_template,
+    checklist_import_upload,
+)
+from .work_order_detail import work_order_detail
+
 __all__ = [
     "get_user_context",
     "get_or_create_user_signature",
@@ -68,4 +80,13 @@ __all__ = [
     "load_accessories",
     "check_stock_availability",
     "load_equipment",
+    "checklist_for_work",
+    "checklist_list",
+    "checklist_detail",
+    "checklist_edit",
+    "checklist_toggle_active",
+    "checklist_from_starter",
+    "checklist_import_template",
+    "checklist_import_upload",
+    "work_order_detail",
 ]

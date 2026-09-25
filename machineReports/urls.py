@@ -5,6 +5,9 @@ urlpatterns = [
     # Main dashboard
     path('', views.equipment_dashboard, name='equipment_dashboard'),
 
+    # Predicted corrective maintenance
+    path('failure-risk/', views.failure_risk, name='failure_risk'),
+
     # Equipment history views (UUID)
 
 

@@ -24,6 +24,7 @@ SCOPES = {
     "workshop.Workshop": ("pk", None),
     "Inventory.Department": ("workshop", "pk"),
     "Inventory.Equipment": ("department__workshop", "department"),
+    "Inventory.Warranty": ("equipment__department__workshop", "equipment__department"),
     "ppms.PPMSchedule": ("workshop", "equipment__department"),
     "jobcard.jobcard": ("workshop", "department"),
     "parts_tools.Tools": ("workshop", None),
