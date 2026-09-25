@@ -50,10 +50,14 @@ class AuditTests(PlanTestBase):
         self.assertTrue(self.done.active_status)
 
     def test_work_under_way_is_kept_over_an_earlier_schedule(self):
-        PPMSchedule.objects.filter(equipment=self.dup, scheduled_month=d(2027, 2)).update(status="in_progress")
-        # PPM has no in_progress status, but a synced row can carry anything.
-        decisions = audit.retire_duplicates("ppm")
-        self.assertEqual(decisions[0][1], d(2027, 2))
+        # Calibration has statuses for work under way (PPM's column can't hold them).
+        from calSchedules.models import CalibrationSchedule
+        eq = self.equipment()
+        CalibrationSchedule.objects.create(equipment=eq, workshop=self.ws, scheduled_month=d(2026, 11))
+        CalibrationSchedule.objects.create(equipment=eq, workshop=self.ws, scheduled_month=d(2027, 2),
+                                           status="in_progress", generation_source="signal")
+        decisions = audit.retire_duplicates("calibration")
+        self.assertEqual(decisions, [(eq.serial_number, d(2027, 2), [d(2026, 11)])])
 
     def test_floor_dates(self):
         moved, blocked = audit.floor_dates("ppm")
