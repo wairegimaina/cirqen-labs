@@ -1,5 +1,6 @@
 import uuid
 import logging
+from datetime import datetime
 from django.db import models
 from django.core.exceptions import ValidationError
 
@@ -265,6 +266,16 @@ class CalibrationSchedule(models.Model):
                 old_status = original.status
                 new_status = self.status
 
+                # A completed schedule keeps the month it was planned for.
+                month = self.scheduled_month
+                if isinstance(month, datetime):
+                    month = month.date()
+                if old_status == "completed" and month != original.scheduled_month:
+                    raise ValidationError(
+                        "Cannot move a completed schedule to another month. "
+                        "Completed schedules are locked historical records."
+                    )
+
                 if old_status != new_status:
                     # Completed is terminal - no regress allowed
                     if old_status == "completed" and new_status != "completed":
@@ -499,6 +510,15 @@ class CalibrationSchedule(models.Model):
     # ============================================
     # CLASS METHODS (QUERIES)
     # ============================================
+
+    @classmethod
+    def open_schedules(cls):
+        """Schedules still to be done: live rows that are not completed.
+
+        An equipment is scheduled when it has one of these. Having only
+        completed history means its chain broke and it needs a next schedule.
+        """
+        return cls.objects.filter(active_status=True, pending_delete=False).exclude(status="completed")
 
     @classmethod
     def get_normalizable_schedules(cls, start_date=None, end_date=None):

@@ -182,10 +182,9 @@ def auto_reschedule_completed_calibrations(check_hours=24):
 
                 with transaction.atomic():
                     for member in completed_members:
-                        # Check if next schedule already exists
-                        existing = CalibrationSchedule.objects.filter(
-                            equipment=member.equipment,
-                            scheduled_month=next_month
+                        # One open schedule per equipment, in any month
+                        existing = CalibrationSchedule.open_schedules().filter(
+                            equipment=member.equipment
                         ).exists()
 
                         if not existing:
@@ -263,9 +262,8 @@ def _basic_auto_reschedule(completed_schedules):
         period = schedule.calibration_period or 12
         next_month = grouping.next_period_month(schedule.scheduled_month, period)
 
-        existing = CalibrationSchedule.objects.filter(
-            equipment=schedule.equipment,
-            scheduled_month=next_month
+        existing = CalibrationSchedule.open_schedules().filter(
+            equipment=schedule.equipment
         ).exists()
 
         if not existing:

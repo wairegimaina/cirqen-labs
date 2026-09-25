@@ -11,6 +11,16 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _retire(queryset):
+    """Take schedules out of the plan without deleting them.
+
+    ``update()`` skips ``save()``, so ``needs_sync`` and ``updated_at`` are set
+    here for the sync agent to pick the change up.
+    """
+    from django.utils import timezone
+    return queryset.update(active_status=False, needs_sync=True, updated_at=timezone.now())
+
+
 @shared_task(name="ppms.tasks.validate_ppm_schedules")
 def validate_ppm_schedules(workshop_id):
     """
@@ -21,39 +31,37 @@ def validate_ppm_schedules(workshop_id):
         workshop = Workshop.objects.get(id=workshop_id)
         issues_fixed = 0
 
-        # Remove schedules for inactive equipment
-        inactive_equipment_schedules = PPMSchedule.objects.filter(
+        # Retire open schedules of inactive equipment (completed history stays)
+        inactive_count = _retire(PPMSchedule.open_schedules().filter(
             workshop_id=workshop_id,
             equipment__active_status=False
-        )
-        inactive_count = inactive_equipment_schedules.count()
+        ))
         if inactive_count > 0:
-            inactive_equipment_schedules.delete()
             issues_fixed += inactive_count
-            logger.info(f"Deleted {inactive_count} schedules for inactive equipment")
+            logger.info(f"Retired {inactive_count} open schedules for inactive equipment")
 
-        # Find duplicate schedules
+        # More than one OPEN schedule for an equipment: keep the earliest,
+        # retire the rest. Completed schedules are history, not duplicates.
         from django.db.models import Count
-        duplicates = PPMSchedule.objects.filter(
+        open_qs = PPMSchedule.open_schedules().filter(
             workshop_id=workshop_id,
             equipment__active_status=True
-        ).values('equipment_id').annotate(
-            count=Count('equipment_id')
+        )
+        duplicates = open_qs.values('equipment_id').annotate(
+            count=Count('id')
         ).filter(count__gt=1)
 
         for duplicate in duplicates:
-            equipment_id = duplicate['equipment_id']
-            schedules = PPMSchedule.objects.filter(
-                workshop_id=workshop_id,
-                equipment_id=equipment_id
-            ).order_by('scheduled_month')
-
-            if schedules.count() > 1:
-                schedules_to_delete = schedules[1:]
-                for schedule in schedules_to_delete:
-                    logger.info(f"Deleting duplicate schedule {schedule.id}")
-                    schedule.delete()
-                    issues_fixed += 1
+            extra_ids = list(
+                open_qs.filter(equipment_id=duplicate['equipment_id'])
+                .order_by('scheduled_month', 'created_at')
+                .values_list('id', flat=True)[1:]
+            )
+            retired = _retire(PPMSchedule.objects.filter(id__in=extra_ids))
+            logger.info(
+                f"Retired {retired} duplicate open schedule(s) for equipment {duplicate['equipment_id']}"
+            )
+            issues_fixed += retired
 
         # Check for split groups (department/description split across months)
         logger.info("Checking for split groups...")
@@ -89,23 +97,26 @@ def validate_ppm_schedules(workshop_id):
 
 @shared_task(name="ppms.tasks.periodic_cleanup_inactive_schedules")
 def periodic_cleanup_inactive_schedules():
-    """Automatically run cleanup of PPM schedules for inactive equipment"""
+    """Retire open PPM schedules of inactive equipment.
+
+    Only schedules still to be done are retired (``active_status=False``);
+    completed schedules are the equipment's maintenance history and are kept.
+    This task used to delete every schedule of an inactive device, completed
+    ones included, so reactivating a device brought it back with no history.
+    """
     try:
-        inactive_schedules = PPMSchedule.objects.select_related('equipment').filter(
+        inactive_schedules = PPMSchedule.open_schedules().filter(
             equipment__active_status=False
         )
-
-        count = inactive_schedules.count()
+        equipment_ids = list(inactive_schedules.values_list('equipment_id', flat=True)[:10])
+        count = _retire(inactive_schedules)
 
         if count > 0:
-            equipment_ids = list(inactive_schedules.values_list('equipment_id', flat=True))
-            inactive_schedules.delete()
-
             logger.info(
-                f"Periodic cleanup: Removed {count} PPM schedule(s) for inactive equipment. "
-                f"Equipment IDs: {equipment_ids[:10]}{'...' if len(equipment_ids) > 10 else ''}"
+                f"Periodic cleanup: Retired {count} open PPM schedule(s) for inactive equipment. "
+                f"Equipment IDs: {equipment_ids}{'...' if count > 10 else ''}"
             )
-            return f"Cleaned up {count} schedules for inactive equipment"
+            return f"Retired {count} open schedules for inactive equipment"
         else:
             logger.debug("Periodic cleanup: No inactive equipment schedules found")
             return "No inactive equipment schedules found"

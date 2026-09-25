@@ -1,4 +1,6 @@
 import uuid
+from datetime import datetime
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.conf import settings
 from Inventory.models import Equipment
@@ -172,6 +174,28 @@ class PPMSchedule(models.Model):
         if self.equipment_id and self.equipment.department:
             self.workshop = self.equipment.department.workshop
 
+        # Completed schedules are historical records: their month and status
+        # never change. Sync writes completions with raw SQL, so this only
+        # guards the ORM paths (edit view, bulk actions, tasks).
+        if self.pk:
+            original = PPMSchedule.objects.filter(pk=self.pk).values(
+                'status', 'scheduled_month'
+            ).first()
+            if original and original['status'] == 'completed':
+                if self.status != 'completed':
+                    raise ValidationError(
+                        f"Cannot change status from 'Completed' to '{self.status}'. "
+                        "Completed schedules are locked historical records."
+                    )
+                month = self.scheduled_month
+                if isinstance(month, datetime):
+                    month = month.date()
+                if month != original['scheduled_month']:
+                    raise ValidationError(
+                        "Cannot move a completed schedule to another month. "
+                        "Completed schedules are locked historical records."
+                    )
+
         # Detect planning_logic change on existing schedules
         if self.pk:
             try:
@@ -322,6 +346,15 @@ class PPMSchedule(models.Model):
     # ============================================
     # CLASS METHODS (QUERIES)
     # ============================================
+
+    @classmethod
+    def open_schedules(cls):
+        """Schedules still to be done: live rows that are not completed.
+
+        An equipment is scheduled when it has one of these. Having only
+        completed history means its chain broke and it needs a next schedule.
+        """
+        return cls.objects.filter(active_status=True, pending_delete=False).exclude(status='completed')
 
     @classmethod
     def get_normalizable_schedules(cls, start_date=None, end_date=None):

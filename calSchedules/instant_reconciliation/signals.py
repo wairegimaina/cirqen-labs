@@ -104,18 +104,11 @@ def instant_reschedule_on_completion(sender, instance, created, **kwargs):
 
     with transaction.atomic():
         for member in completed_members:
-            # Check if schedule for next month already exists
-            existing = CalibrationSchedule.objects.filter(
-                equipment=member.equipment,
-                scheduled_month=next_month
-            ).exists()
-
-            if existing:
+            # One open schedule per equipment: skip anything already
+            # scheduled, whichever month that schedule is in.
+            if CalibrationSchedule.open_schedules().filter(equipment=member.equipment).exists():
                 already_exists_count += 1
-                logger.debug(
-                    f"[SIGNAL] Schedule for {member.equipment.id} "
-                    f"in {next_month.strftime('%B %Y')} already exists"
-                )
+                logger.debug(f"[SIGNAL] {member.equipment.id} already has an open schedule")
                 continue
 
             # Create new schedule for next period

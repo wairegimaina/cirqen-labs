@@ -47,11 +47,12 @@ def initialize_ppm_schedule_with_logic(self, workshop_id, planning_logic='depart
 
         start_date = date(base_year, base_month, 1)
 
-        # Track existing schedules
+        # Track existing schedules. Retired rows (inactive or pending
+        # deletion) don't count: equipment with only those is unscheduled.
         existing_schedules = PPMSchedule.objects.select_related(
             'equipment__department',
             'equipment__description'
-        ).filter(workshop_id=workshop_id)
+        ).filter(workshop_id=workshop_id, active_status=True, pending_delete=False)
 
         existing_equipment_ids = set(existing_schedules.values_list('equipment_id', flat=True))
         logger.info(f"Found {len(existing_equipment_ids)} existing schedules")
@@ -114,8 +115,9 @@ def initialize_ppm_schedule_with_logic(self, workshop_id, planning_logic='depart
         logger.info(f"Processing {total_groups} groups...")
 
         for group_index, (group_id, equipment_in_group) in enumerate(group_items):
-            # Update progress
-            if group_index % 5 == 0:
+            # Update progress (only when running as a Celery task, not when
+            # called directly by the daily auto-scheduler)
+            if group_index % 5 == 0 and self.request.id:
                 progress = int((group_index / total_groups) * 100)
                 self.update_state(
                     state='PROGRESS',
@@ -169,7 +171,9 @@ def initialize_ppm_schedule_with_logic(self, workshop_id, planning_logic='depart
             for equip in equipment_in_group:
                 try:
                     # Double-check if equipment is already scheduled
-                    if PPMSchedule.objects.filter(equipment_id=equip.id).exists():
+                    if PPMSchedule.objects.filter(
+                        equipment_id=equip.id, active_status=True, pending_delete=False
+                    ).exists():
                         logger.debug(f"Equipment {equip.id} already scheduled, skipping")
                         skipped_already_scheduled += 1
                         continue

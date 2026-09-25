@@ -63,7 +63,11 @@ def initialize_calibration_schedule_with_logic(
         equipment__active_status=True
     ).select_related('equipment__department', 'equipment__description')
 
-    existing_equipment_ids = set(existing_schedules.values_list('equipment_id', flat=True))
+    # Retired rows (inactive or pending deletion) don't make equipment scheduled.
+    existing_equipment_ids = set(
+        existing_schedules.filter(active_status=True, pending_delete=False)
+        .values_list('equipment_id', flat=True)
+    )
 
     # Build month usage maps
     month_dept_count = defaultdict(int)
@@ -115,7 +119,9 @@ def initialize_calibration_schedule_with_logic(
         for equip in equip_list:
             if not equip.active_status:
                 continue
-            if CalibrationSchedule.objects.filter(equipment_id=equip.id).exists():
+            if CalibrationSchedule.objects.filter(
+                equipment_id=equip.id, active_status=True, pending_delete=False
+            ).exists():
                 skipped_count += 1
                 continue
             try:

@@ -16,44 +16,49 @@ from ..locker import lock_completed_schedules, auto_lock_and_reschedule, get_loc
 PROTECTED_SOURCES = ['signal', 'locker', 'job_card']
 
 
+def _retire(queryset):
+    """Take schedules out of the plan without deleting them.
+
+    ``update()`` skips ``save()``, so ``needs_sync`` and ``updated_at`` are set
+    here for the sync agent to pick the change up.
+    """
+    from django.utils import timezone as dj_timezone
+    return queryset.update(active_status=False, needs_sync=True, updated_at=dj_timezone.now())
+
+
 @shared_task(name="calSchedules.tasks.push_overdue_schedules")
 def push_overdue_schedules():
-    """Push overdue pending schedules forward to current/future months."""
-    today = date.today().replace(day=1)
-    overdue = CalibrationSchedule.objects.filter(
-        scheduled_month__lt=today, status='pending', equipment__active_status=True
-    )
-    pushed_count = total_months = 0
+    """Report overdue calibration schedules. Nothing is moved.
 
-    for sched in overdue:
-        months_pushed = 0
-        while sched.scheduled_month < today:
-            sched.scheduled_month += relativedelta(months=1)
-            months_pushed += 1
-        sched.status = 'pushed'
-        sched.save()
-        pushed_count += 1
-        total_months += months_pushed
-        logger.info(f"[PUSH] Pushed schedule {sched.id} forward {months_pushed} month(s)")
-
-    result = f"Pushed {pushed_count} overdue schedules forward ({total_months} total months adjusted)."
+    This used to walk every overdue schedule forward to the current month,
+    which lost the month the device was actually due in and shifted its
+    whole cycle. The due month is now permanent; ``is_overdue`` reports it.
+    """
+    month_start = date.today().replace(day=1)
+    overdue = CalibrationSchedule.open_schedules().filter(
+        scheduled_month__lt=month_start, equipment__active_status=True
+    ).count()
+    result = f"{overdue} overdue calibration schedule(s) (left in their due month)."
     logger.info(f"[PUSH] {result}")
     return result
 
 
 @shared_task(name="calSchedules.tasks.cleanup_orphaned_calibration_schedules")
 def cleanup_orphaned_calibration_schedules():
-    """Remove calibration schedules for missing or inactive equipment."""
+    """Remove orphaned schedules; retire open schedules of inactive equipment.
+
+    Completed schedules of inactive equipment are calibration history and are
+    kept; only work still to be done is taken out of the plan.
+    """
     orphaned = CalibrationSchedule.objects.filter(equipment__isnull=True)
     orphaned_count = orphaned.count()
     orphaned.delete()
 
-    inactive = CalibrationSchedule.objects.filter(equipment__active_status=False)
-    inactive_count = inactive.count()
-    if inactive_count:
-        inactive.delete()
+    inactive_count = _retire(
+        CalibrationSchedule.open_schedules().filter(equipment__active_status=False)
+    )
 
-    result = f"Cleaned up {orphaned_count + inactive_count} orphaned schedules ({inactive_count} inactive equipment)."
+    result = f"Cleaned up {orphaned_count} orphaned schedules; retired {inactive_count} open schedules of inactive equipment."
     logger.info(f"[CLEANUP] {result}")
     return result
 
@@ -63,27 +68,29 @@ def validate_calibration_schedules():
     """Validate calibration schedules and fix common issues."""
     issues_fixed = 0
 
-    inactive = CalibrationSchedule.objects.filter(equipment__active_status=False)
-    inactive_count = inactive.count()
+    inactive_count = _retire(
+        CalibrationSchedule.open_schedules().filter(equipment__active_status=False)
+    )
     if inactive_count:
-        inactive.delete()
         issues_fixed += inactive_count
-        logger.info(f"[VALIDATE] Removed {inactive_count} schedules for inactive equipment")
+        logger.info(f"[VALIDATE] Retired {inactive_count} open schedules for inactive equipment")
 
+    # More than one OPEN schedule for an equipment: keep the earliest, retire
+    # the rest. Completed schedules are history, not duplicates.
+    open_qs = CalibrationSchedule.open_schedules().filter(equipment__active_status=True)
     duplicates = (
-        CalibrationSchedule.objects.filter(equipment__active_status=True)
-        .values('equipment_id').annotate(count=Count('equipment_id')).filter(count__gt=1)
+        open_qs.values('equipment_id').annotate(count=Count('id')).filter(count__gt=1)
     )
     for dup in duplicates:
-        schedules = CalibrationSchedule.objects.filter(
-            equipment_id=dup['equipment_id'], equipment__active_status=True
-        ).order_by('scheduled_month')
-        to_delete = list(schedules[1:])
-        for s in to_delete:
-            s.delete()
-            issues_fixed += 1
-        if to_delete:
-            logger.info(f"[VALIDATE] Removed {len(to_delete)} duplicate schedules for equipment {dup['equipment_id']}")
+        extra_ids = list(
+            open_qs.filter(equipment_id=dup['equipment_id'])
+            .order_by('scheduled_month', 'created_at')
+            .values_list('id', flat=True)[1:]
+        )
+        retired = _retire(CalibrationSchedule.objects.filter(id__in=extra_ids))
+        issues_fixed += retired
+        if retired:
+            logger.info(f"[VALIDATE] Retired {retired} duplicate open schedules for equipment {dup['equipment_id']}")
 
     result = f"Fixed {issues_fixed} calibration scheduling issues ({inactive_count} inactive equipment schedules)."
     logger.info(f"[VALIDATE] {result}")
@@ -92,15 +99,16 @@ def validate_calibration_schedules():
 
 @shared_task(name="calSchedules.tasks.remove_inactive_equipment_schedules")
 def remove_inactive_equipment_schedules():
-    """Remove all calibration schedules for inactive equipment."""
-    qs = CalibrationSchedule.objects.filter(equipment__active_status=False)
-    count = qs.count()
+    """Retire open calibration schedules of inactive equipment.
+
+    Completed schedules are kept: they are the device's calibration history.
+    This used to delete every schedule, completed ones included.
+    """
+    qs = CalibrationSchedule.open_schedules().filter(equipment__active_status=False)
+    count = _retire(qs)
 
     if count:
-        for s in qs:
-            logger.info(f"[REMOVE_INACTIVE] Removing schedule {s.id} for inactive equipment {s.equipment.id}")
-        qs.delete()
-        result = f"Removed {count} calibration schedules for inactive equipment"
+        result = f"Retired {count} open calibration schedules for inactive equipment"
     else:
         result = "No schedules to remove"
 
@@ -155,6 +163,65 @@ def generate_monthly_calibration_report(target_month=None, target_year=None):
     return report_data
 
 
+def _resume_calibration_chains(equipment_ids):
+    """Give equipment whose calibration chain broke its next schedule.
+
+    ``equipment_ids`` have completed calibrations but no open schedule,
+    usually because their group waited on a member that was never done. Each
+    resumes from its own latest completed schedule, one calibration period on
+    and stepped forward by whole periods to this month or later, so it keeps
+    its month-of-year slot (see ``grouping.resume_month``).
+
+    Returns the number of equipment rescheduled.
+    """
+    this_month = date.today().replace(day=1)
+    latest = {}
+    completed = CalibrationSchedule.objects.filter(
+        equipment_id__in=equipment_ids, status='completed', pending_delete=False,
+    ).select_related('equipment').order_by('equipment_id', '-scheduled_month')
+    for sched in completed:
+        latest.setdefault(sched.equipment_id, sched)
+
+    resumed = 0
+    for equipment_id, last in latest.items():
+        period = last.calibration_period or 12
+        target = grouping.resume_month(last.scheduled_month, period, this_month)
+        try:
+            with transaction.atomic():
+                # A retired, never-completed row can already sit in that
+                # month (unique per equipment and month): bring it back.
+                stale = CalibrationSchedule.objects.filter(
+                    equipment_id=equipment_id, scheduled_month=target,
+                ).exclude(status='completed').first()
+                if stale:
+                    stale.status = 'pending'
+                    stale.active_status = True
+                    stale.pending_delete = False
+                    stale.generation_source = 'signal'
+                    stale.parent_schedule = last
+                    stale.save()
+                else:
+                    CalibrationSchedule.objects.create(
+                        equipment=last.equipment,
+                        workshop=last.workshop,
+                        scheduled_month=target,
+                        status='pending',
+                        calibration_period=period,
+                        planning_logic=last.planning_logic,
+                        generation_source='signal',
+                        parent_schedule=last,
+                        active_status=True,
+                    )
+            resumed += 1
+            logger.info(
+                f"[RESUME] Equipment {equipment_id}: last completed "
+                f"{last.scheduled_month.strftime('%B %Y')} + {period}m -> {target.strftime('%B %Y')}"
+            )
+        except Exception as e:
+            logger.error(f"[RESUME] Could not reschedule equipment {equipment_id}: {e}")
+    return resumed
+
+
 @shared_task(name="calSchedules.tasks.auto_schedule_unscheduled_equipment")
 def auto_schedule_unscheduled_equipment(
     planning_logic='department',
@@ -172,14 +239,29 @@ def auto_schedule_unscheduled_equipment(
 
     start_date = date(base_year, base_month, 1)
 
+    # Unscheduled = no open schedule. Completed history alone does not count:
+    # that is a chain that stopped, not a scheduled device.
     scheduled_ids = set(
-        CalibrationSchedule.objects.filter(equipment__active_status=True).values_list('equipment_id', flat=True)
+        CalibrationSchedule.open_schedules().filter(equipment__active_status=True)
+        .values_list('equipment_id', flat=True)
     )
-    unscheduled = Equipment.objects.filter(active_status=True).exclude(id__in=scheduled_ids).select_related('department', 'description')
+    unscheduled = Equipment.objects.filter(active_status=True).exclude(id__in=scheduled_ids)
+
+    # Equipment with completed history continues its own cycle.
+    with_history = set(
+        CalibrationSchedule.objects.filter(
+            equipment__in=unscheduled, status='completed', pending_delete=False
+        ).values_list('equipment_id', flat=True)
+    )
+    resumed = _resume_calibration_chains(with_history) if with_history else 0
+
+    # Only equipment never calibrated (or whose rows were all retired) is
+    # placed afresh below.
+    unscheduled = unscheduled.exclude(id__in=with_history).select_related('department', 'description')
 
     if not unscheduled.exists():
-        logger.info("[AUTO_SCHEDULE] No unscheduled equipment to schedule")
-        return "No unscheduled equipment to schedule"
+        logger.info(f"[AUTO_SCHEDULE] Resumed {resumed} broken chains; no never-scheduled equipment")
+        return f"Resumed {resumed} broken chains. No unscheduled equipment to schedule"
 
     logger.info(f"[AUTO_SCHEDULE] Found {unscheduled.count()} unscheduled items")
 
@@ -221,6 +303,6 @@ def auto_schedule_unscheduled_equipment(
             logger.error(f"[AUTO_SCHEDULE] Failed for equipment {equip.id}: {e}")
             failed_count += 1
 
-    result = f"Auto-scheduled {created_count} equipment items. Failed: {failed_count}"
+    result = f"Auto-scheduled {created_count} equipment items, resumed {resumed} broken chains. Failed: {failed_count}"
     logger.info(f"[AUTO_SCHEDULE] {result}")
     return result

@@ -116,6 +116,23 @@ def next_period_month(current_month, period):
     return current_month + relativedelta(months=period)
 
 
+def resume_month(last_month, period, from_month):
+    """The month a broken schedule chain picks up again.
+
+    ``last_month`` is the device's latest completed schedule. Its next visit
+    was due ``period`` months later; if that month has already gone by, the
+    chain steps forward a whole period at a time until it reaches
+    ``from_month``. Stepping by whole periods keeps the device in the same
+    month-of-year slot as the rest of its group instead of dropping it into
+    whatever month happens to be next.
+    """
+    period = int(period or 12)
+    month = last_month.replace(day=1) + relativedelta(months=period)
+    while month < from_month:
+        month += relativedelta(months=period)
+    return month
+
+
 def clamp_far_future_month(next_month, today, period, slack_months=6):
     """Guard against a stale base month producing an absurd future date.
 

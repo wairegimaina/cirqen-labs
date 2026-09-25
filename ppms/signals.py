@@ -105,25 +105,27 @@ def auto_reschedule_ppm_on_group_complete(sender, instance, created, **kwargs):
 
     Smart Organizer Protection:
       - Skips if status != 'completed'
-      - Skips if the group has already been processed in this run
+      - Skips saves that did not touch the status (e.g. locking a member)
+      - Skips members that already have an open schedule, so re-running is safe
       - New schedules are created with generation_source='signal' and parent_schedule link
       - Only operates on active schedules
+
+    There is deliberately no "already processed this group" memo. One used to
+    live on this function for the life of the process and was filled in
+    before the completion check, so the first completion in a group recorded
+    the group as done and every later completion returned early: groups with
+    more than one member never advanced. The open-schedule check below is
+    what keeps repeated runs from creating duplicates.
     """
     # Only act on existing rows that reached 'completed'
     if created or instance.status != 'completed':
         return
 
-    # Avoid re-processing groups when multiple saves fire in the same request
-    group_key = _get_ppm_group_key(instance)
-
-    # Important: django signals run in-process, so a module-level set is safe
-    if not hasattr(auto_reschedule_ppm_on_group_complete, '_processed_groups'):
-        auto_reschedule_ppm_on_group_complete._processed_groups = set()
-
-    if group_key in auto_reschedule_ppm_on_group_complete._processed_groups:
+    update_fields = kwargs.get('update_fields')
+    if update_fields is not None and 'status' not in update_fields:
         return
 
-    auto_reschedule_ppm_on_group_complete._processed_groups.add(group_key)
+    group_key = _get_ppm_group_key(instance)
 
     # Check group completion
     group_status = _check_ppm_group_completion(instance)
@@ -148,17 +150,11 @@ def auto_reschedule_ppm_on_group_complete(sender, instance, created, **kwargs):
 
     with transaction.atomic():
         for member in members:
-            # Skip if already rescheduled for this next month
-            existing = PPMSchedule.objects.filter(
-                equipment=member.equipment,
-                scheduled_month=next_month,
-                active_status=True
-            ).exists()
-
-            if existing:
+            # One open schedule per equipment: skip anything already scheduled,
+            # whichever month that schedule is in.
+            if PPMSchedule.open_schedules().filter(equipment=member.equipment).exists():
                 logger.debug(
-                    f"[PPM_SIGNAL] Next schedule already exists for equipment {member.equipment.id} "
-                    f"in {next_month.strftime('%B %Y')}, skipping."
+                    f"[PPM_SIGNAL] Equipment {member.equipment.id} already has an open schedule, skipping."
                 )
                 continue
 
@@ -168,18 +164,20 @@ def auto_reschedule_ppm_on_group_complete(sender, instance, created, **kwargs):
                 member.save(update_fields=['is_locked', 'needs_sync'])
 
             try:
-                new_schedule = PPMSchedule.objects.create(
-                    equipment=member.equipment,
-                    scheduled_month=next_month,
-                    status='pending',
-                    maintenance_period=period,
-                    planning_logic=member.planning_logic or 'department',
-                    generation_source='signal',
-                    parent_schedule=member,
-                    expected_maintenance_date=next_month,
-                    workshop=member.workshop,
-                    active_status=True,
-                )
+                # Savepoint: one failed insert must not abort the other members.
+                with transaction.atomic():
+                    new_schedule = PPMSchedule.objects.create(
+                        equipment=member.equipment,
+                        scheduled_month=next_month,
+                        status='pending',
+                        maintenance_period=period,
+                        planning_logic=member.planning_logic or 'department',
+                        generation_source='signal',
+                        parent_schedule=member,
+                        expected_maintenance_date=next_month,
+                        workshop=member.workshop,
+                        active_status=True,
+                    )
                 logger.info(
                     f"[PPM_SIGNAL] Rescheduled equipment {member.equipment.id} "
                     f"to {new_schedule.scheduled_month.strftime('%B %Y')} (period={period}m, source=signal, parent={member.id})."

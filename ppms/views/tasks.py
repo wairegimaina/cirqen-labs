@@ -474,14 +474,9 @@ def trigger_sync_initialization(request):
             # Import the actual task function
             from ppms.tasks import initialize_ppm_schedule_with_logic
 
-            # Create a mock self object for bind parameter
-            class MockSelf:
-                def update_state(self, state, meta):
-                    logger.info(f"Progress: {meta.get('percent', 0)}% - {meta.get('status', '')}")
-
-            # Call directly without Celery
+            # Call directly without Celery. The task is bound, so calling it
+            # supplies `self`; passing one as well shifted every argument.
             result = initialize_ppm_schedule_with_logic(
-                MockSelf(),
                 str(workshop_id),
                 planning_logic,
                 maintenance_period,

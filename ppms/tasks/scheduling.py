@@ -17,41 +17,89 @@ from .initialize import initialize_ppm_schedule_with_logic
 @shared_task(name="ppms.tasks.check_and_push_overdue_ppms")
 def check_and_push_overdue_ppms():
     """
-    Enhanced version: Only pushes schedules for ACTIVE equipment.
-    Deletes schedules for inactive equipment that became overdue.
+    Report overdue PPM schedules. Nothing is moved or deleted.
+
+    This used to add 30 days to every overdue schedule, which knocked
+    ``scheduled_month`` off the 1st (1 Jan + 30 days is still 31 Jan; 1 Feb
+    becomes 3 Mar) and broke every query that matches a group by month. It
+    also deleted schedules of inactive equipment. A due month is now
+    permanent: overdue is worked out from the month (``PPMSchedule.is_overdue``)
+    and shown as such until the work is done. Schedules of inactive equipment
+    are retired by ``periodic_cleanup_inactive_schedules``.
+
+    The task name is kept so the existing beat entry keeps working.
     """
-    today = date.today()
-
-    # Get all overdue pending schedules
-    overdue = PPMSchedule.objects.select_related('equipment').filter(
-        scheduled_month__lt=today,
-        status='pending'
-    )
-
-    pushed_count = 0
-    deleted_inactive_count = 0
-
-    for sched in overdue:
-        # Check if equipment is still active
-        if sched.equipment and sched.equipment.active_status:
-            # Equipment is active - push the schedule forward
-            sched.scheduled_month = sched.scheduled_month + timedelta(days=30)
-            sched.status = 'pushed'
-            sched.save()
-            pushed_count += 1
-            logger.info(f"Pushed overdue schedule for active equipment {sched.equipment.id}")
-        else:
-            # Equipment is inactive - delete the schedule
-            equipment_id = sched.equipment.id if sched.equipment else 'Unknown'
-            sched.delete()
-            deleted_inactive_count += 1
-            logger.info(f"Deleted overdue schedule for inactive equipment {equipment_id}")
-
-    result = f"Pushed {pushed_count} overdue schedules for active equipment."
-    if deleted_inactive_count > 0:
-        result += f" Deleted {deleted_inactive_count} schedules for inactive equipment."
-
+    month_start = date.today().replace(day=1)
+    overdue = PPMSchedule.open_schedules().filter(
+        scheduled_month__lt=month_start,
+        equipment__active_status=True,
+    ).count()
+    result = f"{overdue} overdue PPM schedule(s) (left in their due month)."
+    logger.info(result)
     return result
+
+
+def _resume_ppm_chains(equipment_ids):
+    """Give equipment whose schedule chain broke its next schedule.
+
+    ``equipment_ids`` have completed history but no open schedule, usually
+    because their group waited on a member that was never completed. Each
+    resumes from its own latest completed schedule, one maintenance period on
+    and stepped forward by whole periods to this month or later, so it stays
+    in its group's months (see ``calSchedules.grouping.resume_month``).
+
+    Returns the number of equipment rescheduled.
+    """
+    from django.db import transaction
+    from calSchedules.grouping import resume_month
+
+    this_month = date.today().replace(day=1)
+    latest = {}
+    completed = PPMSchedule.objects.filter(
+        equipment_id__in=equipment_ids, status='completed', pending_delete=False,
+    ).select_related('equipment').order_by('equipment_id', '-scheduled_month')
+    for sched in completed:
+        latest.setdefault(sched.equipment_id, sched)
+
+    resumed = 0
+    for equipment_id, last in latest.items():
+        period = last.maintenance_period or 6
+        target = resume_month(last.scheduled_month, period, this_month)
+        try:
+            with transaction.atomic():
+                # A retired, never-completed row can already sit in that
+                # month (unique per equipment and month): bring it back.
+                stale = PPMSchedule.objects.filter(
+                    equipment_id=equipment_id, scheduled_month=target,
+                ).exclude(status='completed').first()
+                if stale:
+                    stale.status = 'pending'
+                    stale.active_status = True
+                    stale.pending_delete = False
+                    stale.generation_source = 'signal'
+                    stale.parent_schedule = last
+                    stale.save()
+                else:
+                    PPMSchedule.objects.create(
+                        equipment=last.equipment,
+                        workshop=last.workshop,
+                        scheduled_month=target,
+                        status='pending',
+                        maintenance_period=period,
+                        planning_logic=last.planning_logic or 'department',
+                        generation_source='signal',
+                        parent_schedule=last,
+                        expected_maintenance_date=target,
+                        active_status=True,
+                    )
+            resumed += 1
+            logger.info(
+                f"[PPM_RESUME] Equipment {equipment_id}: last completed "
+                f"{last.scheduled_month.strftime('%B %Y')} + {period}m -> {target.strftime('%B %Y')}"
+            )
+        except Exception as exc:
+            logger.error(f"[PPM_RESUME] Could not reschedule equipment {equipment_id}: {exc}")
+    return resumed
 
 
 @shared_task(name="ppms.tasks.auto_schedule_unscheduled_equipment")
@@ -106,6 +154,7 @@ def auto_schedule_unscheduled_equipment(planning_logic='department',
             'workshops_processed': 0,
             'workshops_with_unscheduled': 0,
             'total_equipment_scheduled': 0,
+            'total_equipment_resumed': 0,
             'total_equipment_skipped': 0,
             'workshop_details': {},
             'errors': []
@@ -117,9 +166,10 @@ def auto_schedule_unscheduled_equipment(planning_logic='department',
                 logger.info(f"{'-'*60}")
                 logger.info(f"Processing workshop: {workshop.name} (ID: {workshop.id})")
 
-                # Find unscheduled equipment in this workshop
-                scheduled_equipment_ids = PPMSchedule.objects.filter(
-                    workshop_id=workshop.id,
+                # Unscheduled = no open schedule. Completed history alone does
+                # not count: that is a chain that stopped, not a scheduled device.
+                scheduled_equipment_ids = PPMSchedule.open_schedules().filter(
+                    equipment__workshop_id=workshop.id,
                     equipment__active_status=True
                 ).values_list('equipment_id', flat=True)
 
@@ -132,10 +182,25 @@ def auto_schedule_unscheduled_equipment(planning_logic='department',
                     ).values_list('id', flat=True)
                 )
 
+                # Equipment with completed history continues its own cycle;
+                # only equipment never maintained goes through initialization.
+                with_history = set(
+                    PPMSchedule.objects.filter(
+                        equipment_id__in=unscheduled_equipment_ids,
+                        status='completed',
+                        pending_delete=False,
+                    ).values_list('equipment_id', flat=True)
+                )
+                resumed = _resume_ppm_chains(with_history) if with_history else 0
+                results['total_equipment_resumed'] += resumed
+                unscheduled_equipment_ids = [
+                    eid for eid in unscheduled_equipment_ids if eid not in with_history
+                ]
+
                 unscheduled_count = len(unscheduled_equipment_ids)
 
-                logger.info(f"  Scheduled equipment: {len(scheduled_equipment_ids)}")
-                logger.info(f"  Unscheduled equipment: {unscheduled_count}")
+                logger.info(f"  Resumed chains: {resumed} of {len(with_history)}")
+                logger.info(f"  Never scheduled: {unscheduled_count}")
 
                 if unscheduled_count == 0:
                     logger.info(f"  No unscheduled equipment in {workshop.name}")
@@ -160,10 +225,11 @@ def auto_schedule_unscheduled_equipment(planning_logic='department',
                     base_month = 1
                     base_year += 1
 
-                # Call the main initialization task
-                # Use direct call instead of .delay() to run synchronously
+                # Call the main initialization task synchronously. It is a
+                # bound task, so calling it passes `self` already: an extra
+                # leading None used to shift every argument and fail with
+                # "got multiple values for argument 'planning_logic'".
                 result = initialize_ppm_schedule_with_logic(
-                    None,  # self parameter (not needed when called directly)
                     str(workshop.id),
                     planning_logic=planning_logic,
                     maintenance_period=maintenance_period,
@@ -243,7 +309,8 @@ def auto_schedule_unscheduled_equipment(planning_logic='department',
         message = (
             f"Auto-scheduling completed: "
             f"Processed {results['workshops_processed']} workshops, "
-            f"scheduled {results['total_equipment_scheduled']} equipment items"
+            f"scheduled {results['total_equipment_scheduled']} equipment items, "
+            f"resumed {results['total_equipment_resumed']} broken chains"
         )
 
         if results['errors']:
@@ -289,8 +356,8 @@ def generate_unscheduled_equipment_report():
 
         for workshop in workshops:
             scheduled_ids = set(
-                PPMSchedule.objects.filter(
-                    workshop_id=workshop.id,
+                PPMSchedule.open_schedules().filter(
+                    equipment__workshop_id=workshop.id,
                     equipment__active_status=True
                 ).values_list('equipment_id', flat=True)
             )

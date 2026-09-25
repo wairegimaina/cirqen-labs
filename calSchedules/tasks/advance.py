@@ -25,7 +25,7 @@ def auto_advance_completed_calibrations():
     GROUP-AWARE: Advance completed calibrations to next period.
     Waits for ALL group members to complete before rescheduling.
     """
-    from .instant_reconciliation import check_group_completion_status, get_next_group_month
+    from ..instant_reconciliation import check_group_completion_status, get_next_group_month
 
     logger.info("[AUTO_ADVANCE] Starting GROUP-AWARE auto-advance")
 
@@ -75,8 +75,9 @@ def auto_advance_completed_calibrations():
 
         with transaction.atomic():
             for member in _get_group_members(schedule, planning_logic):
-                already_exists = CalibrationSchedule.objects.filter(
-                    equipment=member.equipment, scheduled_month=next_month, active_status=True
+                # One open schedule per equipment, in any month
+                already_exists = CalibrationSchedule.open_schedules().filter(
+                    equipment=member.equipment
                 ).exists()
 
                 if already_exists:

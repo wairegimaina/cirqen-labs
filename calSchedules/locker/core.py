@@ -311,11 +311,9 @@ def _reschedule_locked_group(group_schedules, current_month, period, planning_lo
     )
 
     for schedule in group_schedules:
-        # Check if next schedule already exists
-        existing = CalibrationSchedule.objects.filter(
-            equipment=schedule.equipment,
-            scheduled_month=next_month,
-            active_status=True
+        # One open schedule per equipment, in any month
+        existing = CalibrationSchedule.open_schedules().filter(
+            equipment=schedule.equipment
         ).exists()
 
         if not existing:
@@ -379,11 +377,9 @@ def _reschedule_single_schedule(schedule, planning_logic):
     period = schedule.calibration_period or 12
     next_month = grouping.next_period_month(schedule.scheduled_month, period)
 
-    # Check if next schedule already exists
-    existing = CalibrationSchedule.objects.filter(
-        equipment=schedule.equipment,
-        scheduled_month=next_month,
-        active_status=True
+    # One open schedule per equipment, in any month
+    existing = CalibrationSchedule.open_schedules().filter(
+        equipment=schedule.equipment
     ).exists()
 
     if not existing:
