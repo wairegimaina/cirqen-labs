@@ -71,77 +71,26 @@
       </li>
 
       {% if nav.is_tech or nav.is_nic %}
-      <!-- Work Orders (Tech & NIC) -->
+      <!-- Work Orders (Tech & NIC). Waiting, approved, declined and, for
+           technologists, Checklists are tabs on the work order pages. -->
       <li class="menu-entry" role="none">
-        <a href="#" class="menu-link {% if 'jobcard' in request.path and '/checklists/' not in request.path %}active-link{% endif %}" data-toggle="submenu"
-          role="menuitem" aria-haspopup="true" aria-expanded="false">
+        <a href="{% url 'jobcard:create_job_card' %}"
+          class="menu-link {% if module_label == 'Work Orders' %}active-link{% endif %}" role="menuitem">
           <div class="link-icon" aria-hidden="true">
             <i class="fas fa-file-alt"></i>
           </div>
           <span class="link-label">Work Orders</span>
-          <i class="fas fa-chevron-down submenu-toggle-arrow" aria-hidden="true"></i>
-        </a>
-        <ul class="dropdown-menu" role="menu">
-
-          <li class="dropdown-entry" role="none">
-            <a href="{% url 'jobcard:create_job_card' %}"
-              class="dropdown-link {% if request.resolver_match.url_name == 'create_job_card' %}active-dropdown{% endif %}"
-              role="menuitem">
-              <i class="fas fa-plus-circle" aria-hidden="true"></i>
-              <span class="link-label">Create Work Order</span>
-            </a>
-          </li>
-
-          <li class="dropdown-entry" role="none">
-            <a href="{% url 'jobcard:waiting_jobcards' %}"
-              class="dropdown-link {% if request.resolver_match.url_name == 'waiting_jobcards' %}active-dropdown{% endif %}"
-              role="menuitem">
-              <i class="fas fa-hourglass-half" aria-hidden="true"></i>
-              <span class="link-label">Waiting Work Orders</span>
-              {% if nav.job_cards_waiting_count %}
-              <span class="queue-badge">{{ nav.job_cards_waiting_count }}</span>
-              {% endif %}
-            </a>
-          </li>
-
-          <li class="dropdown-entry" role="none">
-            <a href="{% url 'jobcard:approved_jobcards' %}"
-              class="dropdown-link {% if request.resolver_match.url_name == 'approved_jobcards' %}active-dropdown{% endif %}"
-              role="menuitem">
-              <i class="fas fa-check-circle" aria-hidden="true"></i>
-              <span class="link-label">Approved Work Orders</span>
-            </a>
-          </li>
-
-          <li class="dropdown-entry" role="none">
-            <a href="{% url 'jobcard:declined_jobcards' %}"
-              class="dropdown-link {% if request.resolver_match.url_name == 'declined_jobcards' %}active-dropdown{% endif %}"
-              role="menuitem">
-              <i class="fas fa-times-circle" aria-hidden="true"></i>
-              <span class="link-label">Declined Work Orders</span>
-            </a>
-          </li>
-
-        </ul>
-      </li>
-      {% endif %}
-
-      <!-- Checklists (reusable; selected on work orders) -->
-      {% if nav.is_tech or nav.is_hod or nav.is_nic %}
-      <li class="menu-entry" role="none">
-        <a href="{% url 'jobcard:checklist_settings' %}"
-          class="menu-link {% if '/checklists/' in request.path %}active-link{% endif %}" role="menuitem">
-          <div class="link-icon" aria-hidden="true">
-            <i class="fas fa-clipboard-check"></i>
-          </div>
-          <span class="link-label">Checklists</span>
+          {% if nav.job_cards_waiting_count %}
+          <span class="queue-badge">{{ nav.job_cards_waiting_count }}</span>
+          {% endif %}
         </a>
       </li>
       {% endif %}
 
-      <!-- Inventory -->
+      <!-- Inventory (Equipment, Warranties, Suppliers are tabs) -->
       <li class="menu-entry" role="none">
-        <a href="{% url 'inventory' %}" class="menu-link {% if 'inventory' in request.path %}active-link{% endif %}"
+        <a href="{% url 'inventory' %}"
+          class="menu-link {% if module_label == 'Inventory' or 'inventory' in request.path %}active-link{% endif %}"
           role="menuitem">
           <div class="link-icon" aria-hidden="true">
             <i class="fas fa-boxes"></i>
@@ -150,53 +99,19 @@
         </a>
       </li>
 
-      <!-- Warranties (Equipment -> Warranty -> Supplier) -->
-      <li class="menu-entry" role="none">
-        <a href="{% url 'warranty_list' %}"
-          class="menu-link {% if '/warranties/' in request.path %}active-link{% endif %}" role="menuitem">
-          <div class="link-icon" aria-hidden="true">
-            <i class="fas fa-shield-alt"></i>
-          </div>
-          <span class="link-label">Warranties</span>
-        </a>
-      </li>
-
-      {% if nav.is_tech or nav.is_hod %}
-      <li class="menu-entry" role="none">
-        <a href="{% url 'supplier_list' %}"
-          class="menu-link {% if '/suppliers/' in request.path %}active-link{% endif %}" role="menuitem">
-          <div class="link-icon" aria-hidden="true">
-            <i class="fas fa-truck"></i>
-          </div>
-          <span class="link-label">Suppliers</span>
-        </a>
-      </li>
-      {% endif %}
-
-      <!-- Analytics: Machine Reports (maintenance technologists), Failure Risk -->
+      <!-- Analytics: Machine Reports (Failure Risk is a tab there) -->
       {% with ws=selected_workshop|default:user.userprofile.workshop %}
       {% if nav.is_hod or nav.is_tech and ws.category == 'maintenance' or nav.is_tech and not ws %}
       <li class="menu-section-header" role="none">
         <span class="section-label">Analytics</span>
       </li>
-      {% if nav.is_tech %}
       <li class="menu-entry" role="none">
         <a href="{% url 'equipment_dashboard' %}"
-          class="menu-link {% if 'equipment_dashboard' in request.path %}active-link{% endif %}" role="menuitem">
+          class="menu-link {% if module_label == 'Machine Reports' %}active-link{% endif %}" role="menuitem">
           <div class="link-icon" aria-hidden="true">
             <i class="fas fa-microchip"></i>
           </div>
           <span class="link-label">Machine Reports</span>
-        </a>
-      </li>
-      {% endif %}
-      <li class="menu-entry" role="none">
-        <a href="{% url 'failure_risk' %}"
-          class="menu-link {% if request.resolver_match.url_name == 'failure_risk' %}active-link{% endif %}" role="menuitem">
-          <div class="link-icon" aria-hidden="true">
-            <i class="fas fa-heartbeat"></i>
-          </div>
-          <span class="link-label">Failure Risk</span>
         </a>
       </li>
       {% endif %}
@@ -218,19 +133,6 @@
       </li>
       {% endif %}
 
-      <!-- Scheduling plans: HOD and Tech -->
-      {% if nav.is_tech or nav.is_hod %}
-      <li class="menu-entry" role="none">
-        <a href="{% url 'scheduling:overview' %}"
-          class="menu-link {% if request.resolver_match.namespace == 'scheduling' %}active-link{% endif %}" role="menuitem">
-          <div class="link-icon" aria-hidden="true">
-            <i class="fas fa-calendar-alt"></i>
-          </div>
-          <span class="link-label">Scheduling</span>
-        </a>
-      </li>
-      {% endif %}
-
       <!-- ╔═══════════════════════════════════════════════════════╗ -->
       <!-- ║  HOD BLOCK                                            ║ -->
       <!-- ║  Visible to: HOD only                                 ║ -->
@@ -239,6 +141,18 @@
 
       <li class="menu-section-header" role="none">
         <span class="section-label">Administration</span>
+      </li>
+
+      <!-- Scheduling plans: technologists reach them as a tab on PPM or
+           Calibration Schedules; HODs have neither page, so it lives here. -->
+      <li class="menu-entry" role="none">
+        <a href="{% url 'scheduling:overview' %}"
+          class="menu-link {% if request.resolver_match.namespace == 'scheduling' %}active-link{% endif %}" role="menuitem">
+          <div class="link-icon" aria-hidden="true">
+            <i class="fas fa-calendar-alt"></i>
+          </div>
+          <span class="link-label">Scheduling</span>
+        </a>
       </li>
 
       <!-- Manage Users -->
@@ -329,7 +243,7 @@
 
     <li class="menu-entry" role="none">
       <a href="{% url 'ppm_dashboard' %}"
-        class="menu-link {% if request.resolver_match.url_name == 'ppm_dashboard' %}active-dropdown{% endif %}"
+        class="menu-link {% if module_label == 'PPM' %}active-link{% endif %}"
         role="menuitem">
         <div class="link-icon" aria-hidden="true">
           <i class="fas fa-clipboard-list"></i>
@@ -355,7 +269,7 @@
     </li>
 
     <li class="menu-entry" role="none">
-      <a href="#" class="menu-link {% if 'calibration' in request.path %}active-link{% endif %}" data-toggle="submenu"
+      <a href="#" class="menu-link {% if 'calibration' in request.path or module_label == 'Calibration' %}active-link{% endif %}" data-toggle="submenu"
         role="menuitem" aria-haspopup="true" aria-expanded="false">
         <div class="link-icon" aria-hidden="true">
           <i class="fas fa-drafting-compass"></i>
@@ -437,20 +351,10 @@
         <!-- Calibration Schedules -->
         <li class="dropdown-entry" role="none">
           <a href="{% url 'schedule:calibration_dashboard' %}"
-            class="dropdown-link {% if request.resolver_match.url_name == 'calibration_dashboard' %}active-dropdown{% endif %}"
+            class="dropdown-link {% if module_label == 'Calibration' %}active-dropdown{% endif %}"
             role="menuitem">
             <i class="fas fa-calendar-check" aria-hidden="true"></i>
             <span class="link-label">Calibration Schedules</span>
-          </a>
-        </li>
-
-        <!-- Perform Calibration -->
-        <li class="dropdown-entry" role="none">
-          <a href="{% url 'schedule:pending_calibrations' %}"
-            class="dropdown-link {% if request.resolver_match.url_name == 'pending_calibrations' %}active-dropdown{% endif %}"
-            role="menuitem">
-            <i class="fas fa-clock" aria-hidden="true"></i>
-            <span class="link-label">Perform Calibration</span>
           </a>
         </li>
 

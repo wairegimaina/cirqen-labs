@@ -74,7 +74,7 @@
                             <td><span class="badge {% if p.risk_level == 'High' %}badge-danger{% elif p.risk_level == 'Medium' %}badge-warning{% else %}badge-success{% endif %}">{{ p.risk_level }} · {{ p.risk_percent }}%</span></td>
                             <td>{{ p.rate_per_year }}</td>
                             <td>{{ p.last_repair|date:"d M Y"|default:"-" }}</td>
-                            <td>{% if p.expected_days_between_failures and p.expected_days_between_failures <= 730 %}{{ p.predicted_next_failure|date:"M Y" }}{% else %}<span class="text-muted"><td>{{ p.predicted_next_failure|date:"M Y"|default:"-" }}</td>gt; 2 years</span>{% endif %}</td>
+                            <td>{% if p.expected_days_between_failures and p.expected_days_between_failures <= 730 %}{{ p.predicted_next_failure|date:"M Y" }}{% else %}<span class="text-muted">&gt; 2 years</span>{% endif %}</td>
                             <td class="small">{{ p.reasons|join:"; " }}</td>
                         </tr>
                         {% empty %}

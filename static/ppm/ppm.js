@@ -117,7 +117,8 @@ $(document).ready(function () {
   // ============================================
 
   function initSPANavigation() {
-    $('.spa-nav-item').on('click', function (e) {
+    // Only the in-page sections; plain links (Scheduling Plan) navigate.
+    $('.spa-nav-item[data-view]').on('click', function (e) {
       e.preventDefault();
 
       var viewName = $(this).data('view');

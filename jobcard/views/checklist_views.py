@@ -29,9 +29,11 @@ from ..models import ChecklistItem, ChecklistTemplate, WorkOrderChecklistEntry, 
 
 logger = logging.getLogger(__name__)
 
-_EDITORS = ('Tech', 'HOD')
-_VIEWERS = ('Tech', 'HOD', 'NIC')
-_DENIED = "Only technologists and HODs can edit checklists."
+# Checklists belong to the technologists who raise and do the work orders:
+# they are reached from the Work Orders section, nowhere else.
+_EDITORS = ('Tech',)
+_VIEWERS = ('Tech',)
+_DENIED = "Only technologists can edit checklists."
 
 
 @login_required

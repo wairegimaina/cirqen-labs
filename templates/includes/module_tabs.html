@@ -1,0 +1,14 @@
+{% comment %}
+The current module's sections (Equiper.context_processors.module_tabs), in the
+same tab bar the PPM, Inventory and Machine Reports pages use.
+{% endcomment %}
+{% if module_tabs %}
+<nav class="spa-nav-container" aria-label="{{ module_label }}">
+  {% for tab in module_tabs %}
+  <a href="{{ tab.url }}" class="spa-nav-item{% if tab.active %} active{% endif %}"{% if tab.active %} aria-current="page"{% endif %}>
+    <i class="fas {{ tab.icon }}" aria-hidden="true"></i> <span>{{ tab.label }}</span>
+    {% if tab.badge %}<span class="spa-nav-badge">{{ tab.badge }}</span>{% endif %}
+  </a>
+  {% endfor %}
+</nav>
+{% endif %}

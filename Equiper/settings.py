@@ -169,6 +169,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "Equiper.context_processors.nav_context",
+                "Equiper.context_processors.module_tabs",
             ],
         },
     },

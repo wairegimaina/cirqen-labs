@@ -64,7 +64,6 @@
                 {% if showing_uncovered %}Equipment without a warranty{% else %}Equipment warranties{% endif %}
             </h5>
             <div class="d-flex gap-2 flex-wrap">
-                <a href="{% url 'supplier_list' %}" class="btn btn-outline-secondary btn-sm"><i class="fas fa-truck me-1"></i>Suppliers</a>
                 {% if can_edit %}
                 <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#uploadWarrantiesModal">
                     <i class="fas fa-file-excel me-1"></i>Upload Excel

@@ -29,6 +29,11 @@
         <a href="#" class="spa-nav-item" data-view="reports">
             <i class="fas fa-file-alt"></i> Reports
         </a>
+        {% if nav.is_tech %}
+        <a href="{% url 'scheduling:overview' %}?program=ppm" class="spa-nav-item">
+            <i class="fas fa-calendar-alt"></i> Scheduling Plan
+        </a>
+        {% endif %}
     </nav>
 
     <!-- Content Views -->

@@ -18,17 +18,7 @@
         {% if is_technician %}
         <div class="section-header">
             <h2><i class='fas fa-tools'></i> Work Order - Technician</h2>
-            <div class="job-nav">
-                <a href="{% url 'jobcard:waiting_jobcards' %}" class="btn btn-sm btn-outline-primary">
-                    <i class='fas fa-clock'></i> Waiting
-                </a>
-                <a href="{% url 'jobcard:approved_jobcards' %}" class="btn btn-sm btn-outline-success">
-                    <i class='fas fa-check'></i> Approved
-                </a>
-                <a href="{% url 'jobcard:declined_jobcards' %}" class="btn btn-sm btn-outline-danger">
-                    <i class='fas fa-times'></i> Declined
-                </a>
-            </div>
+            {# Waiting, Approved, Declined and Checklists are the Work Orders tabs. #}
         </div>
 
         <form method="POST" action="{% url 'jobcard:create_job_card' %}" id="technician-form" autocomplete="off">

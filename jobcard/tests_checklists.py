@@ -283,12 +283,12 @@ class ChecklistTests(TestCase):
         self.assertContains(response, card.work_order_number)
         self.assertEqual(response.context["template"].use_count, 1)
 
-    def test_in_charge_can_read_but_not_edit(self):
+    def test_checklists_are_for_technologists_only(self):
         nurse = self._user("cl_nic", "NIC", department=self.department)
         self.client.force_login(nurse)
-        self.assertEqual(self.client.get(reverse("jobcard:checklist_detail", args=[self.template.id])).status_code, 200)
-        response = self.client.get(reverse("jobcard:checklist_edit", args=[self.template.id]))
-        self.assertEqual(response.status_code, 302)
+        for name, args in (("checklist_settings", []), ("checklist_detail", [self.template.id]),
+                           ("checklist_edit", [self.template.id])):
+            self.assertEqual(self.client.get(reverse(f"jobcard:{name}", args=args)).status_code, 302, name)
 
     # ── starters and Machine Reports history ─────────────────────────────────
 

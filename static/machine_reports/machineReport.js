@@ -1,6 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
   // 1. Initialize Tabs
-  const tabs = document.querySelectorAll('.nav-item');
+  // In-page sections only; the Failure Risk tab is a plain link.
+  const tabs = document.querySelectorAll('.spa-nav .nav-item[data-section]');
   const sections = document.querySelectorAll('.content-section');
 
   tabs.forEach(tab => {
