@@ -17,7 +17,8 @@ User = get_user_model()
 
 class CustomLoginForm(AuthenticationForm):
     error_messages = {
-        'invalid_login': "Invalid username or password. Please check your credentials and try again.",
+        'invalid_login': "Invalid username/email or password. Please check your credentials and try again.",
+        'ambiguous_login': "More than one account uses this email with that password. Sign in with your username instead.",
         'inactive': "This account is inactive. Please contact the administrator.",
     }
 
@@ -25,7 +26,7 @@ class CustomLoginForm(AuthenticationForm):
         super().__init__(*args, **kwargs)
 
         self.fields['username'].widget.attrs.update({
-            'placeholder': ' Enter your username',
+            'placeholder': ' Username or email',
             'class': 'form-control',
             'autocomplete': 'off',
             'required': True
@@ -37,6 +38,14 @@ class CustomLoginForm(AuthenticationForm):
             'required': True,
             'minlength': 8
         })
+
+    def clean(self):
+        try:
+            return super().clean()
+        except forms.ValidationError:
+            if getattr(self.request, 'login_ambiguous', False):
+                raise forms.ValidationError(self.error_messages['ambiguous_login'], code='ambiguous_login')
+            raise
 
     def confirm_login_allowed(self, user):
         """Enhanced validation before login."""
