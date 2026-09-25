@@ -13,7 +13,7 @@ from .. import grouping
 logger = logging.getLogger(__name__)
 from ..reconciliation import full_reconciliation, auto_reschedule_completed_calibrations, ensure_grouping_consistency, diagnose_schedules
 from ..locker import lock_completed_schedules, auto_lock_and_reschedule, get_lock_status
-PROTECTED_SOURCES = ['signal', 'locker', 'job_card']
+PROTECTED_SOURCES = ['signal', 'locker', 'job_card', 'plan']
 
 
 def _planning_year():

@@ -48,6 +48,7 @@ GENERATION_SOURCE_CHOICES = [
     ("group_fix", "Fixed Group Alignment"),
     ("locker", "Created by Locker"),
     ("job_card", "Triggered by Job Card Completion"),
+    ("plan", "Scheduling Plan"),
 ]
 
 
@@ -200,6 +201,25 @@ class CalibrationSchedule(models.Model):
     )
 
     # ============================================
+    # SCHEDULING PLAN (scheduling app)
+    # ============================================
+
+    due_month = models.DateField(
+        null=True, blank=True,
+        help_text="The month this schedule is due in its cycle. A manual push moves "
+                  "scheduled_month but not this, so the cycle continues from the slot.",
+    )
+    plan = models.ForeignKey(
+        "scheduling.SchedulingPlan", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="%(app_label)s_schedules",
+        help_text="The plan version that placed this schedule (blank: legacy scheduler)",
+    )
+    schedule_reason = models.JSONField(
+        null=True, blank=True,
+        help_text="Why this month: group, months, interval, previous schedule, rule applied",
+    )
+
+    # ============================================
     # META AND CONSTRAINTS
     # ============================================
 
@@ -260,9 +280,11 @@ class CalibrationSchedule(models.Model):
                 pass
 
         # Validate state transitions
+        was_completed = False
         if self.pk:
             try:
                 original = CalibrationSchedule.objects.get(pk=self.pk)
+                was_completed = original.status == "completed"
                 old_status = original.status
                 new_status = self.status
 
@@ -325,6 +347,13 @@ class CalibrationSchedule(models.Model):
         # Auto-lock completed schedules (they become historical records)
         if self.status == "completed" and not self.is_locked:
             self.is_locked = True
+
+        # Record the day it was done, only at the moment it becomes completed:
+        # re-saving an old completed row must not stamp today on it.
+        if self.status == "completed" and not was_completed and not self.completed_date:
+            self.completed_date = timezone.localdate()
+            if kwargs.get("update_fields") is not None:
+                kwargs["update_fields"] = set(kwargs["update_fields"]) | {"completed_date"}
 
         # ✅ Calculate expected_calibration_date for signal-created schedules
         if (
@@ -435,7 +464,7 @@ class CalibrationSchedule(models.Model):
         Returns:
             bool: True if can be normalized, False otherwise
         """
-        PROTECTED_SOURCES = {"signal", "locker", "job_card"}
+        PROTECTED_SOURCES = {"signal", "locker", "job_card", "plan"}
         return (
             self.status in ["pending", "pushed"]
             and not self.is_locked
@@ -541,7 +570,7 @@ class CalibrationSchedule(models.Model):
         Returns:
             QuerySet: Schedules that can be normalized
         """
-        PROTECTED_SOURCES = ["signal", "locker", "job_card"]
+        PROTECTED_SOURCES = ["signal", "locker", "job_card", "plan"]
 
         query = cls.objects.filter(
             active_status=True,

@@ -172,6 +172,9 @@ def protection_reason(schedule):
         return "Completed — a finished calibration is not rescheduled."
     if getattr(schedule, "is_locked", False):
         return "Locked — unlock it first if it really should move."
+    if schedule.generation_source == "plan" or schedule.workshop_id in _planned_workshops():
+        return ("Placed by the workshop's scheduling plan — change the plan's months "
+                "instead of moving schedules by hand.")
     if schedule.generation_source in ("signal", "locker", "job_card"):
         return (
             f"Created automatically by {schedule.generation_source} — moving it "
@@ -180,6 +183,11 @@ def protection_reason(schedule):
     if not schedule.active_status:
         return "Deleted."
     return None
+
+
+def _planned_workshops():
+    from scheduling.planner import planned_workshop_ids
+    return planned_workshop_ids("calibration")
 
 
 def _label(schedule):

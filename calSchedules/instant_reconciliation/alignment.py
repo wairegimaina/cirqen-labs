@@ -89,10 +89,13 @@ def diagnose_group_alignment(planning_logic='department'):
     logger.info(f"🔍 GROUP ALIGNMENT DIAGNOSTICS ({planning_logic})")
     logger.info("=" * 80)
 
+    from scheduling.planner import planned_workshop_ids
     schedules = CalibrationSchedule.objects.filter(
         active_status=True,
         status__in=['pending', 'pushed'],
         equipment__active_status=True
+    ).exclude(
+        workshop_id__in=planned_workshop_ids('calibration')
     ).select_related('equipment__department', 'equipment__description')
 
     if planning_logic == 'department':
@@ -174,11 +177,15 @@ def fix_group_alignment(planning_logic='department', dry_run=True):
     logger.info(f"🔧 FIX GROUP ALIGNMENT ({planning_logic}) - {'DRY RUN' if dry_run else 'LIVE'}")
     logger.info("=" * 80)
 
+    # Planned workshops take their months from the plan: never realign them.
+    from scheduling.planner import planned_workshop_ids
     schedules = CalibrationSchedule.objects.filter(
         active_status=True,
         status__in=['pending', 'pushed'],
         equipment__active_status=True,
         is_locked=False
+    ).exclude(
+        workshop_id__in=planned_workshop_ids('calibration')
     ).select_related('equipment__department', 'equipment__description')
 
     fixed_count = 0

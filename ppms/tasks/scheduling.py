@@ -160,11 +160,28 @@ def auto_schedule_unscheduled_equipment(planning_logic='department',
             'errors': []
         }
 
+        from scheduling.planner import active_plan, schedule as schedule_by_plan
+
         # Process each workshop
         for workshop in workshops:
             try:
                 logger.info(f"{'-'*60}")
                 logger.info(f"Processing workshop: {workshop.name} (ID: {workshop.id})")
+
+                # Workshops with a scheduling plan: the plan places every
+                # unscheduled device, broken chains included.
+                plan = active_plan(workshop.id, 'ppm')
+                if plan:
+                    run = schedule_by_plan(plan)
+                    results['workshops_processed'] += 1
+                    results['total_equipment_scheduled'] += len(run.created)
+                    results['workshop_details'][workshop.name] = {
+                        'scheduled': len(run.created),
+                        'unschedulable': len(run.unschedulable),
+                        'status': 'plan',
+                    }
+                    logger.info(f"  {run.summary()}")
+                    continue
 
                 # Unscheduled = no open schedule. Completed history alone does
                 # not count: that is a chain that stopped, not a scheduled device.

@@ -125,6 +125,12 @@ def auto_reschedule_ppm_on_group_complete(sender, instance, created, **kwargs):
     if update_fields is not None and 'status' not in update_fields:
         return
 
+    # A workshop with an active scheduling plan: the plan decides the next
+    # month, for this device alone (no waiting on the rest of the group).
+    from scheduling.planner import on_completed
+    if on_completed(instance):
+        return
+
     group_key = _get_ppm_group_key(instance)
 
     # Check group completion
@@ -210,6 +216,11 @@ def auto_create_ppm_for_new_equipment(sender, instance, created, **kwargs):
 
     if not instance.active_status:
         logger.debug(f"[PPM_SIGNAL] Equipment {instance.id} is not active, skipping auto-create.")
+        return
+
+    # Planned workshops schedule new equipment through scheduling.signals.
+    from scheduling.planner import active_plan
+    if instance.department_id and active_plan(instance.department.workshop_id, 'ppm'):
         return
 
     existing = PPMSchedule.objects.filter(equipment=instance, active_status=True).exists()

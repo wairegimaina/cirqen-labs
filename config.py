@@ -497,6 +497,9 @@ class CirqenConfig:
                 "public.ppms_auditlog",
                 "public.ppms_ppmschedule",
                 "public.reporthub_report",
+                "public.scheduling_schedulinginterval",
+                "public.scheduling_schedulingplan",
+                "public.scheduling_schedulingrule",
                 "public.users_userprofile",
                 "public.users_usersecuritylog",
                 "public.users_usersignature",
@@ -527,6 +530,10 @@ class CirqenConfig:
             "public.users_userprofile",
             "public.users_usersecuritylog",
             "public.users_usersignature",
+            # ── Scheduling plans (workshop, department, description, users) ──
+            "public.scheduling_schedulingplan",
+            "public.scheduling_schedulingrule",
+            "public.scheduling_schedulinginterval",
             # ── Calibration reference / lookup tables ────────────────────────
             "public.CalSoft_parametercategory",
             "public.CalSoft_parameter",

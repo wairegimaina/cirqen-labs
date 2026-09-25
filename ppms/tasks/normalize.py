@@ -60,6 +60,10 @@ def smart_reorganize_ppm_schedules(
     if workshop_id:
         mismatched = mismatched.filter(workshop_id=workshop_id)
 
+    # Workshops with a scheduling plan are placed by the plan, not repacked.
+    from scheduling.planner import planned_workshop_ids
+    mismatched = mismatched.exclude(workshop_id__in=planned_workshop_ids('ppm'))
+
     total_to_reorg = mismatched.count()
 
     # Count protected schedules
@@ -232,6 +236,10 @@ def normalize_ppm_schedules(
 
     if workshop_id:
         base_qs = base_qs.filter(workshop_id=workshop_id)
+
+    # Workshops with a scheduling plan are placed by the plan, not repacked.
+    from scheduling.planner import planned_workshop_ids
+    base_qs = base_qs.exclude(workshop_id__in=planned_workshop_ids('ppm'))
 
     if not base_qs.exists():
         msg = f"[PPM_NORMALIZE] No normalizable PPM schedules found for {base_year}."

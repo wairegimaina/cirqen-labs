@@ -56,6 +56,12 @@ def instant_reschedule_on_completion(sender, instance, created, **kwargs):
         lock_schedule_immediately(instance)
         logger.info(f"[SIGNAL] 🔒 Immediately locked completed schedule {instance.id}")
 
+    # A workshop with an active scheduling plan: the plan decides the next
+    # month, for this device alone (no waiting on the rest of the group).
+    from scheduling.planner import on_completed
+    if on_completed(instance):
+        return
+
     # Get planning logic
     planning_logic = instance.planning_logic or 'department'
 
@@ -322,6 +328,12 @@ def instant_grouping_alignment(sender, instance, created, **kwargs):
 
     # Skip if locked
     if hasattr(instance, 'is_locked') and instance.is_locked:
+        return
+
+    # Planned workshops: months come from the plan, never from the group's
+    # most common month.
+    from scheduling.planner import active_plan
+    if instance.generation_source == 'plan' or active_plan(instance.workshop_id, 'calibration'):
         return
 
     planning_logic = instance.planning_logic or 'department'

@@ -99,6 +99,7 @@ INSTALLED_APPS = [
     "audit_log",
     "reporthub",
     "calSchedules",
+    "scheduling",
     "CalSoft",
     "chartjs",
     "machineReports",

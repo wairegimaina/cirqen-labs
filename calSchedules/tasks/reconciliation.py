@@ -13,7 +13,7 @@ from .. import grouping
 logger = logging.getLogger(__name__)
 from ..reconciliation import full_reconciliation, auto_reschedule_completed_calibrations, ensure_grouping_consistency, diagnose_schedules
 from ..locker import lock_completed_schedules, auto_lock_and_reschedule, get_lock_status
-PROTECTED_SOURCES = ['signal', 'locker', 'job_card']
+PROTECTED_SOURCES = ['signal', 'locker', 'job_card', 'plan']
 
 
 @shared_task(name="calSchedules.tasks.run_calibration_reconciliation")
@@ -33,11 +33,19 @@ def auto_reschedule_completed_task(check_hours=0.5):
     """Celery wrapper for auto_reschedule_completed_calibrations()."""
     logger.info(f"[TASK:auto_reschedule_completed_task] Starting (check_hours={check_hours})")
     result = auto_reschedule_completed_calibrations(check_hours=check_hours)
+
+    # Planned workshops: completions that arrived through sync (raw SQL, so
+    # no signal fired) get their next schedule here, within 15 minutes.
+    from scheduling.planner import run_all
+    runs = run_all('calibration')
+    result['planned_created'] = sum(len(r.created) for r in runs)
+
     logger.info(
         f"[TASK:auto_reschedule_completed_task] Complete: "
         f"rescheduled={result.get('rescheduled', 0)}, "
         f"waiting={result.get('waiting_for_group', 0)}, "
-        f"skipped={result.get('skipped', 0)}"
+        f"skipped={result.get('skipped', 0)}, "
+        f"planned={result['planned_created']}"
     )
     return result
 

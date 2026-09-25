@@ -58,7 +58,11 @@ def lock_completed_schedules(
         query &= Q(updated_at__gte=cutoff_time)
 
     # Get completed schedules
-    completed_schedules = CalibrationSchedule.objects.filter(query).select_related(
+    # Planned workshops are rescheduled by scheduling.planner.
+    from scheduling.planner import planned_workshop_ids
+    completed_schedules = CalibrationSchedule.objects.filter(query).exclude(
+        workshop_id__in=planned_workshop_ids('calibration')
+    ).select_related(
         'equipment__department',
         'equipment__description'
     )

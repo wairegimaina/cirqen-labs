@@ -122,10 +122,14 @@ def auto_reschedule_completed_calibrations(check_hours=24):
     )
 
     # Get recently completed schedules
+    # Planned workshops are rescheduled by scheduling.planner.run_all.
+    from scheduling.planner import planned_workshop_ids
     completed_schedules = CalibrationSchedule.objects.filter(
         status='completed',
         equipment__active_status=True,
         updated_at__gte=cutoff_time
+    ).exclude(
+        workshop_id__in=planned_workshop_ids('calibration')
     ).select_related('equipment__department', 'equipment__description')
 
     if not completed_schedules.exists():

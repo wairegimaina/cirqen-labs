@@ -13,7 +13,7 @@ from .. import grouping
 logger = logging.getLogger(__name__)
 from ..reconciliation import full_reconciliation, auto_reschedule_completed_calibrations, ensure_grouping_consistency, diagnose_schedules
 from ..locker import lock_completed_schedules, auto_lock_and_reschedule, get_lock_status
-PROTECTED_SOURCES = ['signal', 'locker', 'job_card']
+PROTECTED_SOURCES = ['signal', 'locker', 'job_card', 'plan']
 
 # sibling modules in this package
 from .helpers import _find_optimal_month, _planning_year
@@ -85,7 +85,11 @@ def initialize_calibration_schedule_with_logic(
             month_desc_count[month_key] += 1
             desc_month_map[desc_id] = month_key
 
-    equipment_query = Equipment.objects.filter(active_status=True).select_related('department', 'description')
+    # Workshops with a scheduling plan are placed by the plan, not here.
+    from scheduling.planner import planned_workshop_ids
+    equipment_query = Equipment.objects.filter(active_status=True).exclude(
+        department__workshop_id__in=planned_workshop_ids('calibration')
+    ).select_related('department', 'description')
     if specific_equipment_ids:
         equipment_query = equipment_query.filter(id__in=specific_equipment_ids)
         if preserve_existing:

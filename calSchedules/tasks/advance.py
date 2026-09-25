@@ -13,7 +13,7 @@ from .. import grouping
 logger = logging.getLogger(__name__)
 from ..reconciliation import full_reconciliation, auto_reschedule_completed_calibrations, ensure_grouping_consistency, diagnose_schedules
 from ..locker import lock_completed_schedules, auto_lock_and_reschedule, get_lock_status
-PROTECTED_SOURCES = ['signal', 'locker', 'job_card']
+PROTECTED_SOURCES = ['signal', 'locker', 'job_card', 'plan']
 
 # sibling modules in this package
 from .helpers import _basic_group_completion_check, _get_group_key, _get_group_members
@@ -29,8 +29,11 @@ def auto_advance_completed_calibrations():
 
     logger.info("[AUTO_ADVANCE] Starting GROUP-AWARE auto-advance")
 
+    from scheduling.planner import planned_workshop_ids
     completed_schedules = CalibrationSchedule.objects.filter(
         status='completed', equipment__active_status=True, active_status=True
+    ).exclude(
+        workshop_id__in=planned_workshop_ids('calibration')
     ).select_related('equipment__department', 'equipment__description')
 
     if not completed_schedules.exists():

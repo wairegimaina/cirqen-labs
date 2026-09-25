@@ -39,6 +39,13 @@ def initialize_ppm_schedule_with_logic(self, workshop_id, planning_logic='depart
             logger.error(error_msg)
             return {'status': 'error', 'message': error_msg}
 
+        from scheduling.planner import active_plan
+        if active_plan(workshop_id, 'ppm'):
+            msg = (f"{workshop.name} is scheduled by its scheduling plan; "
+                   "change the plan instead of re-initializing")
+            logger.warning(msg)
+            return {'status': 'error', 'message': msg}
+
         # Set base year if not provided
         if base_year is None:
             base_year = date.today().year

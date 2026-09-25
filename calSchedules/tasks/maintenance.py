@@ -13,7 +13,7 @@ from .. import grouping
 logger = logging.getLogger(__name__)
 from ..reconciliation import full_reconciliation, auto_reschedule_completed_calibrations, ensure_grouping_consistency, diagnose_schedules
 from ..locker import lock_completed_schedules, auto_lock_and_reschedule, get_lock_status
-PROTECTED_SOURCES = ['signal', 'locker', 'job_card']
+PROTECTED_SOURCES = ['signal', 'locker', 'job_card', 'plan']
 
 
 def _retire(queryset):
@@ -245,7 +245,14 @@ def auto_schedule_unscheduled_equipment(
         CalibrationSchedule.open_schedules().filter(equipment__active_status=True)
         .values_list('equipment_id', flat=True)
     )
-    unscheduled = Equipment.objects.filter(active_status=True).exclude(id__in=scheduled_ids)
+    # Workshops with a scheduling plan are placed by the plan, below.
+    from scheduling.planner import planned_workshop_ids, run_all
+    planned = planned_workshop_ids('calibration')
+    planned_created = sum(len(r.created) for r in run_all('calibration'))
+
+    unscheduled = Equipment.objects.filter(active_status=True).exclude(
+        id__in=scheduled_ids
+    ).exclude(department__workshop_id__in=planned)
 
     # Equipment with completed history continues its own cycle.
     with_history = set(
@@ -261,7 +268,8 @@ def auto_schedule_unscheduled_equipment(
 
     if not unscheduled.exists():
         logger.info(f"[AUTO_SCHEDULE] Resumed {resumed} broken chains; no never-scheduled equipment")
-        return f"Resumed {resumed} broken chains. No unscheduled equipment to schedule"
+        return (f"Resumed {resumed} broken chains, {planned_created} placed by plans. "
+                "No unscheduled equipment to schedule")
 
     logger.info(f"[AUTO_SCHEDULE] Found {unscheduled.count()} unscheduled items")
 
@@ -303,6 +311,7 @@ def auto_schedule_unscheduled_equipment(
             logger.error(f"[AUTO_SCHEDULE] Failed for equipment {equip.id}: {e}")
             failed_count += 1
 
-    result = f"Auto-scheduled {created_count} equipment items, resumed {resumed} broken chains. Failed: {failed_count}"
+    result = (f"Auto-scheduled {created_count} equipment items, resumed {resumed} broken chains, "
+              f"{planned_created} placed by plans. Failed: {failed_count}")
     logger.info(f"[AUTO_SCHEDULE] {result}")
     return result

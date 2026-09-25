@@ -4,7 +4,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.conf import settings
 from Inventory.models import Equipment
-from django.utils.timezone import now
+from django.utils.timezone import localdate, now
 from workshop.models import Workshop
 from core.eat import now_eat
 
@@ -35,6 +35,7 @@ GENERATION_SOURCE_CHOICES = [
     ('group_fix', 'Fixed Group Alignment'),
     ('locker', 'Created by Locker'),
     ('job_card', 'Triggered by Job Card Completion'),
+    ('plan', 'Scheduling Plan'),
 ]
 
 
@@ -144,6 +145,30 @@ class PPMSchedule(models.Model):
         help_text='The planning logic that was in use before the last logic change (for smart reorganizer)'
     )
 
+    completed_date = models.DateField(
+        null=True, blank=True,
+        help_text='The day the maintenance was actually done (scheduled_month is when it was due)'
+    )
+
+    # ============================================
+    # SCHEDULING PLAN (scheduling app)
+    # ============================================
+
+    due_month = models.DateField(
+        null=True, blank=True,
+        help_text="The month this schedule is due in its cycle. A manual push moves "
+                  "scheduled_month but not this, so the cycle continues from the slot.",
+    )
+    plan = models.ForeignKey(
+        "scheduling.SchedulingPlan", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="%(app_label)s_schedules",
+        help_text="The plan version that placed this schedule (blank: legacy scheduler)",
+    )
+    schedule_reason = models.JSONField(
+        null=True, blank=True,
+        help_text="Why this month: group, months, interval, previous schedule, rule applied",
+    )
+
     # ============================================
     # META
     # ============================================
@@ -177,11 +202,12 @@ class PPMSchedule(models.Model):
         # Completed schedules are historical records: their month and status
         # never change. Sync writes completions with raw SQL, so this only
         # guards the ORM paths (edit view, bulk actions, tasks).
+        before = None
         if self.pk:
-            original = PPMSchedule.objects.filter(pk=self.pk).values(
+            before = PPMSchedule.objects.filter(pk=self.pk).values(
                 'status', 'scheduled_month'
             ).first()
-            if original and original['status'] == 'completed':
+            if before and before['status'] == 'completed':
                 if self.status != 'completed':
                     raise ValidationError(
                         f"Cannot change status from 'Completed' to '{self.status}'. "
@@ -190,7 +216,7 @@ class PPMSchedule(models.Model):
                 month = self.scheduled_month
                 if isinstance(month, datetime):
                     month = month.date()
-                if month != original['scheduled_month']:
+                if month != before['scheduled_month']:
                     raise ValidationError(
                         "Cannot move a completed schedule to another month. "
                         "Completed schedules are locked historical records."
@@ -220,6 +246,14 @@ class PPMSchedule(models.Model):
         # Auto-lock completed schedules (they become historical records)
         if self.status == 'completed' and not self.is_locked:
             self.is_locked = True
+
+        # Record the day it was done, only at the moment it becomes completed:
+        # re-saving an old completed row must not stamp today on it.
+        newly_completed = not before or before['status'] != 'completed'
+        if self.status == 'completed' and newly_completed and not self.completed_date:
+            self.completed_date = localdate()
+            if kwargs.get('update_fields') is not None:
+                kwargs['update_fields'] = set(kwargs['update_fields']) | {'completed_date'}
 
         # Calculate expected_maintenance_date for signal-created schedules
         if self.generation_source == 'signal' and self.parent_schedule and not self.expected_maintenance_date:

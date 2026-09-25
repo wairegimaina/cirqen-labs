@@ -13,7 +13,8 @@ from .. import grouping
 logger = logging.getLogger(__name__)
 from ..reconciliation import full_reconciliation, auto_reschedule_completed_calibrations, ensure_grouping_consistency, diagnose_schedules
 from ..locker import lock_completed_schedules, auto_lock_and_reschedule, get_lock_status
-PROTECTED_SOURCES = ['signal', 'locker', 'job_card']
+PROTECTED_SOURCES = ['signal', 'locker', 'job_card', 'plan']
+from scheduling.planner import planned_workshop_ids  # noqa: E402
 
 # sibling modules in this package
 from .helpers import _apply_schedule_update, _find_optimal_month, _is_protected, _planning_year
@@ -57,6 +58,8 @@ def normalize_existing_schedules(
         scheduled_month__lte=end_date
     ).exclude(
         generation_source__in=PROTECTED_SOURCES
+    ).exclude(
+        workshop_id__in=planned_workshop_ids('calibration')
     ).select_related('equipment__department', 'equipment__description').order_by('id')
 
     if not schedules.exists():
@@ -175,6 +178,8 @@ def smart_reorganize_on_logic_change(
         is_locked=False,
     ).exclude(
         generation_source__in=PROTECTED_SOURCES
+    ).exclude(
+        workshop_id__in=planned_workshop_ids('calibration')
     ).select_related('equipment__department', 'equipment__description')
 
     # Schedules to act on: wrong logic OR have an outstanding warning
