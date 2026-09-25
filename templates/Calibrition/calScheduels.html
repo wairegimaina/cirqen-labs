@@ -5,6 +5,13 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{% static 'calibrition/calScheduels.css' %}" />
+{% if not access_context.can_edit %}
+{# Read only (HOD, nurse): row checkboxes select for actions they don't have. #}
+<style>.schedule-checkbox, #selectAll { visibility: hidden; }</style>
+{% endif %}
+{% if not access_context.can_schedule %}
+<style>.unscheduled-checkbox { visibility: hidden; }</style>
+{% endif %}
 {% endblock %}
 
 {% block page_title %}Calibration Schedules{% endblock %}
@@ -106,6 +113,7 @@
           aria-label="Search equipment">
       </div>
 
+      {% if access_context.can_edit %}
       <div id="bulkActionsBar" class="cs-bulk-bar" style="display:none;">
         <button type="button" class="cs-btn cs-btn--warning" id="bulkPushSchedules" disabled>
           <i class="fas fa-arrow-right me-1"></i>Push
@@ -117,11 +125,14 @@
           <i class="fas fa-check me-1"></i>Complete
         </button>
       </div>
+      {% endif %}
 
 
+      {% if access_context.can_schedule %}
       <a class="cs-btn cs-btn--ghost" href="{% url 'scheduling:plans' %}?program=calibration" title="Scheduling plans: grouping and months">
         <i class="fas fa-calendar-alt"></i>
       </a>
+      {% endif %}
 
 
       <div class="dropdown">
@@ -212,8 +223,10 @@
   <div class="cs-panel active" id="pendingPanel">
     <div class="cs-panel-toolbar">
       <div class="d-flex align-items-center gap-2">
+        {% if access_context.can_edit %}
         <input type="checkbox" id="selectAll" class="form-check-input cs-check">
         <label for="selectAll" class="small text-muted mb-0">Select all</label>
+        {% endif %}
         <span class="cs-sort-note text-muted small ms-2">Pending → Pushed → Overdue</span>
       </div>
     </div>
@@ -283,6 +296,7 @@
                   {% endif %}
                 </td>
                 <td>
+                  {% if access_context.can_edit %}
                   <div class="cs-row-actions">
                     <button type="button" class="cs-icon-btn" title="Edit"
                       data-bs-toggle="modal" data-bs-target="#editModal{{ schedule.id }}" aria-label="Edit">
@@ -302,6 +316,7 @@
                       <i class="fas fa-trash"></i>
                     </a>
                   </div>
+                  {% endif %}
                 </td>
               </tr>
               {% endwith %}
@@ -376,6 +391,7 @@
 
   <div class="cs-panel" id="unscheduledPanel">
     {% if unscheduled_equipment %}
+    {% if access_context.can_schedule %}
     <div class="cs-panel-toolbar">
       <div class="d-flex align-items-center gap-2">
         <input type="checkbox" id="selectAllUnscheduled" class="form-check-input cs-check">
@@ -388,6 +404,7 @@
         </button>
       </form>
     </div>
+    {% endif %}
     <div class="table-responsive">
       <table class="cs-table" id="unscheduledTable">
         <thead>
@@ -412,10 +429,12 @@
             <td><code class="cs-code">{{ equipment.serial_number|default:"N/A" }}</code></td>
             <td>{{ equipment.model|default:"N/A" }}</td>
             <td>
+              {% if access_context.can_schedule %}
               <a href="{% url 'schedule:schedule_calibration_equipment' equipment.id %}"
                 class="cs-icon-btn cs-icon-btn--success" title="Schedule" aria-label="Schedule">
                 <i class="fas fa-plus"></i>
               </a>
+              {% endif %}
             </td>
           </tr>
           {% endfor %}

@@ -149,10 +149,13 @@
                             </span>
                         </div>
                     </div>
+                    {% if access_context.can_edit %}
                     <div class="d-flex flex-wrap gap-2">
+                        {% if access_context.can_schedule %}
                         <a class="btn btn-sm btn-primary" href="{% url 'scheduling:plans' %}?program=ppm">
                             <i class="fas fa-calendar-alt me-1"></i> Scheduling
                         </a>
+                        {% endif %}
                         <button type="button" class="btn btn-sm btn-secondary" id="bulkMarkCompleted" disabled>
                             <i class="fas fa-check me-1"></i>Mark Completed
                         </button>
@@ -160,6 +163,7 @@
                             <i class="fas fa-arrow-right me-1"></i>Push
                         </button>
                     </div>
+                    {% endif %}
                 </div>
             </div>
 
@@ -179,9 +183,11 @@
                         <table class="table theme-table mb-0" id="schedulesTable">
                             <thead>
                                 <tr>
+                                    {% if access_context.can_edit %}
                                     <th width="40" class="text-center">
                                         <input type="checkbox" id="selectAll" class="form-check-input">
                                     </th>
+                                    {% endif %}
                                     <th>Department</th>
                                     <th>Equipment Details</th>
                                     <th>Serial Number</th>
@@ -194,9 +200,11 @@
                             <tbody>
                                 {% for schedule in schedules %}
                                 <tr class="equipment-row" data-search="{{ schedule.equipment.description.name }} {{ schedule.equipment.serial_number }} {{ schedule.equipment.model }} {{ schedule.equipment.department.name }}">
+                                    {% if access_context.can_edit %}
                                     <td class="text-center">
                                         <input type="checkbox" name="schedule_ids" value="{{ schedule.id }}" class="form-check-input schedule-checkbox">
                                     </td>
+                                    {% endif %}
                                     <td><span class="badge bg-secondary">{{ schedule.equipment.department.name|default:"No Dept" }}</span></td>
                                     <td><strong>{{ schedule.equipment.description.name|default:"No Description" }}</strong></td>
                                     <td><code class="small">{{ schedule.equipment.serial_number|default:"N/A" }}</code></td>
@@ -226,9 +234,11 @@
                         {% if selected_department %}No equipment scheduled in {{ selected_department.name|default:"Unknown" }} for this period.
                         {% else %}No equipment currently scheduled for maintenance for this period.{% endif %}
                     </p>
+                    {% if access_context.can_schedule %}
                     <a class="btn btn-primary me-2" href="{% url 'scheduling:unscheduled' %}?program=ppm">
                         <i class="fas fa-search me-1"></i>See what is unscheduled
                     </a>
+                    {% endif %}
                     <button class="btn btn-outline-secondary" onclick="goToCurrentMonth()">
                         <i class="fas fa-calendar-day me-1"></i>Go to Current Month
                     </button>
@@ -244,9 +254,11 @@
                         <i class="fas fa-exclamation-circle text-danger me-2"></i>Unscheduled equipment
                         <span class="badge bg-danger ms-2">{{ unscheduled_equipment|length }}</span>
                     </h5>
+                    {% if access_context.can_schedule %}
                     <button type="button" class="btn btn-secondary btn-sm" id="scheduleSelectedBtn" disabled>
                         <i class="fas fa-calendar-plus me-1"></i>Schedule Selected
                     </button>
+                    {% endif %}
                 </div>
 
                 <form id="unscheduledForm" method="post" action="{% url 'bulk_schedule_unscheduled' %}">
@@ -255,31 +267,37 @@
                         <table class="table theme-table mb-0" id="unscheduledTable">
                             <thead>
                                 <tr>
+                                    {% if access_context.can_schedule %}
                                     <th width="40" class="text-center">
                                         <input type="checkbox" id="selectAllUnscheduled" class="form-check-input">
                                     </th>
+                                    {% endif %}
                                     <th>Department</th>
                                     <th>Equipment</th>
                                     <th>Serial Number</th>
                                     <th>Model</th>
-                                    <th class="text-end">Action</th>
+                                    {% if access_context.can_schedule %}<th class="text-end">Action</th>{% endif %}
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for equipment in unscheduled_equipment %}
                                 <tr class="equipment-row">
+                                    {% if access_context.can_schedule %}
                                     <td class="text-center">
                                         <input type="checkbox" name="equipment_ids" value="{{ equipment.id }}" class="form-check-input unscheduled-checkbox">
                                     </td>
+                                    {% endif %}
                                     <td><span class="badge bg-secondary">{{ equipment.department.name|default:"No Dept" }}</span></td>
                                     <td><strong>{{ equipment.description.name|default:"No Description" }}</strong></td>
                                     <td><code class="small">{{ equipment.serial_number|default:"N/A" }}</code></td>
                                     <td>{{ equipment.model|default:"N/A" }}</td>
+                                    {% if access_context.can_schedule %}
                                     <td class="text-end">
                                         <button type="button" class="btn btn-sm btn-primary schedule-single-btn" data-equipment-id="{{ equipment.id }}">
                                             <i class="fas fa-calendar-plus me-1"></i>Schedule
                                         </button>
                                     </td>
+                                    {% endif %}
                                 </tr>
                                 {% endfor %}
                             </tbody>

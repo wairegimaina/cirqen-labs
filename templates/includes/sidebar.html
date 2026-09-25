@@ -139,20 +139,32 @@
       <!-- ╚═══════════════════════════════════════════════════════╝ -->
       {% if nav.is_hod %}
 
+      <!-- HODs oversee every workshop's schedules, read only: the workshops
+           plan and schedule them. -->
       <li class="menu-section-header" role="none">
-        <span class="section-label">Administration</span>
+        <span class="section-label">Schedules</span>
+      </li>
+      <li class="menu-entry" role="none">
+        <a href="{% url 'ppm_dashboard' %}"
+          class="menu-link {% if module_label == 'PPM' %}active-link{% endif %}" role="menuitem">
+          <div class="link-icon" aria-hidden="true">
+            <i class="fas fa-clipboard-list"></i>
+          </div>
+          <span class="link-label">PPM Schedules</span>
+        </a>
+      </li>
+      <li class="menu-entry" role="none">
+        <a href="{% url 'schedule:calibration_dashboard' %}"
+          class="menu-link {% if request.resolver_match.namespace == 'schedule' %}active-link{% endif %}" role="menuitem">
+          <div class="link-icon" aria-hidden="true">
+            <i class="fas fa-calendar-check"></i>
+          </div>
+          <span class="link-label">Calibration Schedules</span>
+        </a>
       </li>
 
-      <!-- Scheduling plans: technologists reach them as a tab on PPM or
-           Calibration Schedules; HODs have neither page, so it lives here. -->
-      <li class="menu-entry" role="none">
-        <a href="{% url 'scheduling:overview' %}"
-          class="menu-link {% if request.resolver_match.namespace == 'scheduling' %}active-link{% endif %}" role="menuitem">
-          <div class="link-icon" aria-hidden="true">
-            <i class="fas fa-calendar-alt"></i>
-          </div>
-          <span class="link-label">Scheduling</span>
-        </a>
+      <li class="menu-section-header" role="none">
+        <span class="section-label">Administration</span>
       </li>
 
       <!-- Manage Users -->

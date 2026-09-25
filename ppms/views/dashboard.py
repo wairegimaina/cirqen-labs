@@ -172,7 +172,10 @@ def ppm_dashboard(request):
     access_context_serializable = {
         'workshop_id': str(access_context['workshop_id']) if access_context.get('workshop_id') else None,
         'department_id': str(access_context['department_id']) if access_context.get('department_id') else None,
-        'access_type': access_context['access_type']
+        'access_type': access_context['access_type'],
+        # HODs and nurses see schedules only; the buttons follow these.
+        'can_edit': access_context.get('can_edit', False),
+        'can_schedule': access_context.get('can_schedule', False),
     }
 
     # Get selected month name

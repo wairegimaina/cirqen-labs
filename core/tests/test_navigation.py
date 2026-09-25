@@ -97,5 +97,49 @@ class NavigationTests(TestCase):
         for kept in ("inventory", "equipment_dashboard", "jobcard:create_job_card", "ppm_dashboard"):
             self.assertIn(f'href="{reverse(kept)}"', sidebar, kept)
 
-    def test_hods_keep_scheduling_in_the_sidebar(self):
-        self.assertIn(f'href="{reverse("scheduling:overview")}"', self.sidebar_links(self.hod))
+    def test_hods_see_the_schedules_but_not_the_planning(self):
+        sidebar = self.sidebar_links(self.hod)
+        self.assertIn(f'href="{reverse("ppm_dashboard")}"', sidebar)
+        self.assertIn(f'href="{reverse("schedule:calibration_dashboard")}"', sidebar)
+        self.assertNotIn(f'href="{reverse("scheduling:overview")}"', sidebar)
+
+
+class HodReadOnlyTests(NavigationTests):
+    """HODs oversee schedules: they see them but neither plan nor initiate."""
+
+    def setUp(self):
+        super().setUp()
+        from Inventory.models import Equipment, EquipmentDescription
+        self.eq = Equipment.objects.create(
+            description=EquipmentDescription.objects.create(name="Monitor"), department=self.dept,
+            workshop=self.maint, model="M", serial_number="HOD-1", status="Working")
+        self.client.force_login(self.hod)
+
+    def test_the_pages_open_without_action_buttons(self):
+        # Calibration first, on a fresh session: an HOD belongs to no workshop.
+        cal = self.client.get(reverse("schedule:calibration_dashboard"))
+        self.assertEqual(cal.status_code, 200)
+        for button in ("bulkActionsBar", "bulkScheduleBtn",
+                       reverse("schedule:schedule_calibration_equipment", args=[self.eq.id])):
+            self.assertNotContains(cal, button)
+        ppm = self.client.get(reverse("ppm_dashboard"))
+        self.assertEqual(ppm.status_code, 200)
+        for button in ("bulkMarkCompleted", "scheduleSelectedBtn", "schedule-single-btn"):
+            self.assertNotContains(ppm, button)
+
+    def test_scheduling_actions_are_refused(self):
+        from calSchedules.models import CalibrationSchedule
+        from ppms.models import PPMSchedule
+        PPMSchedule.objects.filter(equipment=self.eq).delete()
+        CalibrationSchedule.objects.filter(equipment=self.eq).delete()
+        self.client.post(reverse("schedule_equipment", args=[self.eq.id]))
+        self.client.post(reverse("schedule:schedule_calibration_equipment", args=[self.eq.id]))
+        self.assertFalse(PPMSchedule.objects.filter(equipment=self.eq).exists())
+        self.assertFalse(CalibrationSchedule.objects.filter(equipment=self.eq).exists())
+
+    def test_plans_are_read_only(self):
+        from scheduling.views import can_manage
+        self.assertFalse(can_manage(self.hod))
+        self.assertTrue(can_manage(self.tech))
+        response = self.client.post(reverse("scheduling:plan_new"), {"logic": "description", "source": "spread"})
+        self.assertEqual(response.status_code, 403)

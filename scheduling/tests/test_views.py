@@ -214,13 +214,13 @@ class PlanFlowTests(ViewTestBase):
         rule = plan.rules.model(plan=plan, description=self.monitor)
         rule.months = [3]
         rule.save()
-        self.client.force_login(self.hod)
+        self.client.force_login(self.incharge)
         self.client.post(reverse("scheduling:plan", args=[plan.id]), {"group": [str(self.monitor.id)]})
         self.assertFalse(plan.rules.exists())
 
     def test_new_draft_copies_the_active_plan(self):
         active = self.active_plan(months=(3, 9))
-        self.client.force_login(self.hod)
+        self.client.force_login(self.incharge)
         self.client.post(reverse("scheduling:plan_new") + f"?workshop={self.ws.id}&program=ppm",
                          {"logic": "description", "source": "copy"})
         draft = SchedulingPlan.objects.get(state="draft")
@@ -228,7 +228,7 @@ class PlanFlowTests(ViewTestBase):
         self.assertEqual(draft.rules.get().months, [3, 9])
 
     def test_only_one_draft_at_a_time(self):
-        self.client.force_login(self.hod)
+        self.client.force_login(self.incharge)
         url = reverse("scheduling:plan_new") + f"?workshop={self.ws.id}&program=ppm"
         self.client.post(url, {"logic": "description", "source": "blank"})
         self.client.post(url, {"logic": "department", "source": "blank"})
@@ -236,7 +236,7 @@ class PlanFlowTests(ViewTestBase):
 
     def test_discard_draft(self):
         plan = SchedulingPlan.objects.create(workshop=self.ws, program="ppm", logic="description", version=1)
-        self.client.force_login(self.hod)
+        self.client.force_login(self.incharge)
         self.client.post(reverse("scheduling:plan_delete", args=[plan.id]))
         self.assertFalse(SchedulingPlan.objects.exists())
 

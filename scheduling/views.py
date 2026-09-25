@@ -2,7 +2,7 @@
 and each device's schedule history.
 
 Who sees what:
-    HOD                        every workshop; may edit and activate plans
+    HOD                        every workshop; read only (oversees, never plans)
     Tech, Engineer Incharge    their workshop; may edit and activate plans
     other Tech                 their workshop; read only
 A maintenance workshop sees only its PPM plan; the calibration center sees
@@ -58,10 +58,15 @@ class Scope:
 
 
 def can_manage(user):
-    """May change scheduling plans: an HOD, or a workshop's Engineer in charge."""
+    """May change scheduling plans: a workshop's Engineer in charge.
+
+    HODs see every workshop's plans and schedules but do not plan them.
+    """
     if not user.is_authenticated:
         return False
-    if user.is_superuser or get_user_role(user) == "HOD":
+    if get_user_role(user) == "HOD":
+        return False
+    if user.is_superuser:
         return True
     profile = getattr(user, "userprofile", None)
     return get_user_role(user) == "Tech" and bool(profile) and profile.level == "Engineer Incharge"
@@ -106,7 +111,7 @@ def _plan_in_scope(request, plan_id):
 
 def _require_manage(scope):
     if not scope.can_manage:
-        raise PermissionDenied("Only an HOD or the Engineer in charge can change scheduling plans.")
+        raise PermissionDenied("Only the Engineer in charge can change scheduling plans.")
 
 
 def _render(request, template, scope, **context):

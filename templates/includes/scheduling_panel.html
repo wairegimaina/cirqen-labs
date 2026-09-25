@@ -10,7 +10,7 @@ Usage: {% include 'includes/scheduling_panel.html' with panels=scheduling_panels
   <div class="section-card-head">
     <div>
       <h3 class="section-card-title" id="scheduling-panel-title"><i class="fas fa-calendar-alt" aria-hidden="true"></i> Scheduling</h3>
-      <p class="section-card-sub">Each workshop's plan decides when every device is due. Change the grouping or the months here; completed work is never moved.</p>
+      <p class="section-card-sub">Each workshop's plan decides when every device is due.{% if can_manage %} Change the grouping or the months here; completed work is never moved.{% endif %}</p>
     </div>
   </div>
   <div class="table-responsive">
@@ -23,15 +23,15 @@ Usage: {% include 'includes/scheduling_panel.html' with panels=scheduling_panels
           <td>
             {% if p.plan %}{{ p.plan.get_logic_display }} <span class="text-muted small">v{{ p.plan.version }}</span>
             {% else %}<span class="text-muted">Set up on first use</span>{% endif %}
-            {% if p.draft %}<a class="badge bg-warning text-dark ms-1" href="{% url 'scheduling:plan_preview' p.draft.id %}">draft v{{ p.draft.version }} waiting</a>{% endif %}
+            {% if p.draft and can_manage %}<a class="badge bg-warning text-dark ms-1" href="{% url 'scheduling:plan_preview' p.draft.id %}">draft v{{ p.draft.version }} waiting</a>{% endif %}
           </td>
           <td class="text-end">{{ p.groups }}</td>
-          <td class="text-end">{% if p.unscheduled %}<a href="{% url 'scheduling:unscheduled' %}{{ p.query }}">{{ p.unscheduled }}</a>{% else %}0{% endif %}</td>
+          <td class="text-end">{% if p.unscheduled and can_manage %}<a href="{% url 'scheduling:unscheduled' %}{{ p.query }}">{{ p.unscheduled }}</a>{% else %}{{ p.unscheduled }}{% endif %}</td>
           <td class="text-end">{{ p.overdue }}</td>
           <td class="text-end text-nowrap">
+            {% if can_manage %}
             <a class="btn btn-sm btn-outline-secondary" href="{% url 'scheduling:overview' %}{{ p.query }}">Overview</a>
             {% if p.plan %}<a class="btn btn-sm btn-outline-secondary" href="{% url 'scheduling:plans' %}{{ p.query }}">Edit months</a>{% endif %}
-            {% if can_manage %}
             <form method="post" action="{% url 'scheduling:change_logic' %}{{ p.query }}" class="d-inline">
               {% csrf_token %}
               <input type="hidden" name="logic" value="{{ p.other_logic }}">

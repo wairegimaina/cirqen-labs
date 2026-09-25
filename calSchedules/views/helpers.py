@@ -125,6 +125,8 @@ def get_user_access_context(request):
                 'can_schedule': False  # NIC cannot schedule
             }
         elif role == 'HOD':
+            # HODs oversee: they see every schedule but neither plan nor
+            # schedule, push, complete or delete (the workshops do).
             if profile.workshop:
                 return {
                     'access_type': 'workshop',
@@ -135,8 +137,8 @@ def get_user_access_context(request):
                     'role': role,
                     'level': level,
                     'can_manage_all_departments': True,
-                    'can_edit': True,
-                    'can_schedule': True
+                    'can_edit': False,
+                    'can_schedule': False
                 }
             elif profile.department:
                 return {
@@ -148,8 +150,27 @@ def get_user_access_context(request):
                     'role': role,
                     'level': level,
                     'can_manage_all_departments': False,
-                    'can_edit': True,
-                    'can_schedule': True
+                    'can_edit': False,
+                    'can_schedule': False
+                }
+
+        if role == 'HOD':
+            # An HOD belongs to no workshop: open on the calibration center
+            # (it calibrates the whole hospital), read only.
+            from scheduling.planner import calibration_center
+            center = calibration_center() or Workshop.objects.order_by('name').first()
+            if center:
+                return {
+                    'access_type': 'workshop',
+                    'workshop_id': center.id,
+                    'department_id': None,
+                    'workshop': center,
+                    'department': None,
+                    'role': role,
+                    'level': level,
+                    'can_manage_all_departments': True,
+                    'can_edit': False,
+                    'can_schedule': False
                 }
 
         workshop_id = request.session.get('workshop_id')
