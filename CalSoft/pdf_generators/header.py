@@ -133,7 +133,7 @@ class HeaderMixin:
         canvas.setFillColor(HexColor('#374151'))
         canvas.setFont('Helvetica', 11)
         canvas.drawCentredString(self.page_width / 2, self.page_height - 50, 'Biomedical Engineering Department')
-        canvas.drawCentredString(self.page_width / 2, self.page_height - 65, 'Issued By: Btwelve CALIBRATION LABORATORY')
+        canvas.drawCentredString(self.page_width / 2, self.page_height - 65, f'Issued By: {organisation_name()} Calibration Laboratory')
 
         # Contact information
         canvas.setFont('Helvetica', 8)
