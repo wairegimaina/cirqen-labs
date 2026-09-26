@@ -51,6 +51,8 @@ from ..manufacturer_performance_pdf_generator import create_manufacturer_pdf_res
 from Inventory.models import Equipment, Workshop
 
 # sibling modules in this package
+from core.scoping import for_user
+
 from .helpers import calculate_manufacturer_performance, get_user_workshop_context
 from core.branding import contact_line
 from core.eat import fmt_eat
@@ -71,7 +73,7 @@ def export_equipment_history(request, equipment_id):
         messages.error(request, "Equipment not found.")
         return redirect('equipment_dashboard')
 
-    if not is_hod and equipment.workshop != selected_workshop:
+    if not is_hod and not for_user(Equipment.objects.filter(id=equipment.id), request.user).exists():
         messages.error(request, "You do not have permission to export this equipment's history.")
         return redirect('equipment_dashboard')
 
@@ -273,7 +275,10 @@ def export_equipment_category_detailed_pdf(request):
             except Workshop.DoesNotExist:
                 pass
     else:
-        # Regular users see only their workshop
+        # Tech: their workshop; NIC: their department (core.scoping). A NIC has
+        # no workshop, so the old `if selected_workshop` filter let them export
+        # every department in the hospital.
+        equipment_qs = for_user(equipment_qs, request.user)
         if selected_workshop:
             equipment_qs = equipment_qs.filter(workshop=selected_workshop)
 
@@ -463,7 +468,10 @@ def export_manufacturer_performance_pdf(request):
             except Workshop.DoesNotExist:
                 pass
     else:
-        # Regular users see only their workshop
+        # Tech: their workshop; NIC: their department (core.scoping). A NIC has
+        # no workshop, so the old `if selected_workshop` filter let them export
+        # every department in the hospital.
+        equipment_qs = for_user(equipment_qs, request.user)
         if selected_workshop:
             equipment_qs = equipment_qs.filter(workshop=selected_workshop)
 

@@ -253,7 +253,10 @@ def generate_verification_url(certificate_number, session):
     This could be used as an alternative to QR codes or in addition to them.
     """
     try:
-        base_url = getattr(settings, 'CERTIFICATE_VERIFICATION_URL', 'https://verify.btwelve.hospital')
+        # No default: a made-up domain printed on a certificate is worse than none.
+        base_url = getattr(settings, 'CERTIFICATE_VERIFICATION_URL', '')
+        if not base_url:
+            return None
         verification_token = base64.urlsafe_b64encode(
             f"{certificate_number}:{session.id}:{session.timestamp.timestamp()}".encode()
         ).decode()

@@ -7,7 +7,7 @@ from django.contrib import messages
 from CalSoft.models import (
     Equipment, CalibrationProcedure,
     CalibrationSession, CalibrationReading, HistoricalCalibration,
-    CalibrationAuditLog
+    CalibrationAuditLog, Standard
 )
 from calSchedules.models import CalibrationSchedule
 from calSchedules.grouping import next_due_date
@@ -118,3 +118,29 @@ def _render_calibration_form_with_context(request, form, equipment, schedule,
         'return_month': return_month, 'return_year': return_year, 'return_search': return_search,
         'reschedule_preference': reschedule_preference, 'show_sidebar': True,
     })
+
+STANDARD_DUE_WARNING_DAYS = 30
+
+
+def _reference_standard_status(procedure, today=None):
+    """Split the procedure's reference standards into (expired, due_soon).
+
+    ISO/IEC 17025 needs every reference to be within its own calibration when
+    it is used. Parameters name their standard by serial number
+    (``CalibrationParameter.standard_reference``); a serial with no matching
+    ``Standard`` row is skipped here, as ``get_standards_used`` already logs it.
+    """
+    today = today or timezone.localdate()
+    serials = {
+        p.standard_reference for p in procedure.parameters.all() if p.standard_reference
+    }
+    expired, due_soon = [], []
+    for standard in Standard.objects.filter(serial_number__in=serials).order_by("name"):
+        due = standard.calibration_due_date
+        if not due:
+            continue
+        if due < today:
+            expired.append(standard)
+        elif due <= today + timedelta(days=STANDARD_DUE_WARNING_DAYS):
+            due_soon.append(standard)
+    return expired, due_soon

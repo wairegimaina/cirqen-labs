@@ -55,22 +55,19 @@ for dev) with the new values.
 
 ### Optional but recommended: purge history
 
-The Supabase password was also committed (in `config.py`, `sync/config.py` and
-`helper_scripts/patch_config.py`) and is not listed below: add it to your local
-replacement file rather than writing it into this document again.
+The Supabase password was also committed (in `config.py`, `sync/config.py`,
+`helper_scripts/patch_config.py`, and inside `hq.tar.xz` in the `hq_server`
+repository). Purge both repositories. Never write the old values into this
+document or any other tracked file.
 
 Rotation is the real fix. If you also want the old values gone from history:
 
+Write the old values, one per line as `<old value>==>REDACTED`, into a local
+file **outside the repository** (never commit it), then:
+
 ```bash
 # with git-filter-repo installed
-git filter-repo --replace-text <(cat <<'EOF'
-cTAU3kJL3NNlUYA9rR07kh87FKHA6c24==>REDACTED
-Btwelvetech@2024==>REDACTED
-58f8605e1966ce148990c477dcb99d02==>REDACTED
-G6PScpbnjBWe4PMhi9c_31FzFzzxnHkyfnyzqsdE-JgIYwe4WBRBkBgLyuje43F5==>REDACTED
-RyJEzkPmYWrdC2472TzWnFUMaOIueaye==>REDACTED
-EOF
-)
+git filter-repo --replace-text /path/outside/repo/old-secrets.txt
 # then force-push and have every collaborator re-clone
 ```
 

@@ -51,6 +51,8 @@ from ..manufacturer_performance_pdf_generator import create_manufacturer_pdf_res
 from Inventory.models import Equipment, Workshop
 
 # sibling modules in this package
+from core.scoping import for_user
+
 from .helpers import calculate_manufacturer_performance, get_user_workshop_context
 from core import aggregate_cache
 
@@ -69,6 +71,11 @@ def equipment_dashboard(request):
 
     # ---- Handle category assignment ----
     if request.method == "POST" and "assign_categories" in request.POST:
+        # Categories (and so which equipment counts as critical) are
+        # hospital-wide settings: only the HOD may change them.
+        if not is_hod:
+            messages.error(request, "Only the head of department can change equipment categories.")
+            return redirect("equipment_dashboard")
         updated_count = 0
         for desc in descriptions:
             category_id = request.POST.get(f"category_{desc.id}")
@@ -103,7 +110,9 @@ def equipment_dashboard(request):
             equipment_qs = equipment_qs.filter(workshop_id=workshop_id)
             selected_workshop = get_object_or_404(Workshop, id=workshop_id)
     else:
-        equipment_qs = equipment_qs.filter(workshop=selected_workshop)
+        equipment_qs = for_user(equipment_qs, request.user)
+        if selected_workshop:
+            equipment_qs = equipment_qs.filter(workshop=selected_workshop)
 
     # Category filter
     category_id = request.GET.get("category")
@@ -174,7 +183,14 @@ def equipment_dashboard(request):
     # One job card query per device, so the unfiltered view is cached per
     # workshop; a search or category filter is computed fresh.
     if not category_id and not search_query:
-        scope = (request.GET.get("workshop") or "all") if is_hod else getattr(selected_workshop, "id", "none")
+        if is_hod:
+            scope = request.GET.get("workshop") or "all"
+        elif selected_workshop:
+            scope = selected_workshop.id
+        else:
+            # NICs have no workshop; without this every NIC shared one cache
+            # entry and saw whichever department computed it first.
+            scope = f"dept-{profile.department_id}"
         manufacturer_performance = aggregate_cache.get_or_compute(
             "inv", ["manufacturer", scope],
             lambda: calculate_manufacturer_performance(equipment_qs),

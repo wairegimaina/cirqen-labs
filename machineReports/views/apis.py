@@ -51,6 +51,8 @@ from ..manufacturer_performance_pdf_generator import create_manufacturer_pdf_res
 from Inventory.models import Equipment, Workshop
 
 # sibling modules in this package
+from core.scoping import for_user
+
 from .helpers import get_user_workshop_context
 
 
@@ -71,7 +73,9 @@ def equipment_count_preview_api(request):
         if workshop_id:
             equipment_qs = equipment_qs.filter(workshop_id=workshop_id)
     else:
-        equipment_qs = equipment_qs.filter(workshop=selected_workshop)
+        equipment_qs = for_user(equipment_qs, request.user)
+        if selected_workshop:
+            equipment_qs = equipment_qs.filter(workshop=selected_workshop)
 
     # Apply category filter
     category_id = request.GET.get("category")
@@ -111,7 +115,9 @@ def equipment_count_preview_api(request):
             if workshop_id:
                 cat_qs = cat_qs.filter(workshop_id=workshop_id)
         else:
-            cat_qs = cat_qs.filter(workshop=selected_workshop)
+            cat_qs = for_user(cat_qs, request.user)
+            if selected_workshop:
+                cat_qs = cat_qs.filter(workshop=selected_workshop)
 
         # Category filter
         cat_qs = cat_qs.filter(category=category)
