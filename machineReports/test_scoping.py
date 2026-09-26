@@ -126,3 +126,59 @@ class MachineReportScopingTest(TestCase):
         self.client.post(reverse("equipment_dashboard"), form)
         desc.refresh_from_db()
         self.assertEqual(desc.category, critical)
+
+
+class ManufacturerPerformanceTest(TestCase):
+    """Pins calculate_manufacturer_performance to hand-computed figures."""
+
+    def test_figures(self):
+        import datetime
+
+        from jobcard.models import SparePartUsed, jobcard
+        from machineReports.views.helpers import calculate_manufacturer_performance
+        from parts_tools.models import Accessories
+
+        ws = Workshop.objects.create(name="W")
+        dept = Department.objects.create(name="D", workshop=ws)
+        desc = EquipmentDescription.objects.create(name="Pump")
+        acme = Manufacturer.objects.create(name="Acme")
+
+        def machine(serial, maker, status):
+            return Equipment.objects.create(description=desc, manufacturer=maker, model="M", serial_number=serial,
+                                            department=dept, workshop=ws, status=status)
+
+        a1, a2 = machine("A1", acme, "Working"), machine("A2", acme, "Not working")
+        orphan = machine("U1", None, "Working")
+        part = Accessories.objects.create(workshop=ws, equipment_description=desc, unit_cost=100, stock_count=50)
+
+        def repair(eq, start, end, status="Approved", action="Repair", parts=0):
+            jc = jobcard.objects.create(department=dept, equipment=eq, workshop=ws, priority_level="Low",
+                                        action_taken=action, job_description="x", status=status,
+                                        time_started=start, time_completed=end)
+            if parts:
+                SparePartUsed.objects.create(job_card=jc, part=part, quantity=parts)
+            return jc
+
+        repair(a1, datetime.time(9, 0), datetime.time(11, 30), parts=2)   # 2.5 h, 200
+        repair(a2, datetime.time(8, 0), datetime.time(9, 0), parts=1)     # 1 h, 100
+        repair(a2, None, None)                                            # counted, no downtime
+        repair(a1, datetime.time(9, 0), datetime.time(10, 0), status="Waiting Approval")  # ignored
+        repair(a1, datetime.time(9, 0), datetime.time(10, 0), action="PPM")               # ignored
+        repair(orphan, datetime.time(9, 0), datetime.time(9, 30))                          # 0.5 h
+
+        result = calculate_manufacturer_performance(Equipment.objects.all())
+
+        acme_row = result["Acme"]
+        self.assertEqual(acme_row["equipment_count"], 2)
+        self.assertEqual(acme_row["working_equipment"], 1)
+        self.assertEqual(acme_row["avg_uptime"], 50.0)
+        self.assertEqual(acme_row["total_repairs"], 3)
+        self.assertAlmostEqual(acme_row["total_downtime"], 3.5)
+        self.assertAlmostEqual(acme_row["total_repair_cost"], 300.0)
+        self.assertAlmostEqual(acme_row["avg_repair_cost"], 100.0)
+        self.assertAlmostEqual(acme_row["repair_frequency"], 1.5)
+
+        unknown = result["Unknown"]
+        self.assertEqual((unknown["equipment_count"], unknown["total_repairs"]), (1, 1))
+        self.assertAlmostEqual(unknown["total_downtime"], 0.5)
+        self.assertEqual(unknown["total_repair_cost"], 0)
