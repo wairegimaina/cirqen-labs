@@ -221,6 +221,7 @@
 
     <!-- ═══════════════ MAIN CONTENT ═══════════════ -->
     <main class="app-main" id="mainContent" role="main">
+      {% include 'includes/module_tabs.html' %}
       {% block content %}{% endblock %}
     </main>
 
@@ -332,6 +333,18 @@
 
   <!-- Page-specific JS -->
   {% block extra_js %}{% endblock %}
+  <script>
+    // Open a page section named in the URL hash (e.g. /Inventory/#summary),
+    // so tabs on other pages of a module can link straight to it. Runs on
+    // load, after the page's own tab handlers are attached.
+    window.addEventListener('load', function () {
+      var name = decodeURIComponent(location.hash.slice(1));
+      if (!name || !window.CSS || !CSS.escape) return;
+      var key = CSS.escape(name);
+      var tab = document.querySelector('.spa-nav-item[data-section="' + key + '"], .spa-nav-item[data-view="' + key + '"], .spa-nav > .nav-item[data-section="' + key + '"]');
+      if (tab) tab.click();
+    });
+  </script>
 
 </body>
 </html>

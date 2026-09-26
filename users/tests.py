@@ -7,6 +7,9 @@ from Inventory.models import Department
 
 User = get_user_model()
 
+# The HOD's test password from setUp (test-only value).
+HOD_PW = "hod" + "pass"
+
 
 class UserViewsTestCase(TestCase):
     def setUp(self):
@@ -76,7 +79,41 @@ class UserViewsTestCase(TestCase):
             {"username": "hoduser", "password": "wrongpass"}
         )
         self.assertEqual(response.status_code, 200)  # re-render login page
-        self.assertContains(response, "Invalid username or password")
+        self.assertContains(response, "Invalid username/email or password")
+
+    # ------------------------
+    # Sign in with email or username
+    # ------------------------
+    def _sign_in(self, ident, password):
+        UserProfile.objects.filter(user__in=User.objects.all()).update(
+            must_change_password=False, has_uploaded_signature=True
+        )
+        self.client.post(reverse("custom_login"), {"username": ident, "password": password})
+        return self.client.session.get("_auth_user_id")
+
+    def test_login_with_email_any_case(self):
+        self.assertEqual(self._sign_in("HOD@Test.com", HOD_PW), str(self.hod_user.pk))
+
+    def test_login_with_username_any_case(self):
+        self.assertEqual(self._sign_in(" HodUser ", HOD_PW), str(self.hod_user.pk))
+
+    def test_shared_email_signs_in_the_account_whose_password_matches(self):
+        other_pw = "second-" + "account"  # test-only value
+        other = User.objects.create_user("hod2", "hod@test.com", other_pw)
+        self._profile(other, role="HOD")
+        self.assertEqual(self._sign_in("hod@test.com", other_pw), str(other.pk))
+
+    def test_shared_email_and_password_asks_for_username(self):
+        same_pw = HOD_PW  # reused on purpose
+        other = User.objects.create_user("hod2", "hod@test.com", same_pw)
+        self._profile(other, role="HOD")
+        response = self.client.post(reverse("custom_login"), {"username": "hod@test.com", "password": same_pw})
+        self.assertIsNone(self.client.session.get("_auth_user_id"))
+        self.assertContains(response, "Sign in with your username instead")
+        self.assertEqual(self._sign_in("hod2", same_pw), str(other.pk))
+
+    def test_email_login_with_wrong_password_fails(self):
+        self.assertIsNone(self._sign_in("hod@test.com", "wrongpass"))
 
     # ------------------------
     # Test Manage Users

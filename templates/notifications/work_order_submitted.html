@@ -1,0 +1,19 @@
+{% extends "notifications/_base.html" %}
+{% block body %}
+<p>A work order is waiting for your approval.</p>
+<table role="presentation" cellpadding="4" cellspacing="0" style="font-size:14px;">
+  <tr><td style="color:#6b7280;">Reference</td><td><strong>{{ ref }}</strong></td></tr>
+  <tr><td style="color:#6b7280;">Equipment</td><td>{{ equipment.description.name }} (SN {{ equipment.serial_number }})</td></tr>
+  <tr><td style="color:#6b7280;">Department</td><td>{{ wo.department.name }}</td></tr>
+  <tr><td style="color:#6b7280;">Workshop</td><td>{{ wo.workshop.name }}</td></tr>
+  <tr><td style="color:#6b7280;">Action</td><td>{{ wo.action_taken }} ({{ wo.priority_level }} priority)</td></tr>
+  <tr><td style="color:#6b7280;">Technician</td><td>{{ technician }}</td></tr>
+</table>
+<p><strong>Work done</strong><br>{{ wo.job_description|linebreaksbr }}</p>
+{% if checklist_total %}
+<p><strong>Checklist:</strong> {{ checklist_total }} step{{ checklist_total|pluralize }} recorded{% if checklist_problems %}, <span style="color:#b42318;">{{ checklist_problems|length }} failed or not done</span>:</p>
+<ul>{% for e in checklist_problems %}<li>{{ e.task }}: <strong>{{ e.get_result_display }}</strong>{% if e.note %} — {{ e.note }}{% endif %}</li>{% endfor %}</ul>
+{% else %}, all passed.</p>{% endif %}
+{% endif %}
+<p>Open {{ app_name }} &rsaquo; Work Orders &rsaquo; Waiting Work Orders to approve or decline it.</p>
+{% endblock %}

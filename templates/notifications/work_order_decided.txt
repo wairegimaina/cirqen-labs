@@ -1,0 +1,10 @@
+{% autoescape off %}Your work order {{ ref }} was {{ wo.status|lower }}.
+
+Equipment:   {{ equipment.description.name }} (SN {{ equipment.serial_number }})
+Department:  {{ wo.department.name }}
+Action:      {{ wo.action_taken }}
+{% if wo.status == 'Approved' %}Approved by: {{ decided_by }}{% else %}Declined by: {{ decided_by }}
+Reason:      {{ wo.decline_reason|default:"not given" }}
+
+Correct the work order and submit it again.{% endif %}
+{% endautoescape %}

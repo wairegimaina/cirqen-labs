@@ -14,6 +14,7 @@ from psycopg2.extras import RealDictCursor, Json
 from psycopg2.pool import ThreadedConnectionPool
 import requests
 import pytz
+from .open_schedule_rule import is_one_open_violation, retire_other_open
 from .state_manager import StateManager
 from .dependency_manager import DependencyManager
 from .smart_delete import SmartDeleteMixin
@@ -556,6 +557,16 @@ class ApplyRemoteUpdateMixin(SmartDeleteMixin):
                 if conn:
                     conn.rollback()
 
+                # One open schedule per equipment: HQ keeps at most one, so its
+                # row is the open one. Retire the local open schedule(s) instead
+                # of letting the generic resolver below act on "the row with
+                # this equipment_id", which could be a completed schedule.
+                if is_one_open_violation(uv_error):
+                    if self._retire_local_open_schedules(tbl, data, row_id):
+                        return self.apply_remote_update_locally(table, payload)
+                    LOG.warning(f"   ⚠️  Could not resolve one-open-schedule conflict on {table}[{row_id}]")
+                    return False
+
                 error_msg = str(uv_error)
                 # Extract the constraint and duplicate value for a helpful log message
                 try:
@@ -708,6 +719,35 @@ class ApplyRemoteUpdateMixin(SmartDeleteMixin):
             finally:
                 if conn:
                     self.pool.putconn(conn)
+
+    def _retire_local_open_schedules(self, table, data, keep_id) -> bool:
+        """Make room for HQ's open schedule: retire this equipment's local ones.
+
+        Retire, never delete: a retired schedule keeps its sessions and job
+        cards, and the bumped ``updated_at`` uploads the retirement so HQ
+        agrees. Returns True when something was retired (retry the insert).
+        """
+        equipment_id = (data or {}).get("equipment_id")
+        if not equipment_id or not keep_id:
+            return False
+        conn = None
+        try:
+            conn = self.pool.getconn()
+            with conn.cursor() as cur:
+                retired = retire_other_open(cur, table, equipment_id, keep_id)
+            conn.commit()
+            if retired:
+                LOG.info(f"   ↳ retired {len(retired)} local open schedule(s) for equipment "
+                         f"{equipment_id}; HQ's {keep_id} is the open one")
+            return bool(retired)
+        except Exception as e:
+            if conn:
+                conn.rollback()
+            LOG.error(f"   ❌ Retiring local open schedules failed: {e}")
+            return False
+        finally:
+            if conn:
+                self.pool.putconn(conn)
 
     def _resolve_unique_conflict_hq_wins(
         self,

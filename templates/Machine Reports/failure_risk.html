@@ -1,0 +1,106 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Failure Risk{% endblock %}
+{% block page_title %}Predicted Corrective Maintenance{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <div class="alert alert-info small">
+        <i class="fas fa-info-circle me-2"></i>
+        Each device's chance of needing a repair in the next <strong>{{ horizon }} days</strong>, estimated from its own
+        repair work orders, the repair history of other devices with the same description, overdue PPMs and failed
+        checklist steps. The <em>Why</em> column says what drove each score. Use it to plan inspections and stock spare
+        parts before the breakdown, not as a certainty.
+    </div>
+
+    <form method="get" class="d-flex flex-wrap gap-2 mb-3 align-items-end">
+        <div>
+            <label class="form-label small mb-0" for="horizon">Horizon</label>
+            <select name="horizon" id="horizon" class="form-select form-select-sm" onchange="this.form.submit()">
+                {% for h in horizons %}<option value="{{ h }}" {% if h == horizon %}selected{% endif %}>{{ h }} days</option>{% endfor %}
+            </select>
+        </div>
+        <div>
+            <label class="form-label small mb-0" for="level">Risk</label>
+            <select name="level" id="level" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="">All levels</option>
+                <option value="High" {% if level == 'High' %}selected{% endif %}>High ({{ counts.High }})</option>
+                <option value="Medium" {% if level == 'Medium' %}selected{% endif %}>Medium ({{ counts.Medium }})</option>
+                <option value="Low" {% if level == 'Low' %}selected{% endif %}>Low ({{ counts.Low }})</option>
+            </select>
+        </div>
+        {% if workshops %}
+        <div>
+            <label class="form-label small mb-0" for="workshop">Workshop</label>
+            <select name="workshop" id="workshop" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="">All workshops</option>
+                {% for w in workshops %}<option value="{{ w.id }}" {% if workshop_filter == w.id|stringformat:"s" %}selected{% endif %}>{{ w.name }}</option>{% endfor %}
+            </select>
+        </div>
+        {% endif %}
+    </form>
+
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-md-3"><div class="card"><div class="card-body py-2"><div class="small text-muted">High risk</div><div class="fs-4 fw-bold text-danger">{{ counts.High }}</div></div></div></div>
+        <div class="col-6 col-md-3"><div class="card"><div class="card-body py-2"><div class="small text-muted">Medium risk</div><div class="fs-4 fw-bold text-warning">{{ counts.Medium }}</div></div></div></div>
+        <div class="col-6 col-md-3"><div class="card"><div class="card-body py-2"><div class="small text-muted">Low risk</div><div class="fs-4 fw-bold text-success">{{ counts.Low }}</div></div></div></div>
+        <div class="col-6 col-md-3"><div class="card"><div class="card-body py-2"><div class="small text-muted">Already down</div><div class="fs-4 fw-bold">{{ down_count }}</div></div></div></div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-header"><h5 class="mb-0"><i class="fas fa-heartbeat me-2 text-muted"></i>Working devices by risk</h5></div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Device</th>
+                            <th>Serial</th>
+                            <th>Department</th>
+                            <th>Risk</th>
+                            <th>Repairs / yr</th>
+                            <th>Last Repair</th>
+                            <th>Likely By</th>
+                            <th>Why</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in predictions %}
+                        <tr>
+                            <td class="fw-bold text-primary">{{ p.equipment.description.name }}</td>
+                            <td class="font-monospace">{{ p.equipment.serial_number }}</td>
+                            <td>{{ p.equipment.department.name }}</td>
+                            <td><span class="badge {% if p.risk_level == 'High' %}badge-danger{% elif p.risk_level == 'Medium' %}badge-warning{% else %}badge-success{% endif %}">{{ p.risk_level }} · {{ p.risk_percent }}%</span></td>
+                            <td>{{ p.rate_per_year }}</td>
+                            <td>{{ p.last_repair|date:"d M Y"|default:"-" }}</td>
+                            <td>{% if p.expected_days_between_failures and p.expected_days_between_failures <= 730 %}{{ p.predicted_next_failure|date:"M Y" }}{% else %}<span class="text-muted">&gt; 2 years</span>{% endif %}</td>
+                            <td class="small">{{ p.reasons|join:"; " }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="8" class="text-center text-muted py-5">No working devices to score.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if total > 200 %}<div class="small text-muted p-2">Showing the 200 highest-risk of {{ total }}.</div>{% endif %}
+        </div>
+    </div>
+
+    {% if down %}
+    <div class="card">
+        <div class="card-header"><h5 class="mb-0"><i class="fas fa-tools me-2 text-muted"></i>Already not working / under repair</h5></div>
+        <div class="card-body p-0">
+            <table class="table table-sm mb-0">
+                <thead><tr><th>Device</th><th>Serial</th><th>Department</th><th>Status</th></tr></thead>
+                <tbody>
+                    {% for e in down %}
+                    <tr><td>{{ e.description.name }}</td><td class="font-monospace">{{ e.serial_number }}</td><td>{{ e.department.name }}</td><td>{{ e.status }}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

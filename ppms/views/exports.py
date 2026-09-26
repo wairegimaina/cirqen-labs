@@ -11,7 +11,6 @@ from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 from ..models import PPMSchedule
 from Inventory.models import Equipment, Department, EquipmentDescription
-from ..tasks import initialize_ppm_schedule_with_logic, normalize_ppm_schedules, smart_reorganize_ppm_schedules
 from openpyxl import Workbook
 from workshop.models import Workshop
 import logging

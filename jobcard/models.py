@@ -1,6 +1,7 @@
 import uuid
 import logging
 from django.db import models
+from django.db.models import F, Q
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.utils.timezone import localdate, now
@@ -127,6 +128,11 @@ class jobcard(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     syncable = True
+
+    @property
+    def work_order_number(self):
+        """Short reference shown on screen, e.g. WO-3F2A9C1B (the same 8 characters machine reports use)."""
+        return f"WO-{str(self.id)[:8].upper()}"
 
     def calculate_total_parts_cost(self):
         """Calculate total cost of all spare parts used"""
@@ -498,3 +504,188 @@ class SparePartUsed(models.Model):
             models.Index(fields=['job_card', 'part']),
             models.Index(fields=['part', 'created_at']),
         ]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Checklists
+#
+# A ChecklistTemplate is a reusable checklist written in the Checklists module:
+# for one equipment description (or for all equipment) and a task type. On the
+# work order form the technician selects a checklist (the ones that fit the
+# device and task are suggested), may add extra steps for that one job, and
+# records a result for each step. Each answer is stored as a
+# WorkOrderChecklistEntry with who completed it and when, and a copy of the
+# step's wording, so editing a checklist later never rewrites what an approved
+# work order says was done.
+# ─────────────────────────────────────────────────────────────────────────────
+
+class ChecklistTemplate(models.Model):
+    TASK_CHOICES = [
+        ('Any', 'Any task'),
+        ('PPM', 'PPM'),
+        ('Calibration', 'Calibration'),
+        ('Repair', 'Repair'),
+        ('Others', 'Others'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    equipment_description = models.ForeignKey(
+        'Inventory.EquipmentDescription', on_delete=models.CASCADE, related_name='checklists',
+        null=True, blank=True, help_text="Blank = applies to all equipment"
+    )
+    task_type = models.CharField(max_length=20, choices=TASK_CHOICES, default='Any')
+    title = models.CharField(max_length=200)
+    instructions = models.TextField(
+        blank=True, help_text="Description: purpose, safety notes, tools needed, how to prepare the device"
+    )
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='checklist_templates')
+    active_status = models.BooleanField(default=True)
+
+    # offline sync
+    needs_sync = models.BooleanField(default=True)
+    pending_delete = models.BooleanField(default=False)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    syncable = True
+
+    @classmethod
+    def usable(cls):
+        return cls.objects.filter(active_status=True, pending_delete=False)
+
+    @classmethod
+    def for_work(cls, equipment, action_taken):
+        """Active checklists suggested for a work order on ``equipment`` for ``action_taken``:
+        the device's own description first, then ones written for all equipment."""
+        return cls.usable().filter(
+            Q(equipment_description_id=equipment.description_id) | Q(equipment_description__isnull=True),
+            task_type__in=['Any', action_taken],
+        ).order_by(F('equipment_description').asc(nulls_last=True), 'title')
+
+    @property
+    def applies_to(self):
+        return self.equipment_description.name if self.equipment_description else 'All equipment'
+
+    def active_items(self):
+        return self.items.filter(active_status=True, pending_delete=False).order_by('order', 'created_at')
+
+    def save(self, *args, **kwargs):
+        self.needs_sync = True
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.title} ({self.applies_to} / {self.task_type})"
+
+    class Meta:
+        ordering = ['equipment_description__name', 'task_type', 'title']
+
+
+class ChecklistItem(models.Model):
+    RESPONSE_CHOICES = [
+        ('check', 'Done / Not done'),
+        ('pass_fail', 'Pass / Fail'),
+        ('value', 'Reading or value'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    template = models.ForeignKey(ChecklistTemplate, on_delete=models.CASCADE, related_name='items')
+    order = models.PositiveIntegerField(default=0)
+    task = models.CharField(max_length=255, help_text="The step, e.g. 'Inspect power cord'")
+    guidance = models.TextField(blank=True, help_text="How to perform the step")
+    expected_result = models.CharField(max_length=255, blank=True,
+                                       help_text="What a good result looks like, e.g. '12 V ± 0.5 V'")
+    response_type = models.CharField(max_length=20, choices=RESPONSE_CHOICES, default='check')
+    is_required = models.BooleanField(default=True)
+    active_status = models.BooleanField(default=True)
+
+    # offline sync
+    needs_sync = models.BooleanField(default=True)
+    pending_delete = models.BooleanField(default=False)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    syncable = True
+
+    def save(self, *args, **kwargs):
+        self.needs_sync = True
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.order}. {self.task}"
+
+    class Meta:
+        ordering = ['template', 'order', 'created_at']
+
+
+class WorkOrderChecklistEntry(models.Model):
+    RESULT_CHOICES = [
+        ('done', 'Done'),
+        ('not_done', 'Not done'),
+        ('pass', 'Pass'),
+        ('fail', 'Fail'),
+        ('na', 'N/A'),
+    ]
+    # Results a technician may pick for each response type.
+    RESULTS_FOR = {
+        'check': ('done', 'not_done', 'na'),
+        'pass_fail': ('pass', 'fail', 'na'),
+        'value': ('pass', 'fail', 'na'),
+    }
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    job_card = models.ForeignKey(jobcard, on_delete=models.CASCADE, related_name='checklist_entries')
+    # The checklist selected on the work order; both are empty for a step the
+    # technician added for this one job.
+    template = models.ForeignKey(ChecklistTemplate, on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name='entries')
+    item = models.ForeignKey(ChecklistItem, on_delete=models.SET_NULL, null=True, blank=True,
+                             related_name='entries')
+
+    # Snapshot of the item at the time the work was done
+    template_title = models.CharField(max_length=200)
+    order = models.PositiveIntegerField(default=0)
+    task = models.CharField(max_length=255)
+    guidance = models.TextField(blank=True)
+    expected_result = models.CharField(max_length=255, blank=True)
+    response_type = models.CharField(max_length=20, choices=ChecklistItem.RESPONSE_CHOICES)
+    is_required = models.BooleanField(default=True)
+
+    # What the technician recorded
+    result = models.CharField(max_length=10, choices=RESULT_CHOICES, blank=True)
+    value = models.CharField(max_length=100, blank=True)
+    note = models.CharField(max_length=500, blank=True)
+    completed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
+                                     related_name='checklist_entries_completed')
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    active_status = models.BooleanField(default=True)
+
+    # offline sync
+    needs_sync = models.BooleanField(default=True)
+    pending_delete = models.BooleanField(default=False)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    syncable = True
+
+    CUSTOM_TITLE = 'Additional steps'
+
+    @property
+    def is_problem(self):
+        return self.result in ('fail', 'not_done')
+
+    @property
+    def is_custom(self):
+        return self.item_id is None and self.template_title == self.CUSTOM_TITLE
+
+    def save(self, *args, **kwargs):
+        self.needs_sync = True
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.task}: {self.get_result_display() or '—'}"
+
+    class Meta:
+        ordering = ['job_card', 'template_title', 'order']
+        verbose_name_plural = 'Work order checklist entries'

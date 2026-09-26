@@ -90,6 +90,11 @@ class UserProfile(models.Model):
         max_length=50, choices=LEVEL_CHOICES, null=True, blank=True,
         help_text="Required for all Tech roles"
     )
+    # Deputy HOD is a designation, not a role: permissions stay with the role.
+    # It decides who is copied on email sent to the HOD (notifications.recipients).
+    is_deputy_hod = models.BooleanField(
+        default=False, help_text="Copied on emails sent to the Head of Department"
+    )
 
     # Extra info
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -164,6 +169,7 @@ class UserProfile(models.Model):
             "department": str(self.department.id) if self.department else None,
             "workshop": str(self.workshop.id) if self.workshop else None,
             "level": self.level,
+            "is_deputy_hod": self.is_deputy_hod,
             "employee_id": self.employee_id,
             "phone_number": self.phone_number,
             "is_approved": self.is_approved,

@@ -1,6 +1,6 @@
 """ppms.views — shared user-access context and PPM statistics helpers."""
 from calendar import monthrange
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, render, redirect
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, HttpResponse
@@ -11,7 +11,6 @@ from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 from ..models import PPMSchedule
 from Inventory.models import Equipment, Department, EquipmentDescription
-from ..tasks import initialize_ppm_schedule_with_logic, normalize_ppm_schedules, smart_reorganize_ppm_schedules
 from openpyxl import Workbook
 from workshop.models import Workshop
 import logging
@@ -87,6 +86,8 @@ def get_user_access_context(request):
                 }
 
         elif role == 'HOD':
+            # HODs oversee: they see every schedule but neither plan nor
+            # schedule, push, complete or delete (the workshops do).
             if profile.workshop:
                 return {
                     'access_type': 'workshop',
@@ -97,8 +98,8 @@ def get_user_access_context(request):
                     'role': role,
                     'level': level,
                     'can_manage_all_departments': True,
-                    'can_edit': True,
-                    'can_schedule': True
+                    'can_edit': False,
+                    'can_schedule': False
                 }
             elif profile.department:
                 return {
@@ -110,8 +111,8 @@ def get_user_access_context(request):
                     'role': role,
                     'level': level,
                     'can_manage_all_departments': False,
-                    'can_edit': True,
-                    'can_schedule': True
+                    'can_edit': False,
+                    'can_schedule': False
                 }
 
             # An HOD is attached to neither a workshop nor a department, so both
@@ -137,8 +138,8 @@ def get_user_access_context(request):
                     'role': role,
                     'level': level,
                     'can_manage_all_departments': True,
-                    'can_edit': True,
-                    'can_schedule': True
+                    'can_edit': False,
+                    'can_schedule': False
                 }
 
         workshop_id = request.session.get('workshop_id')
@@ -169,7 +170,7 @@ def get_user_access_context(request):
 
 def get_current_month_year():
     """Returns current month and year as integers"""
-    today = datetime.today()
+    today = localdate()
     return today.month, today.year
 
 
@@ -236,4 +237,52 @@ def calculate_ppm_statistics(schedules, equipment_queryset):
         'completed_percentage': round(completed_percentage, 1),
         'pushed_percentage': round(pushed_percentage, 1),
         'completion_rate': round(completion_rate, 1),
+    }
+
+
+def filtered_statistics(schedules, equipment_queryset, unscheduled):
+    """Summary counts for exactly the schedules the page shows (the selected
+    month, week and department). Unscheduled is equipment with no schedule
+    at all, which no month narrows."""
+    statistics = calculate_ppm_statistics(schedules, equipment_queryset)
+    statistics['unscheduled'] = unscheduled.count()
+    return statistics
+
+
+def department_breakdown(schedules, equipment_queryset):
+    """Per-department counts of the shown schedules, for the Summary tab."""
+    counts = {
+        row['equipment__department_id']: row
+        for row in schedules.order_by().values('equipment__department_id').annotate(
+            scheduled=Count('id'),
+            pending=Count('id', filter=Q(status='pending')),
+            completed=Count('id', filter=Q(status='completed')),
+        )
+    }
+    rows = []
+    for dept in (equipment_queryset.order_by().values('department_id', 'department__name')
+                 .annotate(equipment=Count('id')).order_by('department__name')):
+        c = counts.get(dept['department_id'], {})
+        scheduled = c.get('scheduled', 0)
+        completed = c.get('completed', 0)
+        rows.append({
+            'name': dept['department__name'],
+            'equipment': dept['equipment'],
+            'scheduled': scheduled,
+            'pending': c.get('pending', 0),
+            'completed': completed,
+            'completion_rate': round(completed / scheduled * 100, 1) if scheduled else 0,
+        })
+    return rows
+
+
+def scheduling_context(request, access_context):
+    """The Scheduling panel on the PPM page: this workshop's PPM plan."""
+    from scheduling.reports import panels
+    from scheduling.views import can_manage
+    workshop_id = (access_context or {}).get('workshop_id')
+    workshops = Workshop.objects.filter(id=workshop_id) if workshop_id else Workshop.objects.none()
+    return {
+        'scheduling_panels': panels(workshops, 'ppm'),
+        'scheduling_can_manage': can_manage(request.user),
     }

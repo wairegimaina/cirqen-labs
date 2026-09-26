@@ -70,9 +70,27 @@
                 </a>
       </li>
 
-      <!-- Inventory -->
+      {% if nav.is_tech or nav.is_nic %}
+      <!-- Work Orders (Tech & NIC). Waiting, approved, declined and, for
+           technologists, Checklists are tabs on the work order pages. -->
       <li class="menu-entry" role="none">
-        <a href="{% url 'inventory' %}" class="menu-link {% if 'inventory' in request.path %}active-link{% endif %}"
+        <a href="{% url 'jobcard:create_job_card' %}"
+          class="menu-link {% if module_label == 'Work Orders' %}active-link{% endif %}" role="menuitem">
+          <div class="link-icon" aria-hidden="true">
+            <i class="fas fa-file-alt"></i>
+          </div>
+          <span class="link-label">Work Orders</span>
+          {% if nav.job_cards_waiting_count %}
+          <span class="queue-badge">{{ nav.job_cards_waiting_count }}</span>
+          {% endif %}
+        </a>
+      </li>
+      {% endif %}
+
+      <!-- Inventory (Equipment, Warranties, Suppliers are tabs) -->
+      <li class="menu-entry" role="none">
+        <a href="{% url 'inventory' %}"
+          class="menu-link {% if module_label == 'Inventory' or 'inventory' in request.path %}active-link{% endif %}"
           role="menuitem">
           <div class="link-icon" aria-hidden="true">
             <i class="fas fa-boxes"></i>
@@ -81,11 +99,69 @@
         </a>
       </li>
 
+      <!-- Analytics: Machine Reports (Failure Risk is a tab there) -->
+      {% with ws=selected_workshop|default:user.userprofile.workshop %}
+      {% if nav.is_hod or nav.is_tech and ws.category == 'maintenance' or nav.is_tech and not ws %}
+      <li class="menu-section-header" role="none">
+        <span class="section-label">Analytics</span>
+      </li>
+      <li class="menu-entry" role="none">
+        <a href="{% url 'equipment_dashboard' %}"
+          class="menu-link {% if module_label == 'Machine Reports' %}active-link{% endif %}" role="menuitem">
+          <div class="link-icon" aria-hidden="true">
+            <i class="fas fa-microchip"></i>
+          </div>
+          <span class="link-label">Machine Reports</span>
+        </a>
+      </li>
+      {% endif %}
+      {% endwith %}
+
+      <!-- Reports -->
+      {% if nav.is_tech %}
+      <li class="menu-section-header" role="none">
+        <span class="section-label">Reports</span>
+      </li>
+      <li class="menu-entry" role="none">
+        <a href="{% url 'report_hub:report_hub' %}"
+          class="menu-link {% if 'report_hub' in request.path %}active-link{% endif %}" role="menuitem">
+          <div class="link-icon" aria-hidden="true">
+            <i class="fas fa-chart-line"></i>
+          </div>
+          <span class="link-label">Report Hub</span>
+        </a>
+      </li>
+      {% endif %}
+
       <!-- ╔═══════════════════════════════════════════════════════╗ -->
       <!-- ║  HOD BLOCK                                            ║ -->
       <!-- ║  Visible to: HOD only                                 ║ -->
       <!-- ╚═══════════════════════════════════════════════════════╝ -->
       {% if nav.is_hod %}
+
+      <!-- HODs oversee every workshop's schedules, read only: the workshops
+           plan and schedule them. -->
+      <li class="menu-section-header" role="none">
+        <span class="section-label">Schedules</span>
+      </li>
+      <li class="menu-entry" role="none">
+        <a href="{% url 'ppm_dashboard' %}"
+          class="menu-link {% if module_label == 'PPM' %}active-link{% endif %}" role="menuitem">
+          <div class="link-icon" aria-hidden="true">
+            <i class="fas fa-clipboard-list"></i>
+          </div>
+          <span class="link-label">PPM Schedules</span>
+        </a>
+      </li>
+      <li class="menu-entry" role="none">
+        <a href="{% url 'schedule:calibration_dashboard' %}"
+          class="menu-link {% if request.resolver_match.namespace == 'schedule' %}active-link{% endif %}" role="menuitem">
+          <div class="link-icon" aria-hidden="true">
+            <i class="fas fa-calendar-check"></i>
+          </div>
+          <span class="link-label">Calibration Schedules</span>
+        </a>
+      </li>
 
       <li class="menu-section-header" role="none">
         <span class="section-label">Administration</span>
@@ -166,46 +242,20 @@
     {# ── END SYSTEM BLOCK ── #}
 
     <!-- ╔═══════════════════════════════════════════════════════╗ -->
-    <!-- ║  MAINTENANCE BLOCK                                    ║ -->
-    <!-- ║  Visible to: Tech in maintenance workshop only        ║ -->
-    <!-- ╚═══════════════════════════════════════════════════════╝ -->
-    {% if nav.is_tech %}
-    {% with ws=selected_workshop|default:user.userprofile.workshop %}
-    {% if ws.category == 'maintenance' or not ws %}
-
-    <li class="menu-section-header" role="none">
-      <span class="section-label">Maintenance</span>
-    </li>
-
-    <li class="menu-entry" role="none">
-      <a href="{% url 'equipment_dashboard' %}"
-        class="menu-link {% if 'equipment_dashboard' in request.path %}active-link{% endif %}" role="menuitem">
-        <div class="link-icon" aria-hidden="true">
-          <i class="fas fa-microchip"></i>
-        </div>
-        <span class="link-label">Machine Reports</span>
-      </a>
-    </li>
-
-    {% endif %}
-    {% endwith %}
-    {% endif %}
-
-    <!-- ╔═══════════════════════════════════════════════════════╗ -->
     <!-- ║  OPERATIONS BLOCK                                     ║ -->
     <!-- ║  Visible to: Tech & NIC                               ║ -->
     <!-- ╚═══════════════════════════════════════════════════════╝ -->
     {% if nav.is_tech or nav.is_nic %}
+    {% with ws=selected_workshop|default:user.userprofile.workshop %}
+    {% if nav.is_nic or ws.category == 'maintenance' %}
 
     <li class="menu-section-header" role="none">
       <span class="section-label">Operations</span>
     </li>
 
-    {% with ws=selected_workshop|default:user.userprofile.workshop %}
-    {% if nav.is_nic or ws.category == 'maintenance' %}
     <li class="menu-entry" role="none">
       <a href="{% url 'ppm_dashboard' %}"
-        class="menu-link {% if request.resolver_match.url_name == 'ppm_dashboard' %}active-dropdown{% endif %}"
+        class="menu-link {% if module_label == 'PPM' %}active-link{% endif %}"
         role="menuitem">
         <div class="link-icon" aria-hidden="true">
           <i class="fas fa-clipboard-list"></i>
@@ -215,73 +265,6 @@
     </li>
     {% endif %}
     {% endwith %}
-
-    <!-- Work Orders (Tech & NIC) -->
-    <li class="menu-entry" role="none">
-      <a href="#" class="menu-link {% if 'jobcard' in request.path %}active-link{% endif %}" data-toggle="submenu"
-        role="menuitem" aria-haspopup="true" aria-expanded="false">
-        <div class="link-icon" aria-hidden="true">
-          <i class="fas fa-file-alt"></i>
-        </div>
-        <span class="link-label">Work Orders</span>
-        <i class="fas fa-chevron-down submenu-toggle-arrow" aria-hidden="true"></i>
-      </a>
-      <ul class="dropdown-menu" role="menu">
-
-        <li class="dropdown-entry" role="none">
-          <a href="{% url 'jobcard:create_job_card' %}"
-            class="dropdown-link {% if request.resolver_match.url_name == 'create_job_card' %}active-dropdown{% endif %}"
-            role="menuitem">
-            <i class="fas fa-plus-circle" aria-hidden="true"></i>
-            <span class="link-label">Create Work Order</span>
-          </a>
-        </li>
-
-        <li class="dropdown-entry" role="none">
-          <a href="{% url 'jobcard:waiting_jobcards' %}"
-            class="dropdown-link {% if request.resolver_match.url_name == 'waiting_jobcards' %}active-dropdown{% endif %}"
-            role="menuitem">
-            <i class="fas fa-hourglass-half" aria-hidden="true"></i>
-            <span class="link-label">Waiting Work Orders</span>
-            {% if nav.job_cards_waiting_count %}
-            <span class="queue-badge">{{ nav.job_cards_waiting_count }}</span>
-            {% endif %}
-          </a>
-        </li>
-
-        <li class="dropdown-entry" role="none">
-          <a href="{% url 'jobcard:approved_jobcards' %}"
-            class="dropdown-link {% if request.resolver_match.url_name == 'approved_jobcards' %}active-dropdown{% endif %}"
-            role="menuitem">
-            <i class="fas fa-check-circle" aria-hidden="true"></i>
-            <span class="link-label">Approved Work Orders</span>
-          </a>
-        </li>
-
-        <li class="dropdown-entry" role="none">
-          <a href="{% url 'jobcard:declined_jobcards' %}"
-            class="dropdown-link {% if request.resolver_match.url_name == 'declined_jobcards' %}active-dropdown{% endif %}"
-            role="menuitem">
-            <i class="fas fa-times-circle" aria-hidden="true"></i>
-            <span class="link-label">Declined Work Orders</span>
-          </a>
-        </li>
-
-      </ul>
-    </li>
-
-    {% if nav.is_tech %}
-    <li class="menu-entry" role="none">
-      <a href="{% url 'report_hub:report_hub' %}"
-        class="menu-link {% if 'report_hub' in request.path %}active-link{% endif %}" role="menuitem">
-        <div class="link-icon" aria-hidden="true">
-          <i class="fas fa-chart-line"></i>
-        </div>
-        <span class="link-label">Report Hub</span>
-      </a>
-    </li>
-    {% endif %}
-
     {% endif %}
     {# ── END OPERATIONS BLOCK ── #}
 
@@ -298,7 +281,7 @@
     </li>
 
     <li class="menu-entry" role="none">
-      <a href="#" class="menu-link {% if 'calibration' in request.path %}active-link{% endif %}" data-toggle="submenu"
+      <a href="#" class="menu-link {% if 'calibration' in request.path or module_label == 'Calibration' or request.resolver_match.url_name == 'pending_calibrations' %}active-link{% endif %}" data-toggle="submenu"
         role="menuitem" aria-haspopup="true" aria-expanded="false">
         <div class="link-icon" aria-hidden="true">
           <i class="fas fa-drafting-compass"></i>
@@ -308,60 +291,24 @@
       </a>
       <ul class="dropdown-menu" role="menu">
 
-        <!-- Procedures -->
+        <!-- Procedures: opens on Create; View is the other tab -->
         <li class="dropdown-entry" role="none">
-          <a href="#" class="dropdown-link" data-toggle="nested-submenu" role="menuitem" aria-haspopup="true"
-            aria-expanded="false">
+          <a href="{% url 'calibration:procedure_create' %}"
+            class="dropdown-link {% if module_label == 'Procedures' %}active-dropdown{% endif %}"
+            role="menuitem">
             <i class="fas fa-book-open" aria-hidden="true"></i>
             <span class="link-label">Procedures</span>
-            <i class="fas fa-chevron-down nested-toggle-arrow" aria-hidden="true"></i>
           </a>
-          <ul class="nested-dropdown" role="menu">
-            <li class="nested-entry" role="none">
-              <a href="{% url 'calibration:procedure_list' %}"
-                class="nested-link {% if request.resolver_match.url_name == 'procedure_list' %}active-nested{% endif %}"
-                role="menuitem">
-                <i class="fas fa-list-ul" aria-hidden="true"></i>
-                <span class="link-label">View Procedures</span>
-              </a>
-            </li>
-            <li class="nested-entry" role="none">
-              <a href="{% url 'calibration:procedure_create' %}"
-                class="nested-link {% if request.resolver_match.url_name == 'procedure_create' %}active-nested{% endif %}"
-                role="menuitem">
-                <i class="fas fa-plus" aria-hidden="true"></i>
-                <span class="link-label">Create Procedure</span>
-              </a>
-            </li>
-          </ul>
         </li>
 
-        <!-- Standards -->
+        <!-- Standards: opens on Create; View is the other tab -->
         <li class="dropdown-entry" role="none">
-          <a href="#" class="dropdown-link" data-toggle="nested-submenu" role="menuitem" aria-haspopup="true"
-            aria-expanded="false">
+          <a href="{% url 'calibration:standard_create' %}"
+            class="dropdown-link {% if module_label == 'Standards' %}active-dropdown{% endif %}"
+            role="menuitem">
             <i class="fas fa-ruler-combined" aria-hidden="true"></i>
             <span class="link-label">Standards</span>
-            <i class="fas fa-chevron-down nested-toggle-arrow" aria-hidden="true"></i>
           </a>
-          <ul class="nested-dropdown" role="menu">
-            <li class="nested-entry" role="none">
-              <a href="{% url 'calibration:StandardsParameters_lists' %}"
-                class="nested-link {% if request.resolver_match.url_name == 'StandardsParameters_lists' %}active-nested{% endif %}"
-                role="menuitem">
-                <i class="fas fa-list-ul" aria-hidden="true"></i>
-                <span class="link-label">View Standards</span>
-              </a>
-            </li>
-            <li class="nested-entry" role="none">
-              <a href="{% url 'calibration:standard_create' %}"
-                class="nested-link {% if request.resolver_match.url_name == 'standard_create' %}active-nested{% endif %}"
-                role="menuitem">
-                <i class="fas fa-plus" aria-hidden="true"></i>
-                <span class="link-label">Create Standard</span>
-              </a>
-            </li>
-          </ul>
         </li>
 
         <!-- Pending Approval -->
@@ -380,7 +327,7 @@
         <!-- Calibration Schedules -->
         <li class="dropdown-entry" role="none">
           <a href="{% url 'schedule:calibration_dashboard' %}"
-            class="dropdown-link {% if request.resolver_match.url_name == 'calibration_dashboard' %}active-dropdown{% endif %}"
+            class="dropdown-link {% if module_label == 'Calibration' %}active-dropdown{% endif %}"
             role="menuitem">
             <i class="fas fa-calendar-check" aria-hidden="true"></i>
             <span class="link-label">Calibration Schedules</span>

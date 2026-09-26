@@ -33,6 +33,10 @@ try:
 except ImportError:  # loaded as a top-level module with sync/ on sys.path
     from sql_ident import qualified
 
+# Tables where active_status=False marks a retired row that stays as history
+# (the scheduling app's one-open-schedule rule), not a deletion.
+RETIRE_NOT_DELETE_TABLES = {"ppms_ppmschedule", "calSchedules_calibrationschedule"}
+
 
 class SchemaAndChangeDetectionMixin(SmartDeleteMixin):
     """DB pool/schema introspection, download checkpoint, and timestamp-based change detection (the legacy poller)."""
@@ -667,13 +671,34 @@ class SchemaAndChangeDetectionMixin(SmartDeleteMixin):
                     except Exception:
                         pass
 
-                cur.execute(query, (since_dt, limit))
+                # One row past the page tells us whether the page ends mid-group.
+                cur.execute(query, (since_dt, limit + 1))
                 rows = cur.fetchall()
 
                 query_time = time.time() - start_time
 
                 if not rows:
                     return []
+
+                # The checkpoint advances to the last row sent and the next scan
+                # asks for `updated_at >` it. A full page that ends partway
+                # through rows sharing one updated_at (a bulk UPDATE stamps them
+                # all with the same now()) would strand the rest of the group,
+                # so hold the whole group back for the next page instead.
+                if len(rows) > limit:
+                    peek, rows = rows[limit], rows[:limit]
+                    last_ts = rows[-1]["updated_at"]
+                    whole = [r for r in rows if r["updated_at"] != last_ts]
+                    if peek["updated_at"] != last_ts:
+                        pass  # page ends on a group boundary
+                    elif whole:
+                        rows = whole
+                    else:
+                        LOG.warning(
+                            "⚠️  %s: %d+ rows share updated_at %s — sending one page; "
+                            "the rest wait for a later edit or checkpoint reset",
+                            table, len(rows), last_ts,
+                        )
 
                 # 🎯 Load soft delete tracking state once
                 state_key = f"synced_soft_deletes_{table}"
@@ -778,6 +803,13 @@ class SchemaAndChangeDetectionMixin(SmartDeleteMixin):
         """Process a batch of records efficiently"""
         changes = []
 
+        # On schedule tables active_status=False means "retired": the row is
+        # kept as history and HQ must store it as an ordinary edit. Sent as a
+        # delete, HQ only set pending_delete and left the row open there, and
+        # the next mirror copied it back down, undoing the retirement.
+        if table.split(".")[-1].strip('"') in RETIRE_NOT_DELETE_TABLES:
+            has_active_status = False
+
         for row in batch:
             event_timestamp = (
                 row.get("updated_at") or row.get("created_at") or datetime.now(timezone.utc)
@@ -789,7 +821,11 @@ class SchemaAndChangeDetectionMixin(SmartDeleteMixin):
                 row, has_pending_delete, has_active_status, has_deleted_at
             )
 
-            was_tracked = row_id in synced_soft_deletes
+            # Track row VERSIONS, not rows: keyed by id alone, a row deleted,
+            # restored by the mirror and deleted again was skipped as "already
+            # synced" and never reached HQ.
+            version_key = f"{row_id}@{event_timestamp.isoformat()}"
+            was_tracked = version_key in synced_soft_deletes
 
             # ⚡ Skip already-synced soft deletes (optimization)
             if is_soft_deleted and was_tracked:
@@ -807,7 +843,7 @@ class SchemaAndChangeDetectionMixin(SmartDeleteMixin):
                 change_event = self._create_soft_delete_event(
                     row, row_id, table, event_timestamp, conn, metrics
                 )
-                new_soft_deletes.append(row_id)
+                new_soft_deletes.append(version_key)
             else:
                 change_event = self._create_update_event(
                     row,

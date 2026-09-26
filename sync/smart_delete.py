@@ -445,12 +445,11 @@ class SmartDeleteMixin:
             set(synced_soft_deletes_str.split(",")) if synced_soft_deletes_str else set()
         )
 
-        cleared_count = 0
-        for row_id in row_ids:
-            if row_id in synced_soft_deletes:
-                synced_soft_deletes.discard(row_id)
-                cleared_count += 1
-                LOG.debug(f"   🧹 Cleared tracking for {row_id}")
+        # Entries are "id@version" (bare ids from older builds still match).
+        wanted = {str(r) for r in row_ids}
+        cleared = {k for k in synced_soft_deletes if k.split("@", 1)[0] in wanted}
+        synced_soft_deletes -= cleared
+        cleared_count = len(cleared)
 
         # Save updated tracking
         self.state.set(state_key, ",".join(synced_soft_deletes))
@@ -472,8 +471,9 @@ class SmartDeleteMixin:
                 set(synced_soft_deletes_str.split(",")) if synced_soft_deletes_str else set()
             )
 
-            if row_id in synced_soft_deletes:
-                synced_soft_deletes.discard(row_id)
+            cleared = {k for k in synced_soft_deletes if k.split("@", 1)[0] == str(row_id)}
+            if cleared:
+                synced_soft_deletes -= cleared
                 self.state.set(state_key, ",".join(synced_soft_deletes))
                 LOG.info(f"🧹 Cleared soft delete tracking for {table}[{row_id}]")
             else:

@@ -148,7 +148,7 @@ class TemplateDownloadTests(ImportTestBase):
 
         wb = load_workbook(io.BytesIO(resp.content))
         self.assertEqual(wb.sheetnames, ["Equipment", "Reference", "Instructions"])
-        self.assertEqual([c.value for c in wb["Equipment"][1]], HEADERS)
+        self.assertEqual([c.value for c in wb["Equipment"][1]], HEADERS + ["Hospital Asset No."])
 
     def test_reference_sheet_is_scoped_to_own_workshop(self):
         self.client.force_login(self.tech)
@@ -468,3 +468,20 @@ class UploadFormatToleranceTests(ImportTestBase):
 
         # Headers occupy row 1, so data starts at row 2.
         self.assertEqual([row["row"] for row in data["rows"]], [2, 3])
+
+
+class UploadAssetNumberColumnTests(ImportTestBase):
+    """Optional hospital asset number column. Warranties have their own upload (Warranties module)."""
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.tech)
+
+    def test_asset_number_is_imported(self):
+        buffer = build_workbook(
+            [["Scanner", "Acme", "X1", "sn-70", "CT", "Working", "KNH-7"]],
+            headers=HEADERS + ["Asset No"],
+        )
+        data = self.upload(buffer, commit=True).json()
+        self.assertTrue(data["success"], data)
+        self.assertEqual(Equipment.objects.get(serial_number="SN-70").asset_tag, "KNH-7")

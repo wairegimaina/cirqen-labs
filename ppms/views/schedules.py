@@ -11,7 +11,6 @@ from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 from ..models import PPMSchedule
 from Inventory.models import Equipment, Department, EquipmentDescription
-from ..tasks import initialize_ppm_schedule_with_logic, normalize_ppm_schedules, smart_reorganize_ppm_schedules
 from openpyxl import Workbook
 from workshop.models import Workshop
 import logging
@@ -206,20 +205,22 @@ def schedule_equipment(request, equipment_id):
             filter_kwargs['active_status'] = True
             equipment = get_object_or_404(Equipment, **filter_kwargs)
             workshop = get_object_or_404(Workshop, id=access_context['workshop_id'])
-            scheduled_month = datetime.today().replace(day=1) + relativedelta(months=1)
+            name = equipment.description.name if equipment.description else 'N/A'
 
-            if PPMSchedule.objects.filter(equipment=equipment).exists():
-                messages.error(request, f"Equipment {equipment.description.name if equipment.description else 'N/A'} is already scheduled.")
+            # Completed history doesn't make a device scheduled; an open schedule does.
+            if PPMSchedule.open_schedules().filter(equipment=equipment).exists():
+                messages.error(request, f"Equipment {name} is already scheduled.")
                 return redirect('ppm_dashboard')
 
-            PPMSchedule.objects.create(
-                equipment=equipment,
-                workshop=workshop,
-                scheduled_month=scheduled_month,
-                status='pending',
-                maintenance_period=6
-            )
-            messages.success(request, f"Equipment {equipment.description.name if equipment.description else 'N/A'} scheduled successfully for {scheduled_month.strftime('%B %Y')}.")
+            # The workshop's scheduling plan decides the month.
+            from scheduling.planner import schedule_by_hand
+            done, problems = schedule_by_hand([equipment.id], 'ppm')
+            if done:
+                messages.success(request, f"Equipment {name} scheduled: {done[0][1].message}.")
+            else:
+                reason = problems[0][1] if problems else "it could not be placed"
+                messages.error(request, f"Equipment {name} cannot be scheduled: {reason}.")
+            return redirect('ppm_dashboard')
         except Exception as e:
             logger.error(f"Error scheduling equipment {equipment_id} for user {request.user.username}: {e}")
             messages.error(request, f"Failed to schedule equipment: {str(e)}")

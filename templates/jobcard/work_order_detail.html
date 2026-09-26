@@ -1,0 +1,130 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Work Order {{ card.work_order_number }}{% endblock %}
+{% block page_title %}Work Order {{ card.work_order_number }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .detail-list { display: grid; grid-template-columns: minmax(120px, 34%) 1fr; gap: .45rem 1rem; margin: 0; }
+    .detail-list dt { font-weight: 500; color: var(--text-secondary, #6c757d); }
+    .detail-list dd { margin: 0; }
+    .checklist-result-icon { width: 1.25rem; text-align: center; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+        <div>
+            <h4 class="mb-0">Work Order #{{ card.work_order_number }}</h4>
+            <div class="small text-muted font-monospace">{{ card.id }}</div>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <span class="badge fs-6 {% if card.status == 'Approved' %}bg-success{% elif card.status == 'Declined' %}bg-danger{% else %}bg-warning text-dark{% endif %}">{{ card.status }}</span>
+            <a href="{% url 'jobcard:download_jobcard_pdf' card.id %}" class="btn btn-outline-secondary btn-sm"><i class="fas fa-file-pdf me-1"></i>PDF</a>
+            {% if user.userprofile.role == 'NIC' and card.status == 'Waiting Approval' %}
+            <a href="{% url 'jobcard:create_job_card' %}?jobcard_id={{ card.id }}" class="btn btn-primary btn-sm">Review &amp; Approve</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-header"><h6 class="mb-0"><i class="fas fa-file-alt me-2 text-muted"></i>Work Order</h6></div>
+                <div class="card-body">
+                    <dl class="detail-list">
+                        <dt>Equipment</dt>
+                        <dd>{{ card.equipment.description.name }}
+                            <div class="small text-muted">{{ card.equipment.manufacturer.name|default:"" }} {{ card.equipment.model }} · <span class="font-monospace">{{ card.equipment.serial_number }}</span></div>
+                        </dd>
+                        <dt>Task</dt><dd>{{ card.get_action_taken_display }}{% if card.related_ppm_schedule %} <span class="small text-muted">(PPM {{ card.related_ppm_schedule.scheduled_month|date:"M Y" }})</span>{% endif %}</dd>
+                        <dt>Priority</dt><dd>{{ card.priority_level }}</dd>
+                        <dt>Department</dt><dd>{{ card.department.name }}</dd>
+                        <dt>Workshop</dt><dd>{{ card.workshop.name|default:"-" }}</dd>
+                        <dt>Date</dt><dd>{{ card.date_issued|date:"d M Y" }}{% if card.time_started %} · {{ card.time_started|time:"H:i" }}{% if card.time_completed %}–{{ card.time_completed|time:"H:i" }}{% endif %}{% endif %}</dd>
+                        <dt>Technician</dt><dd>{% include "includes/_user_name.html" with u=card.performed_by %}</dd>
+                        {% if card.verified_by_nurse %}
+                        <dt>{% if card.status == 'Declined' %}Declined by{% else %}Approved by{% endif %}</dt>
+                        <dd>{% if card.nurse_name %}{{ card.nurse_name }}{% else %}{% include "includes/_user_name.html" with u=card.verified_by_nurse %}{% endif %} <span class="small text-muted">{{ card.nurse_signed_date|date:"d M Y H:i" }} EAT</span></dd>
+                        {% endif %}
+                    </dl>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-header"><h6 class="mb-0"><i class="fas fa-align-left me-2 text-muted"></i>Work Done</h6></div>
+                <div class="card-body">
+                    <p style="white-space: pre-line;">{{ card.job_description }}</p>
+                    {% if card.remarks %}<p class="small mb-2"><strong>Remarks:</strong> {{ card.remarks }}</p>{% endif %}
+                    {% if card.decline_reason %}<p class="small text-danger mb-2"><strong>Decline reason:</strong> {{ card.decline_reason }}</p>{% endif %}
+                    {% if spare_parts %}
+                    <p class="small mb-0"><strong>Parts:</strong>
+                        {% for sp in spare_parts %}{{ sp.part.name.name|default:"Part" }} × {{ sp.quantity }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                    </p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mt-3">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h6 class="mb-0"><i class="fas fa-clipboard-check me-2 text-muted"></i>Checklist</h6>
+            {% if checklist_total %}
+            <span class="small">
+                {{ checklist_total }} step{{ checklist_total|pluralize }} recorded
+                {% if checklist_problems %}· <span class="text-danger fw-semibold">{{ checklist_problems }} failed or not done</span>{% endif %}
+            </span>
+            {% endif %}
+        </div>
+        <div class="card-body p-0">
+            {% for title, entries in checklist_groups %}
+            <div class="px-3 pt-3 pb-1 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <strong>{{ title }}</strong>
+                {% with t=entries.0.template %}{% if t %}<a href="{% url 'jobcard:checklist_detail' t.id %}" class="small">View checklist</a>{% endif %}{% endwith %}
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-2">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 2.5rem;">#</th>
+                            <th>Checklist item</th>
+                            <th>Status</th>
+                            <th>Reading</th>
+                            <th>Completed by</th>
+                            <th>Completed (EAT)</th>
+                            <th>Remarks</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for e in entries %}
+                        <tr class="{% if e.is_problem %}table-danger{% endif %}">
+                            <td class="text-muted">{{ forloop.counter }}</td>
+                            <td>
+                                <span class="checklist-result-icon me-1" aria-hidden="true">
+                                    {% if e.result == 'done' or e.result == 'pass' %}<i class="fas fa-check-square text-success"></i>
+                                    {% elif e.is_problem %}<i class="fas fa-times-circle text-danger"></i>
+                                    {% else %}<i class="far fa-square text-muted"></i>{% endif %}
+                                </span>{{ e.task }}
+                                {% if e.expected_result %}<div class="small text-muted">Expected: {{ e.expected_result }}</div>{% endif %}
+                            </td>
+                            <td>{{ e.get_result_display|default:"—" }}</td>
+                            <td>{{ e.value|default:"" }}</td>
+                            <td>{% include "includes/_user_name.html" with u=e.completed_by %}</td>
+                            <td class="text-nowrap small">{{ e.completed_at|date:"d M Y H:i"|default:"—" }}</td>
+                            <td class="small">{{ e.note|default:"" }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% empty %}
+            <p class="text-muted p-3 mb-0">No checklist was completed on this work order.</p>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

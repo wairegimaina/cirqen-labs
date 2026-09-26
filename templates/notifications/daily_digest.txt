@@ -1,0 +1,9 @@
+{% autoescape off %}Good morning {{ name }},
+
+Here is what needs doing as of {{ today|date:"l j F Y" }}.
+{% for s in sections %}
+{{ s.title|upper }} ({{ s.total }})
+{% for line in s.items %}  - {{ line }}
+{% endfor %}{% if s.total > s.items|length %}  (showing {{ s.items|length }} of {{ s.total }}; see {{ app_name }} for the rest)
+{% endif %}{% endfor %}
+{% endautoescape %}

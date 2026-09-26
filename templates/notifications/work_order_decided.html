@@ -1,0 +1,13 @@
+{% extends "notifications/_base.html" %}
+{% block body %}
+<p>Your work order <strong>{{ ref }}</strong> was
+  <strong style="color:{% if wo.status == 'Approved' %}#067647{% else %}#b42318{% endif %};">{{ wo.status|lower }}</strong>.</p>
+<table role="presentation" cellpadding="4" cellspacing="0" style="font-size:14px;">
+  <tr><td style="color:#6b7280;">Equipment</td><td>{{ equipment.description.name }} (SN {{ equipment.serial_number }})</td></tr>
+  <tr><td style="color:#6b7280;">Department</td><td>{{ wo.department.name }}</td></tr>
+  <tr><td style="color:#6b7280;">Action</td><td>{{ wo.action_taken }}</td></tr>
+  <tr><td style="color:#6b7280;">{{ wo.status }} by</td><td>{{ decided_by }}</td></tr>
+  {% if wo.status == 'Declined' %}<tr><td style="color:#6b7280;">Reason</td><td>{{ wo.decline_reason|default:"not given" }}</td></tr>{% endif %}
+</table>
+{% if wo.status == 'Declined' %}<p>Correct the work order and submit it again.</p>{% endif %}
+{% endblock %}

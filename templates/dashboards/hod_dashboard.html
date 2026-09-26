@@ -238,7 +238,7 @@
         <div class="ws-stat">
           <span class="ws-stat-label">Calibrations</span>
           <span class="ws-stat-value">
-            <a href="{% url 'schedule:schedule_groups' %}">{{ workshop.stats.calibrations_count }}</a>
+            <a href="{% url 'scheduling:overview' %}?workshop={{ workshop.id }}&program=calibration">{{ workshop.stats.calibrations_count }}</a>
           </span>
           <span class="ws-stat-note">sessions on this estate</span>
         </div>

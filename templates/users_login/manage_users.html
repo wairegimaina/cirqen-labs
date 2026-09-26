@@ -332,6 +332,16 @@
                   <div class="field-help-text">Required for Tech roles</div>
                 </div>
               </div>
+              {% if user.userprofile.role == 'HOD' %}
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="editIsDeputyHod">
+                    <input type="checkbox" id="editIsDeputyHod"> Deputy Head of Department
+                  </label>
+                  <div class="field-help-text">Copied on every email sent to the HOD</div>
+                </div>
+              </div>
+              {% endif %}
             </div>
             <!-- Signature Section -->
             <div class="modal-section">

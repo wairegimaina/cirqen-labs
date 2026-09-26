@@ -1,0 +1,267 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Warranties{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'Inventory/theme.css' %}" />
+<link rel="stylesheet" href="{% static 'css/select2.min.css' %}" />
+<style>
+    .warranty-stat { display: block; text-decoration: none; color: inherit; border: 1px solid var(--border-color, #dee2e6);
+        border-radius: .5rem; padding: .75rem 1rem; height: 100%; transition: box-shadow .15s, border-color .15s; }
+    .warranty-stat:hover { box-shadow: 0 2px 8px rgba(0,0,0,.08); color: inherit; }
+    .warranty-stat.active { border-color: var(--primary-color, #0d6efd); box-shadow: 0 0 0 2px rgba(13,110,253,.15); }
+    .warranty-stat .stat-value { font-size: 1.6rem; font-weight: 700; line-height: 1.1; }
+    .warranty-table td .equipment-link { font-weight: 600; text-decoration: none; }
+    .warranty-table td .equipment-link:hover { text-decoration: underline; }
+</style>
+{% endblock %}
+
+{% block page_title %}Warranties{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    {% for message in messages %}
+    <div class="alert {% if 'success' in message.tags %}alert-success{% elif 'warning' in message.tags %}alert-warning{% else %}alert-danger{% endif %} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endfor %}
+
+    <!-- Status summary: each card filters the table -->
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-lg-3">
+            <a href="?status=active" class="warranty-stat {% if status == 'active' %}active{% endif %}">
+                <div class="small text-muted"><i class="fas fa-shield-alt text-success me-1"></i>Active</div>
+                <div class="stat-value text-success">{{ counts.active }}</div>
+            </a>
+        </div>
+        <div class="col-6 col-lg-3">
+            <a href="?status=expiring" class="warranty-stat {% if status == 'expiring' %}active{% endif %}">
+                <div class="small text-muted"><i class="fas fa-hourglass-half text-warning me-1"></i>Expiring Soon</div>
+                <div class="stat-value text-warning">{{ counts.expiring }}</div>
+                <div class="small text-muted">within {{ expiring_soon_days }} days</div>
+            </a>
+        </div>
+        <div class="col-6 col-lg-3">
+            <a href="?status=expired" class="warranty-stat {% if status == 'expired' %}active{% endif %}">
+                <div class="small text-muted"><i class="fas fa-times-circle text-danger me-1"></i>Expired</div>
+                <div class="stat-value text-danger">{{ counts.expired }}</div>
+            </a>
+        </div>
+        <div class="col-6 col-lg-3">
+            <a href="?status=none" class="warranty-stat {% if status == 'none' %}active{% endif %}">
+                <div class="small text-muted"><i class="fas fa-question-circle text-secondary me-1"></i>No Warranty</div>
+                <div class="stat-value text-secondary">{{ counts.none }}</div>
+                <div class="small text-muted">equipment without a warranty</div>
+            </a>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h5 class="mb-0"><i class="fas fa-shield-alt me-2 text-muted"></i>
+                {% if showing_uncovered %}Equipment without a warranty{% else %}Equipment warranties{% endif %}
+            </h5>
+            <div class="d-flex gap-2 flex-wrap">
+                {% if can_edit %}
+                <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#uploadWarrantiesModal">
+                    <i class="fas fa-file-excel me-1"></i>Upload Excel
+                </button>
+                <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#warrantyModal">
+                    <i class="fas fa-plus me-1"></i>Add Warranty
+                </button>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card-body border-bottom">
+            <form method="get" class="row g-2 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label small mb-0" for="statusFilter">Status</label>
+                    <select name="status" id="statusFilter" class="form-select form-select-sm">
+                        <option value="">All warranties</option>
+                        <option value="active" {% if status == 'active' %}selected{% endif %}>Active</option>
+                        <option value="expiring" {% if status == 'expiring' %}selected{% endif %}>Expiring Soon</option>
+                        <option value="expired" {% if status == 'expired' %}selected{% endif %}>Expired</option>
+                        <option value="none" {% if status == 'none' %}selected{% endif %}>No Warranty</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small mb-0" for="supplierFilter">Supplier</label>
+                    <select name="supplier" id="supplierFilter" class="form-select form-select-sm" {% if showing_uncovered %}disabled{% endif %}>
+                        <option value="">All suppliers</option>
+                        {% for s in suppliers %}
+                        <option value="{{ s.id }}" {% if supplier_filter == s.id|stringformat:"s" %}selected{% endif %}>{{ s.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small mb-0" for="warrantySearch">Search</label>
+                    <input type="search" name="q" id="warrantySearch" value="{{ q }}" class="form-control form-control-sm"
+                           placeholder="Equipment, serial number, asset no., supplier…">
+                </div>
+                <div class="col-md-2 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary btn-sm flex-fill"><i class="fas fa-filter me-1"></i>Filter</button>
+                    {% if status or q or supplier_filter %}<a href="{% url 'warranty_list' %}" class="btn btn-outline-secondary btn-sm" title="Clear filters" aria-label="Clear filters"><i class="fas fa-times"></i></a>{% endif %}
+                </div>
+            </form>
+        </div>
+
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                {% if showing_uncovered %}
+                <table class="table table-hover align-middle mb-0 warranty-table">
+                    <thead>
+                        <tr>
+                            <th>Equipment</th>
+                            <th>Model</th>
+                            <th>Department</th>
+                            <th>Warranty Status</th>
+                            {% if can_edit %}<th class="text-end">Actions</th>{% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for e in page %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'equipment_warranty' e.id %}" class="equipment-link">{{ e.description.name }}</a>
+                                <div class="small text-muted font-monospace">{{ e.serial_number }}{% if e.asset_tag %} · {{ e.asset_tag }}{% endif %}</div>
+                            </td>
+                            <td>{{ e.model|default:"-" }}</td>
+                            <td>{{ e.department.name }}</td>
+                            <td><span class="badge badge-secondary">No Warranty</span></td>
+                            {% if can_edit %}
+                            <td class="text-end">
+                                <button type="button" class="btn btn-outline-success btn-sm add-for-equipment" data-equipment="{{ e.id }}">
+                                    <i class="fas fa-plus me-1"></i>Add warranty
+                                </button>
+                            </td>
+                            {% endif %}
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="5" class="text-center text-muted py-5">Every device in your inventory has a warranty recorded.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <table class="table table-hover align-middle mb-0 warranty-table">
+                    <thead>
+                        <tr>
+                            <th>Equipment</th>
+                            <th>Warranty</th>
+                            <th>Supplier</th>
+                            <th>Supplier Phone</th>
+                            <th>Warranty Status</th>
+                            <th>Expiry Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for w in page %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'warranty_detail' w.id %}" class="equipment-link">{{ w.equipment.description.name }}</a>
+                                <div class="small text-muted font-monospace">{{ w.equipment.serial_number }}{% if w.equipment.asset_tag %} · {{ w.equipment.asset_tag }}{% endif %}</div>
+                            </td>
+                            <td>
+                                {{ w.period_display }}
+                                <div class="small text-muted text-truncate" style="max-width: 260px;" title="{{ w.coverage_summary }}">Covers: {{ w.coverage_summary }}</div>
+                            </td>
+                            <td>{{ w.supplier.name|default:"-" }}</td>
+                            <td>{% if w.supplier.phone %}<a href="tel:{{ w.supplier.phone }}" class="text-decoration-none">{{ w.supplier.phone }}</a>{% else %}-{% endif %}</td>
+                            <td>{% include "Inventory/_warranty_status_badge.html" with code=w.status_code label=w.status_label %}</td>
+                            <td class="text-nowrap">{{ w.expiry_date|date:"d M Y" }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="6" class="text-center text-muted py-5">
+                            {% if q or status or supplier_filter %}No warranties match these filters.{% else %}No warranties recorded yet.{% if can_edit %} Add one, or upload them from Excel.{% endif %}{% endif %}
+                        </td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if page.has_other_pages %}
+        <div class="card-footer d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span class="small text-muted">{{ page.start_index }}–{{ page.end_index }} of {{ page.paginator.count }}</span>
+            <nav aria-label="Warranty pages">
+                <ul class="pagination pagination-sm mb-0">
+                    {% if page.has_previous %}
+                    <li class="page-item"><a class="page-link" href="?status={{ status }}&supplier={{ supplier_filter }}&q={{ q|urlencode }}&page={{ page.previous_page_number }}">Prev</a></li>
+                    {% endif %}
+                    <li class="page-item active"><span class="page-link">{{ page.number }} / {{ page.paginator.num_pages }}</span></li>
+                    {% if page.has_next %}
+                    <li class="page-item"><a class="page-link" href="?status={{ status }}&supplier={{ supplier_filter }}&q={{ q|urlencode }}&page={{ page.next_page_number }}">Next</a></li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% if can_edit %}
+<div class="modal fade" id="warrantyModal" tabindex="-1" aria-labelledby="warrantyModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <form method="post" action="{% url 'warranty_create' %}">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title" id="warrantyModalTitle"><i class="fas fa-shield-alt me-2"></i>Add Warranty</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label" for="warrantyEquipment">Equipment <span class="text-danger">*</span></label>
+                        <select name="equipment" id="warrantyEquipment" class="form-select" required>
+                            <option value="">— Select equipment from inventory —</option>
+                            {% for e in equipment_choices %}
+                            <option value="{{ e.id }}">{{ e.description.name }} — {{ e.serial_number }}{% if e.asset_tag %} ({{ e.asset_tag }}){% endif %}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% include "Inventory/_warranty_fields.html" with prefix="new_warranty" required="1" %}
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Warranty</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% include 'includes/excel_import_modal.html' with modal_id='uploadWarrantiesModal' title='Bulk Upload Warranties' noun='warranty' template_url=warranty_template_url upload_url=warranty_upload_url help_text='Required columns: Serial Number, Supplier, Start Date, and Period (Months) or Expiry Date. Covers, Other Coverage, Warranty Reference and Terms / Notes are optional.' create_missing_label="Create suppliers that don't exist yet" %}
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  document.querySelectorAll('#statusFilter, #supplierFilter').forEach((el) => {
+    el.addEventListener('change', () => el.form.submit());
+  });
+</script>
+{% if can_edit %}
+<script src="{% static 'js/select2.min.js' %}"></script>
+<script src="{% static 'Inventory/warranty-form.js' %}"></script>
+<script src="{% static 'js/excel_import.js' %}"></script>
+<script>
+(function () {
+  const modalEl = document.getElementById('warrantyModal');
+  const select = document.getElementById('warrantyEquipment');
+  if (window.jQuery && jQuery.fn.select2) {
+    jQuery(select).select2({ dropdownParent: jQuery(modalEl), width: '100%', placeholder: 'Search equipment…' });
+  }
+  document.querySelectorAll('.add-for-equipment').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      select.value = btn.dataset.equipment;
+      if (window.jQuery) jQuery(select).trigger('change');
+      bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    });
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}
