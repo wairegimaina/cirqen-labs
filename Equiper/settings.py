@@ -237,6 +237,24 @@ SYNC_AUTH_TOKEN = config.get("sync.auth_token")
 SYNC_TABLES = config.get("sync_tables", [])
 HQ_INSTANT_PUSH = config.get("sync.instant_push", True)
 
+
+def _certificate_verification_url():
+    """Base of the public page a certificate's QR code opens (hq_server
+    certificate_verify.py). CIRQEN_CERT_VERIFY_URL, then
+    certificates.verification_url in config.json, then HQ's own address:
+    https://<hq>/api/sync -> https://<hq>/verify. Empty when nothing is known,
+    in which case certificates keep the data-only QR payload."""
+    explicit = os.getenv("CIRQEN_CERT_VERIFY_URL") or config.get("certificates.verification_url")
+    if explicit:
+        return explicit.rstrip("/")
+    sync_url = (HQ_SYNC_API_URL or "").rstrip("/")
+    if sync_url.startswith("https://") and sync_url.endswith("/api/sync"):
+        return sync_url[: -len("/api/sync")] + "/verify"
+    return ""
+
+
+CERTIFICATE_VERIFICATION_URL = _certificate_verification_url()
+
 # ============================================================
 # 🔴 REDIS & CACHING
 # ============================================================
