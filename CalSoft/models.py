@@ -308,7 +308,7 @@ class CalibrationParameter(models.Model):
     procedure = models.ForeignKey('CalibrationProcedure', on_delete=models.CASCADE, related_name='parameters')
     name = models.CharField(max_length=100)
     unit = models.CharField(max_length=20, blank=True)
-    num_readings = models.PositiveIntegerField(default=5, validators=[MinValueValidator(3), MaxValueValidator(20)])
+    num_readings = models.PositiveIntegerField(default=5, validators=[MinValueValidator(3), MaxValueValidator(10)])
     standard_reference = models.CharField(max_length=200, help_text="Reference standard identification")
     reference_uncertainty = models.DecimalField(max_digits=10, decimal_places=6, default=0.001, help_text="k=2")
     coverage_factor = models.DecimalField(max_digits=3, decimal_places=1, default=2.0)
@@ -1150,3 +1150,34 @@ class PendingCertificate(models.Model):
 
     def __str__(self):
         return f"Pending Cert for {self.session.id} - {self.sync_status}"
+
+
+class IssuedCertificate(models.Model):
+    """The PDF exactly as it was first issued, with its SHA-256 fingerprint.
+
+    Written the first time a certificate is produced after it has its number
+    (CalSoft.issued). Every later download serves this file, after checking it
+    still matches the fingerprint, so an issued certificate never silently
+    changes when templates, signatures or data change afterwards. A reissue
+    under a new number (cert_conflict_guard) gets its own row.
+
+    Kept on this machine only (not in sync_tables): it is a file, and the
+    fingerprint is what an auditor compares.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    session = models.ForeignKey('CalibrationSession', on_delete=models.PROTECT, related_name='issued_certificates')
+    certificate_number = models.CharField(max_length=100)
+    pdf = models.FileField(upload_to='issued_certificates/%Y/%m/')
+    sha256 = models.CharField(max_length=64)
+    size = models.PositiveIntegerField()
+    issued_at = models.DateTimeField(auto_now_add=True)
+    issued_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['session', 'certificate_number'], name='issued_certificate_once'),
+        ]
+        ordering = ['-issued_at']
+
+    def __str__(self):
+        return f"{self.certificate_number} ({self.sha256[:12]})"

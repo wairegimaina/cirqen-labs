@@ -26,6 +26,7 @@ from CalSoft.models import (
 from Inventory.models import Department
 from workshop.models import Workshop
 from CalSoft.pdf_generators import BtwelveHospitalCertificateGenerator, generate_btwelve_certificate
+from CalSoft.issued import CertificateTampered, issued_pdf
 
 from calSchedules.grouping import days_until_due, is_overdue, next_due_date
 from users.control import get_user_role
@@ -328,8 +329,15 @@ def generate_comprehensive_certificate(request, session_pk):
                 }
             )
 
-        pdf_buffer = generate_btwelve_certificate(session, context)
-        response = HttpResponse(pdf_buffer.getvalue(), content_type="application/pdf")
+        # An issued certificate is stored the first time and served unchanged
+        # afterwards (CalSoft.issued).
+        try:
+            pdf_bytes = issued_pdf(
+                session, request.user, lambda: generate_btwelve_certificate(session, context).getvalue())
+        except CertificateTampered as exc:
+            messages.error(request, str(exc))
+            return redirect("calibration:session_detail", pk=session_pk)
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
         filename = f"certificate_{session.certificate_number or session.id}.pdf"
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
         return response
@@ -536,9 +544,11 @@ def bulk_certificates_download(request):
                     ),
                 }
 
-                pdf_buffer = generate_btwelve_certificate(session, context)
+                pdf_bytes = issued_pdf(
+                    session, request.user,
+                    lambda: generate_btwelve_certificate(session, context).getvalue())
                 filename = f"certificate_{session.certificate_number or session.id}.pdf"
-                z.writestr(filename, pdf_buffer.getvalue())
+                z.writestr(filename, pdf_bytes)
 
             except Exception as e:
                 logger.error(

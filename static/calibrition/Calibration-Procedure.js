@@ -327,7 +327,7 @@ document.addEventListener("DOMContentLoaded", () => {
         <div class="col-md-2 form-group">
           <label for="id_${p}-num_readings" class="form-label">Number of Readings</label>
           <input type="number" name="${p}-num_readings" id="id_${p}-num_readings"
-            class="form-control" min="3" max="20" value="5" required>
+            class="form-control" min="3" max="10" value="5" required>
         </div>
         <div class="col-md-3 form-group">
           <label for="id_${p}-standard_reference" class="form-label">Standard Reference</label>

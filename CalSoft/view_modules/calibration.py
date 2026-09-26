@@ -140,6 +140,22 @@ def _handle_calibration_post(request):
             f"{s.calibration_due_date:%d %b %Y}.",
         )
 
+    # Every set value needs the number of readings the procedure asks for.
+    # The page enforces this too; this is the check that cannot be skipped.
+    readings_data = _parse_readings(request.POST)
+    if readings_data is None:
+        messages.error(request, "This calibration was not saved: a reading is not a number.")
+        return redirect('schedule:pending_calibrations')
+    shortfall = _readings_shortfall(procedure, readings_data)
+    if shortfall:
+        more = f" and {len(shortfall) - 3} more" if len(shortfall) > 3 else ""
+        messages.error(
+            request,
+            "This calibration was not saved: too few readings for "
+            + "; ".join(shortfall[:3]) + more + ".",
+        )
+        return redirect('schedule:pending_calibrations')
+
     schedule_was_created = False
     if not schedule:
         grouped_schedule = _find_grouped_schedule_for_equipment(equipment)
@@ -234,22 +250,53 @@ def _ensure_saved_schedule(schedule, equipment, procedure):
         return schedule
 
 
+MAX_STORED_READINGS = 10  # CalibrationReading.reading_1 .. reading_10
+
+
+def _parse_readings(post):
+    """{"<param>_<sub|null>_<set value>": [Decimal, ...]} from the form, or
+    None if any reading is not a number."""
+    readings_data = {}
+    for key, value in post.items():
+        if key.startswith("reading_") and value.strip():
+            parts = key.split("_")
+            if len(parts) < 5:
+                continue
+            _, param_id, sub_param_id, set_value_id, _ = parts[:5]
+            try:
+                reading_value = Decimal(value.strip())
+            except (ValueError, InvalidOperation):
+                return None
+            if not reading_value.is_finite():
+                return None
+            readings_data.setdefault(f"{param_id}_{sub_param_id}_{set_value_id}", []).append(reading_value)
+    return readings_data
+
+
+def required_readings(parameter):
+    return max(3, min(parameter.num_readings or 3, MAX_STORED_READINGS))
+
+
+def _readings_shortfall(procedure, readings_data):
+    """Human-readable rows that have fewer readings than the procedure asks for."""
+    shortfall = []
+    for parameter in CalibrationParameter.objects.filter(procedure=procedure).order_by('order'):
+        needed = required_readings(parameter)
+        sub_parameters = list(SubParameter.objects.filter(parameter=parameter).order_by('order')) or [None]
+        for sub_param in sub_parameters:
+            set_values = SetValue.objects.filter(parameter=parameter, sub_parameter=sub_param).order_by('order')
+            for sv in set_values:
+                key = f"{parameter.id}_{sub_param.id if sub_param else 'null'}_{sv.id}"
+                got = len(readings_data.get(key, []))
+                if got < needed:
+                    label = f"{parameter.name}" + (f" / {sub_param.name}" if sub_param else "")
+                    shortfall.append(f"{label} at {sv.value} ({got} of {needed})")
+    return shortfall
+
+
 def _process_readings(request, session, procedure, equipment, schedule, return_department, return_month, return_year):
     parameters = CalibrationParameter.objects.filter(procedure=procedure).order_by('order')
-    readings_data = {}
-
-    for key, value in request.POST.items():
-        if key.startswith("reading_") and value.strip():
-            try:
-                parts = key.split("_")
-                if len(parts) >= 5:
-                    _, param_id, sub_param_id, set_value_id, _ = parts[:5]
-                    reading_key = f"{param_id}_{sub_param_id}_{set_value_id}"
-                    reading_value = Decimal(value.strip())
-                    readings_data.setdefault(reading_key, []).append(reading_value)
-            except (ValueError, InvalidOperation, IndexError):
-                messages.error(request, f"Invalid reading format for key '{key}'")
-                return redirect('schedule:pending_calibrations')
+    readings_data = _parse_readings(request.POST) or {}
 
     overall_pass = True
     for parameter in parameters:
@@ -288,7 +335,7 @@ def _process_readings(request, session, procedure, equipment, schedule, return_d
                     session=session, parameter=parameter, sub_parameter=sub_param, set_value=sv,
                 )
 
-                for i, val in enumerate(readings[:parameter.num_readings], 1):
+                for i, val in enumerate(readings[:required_readings(parameter)], 1):
                     try:
                         reading.set_reading(i, val)
                     except Exception as e:
