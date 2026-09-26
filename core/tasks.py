@@ -279,3 +279,18 @@ def backup_local_database(keep=14):
     except OSError:
         logger.exception("Backup %s was written locally but could not be copied off this machine", path)
     return str(path)
+
+
+@shared_task(soft_time_limit=600, time_limit=900)
+def build_report(name, params, user_id, key):
+    """Build a large PDF report in the background (core.report_jobs)."""
+    from core import report_jobs
+
+    report_jobs.build(name, params, user_id, key)
+
+
+@shared_task
+def prune_report_cache():
+    from core import report_jobs
+
+    return report_jobs.prune()

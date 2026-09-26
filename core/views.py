@@ -137,3 +137,37 @@ def site_logo(request):
     if not path:
         raise Http404("No site logo")
     return FileResponse(open(path, "rb"))
+
+
+# ── Background reports (core.report_jobs) ────────────────────────────────────
+
+@login_required
+def report_start(request, name):
+    from . import report_jobs
+
+    try:
+        key, current = report_jobs.start(name, request.GET.dict(), request.user)
+    except KeyError:
+        return JsonResponse({"error": "Unknown report"}, status=404)
+    return JsonResponse({"key": key, "status": current})
+
+
+@login_required
+def report_status(request, key):
+    from . import report_jobs
+
+    return JsonResponse({"key": key, "status": report_jobs.state(key, request.user.pk)})
+
+
+@login_required
+def report_download(request, key):
+    from django.http import FileResponse, Http404
+
+    from . import report_jobs
+
+    found = report_jobs.file_for(key, request.user.pk)
+    if not found:
+        raise Http404("This report is not ready or has expired; ask for it again.")
+    path, filename = found
+    return FileResponse(open(path, "rb"), as_attachment=True, filename=filename,
+                        content_type="application/pdf")

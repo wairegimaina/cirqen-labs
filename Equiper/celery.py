@@ -52,6 +52,11 @@ app.conf.beat_schedule = {
         "schedule": crontab(hour=12, minute=30),
         "options": {"expires": 6 * 3600},
     },
+    # Background PDF reports are kept 15 minutes (core.report_jobs).
+    "prune-report-cache": {
+        "task": "core.tasks.prune_report_cache",
+        "schedule": crontab(minute="*/30"),
+    },
     # ============================================================================
     # PPM (PREVENTIVE MAINTENANCE) TASKS - KEEP AS IS
     # ============================================================================

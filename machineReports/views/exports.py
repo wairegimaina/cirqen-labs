@@ -1,4 +1,5 @@
 """machineReports views — Excel/PDF exports and their ReportLab doc templates."""
+from core.branding import logo_path as site_logo_path
 from uuid import UUID
 from django.shortcuts import redirect, render, get_object_or_404
 from django.http import HttpResponse, JsonResponse
@@ -372,7 +373,7 @@ class ManufacturerPerformanceDocTemplate(BaseDocTemplate):
         canvas.rect(0, A4[1]-3*cm, A4[0], 3*cm, fill=1, stroke=0)
 
         # Logo (if exists)
-        logo_path = os.path.join(settings.STATIC_ROOT or settings.STATICFILES_DIRS[0], 'images', 'logo.png')
+        logo_path = site_logo_path() or os.path.join(settings.STATIC_ROOT or settings.STATICFILES_DIRS[0], 'images', 'logo.png')
         if os.path.exists(logo_path):
             try:
                 canvas.drawImage(logo_path, 1*cm, A4[1]-2.5*cm, width=2*cm, height=1.5*cm, mask='auto')
