@@ -1,4 +1,5 @@
 from django.conf import settings
+from core.branding import organisation_name
 
 from users.control import get_user_role
 
@@ -61,8 +62,8 @@ def nav_context(request):
     role = get_user_role(user) if is_authenticated else None
 
     return {
-        # client.name from config.json; replaces the hospital name that was hard-coded in titles.
-        "site_name": getattr(settings, "SITE_NAME", "Cirqen"),
+        # Site details page (core.SiteProfile), else client.name from config.json.
+        "site_name": organisation_name(default=getattr(settings, "SITE_NAME", "Cirqen")),
         "nav": {
             "role": role,
             "is_hod": role == "HOD",

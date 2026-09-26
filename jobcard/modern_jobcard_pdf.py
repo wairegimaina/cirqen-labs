@@ -2,6 +2,7 @@
 Modern PDF Generator for Job Cards
 Complete with header/footer, watermark, and proper accessories display
 """
+from core.branding import logo_path as site_logo_path
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.colors import HexColor
@@ -75,7 +76,8 @@ class ModernJobCardPDFGenerator:
         self.width, self.height = A4
         self.styles = getSampleStyleSheet()
         self.setup_custom_styles()
-        self.logo_path = self._find_logo()
+        # The logo uploaded on the Site details page wins.
+        self.logo_path = site_logo_path() or self._find_logo()
 
     def _find_logo(self):
         """

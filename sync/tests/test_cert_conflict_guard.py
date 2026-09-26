@@ -97,3 +97,13 @@ def test_hq_error_is_not_treated_as_no_conflicts(pool, sessions):
     failing.raise_for_status.side_effect = RuntimeError("503")
     with mock.patch("sync.cert_conflict_guard.requests.post", return_value=failing):
         assert Agent(pool).resolve_certificate_conflicts() == 0  # logged, nothing changed
+
+
+def test_replacement_numbers_use_the_prefix_hq_reports(pool, sessions):
+    orphan = str(uuid.uuid4())
+    _add(pool, orphan, "KNH-0007")
+    reply = _hq([{"certificate_number": "KNH-0007", "hq_id": str(uuid.uuid4())}], 40)
+    reply.json.return_value["prefix"] = "KNH-"
+    with mock.patch("sync.cert_conflict_guard.requests.post", return_value=reply):
+        assert Agent(pool).resolve_certificate_conflicts() == 1
+    assert _rows(pool)[0][orphan]["certificate_number"] == "KNH-0041"

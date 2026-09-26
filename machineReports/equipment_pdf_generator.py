@@ -2,6 +2,7 @@
 Complete Standalone Equipment Report PDF Generator
 Includes base template, generator logic, and all necessary components
 """
+from core.branding import logo_path as site_logo_path
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -119,7 +120,8 @@ class EquipmentPDFTemplate(BaseDocTemplate):
         self.page_width, self.page_height = pagesize
 
         # Get logo path
-        self.logo_path = self._find_logo(logo_path)
+        # The logo uploaded on the Site details page wins.
+        self.logo_path = site_logo_path() or self._find_logo(logo_path)
 
         # Setup page templates
         self._setup_page_templates()

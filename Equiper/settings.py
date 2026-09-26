@@ -243,6 +243,10 @@ def _certificate_verification_url():
 
 CERTIFICATE_VERIFICATION_URL = _certificate_verification_url()
 
+# Certificate numbers are allocated by HQ with its CERT_PREFIX; this must
+# match it (the conflict guard takes HQ's value from each reply).
+CERTIFICATE_PREFIX = os.getenv("CIRQEN_CERT_PREFIX") or config.get("certificates.prefix") or "BNH-"
+
 # Second backup location (core.backups.copy_dir); CIRQEN_BACKUP_COPY_DIR wins.
 BACKUP_COPY_DIR = config.get("backups.copy_dir") or ""
 

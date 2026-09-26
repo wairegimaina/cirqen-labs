@@ -1,4 +1,5 @@
 import logging
+import re
 import zipstream
 from datetime import timedelta
 from dateutil.relativedelta import relativedelta
@@ -178,8 +179,9 @@ def certificate_list(request):
         cert_numeric=Case(
             When(
                 certificate_number__isnull=False,
-                certificate_number__regex=r"^BNH-\d+$",
-                then=Cast(Substr("certificate_number", 5), output_field=IntegerField()),
+                certificate_number__regex=rf"^{re.escape(settings.CERTIFICATE_PREFIX)}\d+$",
+                then=Cast(Substr("certificate_number", len(settings.CERTIFICATE_PREFIX) + 1),
+                          output_field=IntegerField()),
             ),
             default=Value(0),
             output_field=IntegerField(),

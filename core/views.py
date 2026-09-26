@@ -1,10 +1,15 @@
+from django import forms
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
 
-from . import hq_settings
+from users.control import role_required
+
+from . import branding, hq_settings
+from .models import SiteProfile
 
 
 @staff_member_required
@@ -86,3 +91,49 @@ def hq_connection_test(request):
     """Reachability of whatever is configured right now. Called from the page."""
     cfg = hq_settings.load_config()
     return JsonResponse({"results": hq_settings.probe_all(cfg)})
+
+
+# ── Site details (branding) ──────────────────────────────────────────────────
+
+class SiteProfileForm(forms.ModelForm):
+    class Meta:
+        model = SiteProfile
+        fields = ["name", "address", "phone", "email", "logo"]
+        labels = {"name": "Hospital name", "logo": "Logo (PNG or JPG, printed on PDFs)"}
+        widgets = {"address": forms.Textarea(attrs={"rows": 3})}
+
+    def clean_logo(self):
+        logo = self.cleaned_data.get("logo")
+        if logo and hasattr(logo, "size") and logo.size > 2 * 1024 * 1024:
+            raise forms.ValidationError("Keep the logo under 2 MB.")
+        return logo
+
+
+@login_required
+@role_required("HOD")
+def site_profile(request):
+    """Name, address, contacts and logo shown on pages, reports and certificates."""
+    profile = SiteProfile.load()
+    if request.method == "POST":
+        form = SiteProfileForm(request.POST, request.FILES, instance=profile)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Site details saved. New reports and certificates use them now.")
+            return redirect("core:site_profile")
+    else:
+        form = SiteProfileForm(instance=profile)
+    return render(request, "core/site_profile.html", {
+        "form": form, "profile": profile,
+        "effective_name": branding.organisation_name(default=""),
+    })
+
+
+def site_logo(request):
+    """The uploaded logo, on its own URL: the media folder also holds staff
+    signatures and is not served as a whole."""
+    from django.http import FileResponse, Http404
+
+    path = branding.logo_path()
+    if not path:
+        raise Http404("No site logo")
+    return FileResponse(open(path, "rb"))

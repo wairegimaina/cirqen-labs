@@ -141,6 +141,19 @@
     {% endif %}
     {# ── END HOD BLOCK ── #}
 
+    {% if nav.is_hod %}
+      <li class="menu-entry" role="none">
+        <a href="{% url 'core:site_profile' %}"
+          class="menu-link {% if request.resolver_match.url_name == 'site_profile' %}active-link{% endif %}"
+          role="menuitem">
+          <div class="link-icon" aria-hidden="true">
+            <i class="fas fa-hospital"></i>
+          </div>
+          <span class="link-label">Site details</span>
+        </a>
+      </li>
+    {% endif %}
+
     {# ══════════════════════════════════════════════════════ #}
     {# ║  SYSTEM BLOCK — staff only, matching the view guard ║ #}
     {# ══════════════════════════════════════════════════════ #}
@@ -490,7 +503,7 @@
     {% endif %}
 
     <div class="sidebar-copyright">
-      <p>&copy; <span id="copyrightYear"></span> Equiper National Hospital</p>
+      <p>&copy; <span id="copyrightYear"></span> {{ site_name }}</p>
     </div>
 
   </div>

@@ -26,6 +26,7 @@ sessions table directly, which put the HQ database password on every
 install.)
 """
 import os
+import re
 import threading
 import time
 
@@ -35,6 +36,8 @@ from psycopg2.extras import RealDictCursor
 from .agent_prelude import LOG, now_utc
 
 SESSION_TABLE = 'public."CalSoft_calibrationsession"'
+# HQ allocates numbers with its CERT_PREFIX and returns it with each check.
+DEFAULT_PREFIX = os.getenv("CIRQEN_CERT_PREFIX", "BNH-")
 
 
 class CertConflictGuardMixin:
@@ -71,7 +74,7 @@ class CertConflictGuardMixin:
 
     def _cert_guard_find_conflicts(self, local_conn):
         """
-        Return ([(local_orphan_id, hq_authoritative_id, cert_number), ...], hq_max_sequence).
+        Return ([(local_orphan_id, hq_authoritative_id, cert_number), ...], hq_max_sequence, prefix).
 
         Raises on an HQ error, so a failed check never looks like "no conflicts".
         """
@@ -104,20 +107,19 @@ class CertConflictGuardMixin:
             local_id = local_map.get(cert_num)
             if local_id and hq_id and local_id != hq_id:
                 conflicts.append((local_id, hq_id, cert_num))
-        return conflicts, int(body.get("max_sequence") or 0)
+        return conflicts, int(body.get("max_sequence") or 0), body.get("prefix") or DEFAULT_PREFIX
 
     @staticmethod
-    def _cert_guard_max_seq(cur):
+    def _cert_guard_max_seq(cur, prefix=DEFAULT_PREFIX):
         cur.execute(f"""
-            SELECT certificate_number FROM {SESSION_TABLE}
-            WHERE certificate_number ~ '^BNH-[0-9]+$'
-            ORDER BY CAST(SPLIT_PART(certificate_number, '-', 2) AS INT) DESC
-            LIMIT 1
-        """)
+            SELECT MAX(CAST(SUBSTRING(certificate_number FROM %s) AS INTEGER)) AS seq
+            FROM {SESSION_TABLE}
+            WHERE certificate_number ~ %s
+        """, (len(prefix) + 1, "^" + re.escape(prefix) + "[0-9]+$"))
         row = cur.fetchone()
         # Called with a RealDictCursor, whose rows are dicts, not tuples.
-        value = (row.get("certificate_number") if isinstance(row, dict) else row[0]) if row else None
-        return int(value.split("-")[1]) if value else 0
+        value = (row.get("seq") if isinstance(row, dict) else row[0]) if row else None
+        return int(value or 0)
 
     @staticmethod
     def _cert_guard_exists(cur, cert_num):
@@ -137,7 +139,7 @@ class CertConflictGuardMixin:
         try:
             local_conn = self.pool.getconn()
 
-            conflicts, hq_max = self._cert_guard_find_conflicts(local_conn)
+            conflicts, hq_max, prefix = self._cert_guard_find_conflicts(local_conn)
             if not conflicts:
                 return 0
 
@@ -149,7 +151,7 @@ class CertConflictGuardMixin:
             with local_conn.cursor(cursor_factory=RealDictCursor) as cur:
 
                 # Above HQ's highest number, so a candidate can only clash locally.
-                next_n = max(self._cert_guard_max_seq(cur), hq_max) + 1
+                next_n = max(self._cert_guard_max_seq(cur, prefix), hq_max) + 1
 
                 for orphan_id, hq_id, cert_num in conflicts:
                     cur.execute(f"SELECT * FROM {SESSION_TABLE} WHERE id = %s", (orphan_id,))
@@ -162,10 +164,10 @@ class CertConflictGuardMixin:
                         continue
 
                     # Allocate the orphan's replacement number before touching anything.
-                    candidate = f"BNH-{next_n:04d}"
+                    candidate = f"{prefix}{next_n:04d}"
                     while self._cert_guard_exists(cur, candidate):
                         next_n += 1
-                        candidate = f"BNH-{next_n:04d}"
+                        candidate = f"{prefix}{next_n:04d}"
                     next_n += 1
 
                     # 1) Clear the orphan's certificate_number to release the UNIQUE constraint.

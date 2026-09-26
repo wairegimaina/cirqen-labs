@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}{% if department %}{{ department.name }}{% else %}Calibration Certificates{% endif %} - Equiper National Hospital{% endblock %}
+{% block title %}{% if department %}{{ department.name }}{% else %}Calibration Certificates{% endif %} — {{ site_name }}{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{% static 'calibrition/certificate-list.css' %}" />
