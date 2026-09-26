@@ -972,8 +972,8 @@ def step_create_install_script() -> bool:
         echo "  First-run notes:"
         echo "    • User data is stored per-user in  ~/.local/share/cirqen/"
         echo "    • On first launch the database initialises (takes ~1 minute)"
-        echo "    • Default login:  maina.wairegi  /  ChangeMe123!"
-        echo "    • ⚠️   Change the password immediately after first login!"
+        echo "    • First login: username hod, one-time password shown by the setup screen"
+        echo "      (also in ~/.local/share/cirqen/first_login.txt)"
         echo ""
     """))
 
@@ -1450,9 +1450,10 @@ def step_create_readme(distro: dict) -> bool:
         FIRST-RUN LOGIN
         ──────────────────────────────────────────────────────────────────────
 
-          Username : maina.wairegi
-          Password : ChangeMe123!
-          ⚠️   Change the password immediately after first login!
+          Username : hod
+          Password : one-time, shown by the setup screen and saved in
+                     ~/.local/share/cirqen/first_login.txt
+          You choose your own password at first login.
 
         ──────────────────────────────────────────────────────────────────────
         LOG FILES  (~/.local/share/cirqen/logs/)

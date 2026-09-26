@@ -3078,11 +3078,11 @@ Built: Auto-configured with all Django apps
   3. Application window opens automatically
   4. Login with HOD credentials
 
-🔐 DEFAULT LOGIN (First Run):
-  Username: maina.wairegi
-  Email: mosemaina5@gmail.com
-  Password: ChangeMe123!
-  ⚠️  CHANGE PASSWORD ON FIRST LOGIN!
+🔐 FIRST LOGIN:
+  The setup screen shows the head of department's username (hod) and a
+  one-time password made for this installation. It is also saved in
+  first_login.txt in the data folder. You choose your own password and
+  draw your signature at first login; delete first_login.txt afterwards.
 
 ══════════════════════════════════════════════════════════════════════
 
@@ -3194,10 +3194,9 @@ For help, contact:
    You'll see a splash screen with progress
 
 3️⃣  LOGIN
-   First run creates HOD user automatically:
-   • Username: maina.wairegi
-   • Password: ChangeMe123!
-   ⚠️  Change password immediately!
+   First run creates the head of department account (username: hod)
+   with a one-time password shown on screen and saved in first_login.txt.
+   You choose your own password at first login.
 
 4️⃣  WORK
    Application works online or offline

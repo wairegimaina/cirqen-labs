@@ -125,17 +125,21 @@ class FirstRunSetup(QObject):
 
             self.progress_update.emit("Setup complete!", 100)
 
+            login = getattr(self, 'first_login', None)
+            login_text = (
+                "Head of department account:\n"
+                f"- Username: {login['username']}\n"
+                f"- One-time password: {login['password']}\n"
+                f"  (also saved in {DATA_PATH / 'first_login.txt'})\n"
+                "You will choose your own password at first login.\n\n"
+            ) if login else ""
             success_msg = (
                 "First-run setup completed successfully!\n\n"
-                "HOD User Created:\n"
-                "â€¢ Username: maina.wairegi\n"
-                "â€¢ Email: mosemaina5@gmail.com\n"
-                "â€¢ Password: ChangeMe123!\n\n"
-                "âš ï¸ Please change the password on first login!\n\n"
-                f"Allocated Ports:\n"
-                f"â€¢ PostgreSQL Local: {self.port_manager.get_port('postgresql_local')}\n"
-                f"â€¢ Redis: {self.port_manager.get_port('redis')}\n"
-                f"â€¢ Django: {self.port_manager.get_port('django')}"
+                + login_text
+                + "Allocated Ports:\n"
+                f"- PostgreSQL Local: {self.port_manager.get_port('postgresql_local')}\n"
+                f"- Redis: {self.port_manager.get_port('redis')}\n"
+                f"- Django: {self.port_manager.get_port('django')}"
             )
             logger.info("First-run setup completed successfully")
             self.setup_complete.emit(True, success_msg)
@@ -699,38 +703,48 @@ class FirstRunSetup(QObject):
 
             User = get_user_model()
 
-            # Check if HOD user exists
-            if User.objects.filter(email='mosemaina5@gmail.com').exists():
-                logger.info("âœ… HOD user already exists")
+            # One first HOD per installation. Earlier builds created the same
+            # named superuser with the same published password on every
+            # machine; now each install gets its own random one-time password,
+            # shown once in the setup dialog and kept in first_login.txt
+            # (owner-only) until the HOD changes it at first login.
+            self.first_login = None
+            if has_user_profile and UserProfile.objects.filter(role='HOD').exists():
+                logger.info("An HOD account already exists")
+                return True
+            if not has_user_profile and User.objects.filter(username='hod').exists():
                 return True
 
-            logger.info("Creating HOD user...")
-
-            # Create HOD user
+            import secrets
+            password = secrets.token_urlsafe(12)
             user = User.objects.create_user(
-                username='maina.wairegi',
-                email='mosemaina5@gmail.com',
-                password='ChangeMe123!',
-                first_name='Maina',
-                last_name='Wairegi',
+                username='hod',
+                password=password,
                 is_staff=True,
-                is_superuser=True
+                is_superuser=False,
             )
+            logger.info(f"Created user: {user.username}")
 
-            logger.info(f"âœ… Created user: {user.username}")
-
-            # Create UserProfile if model exists
             if has_user_profile:
-                UserProfile.objects.create(
-                    user=user,
-                    role='HOD',
-                    must_change_password=True,
-                    has_uploaded_signature=False,
-                    is_approved=True
-                )
-                logger.info("âœ… Created UserProfile for HOD")
+                UserProfile.objects.update_or_create(user=user, defaults={
+                    'role': 'HOD',
+                    'must_change_password': True,
+                    'has_uploaded_signature': False,
+                    'is_approved': True,
+                })
 
-            logger.info("âœ… HOD user creation complete")
+            self.first_login = {'username': user.username, 'password': password}
+            note = DATA_PATH / 'first_login.txt'
+            note.write_text(
+                "Cirqen first login (delete this file after signing in)\n"
+                f"Username: {user.username}\nOne-time password: {password}\n"
+                "You will be asked to choose a new password and draw your signature.\n"
+            )
+            try:
+                note.chmod(0o600)
+            except OSError:
+                pass
+            logger.info("HOD user creation complete")
             return True
 
         except Exception as e:
