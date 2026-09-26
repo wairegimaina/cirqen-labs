@@ -141,6 +141,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "users.middleware.ActiveUserMiddleware",
+    "users.middleware.FirstLoginSetupMiddleware",
     "users.session_middleware.SessionExpiryMiddleware",
     "core.hq_link.HQInstantPushMiddleware",
 ]
@@ -254,6 +255,9 @@ def _certificate_verification_url():
 
 
 CERTIFICATE_VERIFICATION_URL = _certificate_verification_url()
+
+# Second backup location (core.backups.copy_dir); CIRQEN_BACKUP_COPY_DIR wins.
+BACKUP_COPY_DIR = config.get("backups.copy_dir") or ""
 
 # ============================================================
 # 🔴 REDIS & CACHING
@@ -549,6 +553,16 @@ if os.getenv("CIRQEN_BEHIND_PROXY", "0").strip().lower() in ("1", "true", "yes",
 CSRF_COOKIE_HTTPONLY = True
 CSRF_COOKIE_SAMESITE = "Lax"
 CSRF_TRUSTED_ORIGINS = ["http://localhost:8000", "http://127.0.0.1:8000"]
+# Server mode (deploy/server): browsers post from https://<server name>, which
+# Django refuses unless the origin is trusted. Every non-local ALLOWED_HOSTS name
+# is trusted over HTTPS when CIRQEN_HTTPS is on; CIRQEN_CSRF_TRUSTED_ORIGINS
+# adds explicit origins (comma-separated, with scheme).
+if CIRQEN_HTTPS:
+    CSRF_TRUSTED_ORIGINS += [
+        f"https://{host.lstrip('.')}" for host in ALLOWED_HOSTS
+        if host and host not in ("localhost", "127.0.0.1", "*") and not host.startswith("*")
+    ]
+CSRF_TRUSTED_ORIGINS += [o.strip() for o in os.getenv("CIRQEN_CSRF_TRUSTED_ORIGINS", "").split(",") if o.strip()]
 
 PASSWORD_RESET_TIMEOUT = 1800
 PASSWORD_RESET_CODE_LENGTH = 6

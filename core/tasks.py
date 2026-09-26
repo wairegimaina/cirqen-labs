@@ -272,4 +272,10 @@ def backup_local_database(keep=14):
     path = backups.create_backup()
     removed = backups.prune(keep)
     logger.info("Local database backup written to %s (%d old backup(s) removed)", path, len(removed))
+    try:
+        copy = backups.copy_offsite(path, keep)
+        if copy:
+            logger.info("Backup copied to %s", copy)
+    except OSError:
+        logger.exception("Backup %s was written locally but could not be copied off this machine", path)
     return str(path)

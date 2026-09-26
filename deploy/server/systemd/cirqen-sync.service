@@ -1,0 +1,22 @@
+[Unit]
+Description=Cirqen sync agent (exchanges changes with HQ)
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=cirqen
+Group=cirqen
+WorkingDirectory=/opt/cirqen/app
+EnvironmentFile=/etc/cirqen/cirqen.env
+ExecStart=/opt/cirqen/venv/bin/python -m sync.sync_agent --data-dir /var/lib/cirqen --log-level INFO
+Restart=always
+RestartSec=15
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/cirqen
+
+[Install]
+WantedBy=multi-user.target

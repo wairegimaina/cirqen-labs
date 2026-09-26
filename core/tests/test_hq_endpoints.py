@@ -30,6 +30,9 @@ NEW_UPDATES = "https://new-updates.example.com"
 CLEARED_ENV = list(HQ_ENDPOINT_ENV.values()) + [
     "SYNC_AUTH_TOKEN", "HQ_API_KEY", "POSTGRES_HQ_PASSWORD", "CIRQEN_PROVISIONING_FILE",
     config.ENDPOINTS_FROM_CONFIG_VAR,
+    # Django startup copies config into these; server mode sets them itself.
+    "POSTGRES_LOCAL_HOST", "POSTGRES_LOCAL_DB", "POSTGRES_LOCAL_USER", "POSTGRES_LOCAL_PASSWORD",
+    "REDIS_HOST", "REDIS_PORT", "REDIS_PASSWORD", "CLIENT_NAME",
 ]
 
 

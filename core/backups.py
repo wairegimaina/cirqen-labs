@@ -5,6 +5,9 @@ Backups are pg_dumps of the local database's public schema, written to
 single transaction (updates.db_snapshot), and first takes a "pre-restore"
 backup so a restore of the wrong file can itself be undone.
 """
+import logging
+import os
+import shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -34,14 +37,48 @@ def create_backup(label=""):
     return db_snapshot.dump(local_database(), backup_dir() / name)
 
 
-def list_backups():
+def list_backups(directory=None):
     """Newest first."""
-    return sorted(backup_dir().glob(f"{PREFIX}*{SUFFIX}"), reverse=True)
+    return sorted((directory or backup_dir()).glob(f"{PREFIX}*{SUFFIX}"), reverse=True)
 
 
-def prune(keep):
+logger = logging.getLogger(__name__)
+
+
+def copy_dir():
+    """A second location for backups, off this machine's data disk.
+
+    CIRQEN_BACKUP_COPY_DIR, or backups.copy_dir in config.json: typically a
+    mounted network share, NAS or USB disk on a hospital server. None when not
+    configured. A backup on the same disk as the database is lost with it.
+    """
+    configured = os.getenv("CIRQEN_BACKUP_COPY_DIR") or getattr(settings, "BACKUP_COPY_DIR", "")
+    return Path(configured) if configured else None
+
+
+def copy_offsite(path, keep):
+    """Copy ``path`` to copy_dir() and prune old copies there.
+
+    Returns the copy's path, or None when no copy location is configured.
+    Raises OSError when the location is configured but unwritable, so the
+    caller can report it; the local backup is unaffected either way.
+    """
+    target_dir = copy_dir()
+    if target_dir is None:
+        return None
+    if not target_dir.is_dir():
+        raise OSError(f"Backup copy location {target_dir} does not exist or is not mounted")
+    copy = target_dir / Path(path).name
+    partial = copy.with_suffix(copy.suffix + ".partial")
+    shutil.copy2(path, partial)
+    partial.replace(copy)  # never leave a half-written file under the real name
+    prune(keep, directory=target_dir)
+    return copy
+
+
+def prune(keep, directory=None):
     """Delete all but the newest ``keep`` scheduled backups; pre-restore ones are kept."""
-    scheduled = [p for p in list_backups() if "-pre-restore" not in p.name]
+    scheduled = [p for p in list_backups(directory) if "-pre-restore" not in p.name]
     removed = scheduled[keep:]
     for path in removed:
         path.unlink(missing_ok=True)

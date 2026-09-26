@@ -105,6 +105,20 @@ PLAIN_ENV = {
     # The desktop launcher moves the embedded DB off the configured port when
     # another postgres holds it, and hands the live port to its children here.
     "local_db.port": "POSTGRES_LOCAL_PORT",
+    # Hospital server mode (deploy/server) supplies the database, cache and site
+    # name through /etc/cirqen/cirqen.env. Before these were listed, the env
+    # file was ignored in production mode and the server connected as the
+    # desktop's default role with a random password.
+    "local_db.host": "POSTGRES_LOCAL_HOST",
+    "local_db.database": "POSTGRES_LOCAL_DB",
+    "local_db.user": "POSTGRES_LOCAL_USER",
+    # Not in SECRET_ENV on purpose: those are copied into installers'
+    # provisioning.json, and this password is per machine.
+    "local_db.password": "POSTGRES_LOCAL_PASSWORD",
+    "redis.host": "REDIS_HOST",
+    "redis.port": "REDIS_PORT",
+    "redis.password": "REDIS_PASSWORD",
+    "client.name": "CLIENT_NAME",
 }
 
 ENDPOINT_MARKER = "_endpoints_v"
@@ -1271,12 +1285,13 @@ class CirqenConfig:
         os.environ["EXTERNAL_SERVICE_TIMEOUT"] = str(self.get("system.external_service_timeout"))
         os.environ["STATS_PRINT_INTERVAL"] = str(self.get("system.stats_print_interval"))
 
-        # email
-        os.environ["EMAIL_HOST"] = self.get("email.host", "smtp.gmail.com")
-        os.environ["EMAIL_PORT"] = str(self.get("email.port", 587))
-        os.environ["EMAIL_USE_TLS"] = "true" if self.get("email.use_tls", True) else "false"
-        os.environ["EMAIL_HOST_USER"] = self.get("email.host_user", "")
-        os.environ["EMAIL_HOST_PASSWORD"] = self.get("email.host_password", "")
+        # email (a value already in the environment, e.g. server mode's
+        # /etc/cirqen/cirqen.env, is kept)
+        os.environ.setdefault("EMAIL_HOST", self.get("email.host", "smtp.gmail.com"))
+        os.environ.setdefault("EMAIL_PORT", str(self.get("email.port", 587)))
+        os.environ.setdefault("EMAIL_USE_TLS", "true" if self.get("email.use_tls", True) else "false")
+        os.environ.setdefault("EMAIL_HOST_USER", self.get("email.host_user", ""))
+        os.environ.setdefault("EMAIL_HOST_PASSWORD", self.get("email.host_password", ""))
 
         # sync state dir
         sync_state_dir = self.data_path / "sync_state"
@@ -1285,8 +1300,11 @@ class CirqenConfig:
 
         # django
         os.environ["DEBUG"] = str(self.get("app.debug"))
-        os.environ["DJANGO_SECRET_KEY"] = self._get_or_create_secret_key()
-        os.environ["DJANGO_ALLOWED_HOSTS"] = "localhost,127.0.0.1"
+        # setdefault, not assignment: hospital server mode sets the hosts people
+        # browse to and its own secret key in the environment. Assigning here
+        # replaced them with localhost, so every request to the server got 400.
+        os.environ.setdefault("DJANGO_SECRET_KEY", self._get_or_create_secret_key())
+        os.environ.setdefault("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1")
 
         missing = self.missing_secrets()
         if missing:

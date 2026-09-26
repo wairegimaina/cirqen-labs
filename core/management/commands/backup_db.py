@@ -26,3 +26,9 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f"Backup written: {path}"))
         if removed:
             self.stdout.write(f"Removed {len(removed)} old backup(s).")
+        try:
+            copy = backups.copy_offsite(path, keep)
+        except OSError as exc:
+            raise CommandError(f"Backup written locally, but the off-machine copy failed: {exc}")
+        if copy:
+            self.stdout.write(self.style.SUCCESS(f"Copied to: {copy}"))

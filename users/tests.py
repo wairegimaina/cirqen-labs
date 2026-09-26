@@ -38,7 +38,8 @@ class UserViewsTestCase(TestCase):
 
     def _profile(self, user, **fields):
         # A signal may already have created the profile; update it either way.
-        profile, _ = UserProfile.objects.update_or_create(user=user, defaults=fields)
+        profile, _ = UserProfile.objects.update_or_create(
+            user=user, defaults={"must_change_password": False, **fields})
         return profile
 
     def login_hod(self):
