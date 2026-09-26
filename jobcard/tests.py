@@ -71,6 +71,34 @@ class JobCardFlowTests(TestCase):
             "nurse_signature_data": SIGNATURE, decision: "1", **extra,
         })
 
+    # ── Phone approvals page (jobcard:approvals) ─────────────────────────────
+
+    def test_phone_page_lists_only_this_departments_waiting_orders(self):
+        self.raise_job_card()
+        self.client.force_login(self.nic)
+        self.assertContains(self.client.get(reverse("jobcard:approvals")), "VENT-1")
+        self.client.force_login(self.other_nic)
+        self.assertNotContains(self.client.get(reverse("jobcard:approvals")), "VENT-1")
+
+    def test_approving_from_the_phone_page_returns_there(self):
+        card = self.raise_job_card()
+        response = self.decide(card, self.nic, "approve", return_to="approvals")
+        self.assertRedirects(response, reverse("jobcard:approvals"), fetch_redirect_response=False)
+        card.refresh_from_db()
+        self.assertEqual(card.status, "Approved")
+        self.assertTrue(card.verified_signature)
+
+    def test_a_phone_decline_without_a_reason_returns_to_the_open_card(self):
+        card = self.raise_job_card()
+        response = self.decide(card, self.nic, "decline", return_to="approvals")
+        self.assertRedirects(response, reverse("jobcard:approvals") + f"?open={card.id}",
+                             fetch_redirect_response=False)
+        self.assertEqual(jobcard.objects.get(pk=card.pk).status, "Waiting Approval")
+
+    def test_technicians_do_not_get_the_phone_approvals_page(self):
+        self.client.force_login(self.tech)
+        self.assertEqual(self.client.get(reverse("jobcard:approvals")).status_code, 302)
+
     def test_technician_raises_a_card_that_waits_for_approval(self):
         card = self.raise_job_card()
         self.assertIsNotNone(card)

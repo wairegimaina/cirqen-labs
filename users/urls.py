@@ -3,6 +3,9 @@ from django.urls import path
 from .views import (
     admin_reset_user_password,
     api_create_user,
+    activity_ping,
+    two_factor_setup,
+    two_factor_verify,
     custom_login_view,
     force_setup,
     forgot_password_view,
@@ -33,6 +36,9 @@ urlpatterns = [
     # ============================================================================
 
     path('', custom_login_view, name='custom_login'),
+    path('activity/', activity_ping, name='activity_ping'),
+    path('two-factor/', two_factor_setup, name='two_factor_setup'),
+    path('two-factor/verify/', two_factor_verify, name='two_factor_verify'),
     path('logout/', logout_view, name='logout'),
 
     # Password Reset Flow

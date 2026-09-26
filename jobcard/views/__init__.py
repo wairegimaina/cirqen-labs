@@ -22,6 +22,7 @@ from .technician_approval import (
 )
 from .listing import (
     waiting_jobcards,
+    approvals,
     approved_jobcards,
     declined_jobcards,
     hod_workshop_jobcards,
@@ -55,6 +56,7 @@ __all__ = [
     "handle_nurse_approval",
     "handle_technician_job_card",
     "waiting_jobcards",
+    "approvals",
     "approved_jobcards",
     "declined_jobcards",
     "hod_workshop_jobcards",

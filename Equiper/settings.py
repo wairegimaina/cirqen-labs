@@ -143,6 +143,7 @@ MIDDLEWARE = [
     "users.middleware.ActiveUserMiddleware",
     "users.middleware.FirstLoginSetupMiddleware",
     "users.session_middleware.SessionExpiryMiddleware",
+    "users.session_middleware.IdleTimeoutMiddleware",
     "core.hq_link.HQInstantPushMiddleware",
 ]
 
@@ -519,7 +520,11 @@ LOGOUT_REDIRECT_URL = "/login/"
 SESSION_ENGINE = "django.contrib.sessions.backends.cached_db"
 SESSION_CACHE_ALIAS = "sessions"
 SESSION_COOKIE_NAME = "sessionid"
-SESSION_COOKIE_AGE = 3600
+# Signed out after this long without a person's activity (IdleTimeoutMiddleware).
+SESSION_IDLE_SECONDS = int(os.getenv("CIRQEN_IDLE_MINUTES", "30")) * 60
+SESSION_COOKIE_AGE = max(3600, SESSION_IDLE_SECONDS)
+# Heads of department must sign in with an authenticator app as well.
+REQUIRE_HOD_TWO_FACTOR = os.getenv("CIRQEN_REQUIRE_HOD_2FA", "0").lower() in ("1", "true", "yes")
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 SESSION_SAVE_EVERY_REQUEST = True
 # Transport security. The desktop build serves plain HTTP on 127.0.0.1, so these

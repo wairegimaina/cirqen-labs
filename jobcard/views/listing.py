@@ -403,3 +403,28 @@ def hod_calibration_work_on_equipment(request, workshop_id):
     }
 
     return render(request, "jobcard/hod_workshop_jobcards.html", context)
+
+
+
+@login_required
+@role_required('NIC', redirect_to='jobcard:create_job_card', message='Only in-charges approve work orders.',
+               extra_tags='jobcard')
+def approvals(request):
+    """Phone-first list of work orders waiting for this in-charge's decision.
+
+    Decisions post to the same handler as the full work order page
+    (nurse_approval.handle_nurse_approval), so every check still applies.
+    """
+    from users.models import UserSignature
+
+    profile, department, workshop, role = get_user_context(request)
+    cards = (jobcard.objects.filter(status="Waiting Approval", department=department)
+             .select_related("equipment__description", "performed_by", "workshop")
+             .order_by("-date_issued") if department else jobcard.objects.none())
+    signature = UserSignature.objects.filter(user=request.user, active_status=True).first()
+    return render(request, "jobcard/approvals_mobile.html", {
+        "cards": cards,
+        "open_id": request.GET.get("open", ""),
+        "has_saved_signature": bool(signature and signature.has_signature()),
+        "default_name": request.user.get_full_name() or request.user.get_username(),
+    })

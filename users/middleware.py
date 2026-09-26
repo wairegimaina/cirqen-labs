@@ -49,7 +49,8 @@ class FirstLoginSetupMiddleware:
     be used indefinitely.
     """
 
-    ALLOWED_URL_NAMES = ("force_setup", "logout", "dashboard:hod_logout", "custom_login", "health_check")
+    ALLOWED_URL_NAMES = ("force_setup", "two_factor_setup", "activity_ping", "logout", "dashboard:hod_logout",
+                         "custom_login", "health_check")
     ALLOWED_PREFIXES = ("/static/", "/media/", "/favicon")
 
     def __init__(self, get_response):
@@ -76,12 +77,28 @@ class FirstLoginSetupMiddleware:
             # The temporary password is the risk; a missing signature is
             # already refused where a signature is needed (work orders,
             # certificates), and force_setup collects both.
+            target = None
             if profile is not None and profile.must_change_password:
+                target = "force_setup"
+            elif profile is not None and self._needs_two_factor(user, profile):
+                target = "two_factor_setup"
+            if target:
                 wants_json = (request.headers.get("x-requested-with") == "XMLHttpRequest"
                               or "application/json" in request.headers.get("accept", ""))
                 if wants_json:
                     from django.http import JsonResponse
 
                     return JsonResponse({"error": "Finish your account setup first."}, status=403)
-                return redirect("force_setup")
+                return redirect(target)
         return self.get_response(request)
+
+    @staticmethod
+    def _needs_two_factor(user, profile):
+        """With CIRQEN_REQUIRE_HOD_2FA, an HOD must register an authenticator app."""
+        from django.conf import settings
+
+        if not getattr(settings, "REQUIRE_HOD_TWO_FACTOR", False) or profile.role != "HOD":
+            return False
+        from users.models import TwoFactorDevice
+
+        return not TwoFactorDevice.objects.filter(user=user).exists()

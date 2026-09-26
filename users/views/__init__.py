@@ -8,6 +8,9 @@ from .auth import (
     forgot_password_view,
     verify_reset_code_view,
     reset_password_view,
+    activity_ping,
+    two_factor_setup,
+    two_factor_verify,
 )
 from .user_management import (
     api_create_user,

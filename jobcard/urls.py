@@ -8,6 +8,7 @@ urlpatterns = [
     path('ajax/load-equipment/', views.load_equipment, name='load_equipment'),
     path('checklists/', views.checklist_templates, name='checklist_templates'),
     path('jobcards/waiting/', views.waiting_jobcards, name='waiting_jobcards'),
+    path('approvals/', views.approvals, name='approvals'),
     path('jobcards/approved/', views.approved_jobcards, name='approved_jobcards'),
     path('jobcards/declined/', views.declined_jobcards, name='declined_jobcards'),
     path('get-pending-ppm-schedules/', views.get_pending_ppm_schedules, name='get_pending_ppm_schedules'),

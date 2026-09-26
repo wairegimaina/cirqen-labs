@@ -141,6 +141,17 @@
     {% endif %}
     {# ── END HOD BLOCK ── #}
 
+    <li class="menu-entry" role="none">
+      <a href="{% url 'two_factor_setup' %}"
+        class="menu-link {% if request.resolver_match.url_name == 'two_factor_setup' %}active-link{% endif %}"
+        role="menuitem">
+        <div class="link-icon" aria-hidden="true">
+          <i class="fas fa-shield-alt"></i>
+        </div>
+        <span class="link-label">Two-factor sign-in</span>
+      </a>
+    </li>
+
     {% if nav.is_hod %}
       <li class="menu-entry" role="none">
         <a href="{% url 'core:site_profile' %}"
@@ -273,6 +284,17 @@
             {% endif %}
           </a>
         </li>
+
+        {% if nav.is_nic %}
+        <li class="dropdown-entry" role="none">
+          <a href="{% url 'jobcard:approvals' %}"
+            class="dropdown-link {% if request.resolver_match.url_name == 'approvals' %}active-dropdown{% endif %}"
+            role="menuitem">
+            <i class="fas fa-mobile-alt" aria-hidden="true"></i>
+            <span class="link-label">Approve (phone view)</span>
+          </a>
+        </li>
+        {% endif %}
 
         <li class="dropdown-entry" role="none">
           <a href="{% url 'jobcard:approved_jobcards' %}"

@@ -158,6 +158,15 @@ one covering the new names is made.
 
 ## Security notes
 
+- People are signed out after 30 minutes without activity (typing and
+  clicking count; background page refreshes do not). Change it with
+  `CIRQEN_IDLE_MINUTES` in `cirqen.env`.
+- Anyone can turn on two-factor sign-in (menu: Two-factor sign-in) with an
+  authenticator app. Set `CIRQEN_REQUIRE_HOD_2FA=1` to make it compulsory for
+  heads of department.
+- In-charges can approve work orders from a phone: menu, Work Orders,
+  Approve (phone view).
+
 - Only nginx listens on the network; the app, database and Redis listen on
   127.0.0.1 only. Open port 443 (and 80, for the redirect) in the firewall.
 - Session and CSRF cookies are HTTPS-only; HSTS is sent.
