@@ -250,6 +250,7 @@ CERTIFICATE_PREFIX = os.getenv("CIRQEN_CERT_PREFIX") or config.get("certificates
 
 # Second backup location (core.backups.copy_dir); CIRQEN_BACKUP_COPY_DIR wins.
 BACKUP_COPY_DIR = config.get("backups.copy_dir") or ""
+BACKUP_KEEP = int(os.getenv("CIRQEN_BACKUP_KEEP") or config.get("backups.keep") or 14)
 
 # ============================================================
 # 🔴 REDIS & CACHING

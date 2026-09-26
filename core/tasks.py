@@ -265,10 +265,11 @@ CELERY_BEAT_SCHEDULE = {
 
 
 @shared_task(soft_time_limit=1800, time_limit=2400)
-def backup_local_database(keep=14):
+def backup_local_database(keep=None):
     """Daily local database backup (core.backups); same as manage.py backup_db."""
     from core import backups
 
+    keep = keep or backups.keep_count()
     path = backups.create_backup()
     removed = backups.prune(keep)
     logger.info("Local database backup written to %s (%d old backup(s) removed)", path, len(removed))
@@ -294,3 +295,21 @@ def prune_report_cache():
     from core import report_jobs
 
     return report_jobs.prune()
+
+
+@shared_task
+def verify_latest_backup():
+    """Daily: the newest backup exists, is recent and can be read back.
+
+    A failure is logged at ERROR (reaching Sentry when configured), because a
+    backup that silently stopped is only found out when it is needed.
+    """
+    from core import backups
+
+    try:
+        summary = backups.verify_latest()
+    except backups.BackupCheckFailed as exc:
+        logger.error("BACKUP CHECK FAILED: %s", exc)
+        return {"ok": False, "error": str(exc)}
+    logger.info("Backup check passed: %s", summary)
+    return {"ok": True, **summary}

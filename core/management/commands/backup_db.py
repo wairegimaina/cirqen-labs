@@ -8,12 +8,24 @@ class Command(BaseCommand):
     help = "Back up the local database to <data dir>/backups and prune old backups."
 
     def add_arguments(self, parser):
-        parser.add_argument("--keep", type=int, default=14,
-                            help="How many scheduled backups to keep (default 14).")
+        parser.add_argument("--keep", type=int, default=None,
+                            help="How many scheduled backups to keep (default CIRQEN_BACKUP_KEEP, else 14).")
+        parser.add_argument("--verify", action="store_true",
+                            help="Check the newest backup is recent and readable instead of creating one.")
         parser.add_argument("--list", action="store_true", dest="list_only",
                             help="List backups instead of creating one.")
 
-    def handle(self, *args, keep, list_only, **options):
+    def handle(self, *args, keep, list_only, verify=False, **options):
+        keep = keep or backups.keep_count()
+        if verify:
+            try:
+                summary = backups.verify_latest()
+            except backups.BackupCheckFailed as exc:
+                raise CommandError(f"Backup check failed: {exc}")
+            self.stdout.write(self.style.SUCCESS(
+                f"OK: {summary['file']} ({summary['age_hours']} h old, {summary['tables']} tables, "
+                f"{summary['size']:,} bytes)"))
+            return
         if list_only:
             for path in backups.list_backups():
                 self.stdout.write(f"{path.name}\t{path.stat().st_size:,} bytes")

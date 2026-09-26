@@ -93,3 +93,51 @@ def restore_backup(path):
     safety = create_backup(label="pre-restore")
     db_snapshot.restore(local_database(), path)
     return safety
+
+
+def keep_count():
+    """How many scheduled backups to keep: CIRQEN_BACKUP_KEEP / backups.keep,
+    default 14 (one a day). Hospital servers set 30."""
+    return int(getattr(settings, "BACKUP_KEEP", 14) or 14)
+
+
+class BackupCheckFailed(Exception):
+    """The newest backup is missing, too old, or unreadable."""
+
+
+def verify_latest(max_age_hours=36):
+    """Check the newest backup can be read back, without restoring it.
+
+    ``pg_restore --list`` reads the whole archive's table of contents, which
+    fails on a truncated or corrupt file; the list must name the core tables.
+    Returns a summary dict; raises BackupCheckFailed with the reason.
+    """
+    import subprocess
+    import time
+
+    from updates.db_snapshot import find_pg_tool
+
+    latest = next(iter(list_backups()), None)
+    if latest is None:
+        raise BackupCheckFailed("No backup exists yet.")
+    age_hours = (time.time() - latest.stat().st_mtime) / 3600
+    if age_hours > max_age_hours:
+        raise BackupCheckFailed(f"The newest backup, {latest.name}, is {age_hours:.0f} hours old.")
+    result = subprocess.run([find_pg_tool("pg_restore"), "--list", str(latest)],
+                            capture_output=True, text=True, timeout=300)
+    if result.returncode != 0:
+        raise BackupCheckFailed(f"{latest.name} cannot be read: {result.stderr.strip()[:300]}")
+    tables = set()
+    for line in result.stdout.splitlines():
+        # "<id>; <oid> <oid> TABLE DATA <schema> <table> <owner>"
+        words = line.split()
+        if "TABLE" in words and words[words.index("TABLE") + 1:words.index("TABLE") + 2] == ["DATA"]:
+            at = words.index("TABLE") + 2
+            if len(words) > at + 1:
+                tables.add(words[at + 1])
+    required = {"Inventory_equipment", "jobcard_jobcard", "CalSoft_calibrationsession", "users_userprofile"}
+    missing = sorted(required - tables)
+    if missing:
+        raise BackupCheckFailed(f"{latest.name} has no data for: {', '.join(missing)}")
+    return {"file": latest.name, "age_hours": round(age_hours, 1), "tables": len(tables),
+            "size": latest.stat().st_size}

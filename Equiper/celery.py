@@ -52,6 +52,11 @@ app.conf.beat_schedule = {
         "schedule": crontab(hour=12, minute=30),
         "options": {"expires": 6 * 3600},
     },
+    # An hour after the backup, check it can be read back.
+    "verify-latest-backup": {
+        "task": "core.tasks.verify_latest_backup",
+        "schedule": crontab(hour=13, minute=30),
+    },
     # Background PDF reports are kept 15 minutes (core.report_jobs).
     "prune-report-cache": {
         "task": "core.tasks.prune_report_cache",
