@@ -193,21 +193,8 @@ DATABASES = {
             "options": "-c statement_timeout=30000",
         },
     },
-    "hq": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": config.get("hq_db.database"),
-        "USER": config.get("hq_db.user"),
-        "PASSWORD": config.get("hq_db.password"),
-        "HOST": config.get("hq_db.host"),
-        "PORT": config.get("hq_db.port"),
-        "CONN_MAX_AGE": 300,
-        "CONN_HEALTH_CHECKS": True,
-        "OPTIONS": {
-            "connect_timeout": 10,
-            "options": "-c statement_timeout=30000",
-            "sslmode": "require",
-        },
-    },
+    # No "hq" alias: this app never connects to the HQ database. HQ is
+    # reached through its sync API only.
 }
 
 # ============================================================
@@ -669,18 +656,8 @@ DEBEZIUM_CONFIG = {
         "DBNAME": config.get("local_db.database"),
         "SERVER_NAME": "postgres_local",
     },
-    "HQ_DB": {
-        "HOSTNAME": config.get("hq_db.host"),
-        "PORT": str(config.get("hq_db.port")),
-        "USER": config.get("hq_db.user"),
-        "PASSWORD": config.get("hq_db.password"),
-        "DBNAME": config.get("hq_db.database"),
-        "SERVER_NAME": "postgres_hq",
-    },
     "SLOT_NAME_LOCAL": "debezium_local_slot",
-    "SLOT_NAME_HQ": "debezium_hq_slot",
     "PUBLICATION_NAME_LOCAL": "debezium_local_publication",
-    "PUBLICATION_NAME_HQ": "debezium_hq_publication",
     "INCLUDE_SCHEMA_CHANGES": False,
     "SCHEMA_INCLUDE_LIST": "public",
     "TABLE_INCLUDE_LIST": ",".join(config.get("debezium.table_include_list")),

@@ -46,22 +46,6 @@ FIELDS: tuple[dict[str, Any], ...] = (
         "group": "Servers",
         "placeholder": "https://updates.example.com",
     },
-    {
-        "key": "hq_db.host",
-        "label": "HQ database host",
-        "help": "Reached directly by the sync agent. Changing this needs the matching password.",
-        "group": "HQ database",
-        "placeholder": "db.example.com",
-    },
-    {"key": "hq_db.port", "label": "Port", "group": "HQ database", "placeholder": "5432"},
-    {"key": "hq_db.database", "label": "Database", "group": "HQ database", "placeholder": "postgres"},
-    {"key": "hq_db.user", "label": "User", "group": "HQ database", "placeholder": "postgres.abc"},
-    {
-        "key": "hq_db.sslmode",
-        "label": "SSL mode",
-        "group": "HQ database",
-        "choices": ("disable", "allow", "prefer", "require", "verify-ca", "verify-full"),
-    },
 )
 
 # What each source means to someone reading the page.
@@ -152,7 +136,6 @@ def apply_changes(cfg: CirqenConfig, submitted: dict[str, str]) -> tuple[list[st
         validate_endpoints(
             proposed,
             sync_enabled=bool(cfg.get("sync.enabled", True)),
-            db_enabled=bool(cfg.get("hq_db.enabled")),
         )
     )
     if errors:
@@ -200,46 +183,10 @@ def probe_update(cfg: CirqenConfig) -> ProbeResult:
     return _probe_http(cfg.get("update.server_url"), "/health/")
 
 
-def probe_database(cfg: CirqenConfig) -> ProbeResult:
-    """Open a real connection. A wrong host usually fails here, not at the API."""
-    if not cfg.get("hq_db.enabled"):
-        return ProbeResult(True, "HQ database is disabled on this machine")
-    host = cfg.get("hq_db.host")
-    if not host:
-        return ProbeResult(False, "Not configured")
-    password = cfg.get("hq_db.password")
-    if not password:
-        return ProbeResult(False, "No password set (POSTGRES_HQ_PASSWORD or config.json)")
-    try:
-        import psycopg2
-    except ImportError:  # pragma: no cover - psycopg2 ships with the app
-        return ProbeResult(False, "psycopg2 is not installed")
-    try:
-        conn = psycopg2.connect(
-            host=host,
-            port=cfg.get("hq_db.port"),
-            dbname=cfg.get("hq_db.database"),
-            user=cfg.get("hq_db.user"),
-            password=password,
-            sslmode=cfg.get("hq_db.sslmode", "require"),
-            connect_timeout=PROBE_TIMEOUT,
-        )
-    except Exception as exc:  # noqa: BLE001 - psycopg2 raises several types
-        return ProbeResult(False, str(exc).strip().splitlines()[0][:140])
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT 1")
-            cur.fetchone()
-    finally:
-        conn.close()
-    return ProbeResult(True, f"Connected to {host}")
-
-
 def probe_all(cfg: CirqenConfig) -> dict[str, dict[str, Any]]:
     results = {
         "sync": probe_sync(cfg),
         "update": probe_update(cfg),
-        "database": probe_database(cfg),
     }
     return {name: {"ok": r.ok, "detail": r.detail} for name, r in results.items()}
 

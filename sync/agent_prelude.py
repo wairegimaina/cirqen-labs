@@ -122,14 +122,6 @@ try:
 except ImportError:
     NETWORKX_AVAILABLE = False
     # Will log warning after logger is set up
-try:
-    from sync.mirror import DatabaseMirror, SyncDirection
-
-    MIRROR_AVAILABLE = True
-except ImportError as e:
-    MIRROR_AVAILABLE = False
-    DatabaseMirror = None
-    SyncDirection = None
 
 # ============================================================
 # 🇰🇪 KENYAN TIMEZONE SETUP
@@ -388,14 +380,6 @@ def load_config_from_unified_manager(data_path: Path = None):
             "enabled": config.get("mirror.enabled"),
             "interval_hours": config.get("mirror.interval_hours"),
         },
-        "hq_db": {
-            "host": config.get("hq_db.host"),
-            "port": config.get("hq_db.port"),
-            "dbname": config.get("hq_db.database"),
-            "user": config.get("hq_db.user"),
-            "password": config.get("hq_db.password"),
-            "sslmode": config.get("hq_db.sslmode", "require"),
-        },
     }
 
     LOG.info("=" * 80)
@@ -472,14 +456,6 @@ def load_config_from_env_fallback():
         "mirror": {
             "enabled": os.getenv("MIRROR_ENABLED", "false").lower() == "true",
             "interval_hours": float(os.getenv("MIRROR_INTERVAL_HOURS", "24")),
-        },
-        "hq_db": {
-            "host": os.getenv("POSTGRES_HQ_HOST", ""),
-            "port": int(os.getenv("POSTGRES_HQ_PORT", "5432")),
-            "dbname": os.getenv("POSTGRES_HQ_DB", ""),
-            "user": os.getenv("POSTGRES_HQ_USER", ""),
-            "password": os.getenv("POSTGRES_HQ_PASSWORD", ""),
-            "sslmode": os.getenv("POSTGRES_SSLMODE", "require"),
         },
     }
 

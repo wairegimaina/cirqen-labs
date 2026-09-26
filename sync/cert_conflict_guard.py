@@ -19,29 +19,20 @@ instead of needing someone to notice and run the script manually:
 
 Both writes go through the local pool and bump ``updated_at``, so the
 existing upload pipeline picks them up and pushes them to HQ on its
-normal schedule. No new HQ write path is introduced — HQ is only ever
-read here, matching how the rest of the sync agent treats HQ as
-authoritative and reaches it exclusively through the sync API upload flow.
+normal schedule. HQ is reached only through the sync API: the agent sends
+its own certificate numbers to ``POST /certificates/conflicts`` and gets
+back the clashes and HQ's highest sequence number. (It used to read HQ's
+sessions table directly, which put the HQ database password on every
+install.)
 """
 import os
 import threading
 import time
 
-import psycopg2
+import requests
 from psycopg2.extras import RealDictCursor
 
 from .agent_prelude import LOG, now_utc
-
-# config.HQ_ENDPOINT_DEFAULTS names the database "database"; psycopg2 wants
-# "dbname". Only these fields can arrive from the update server — a password
-# never travels in that document, so it always comes from local config.
-HQ_DB_REMOTE_FIELDS = {
-    "hq_db.host": "host",
-    "hq_db.port": "port",
-    "hq_db.database": "dbname",
-    "hq_db.user": "user",
-    "hq_db.sslmode": "sslmode",
-}
 
 SESSION_TABLE = 'public."CalSoft_calibrationsession"'
 
@@ -78,62 +69,42 @@ class CertConflictGuardMixin:
                 superseded, reissued_as, session_id, exc,
             )
 
-    def _cert_guard_hq_conn(self):
-        """Short-lived, read-only connection to HQ used for conflict detection only."""
-        hq_config = dict(self.config["hq_db"])
-        hq_config.pop("enabled", None)
+    def _cert_guard_find_conflicts(self, local_conn):
+        """
+        Return ([(local_orphan_id, hq_authoritative_id, cert_number), ...], hq_max_sequence).
 
-        # Resolve at connection time, not from the snapshot taken at start-up,
-        # so a database move adopted from the update server lands without
-        # waiting for a restart — matching how the sync address already
-        # behaves. Falls back to the start-up copy if anything goes wrong.
-        try:
-            from config import resolve_endpoints
-
-            resolved = resolve_endpoints(self.data_path)
-            for key, field in HQ_DB_REMOTE_FIELDS.items():
-                value, source = resolved.get(key, (None, None))
-                # ONLY a value the update server actually sent. Applying any
-                # other layer here would overwrite the settings this agent
-                # started with using a freshly-resolved default, which is a
-                # different thing entirely and not what a fleet move means.
-                if source == "remote":
-                    hq_config[field] = value
-        except (ImportError, OSError, ValueError, AttributeError) as exc:
-            # Narrow on purpose: a broad except here hid a real programming
-            # error behind a silent fall back to the start-up settings.
-            LOG.warning("Using start-up HQ database settings (%s)", exc)
-
-        hq_config.setdefault("sslmode", os.getenv("POSTGRES_SSLMODE", "require"))
-        conn = psycopg2.connect(**hq_config, connect_timeout=15)
-        conn.autocommit = True
-        return conn
-
-    @staticmethod
-    def _cert_guard_find_conflicts(hq_conn, local_conn):
-        """Return [(local_orphan_id, hq_authoritative_id, cert_number), ...]."""
-        with hq_conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute(f"""
-                SELECT id::text AS id, certificate_number
-                FROM {SESSION_TABLE}
-                WHERE certificate_number IS NOT NULL AND certificate_number != ''
-            """)
-            hq_map = {r["certificate_number"]: r["id"] for r in cur.fetchall()}
-
+        Raises on an HQ error, so a failed check never looks like "no conflicts".
+        """
         with local_conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(f"""
                 SELECT id::text AS id, certificate_number
                 FROM {SESSION_TABLE}
                 WHERE certificate_number IS NOT NULL AND certificate_number != ''
             """)
-            local_map = {r["certificate_number"]: r["id"] for r in cur.fetchall()}
+            local_rows = cur.fetchall()
 
+        response = requests.post(
+            f"{self.api_url}/certificates/conflicts",
+            json={
+                "client_id": self.client_id,
+                "certificates": [
+                    {"id": r["id"], "certificate_number": r["certificate_number"]} for r in local_rows
+                ],
+            },
+            headers=self._http_headers(),
+            timeout=60,
+        )
+        response.raise_for_status()
+        body = response.json()
+
+        local_map = {r["certificate_number"]: r["id"] for r in local_rows}
         conflicts = []
-        for cert_num, hq_id in hq_map.items():
+        for entry in body.get("conflicts") or []:
+            cert_num, hq_id = entry.get("certificate_number"), entry.get("hq_id")
             local_id = local_map.get(cert_num)
-            if local_id and local_id != hq_id:
+            if local_id and hq_id and local_id != hq_id:
                 conflicts.append((local_id, hq_id, cert_num))
-        return conflicts
+        return conflicts, int(body.get("max_sequence") or 0)
 
     @staticmethod
     def _cert_guard_max_seq(cur):
@@ -144,7 +115,9 @@ class CertConflictGuardMixin:
             LIMIT 1
         """)
         row = cur.fetchone()
-        return int(row[0].split("-")[1]) if row and row[0] else 0
+        # Called with a RealDictCursor, whose rows are dicts, not tuples.
+        value = (row.get("certificate_number") if isinstance(row, dict) else row[0]) if row else None
+        return int(value.split("-")[1]) if value else 0
 
     @staticmethod
     def _cert_guard_exists(cur, cert_num):
@@ -160,13 +133,11 @@ class CertConflictGuardMixin:
         rest of the sync agent).
         """
         local_conn = None
-        hq_conn = None
         fixed = 0
         try:
             local_conn = self.pool.getconn()
-            hq_conn = self._cert_guard_hq_conn()
 
-            conflicts = self._cert_guard_find_conflicts(hq_conn, local_conn)
+            conflicts, hq_max = self._cert_guard_find_conflicts(local_conn)
             if not conflicts:
                 return 0
 
@@ -175,10 +146,10 @@ class CertConflictGuardMixin:
                 len(conflicts),
             )
 
-            with local_conn.cursor(cursor_factory=RealDictCursor) as cur, \
-                 hq_conn.cursor() as hq_cur:
+            with local_conn.cursor(cursor_factory=RealDictCursor) as cur:
 
-                next_n = max(self._cert_guard_max_seq(cur), self._cert_guard_max_seq(hq_cur)) + 1
+                # Above HQ's highest number, so a candidate can only clash locally.
+                next_n = max(self._cert_guard_max_seq(cur), hq_max) + 1
 
                 for orphan_id, hq_id, cert_num in conflicts:
                     cur.execute(f"SELECT * FROM {SESSION_TABLE} WHERE id = %s", (orphan_id,))
@@ -192,7 +163,7 @@ class CertConflictGuardMixin:
 
                     # Allocate the orphan's replacement number before touching anything.
                     candidate = f"BNH-{next_n:04d}"
-                    while self._cert_guard_exists(cur, candidate) or self._cert_guard_exists(hq_cur, candidate):
+                    while self._cert_guard_exists(cur, candidate):
                         next_n += 1
                         candidate = f"BNH-{next_n:04d}"
                     next_n += 1
@@ -259,8 +230,6 @@ class CertConflictGuardMixin:
             LOG.error("💥 cert_conflict_guard: repair pass failed: %s", e)
             LOG.exception(e)
         finally:
-            if hq_conn:
-                hq_conn.close()
             if local_conn:
                 self.pool.putconn(local_conn)
 
@@ -281,11 +250,10 @@ class CertConflictGuardMixin:
         )
 
         # Give the agent time to finish its initial sync before the first check.
-        # Jittered, not a flat 60s: this loop opens a direct connection to the
-        # HQ database, and a site that powers on its desktops together would
-        # otherwise have all of them connect in the same second. Spreading the
-        # first check over several minutes turns a spike into a trickle, which
-        # is what lets the fleet grow without the pooler refusing connections.
+        # Jittered, not a flat 60s: a site that powers on its desktops together
+        # would otherwise have all of them call HQ in the same second.
+        # Spreading the first check over several minutes turns a spike into a
+        # trickle.
         import random
 
         for _ in range(int(random.uniform(60, 300))):

@@ -40,7 +40,7 @@ Useful switches:
 
 ## Where HQ is hosted
 
-The HQ addresses and the HQ database host are written in **one place**:
+The HQ addresses are written in **one place**:
 `HQ_ENDPOINT_DEFAULTS` at the top of `config.py`. Nothing else in the code names
 a host, and `core/tests/test_hq_endpoints.py` fails if one appears elsewhere.
 Sync and updates are two different services, so they are two settings.
@@ -49,7 +49,11 @@ Sync and updates are two different services, so they are two settings.
 |---|---|---|
 | `sync.api_url` | `SYNC_API_URL` | Sync and certificate API (ends in `/api/sync`) |
 | `update.server_url` | `HQ_SERVER_URL` | Update server (a bare address, no `/api/...`) |
-| `hq_db.host` `.port` `.database` `.user` `.sslmode` | `POSTGRES_HQ_HOST` `_PORT` `_DB` `_USER`, `POSTGRES_SSLMODE` | HQ database |
+
+Clients never connect to the HQ database: the app and the sync agent reach HQ
+through these two services only, so no install or `config.json` holds an HQ
+database password. A `config.json` from an older build has its `hq_db` section
+removed on the next start.
 
 Each is resolved in this order: environment variable, then `config.json`, then
 `provisioning.json`, then the default. This works in the packaged app as well as

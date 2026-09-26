@@ -693,18 +693,13 @@ class Updater:
 
     def _run_migrations(self):
         """
-        Step 1 — always migrate local SQLite immediately, no lock needed.
-        Step 2 — if a shared HQ PostgreSQL database is configured, acquire
-                  the HQ migration lock first so only one machine migrates it.
-
-        For the current SQLite-per-machine setup, Step 2 is skipped because
-        _get_hq_db_config() returns None.  Wire in HQ Postgres credentials
-        when you add a shared database and Step 2 activates automatically.
+        Migrate this machine's database. HQ's schema is not changed from
+        here: HQ applies its own migrations, and clients have no HQ database
+        connection.
         """
         python = sys.executable
         manage_py = BASE_DIR / "manage.py"
 
-        # ── Step 1: local SQLite ──────────────────────────────────────────────
         self._emit("migrating", {"message": "Migrating local database…"})
         result = subprocess.run(
             [python, str(manage_py), "migrate", "--database=default", "--no-input"],
@@ -718,153 +713,6 @@ class Updater:
             raise RuntimeError(f"Local migration failed:\n{result.stderr[:500]}")
 
         self._emit("migrating", {"message": "Local database migrated ✓"})
-
-        # ── Step 2: HQ PostgreSQL (only when configured) ──────────────────────
-        hq_db = self._get_hq_db_config()
-        if not hq_db:
-            # No shared HQ database configured — nothing more to do
-            return
-
-        self._migrate_hq_with_lock(python, manage_py)
-
-    def _get_hq_db_config(self) -> Optional[dict]:
-        """
-        Returns the HQ update server config dict if:
-          a) UPDATE_SYSTEM['server_url'] is set, AND
-          b) DATABASES has an 'hq' entry (shared HQ PostgreSQL)
-        Otherwise returns None — migration lock is skipped entirely.
-        """
-        cfg = getattr(settings, "UPDATE_SYSTEM", {})
-        server_url = cfg.get("server_url", "").rstrip("/")
-        api_key = cfg.get("api_key", "")
-
-        if not server_url or not api_key:
-            return None
-
-        databases = getattr(settings, "DATABASES", {})
-        if "hq" not in databases:
-            return None
-
-        return {"server_url": server_url, "api_key": api_key}
-
-    def _migrate_hq_with_lock(self, python, manage_py):
-        """
-        Acquire the HQ migration lock, run migrate --database=hq, release.
-
-        Retry logic:
-          - Up to 5 attempts, 30 s apart
-          - If all 5 fail (another machine holds the lock the whole time),
-            call showmigrations to check whether HQ is already fully migrated.
-            If yes — skip gracefully. If no — raise so the update is marked failed.
-        """
-        cfg = self._get_hq_db_config()
-        headers = {"X-Api-Key": cfg["api_key"]}
-        machine_id = self._machine_id()
-        hq_lock_acquired = False
-
-        try:
-            self._emit("migrating", {"message": "Requesting HQ migration lock…"})
-
-            for attempt in range(1, 6):
-                try:
-                    resp = requests.post(
-                        f"{cfg['server_url']}/api/migrations/acquire/",
-                        params={"machine_id": machine_id, "version": self.version},
-                        headers=headers,
-                        timeout=15,
-                    )
-                    resp.raise_for_status()
-                    data = resp.json()
-                except Exception as exc:
-                    # HQ server unreachable — warn and skip HQ migration
-                    self._emit("migrating", {
-                        "message": (
-                            f"Cannot reach HQ server for migration lock "
-                            f"({exc}). Skipping HQ migration."
-                        ),
-                    })
-                    logger.warning("HQ migration lock request failed: %s", exc)
-                    return
-
-                if data.get("granted"):
-                    hq_lock_acquired = True
-                    self._emit("migrating", {
-                        "message": "HQ lock acquired. Migrating HQ database…"
-                    })
-                    break
-                else:
-                    who = data.get("locked_by", "another machine")
-                    self._emit("migrating", {
-                        "message": (
-                            f"HQ locked by {who}. "
-                            f"Waiting 30 s… (attempt {attempt}/5)"
-                        ),
-                    })
-                    time.sleep(30)
-
-            if not hq_lock_acquired:
-                # 5 attempts exhausted — check if HQ is already migrated
-                self._emit("migrating", {
-                    "message": "Could not acquire HQ lock. Checking HQ migration state…"
-                })
-                self._assert_hq_already_migrated(python, manage_py)
-                return
-
-            # Run the actual HQ migration
-            result = subprocess.run(
-                [python, str(manage_py), "migrate", "--database=hq", "--no-input"],
-                capture_output=True,
-                text=True,
-                cwd=str(BASE_DIR),
-                timeout=600,
-            )
-            if result.returncode != 0:
-                logger.error("HQ migrate stderr: %s", result.stderr)
-                raise RuntimeError(f"HQ migration failed:\n{result.stderr[:500]}")
-
-            self._emit("migrating", {"message": "HQ database migrated ✓"})
-
-        finally:
-            # ALWAYS release — even if the migration itself raised
-            if hq_lock_acquired:
-                try:
-                    requests.post(
-                        f"{cfg['server_url']}/api/migrations/release/",
-                        params={"machine_id": machine_id},
-                        headers=headers,
-                        timeout=10,
-                    )
-                    self._emit("migrating", {"message": "HQ migration lock released."})
-                except Exception as exc:
-                    logger.warning("Failed to release HQ migration lock: %s", exc)
-                    # The HQ server's 5-minute watchdog will expire it automatically
-
-    def _assert_hq_already_migrated(self, python, manage_py):
-        """
-        After failing to acquire the lock, verify HQ is fully migrated.
-        Raises RuntimeError if there are unapplied migrations.
-        """
-        result = subprocess.run(
-            [python, str(manage_py), "showmigrations", "--database=hq", "--plan"],
-            capture_output=True,
-            text=True,
-            cwd=str(BASE_DIR),
-            timeout=120,
-        )
-        unapplied = [
-            line for line in result.stdout.splitlines()
-            if line.strip().startswith("[ ]")
-        ]
-        if unapplied:
-            raise RuntimeError(
-                f"HQ migration lock timed out and {len(unapplied)} "
-                f"migration(s) are still unapplied on HQ database."
-            )
-        self._emit("migrating", {
-            "message": "HQ already fully migrated by another machine ✓"
-        })
-
-    # ── Restart ───────────────────────────────────────────────────────────────
 
     def _signal_restart(self):
         SENTINEL_FILE.write_text(self.version)

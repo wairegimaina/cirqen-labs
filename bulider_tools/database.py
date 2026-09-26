@@ -20,7 +20,7 @@ class FirstRunSetup(QObject):
         self.pg_logs = DATA_PATH / 'logs'
         self.runtime_dir = RUNTIME_DIR
         self.pg_dir = self.runtime_dir / 'postgresql'
-        self.db_config, _ = setup_environment(port_manager)
+        self.db_config = setup_environment(port_manager)
 
     def is_first_run(self):
         """Check if this is the first run"""
@@ -134,7 +134,6 @@ class FirstRunSetup(QObject):
                 "âš ï¸ Please change the password on first login!\n\n"
                 f"Allocated Ports:\n"
                 f"â€¢ PostgreSQL Local: {self.port_manager.get_port('postgresql_local')}\n"
-                f"â€¢ PostgreSQL HQ: {self.port_manager.get_port('postgresql_hq')}\n"
                 f"â€¢ Redis: {self.port_manager.get_port('redis')}\n"
                 f"â€¢ Django: {self.port_manager.get_port('django')}"
             )
@@ -623,9 +622,8 @@ class FirstRunSetup(QObject):
 
     def _run_migrations(self):
         """
-        Run Django migrations on BOTH the local database and the Render HQ database.
-        Uses --database=hq flag for the second pass so Django applies each set
-        to the right DB.  HQ failure is non-fatal — local app still works.
+        Run Django migrations on the local database. HQ's schema is not
+        changed from here: HQ applies its own migrations.
         """
         manage_py = APPLICATION_PATH / 'manage.py'
         if not manage_py.exists():
@@ -668,51 +666,6 @@ class FirstRunSetup(QObject):
             logger.error(f"Local migration error: {e}")
             import traceback; logger.error(traceback.format_exc())
             return False
-
-        # ── 2. HQ database (Render PostgreSQL from CirqenConfig) ─────────
-        _, hq = setup_environment(self.port_manager)
-        hq_enabled = hq.get('enabled', True)
-        hq_host    = hq.get('host', '')
-
-        if not hq_enabled or not hq_host:
-            logger.info("HQ DB not configured / disabled — skipping HQ migrations")
-            return True
-
-        logger.info("=" * 60)
-        logger.info("RUNNING MIGRATIONS — HQ database (Render)")
-        logger.info(f"  {hq_host}:{hq['port']}  db={hq['database']}")
-        logger.info("=" * 60)
-
-        hq_env = base_env.copy()
-        hq_env['POSTGRES_HQ_HOST']     = str(hq['host'])
-        hq_env['POSTGRES_HQ_PORT']     = str(hq['port'])
-        hq_env['POSTGRES_HQ_DATABASE'] = str(hq['database'])
-        hq_env['POSTGRES_HQ_USER']     = str(hq['user'])
-        hq_env['POSTGRES_HQ_PASSWORD'] = str(hq['password'])
-        hq_env['HQ_DB_HOST']     = str(hq['host'])
-        hq_env['HQ_DB_PORT']     = str(hq['port'])
-        hq_env['HQ_DB_NAME']     = str(hq['database'])
-        hq_env['HQ_DB_USER']     = str(hq['user'])
-        hq_env['HQ_DB_PASSWORD'] = str(hq['password'])
-
-        try:
-            result = subprocess.run(
-                [sys.executable, str(manage_py), 'migrate', '--noinput', '--database=hq'],
-                capture_output=True, text=True,
-                cwd=str(APPLICATION_PATH), env=hq_env,
-                check=True, timeout=300,
-            )
-            logger.info("HQ migrations completed")
-            if result.stdout:
-                logger.debug(f"Output:\n{result.stdout}")
-        except subprocess.CalledProcessError as e:
-            logger.warning(f"HQ migration failed (exit {e.returncode}) — continuing")
-            logger.warning(f"stdout:\n{e.stdout}")
-            logger.warning(f"stderr:\n{e.stderr}")
-        except subprocess.TimeoutExpired:
-            logger.warning("HQ migration timeout — continuing without HQ schema")
-        except Exception as e:
-            logger.warning(f"HQ migration error: {e} — continuing")
 
         return True
 

@@ -102,7 +102,7 @@ class ApplyChangesTests(HQSettingsBase):
         cfg = self.load()
         changed, errors = hq_settings.apply_changes(cfg, {
             "sync.api_url": "https://good.example.com/api/sync",
-            "hq_db.port": "not-a-number",
+            "update.server_url": "ftp://not-a-web-address",
         })
         self.assertEqual(changed, [])
         self.assertTrue(errors)
@@ -161,10 +161,10 @@ class ProbeTests(HQSettingsBase):
         self.assertFalse(result.ok)
         self.assertIn("Cannot reach", result.detail)
 
-    def test_the_database_probe_needs_a_password(self):
-        result = hq_settings.probe_database(self.load())
-        self.assertFalse(result.ok)
-        self.assertIn("password", result.detail)
+    def test_there_is_no_database_probe(self):
+        # Clients reach HQ through its API only.
+        self.assertFalse(hasattr(hq_settings, "probe_database"))
+        self.assertFalse([f for f in hq_settings.FIELDS if f["key"].startswith("hq_db.")])
 
 
 class PageTests(HQSettingsBase):
@@ -220,7 +220,7 @@ class PageTests(HQSettingsBase):
         self.client.force_login(self.staff)
         with mock.patch("requests.get", return_value=mock.Mock(status_code=200)):
             payload = self.client.post(reverse("core:hq_connection_test")).json()
-        self.assertEqual(set(payload["results"]), {"sync", "update", "database"})
+        self.assertEqual(set(payload["results"]), {"sync", "update"})
         self.assertTrue(payload["results"]["sync"]["ok"])
 
 
@@ -248,8 +248,8 @@ class CommandTests(HQSettingsBase):
 
     def test_a_bad_value_is_refused_and_nothing_changes(self):
         with self.assertRaises(CommandError):
-            self.run_command("--set", "hq_db.port=99999")
-        self.assertEqual(self.load().get("hq_db.port"), HQ_ENDPOINT_DEFAULTS["hq_db.port"])
+            self.run_command("--set", "update.server_url=http://plain.example.com")
+        self.assertEqual(self.load().get("update.server_url"), HQ_ENDPOINT_DEFAULTS["update.server_url"])
 
     def test_reset_all_releases_every_pin(self):
         self.run_command("--set", "sync.api_url=https://a.example.com/api/sync",
