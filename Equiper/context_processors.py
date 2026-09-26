@@ -105,6 +105,11 @@ _SUPPLIER_PAGES = {"supplier_list", "supplier_create", "supplier_update"}
 _WORK_ORDER_PAGES = {"jobcard:create_job_card", "jobcard:waiting_jobcards", "jobcard:approved_jobcards",
                      "jobcard:declined_jobcards", "jobcard:work_order_detail"}
 _CALIBRATION_PAGES = {"schedule:calibration_dashboard", "schedule:calibration_by_department"}
+_PROCEDURE_PAGES = {"calibration:procedure_list", "calibration:procedure_create", "calibration:procedure_detail",
+                    "calibration:procedure_edit"}
+_STANDARD_PAGES = {"calibration:StandardsParameters_lists", "calibration:standard_list",
+                   "calibration:standard_create", "calibration:standard_edit",
+                   "calibration:upload_standards_excel"}
 
 
 def _module(request, role, name):
@@ -125,16 +130,32 @@ def _module(request, role, name):
             _tab("Scheduling Plan", "fa-calendar-alt", reverse("scheduling:overview") + "?program=ppm", True),
         ]
 
-    # Calibration (calibration centers): schedules, the work, the hospital plan.
-    if program == "calibration" or name in _CALIBRATION_PAGES or name == "schedule:pending_calibrations":
+    # Calibration (calibration centers): schedules and the hospital plan.
+    # Perform Calibration has its own entry in the sidebar's Calibration menu.
+    if program == "calibration" or name in _CALIBRATION_PAGES:
         return "Calibration", [
             _tab("Calibration Schedules", "fa-calendar-check", reverse("schedule:calibration_dashboard"),
                  name in _CALIBRATION_PAGES),
-            _tab("Perform Calibration", "fa-clock", reverse("schedule:pending_calibrations"),
-                 name == "schedule:pending_calibrations"),
             _tab("Scheduling Plan", "fa-calendar-alt",
                  reverse("scheduling:overview") + "?program=calibration", scheduling),
         ] if is_tech else []
+
+    # Procedures and standards (calibration centers): creating one comes
+    # first (the sidebar opens there), then the list.
+    if name in _PROCEDURE_PAGES:
+        return "Procedures", [
+            _tab("Create Procedure", "fa-plus", reverse("calibration:procedure_create"),
+                 name == "calibration:procedure_create"),
+            _tab("View Procedures", "fa-list-ul", reverse("calibration:procedure_list"),
+                 name != "calibration:procedure_create"),
+        ]
+    if name in _STANDARD_PAGES:
+        return "Standards", [
+            _tab("Create Standard", "fa-plus", reverse("calibration:standard_create"),
+                 name in ("calibration:standard_create", "calibration:upload_standards_excel")),
+            _tab("View Standards", "fa-list-ul", reverse("calibration:StandardsParameters_lists"),
+                 name in ("calibration:StandardsParameters_lists", "calibration:standard_list")),
+        ]
 
     # Work orders; technologists also keep their checklists here.
     checklist = is_tech and name.startswith("jobcard:checklist_")

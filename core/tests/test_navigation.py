@@ -54,6 +54,18 @@ class NavigationTests(TestCase):
         self.assertEqual((label, active), ("Work Orders", ["Checklists"]))
         self.assertEqual(self.tabs(self.nurse, reverse("jobcard:checklist_settings"))[1], [])
 
+    def test_procedures_and_standards_are_view_and_create_tabs(self):
+        label, tabs, active = self.tabs(self.cal_tech, reverse("calibration:procedure_list"))
+        self.assertEqual((label, tabs, active),
+                         ("Procedures", ["Create Procedure", "View Procedures"], ["View Procedures"]))
+        self.assertEqual(self.tabs(self.cal_tech, reverse("calibration:procedure_create"))[2],
+                         ["Create Procedure"])
+        label, tabs, active = self.tabs(self.cal_tech, reverse("calibration:StandardsParameters_lists"))
+        self.assertEqual((label, tabs, active),
+                         ("Standards", ["Create Standard", "View Standards"], ["View Standards"]))
+        self.assertEqual(self.tabs(self.cal_tech, reverse("calibration:standard_create"))[2],
+                         ["Create Standard"])
+
     def test_warranties_and_suppliers_are_inventory_tabs(self):
         label, tabs, active = self.tabs(self.tech, reverse("supplier_list"))
         self.assertEqual(label, "Inventory")

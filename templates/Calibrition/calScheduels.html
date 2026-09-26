@@ -80,18 +80,19 @@
       </div>
 
       <select class="cs-select" id="monthFilter" aria-label="Filter by month">
-        <option value="1"  {% if selected_month == '1'  %}selected{% endif %}>January</option>
-        <option value="2"  {% if selected_month == '2'  %}selected{% endif %}>February</option>
-        <option value="3"  {% if selected_month == '3'  %}selected{% endif %}>March</option>
-        <option value="4"  {% if selected_month == '4'  %}selected{% endif %}>April</option>
-        <option value="5"  {% if selected_month == '5'  %}selected{% endif %}>May</option>
-        <option value="6"  {% if selected_month == '6'  %}selected{% endif %}>June</option>
-        <option value="7"  {% if selected_month == '7'  %}selected{% endif %}>July</option>
-        <option value="8"  {% if selected_month == '8'  %}selected{% endif %}>August</option>
-        <option value="9"  {% if selected_month == '9'  %}selected{% endif %}>September</option>
-        <option value="10" {% if selected_month == '10' %}selected{% endif %}>October</option>
-        <option value="11" {% if selected_month == '11' %}selected{% endif %}>November</option>
-        <option value="12" {% if selected_month == '12' %}selected{% endif %}>December</option>
+        <option value="all" {% if period_all %}selected{% endif %}>All months</option>
+        <option value="1"  {% if not period_all and selected_month == '1' %}selected{% endif %}>January</option>
+        <option value="2"  {% if not period_all and selected_month == '2' %}selected{% endif %}>February</option>
+        <option value="3"  {% if not period_all and selected_month == '3' %}selected{% endif %}>March</option>
+        <option value="4"  {% if not period_all and selected_month == '4' %}selected{% endif %}>April</option>
+        <option value="5"  {% if not period_all and selected_month == '5' %}selected{% endif %}>May</option>
+        <option value="6"  {% if not period_all and selected_month == '6' %}selected{% endif %}>June</option>
+        <option value="7"  {% if not period_all and selected_month == '7' %}selected{% endif %}>July</option>
+        <option value="8"  {% if not period_all and selected_month == '8' %}selected{% endif %}>August</option>
+        <option value="9"  {% if not period_all and selected_month == '9' %}selected{% endif %}>September</option>
+        <option value="10" {% if not period_all and selected_month == '10' %}selected{% endif %}>October</option>
+        <option value="11" {% if not period_all and selected_month == '11' %}selected{% endif %}>November</option>
+        <option value="12" {% if not period_all and selected_month == '12' %}selected{% endif %}>December</option>
       </select>
       <select class="cs-select cs-select--year" id="yearFilter" aria-label="Filter by year"></select>
 
@@ -172,7 +173,7 @@
   </div>
   <div class="cs-stats-row" id="calStatsRow">
     <div class="cs-stat">
-      <span class="cs-stat-value" id="stat-pending">{{ stats.pending|default:"—" }}</span>
+      <span class="cs-stat-value" id="stat-pending">{{ stats.pending|default:"0" }}</span>
       <span class="cs-stat-label">Pending</span>
     </div>
     <div class="cs-stat cs-stat--danger" id="cs-stat-overdue" {% if not stats.overdue %}style="opacity:.45"{% endif %}>
@@ -180,8 +181,8 @@
       <span class="cs-stat-label">Overdue</span>
     </div>
     <div class="cs-stat cs-stat--success">
-      <span class="cs-stat-value" id="stat-completed">{{ stats.completed_this_month|default:"—" }}</span>
-      <span class="cs-stat-label">Completed (30d)</span>
+      <span class="cs-stat-value" id="stat-completed">{{ stats.completed|default:"0" }}</span>
+      <span class="cs-stat-label">Completed</span>
     </div>
   </div>
 
@@ -203,17 +204,17 @@
 
 
   <nav class="cs-tabs" id="schedulesSubTabs">
-    <button class="cs-tab active" data-subtab="pending" data-endpoint="ajaxSchedules">
+    <button class="cs-tab active" data-subtab="pending" data-endpoint="ajaxSchedules" data-params="{{ filter_query }}">
       <i class="fas fa-clock"></i> Pending
-      <span class="cs-tab-badge" id="badge-pending">…</span>
+      <span class="cs-tab-badge" id="badge-pending">{{ schedules.paginator.count }}</span>
     </button>
-    <button class="cs-tab" data-subtab="completed" data-endpoint="ajaxCompleted">
+    <button class="cs-tab" data-subtab="completed" data-endpoint="ajaxCompleted" data-params="{{ filter_query }}">
       <i class="fas fa-check-circle"></i> Completed
-      <span class="cs-tab-badge cs-tab-badge--green" id="badge-completed">…</span>
+      <span class="cs-tab-badge cs-tab-badge--green" id="badge-completed">{{ completed_schedules.paginator.count }}</span>
     </button>
-    <button class="cs-tab" data-subtab="unscheduled" data-endpoint="ajaxUnscheduled">
+    <button class="cs-tab" data-subtab="unscheduled" data-endpoint="ajaxUnscheduled" data-params="{{ filter_query }}">
       <i class="fas fa-calendar-plus"></i> Unscheduled
-      <span class="cs-tab-badge cs-tab-badge--amber" id="badge-unscheduled">…</span>
+      <span class="cs-tab-badge cs-tab-badge--amber" id="badge-unscheduled">{{ unscheduled_equipment.paginator.count }}</span>
     </button>
     <button class="cs-tab" data-subtab="reports" data-view="reports">
       <i class="fas fa-file-alt"></i> Reports
@@ -346,7 +347,7 @@
         <ul class="pagination pagination-sm mb-0">
           {% if schedules.has_previous %}
           <li class="page-item">
-            <a class="page-link" href="?page={{ schedules.previous_page_number }}{% if selected_department_id %}&department={{ selected_department_id }}{% endif %}{% if month_filter %}&month={{ month_filter }}{% endif %}{% if year_filter %}&year={{ year_filter }}{% endif %}{% if search_query %}&search={{ search_query|urlencode }}{% endif %}">‹</a>
+            <a class="page-link" href="?page={{ schedules.previous_page_number }}&{{ filter_query }}">‹</a>
           </li>
           {% endif %}
           {% for page_num in schedules.paginator.page_range %}
@@ -354,13 +355,13 @@
             <li class="page-item active"><span class="page-link">{{ page_num }}</span></li>
             {% elif page_num > schedules.number|add:'-3' and page_num < schedules.number|add:'3' %}
             <li class="page-item">
-              <a class="page-link" href="?page={{ page_num }}{% if selected_department_id %}&department={{ selected_department_id }}{% endif %}{% if month_filter %}&month={{ month_filter }}{% endif %}{% if year_filter %}&year={{ year_filter }}{% endif %}{% if search_query %}&search={{ search_query|urlencode }}{% endif %}">{{ page_num }}</a>
+              <a class="page-link" href="?page={{ page_num }}&{{ filter_query }}">{{ page_num }}</a>
             </li>
             {% endif %}
           {% endfor %}
           {% if schedules.has_next %}
           <li class="page-item">
-            <a class="page-link" href="?page={{ schedules.next_page_number }}{% if selected_department_id %}&department={{ selected_department_id }}{% endif %}{% if month_filter %}&month={{ month_filter }}{% endif %}{% if year_filter %}&year={{ year_filter }}{% endif %}{% if search_query %}&search={{ search_query|urlencode }}{% endif %}">›</a>
+            <a class="page-link" href="?page={{ schedules.next_page_number }}&{{ filter_query }}">›</a>
           </li>
           {% endif %}
         </ul>
@@ -451,7 +452,7 @@
         <ul class="pagination pagination-sm mb-0">
           {% if unscheduled_equipment.has_previous %}
           <li class="page-item">
-            <a class="page-link" href="?unscheduled_page={{ unscheduled_equipment.previous_page_number }}{% if selected_department_id %}&department={{ selected_department_id }}{% endif %}">‹</a>
+            <a class="page-link" href="?unscheduled_page={{ unscheduled_equipment.previous_page_number }}&{{ filter_query }}">‹</a>
           </li>
           {% endif %}
           {% for page_num in unscheduled_equipment.paginator.page_range %}
@@ -459,13 +460,13 @@
             <li class="page-item active"><span class="page-link">{{ page_num }}</span></li>
             {% elif page_num > unscheduled_equipment.number|add:'-3' and page_num < unscheduled_equipment.number|add:'3' %}
             <li class="page-item">
-              <a class="page-link" href="?unscheduled_page={{ page_num }}{% if selected_department_id %}&department={{ selected_department_id }}{% endif %}">{{ page_num }}</a>
+              <a class="page-link" href="?unscheduled_page={{ page_num }}&{{ filter_query }}">{{ page_num }}</a>
             </li>
             {% endif %}
           {% endfor %}
           {% if unscheduled_equipment.has_next %}
           <li class="page-item">
-            <a class="page-link" href="?unscheduled_page={{ unscheduled_equipment.next_page_number }}{% if selected_department_id %}&department={{ selected_department_id }}{% endif %}">›</a>
+            <a class="page-link" href="?unscheduled_page={{ unscheduled_equipment.next_page_number }}&{{ filter_query }}">›</a>
           </li>
           {% endif %}
         </ul>
@@ -706,8 +707,7 @@
     overdueStatus:     "{% url 'schedule:api_overdue_status' %}",
     ajaxSchedules:     "{% url 'schedule:ajax_schedules' %}",
     ajaxCompleted:     "{% url 'schedule:ajax_completed_schedules' %}",
-    ajaxUnscheduled:   "{% url 'schedule:ajax_unscheduled_equipment' %}",
-    ajaxStats:         "{% url 'schedule:ajax_schedule_stats' %}"
+    ajaxUnscheduled:   "{% url 'schedule:ajax_unscheduled_equipment' %}"
   };
 </script>
 
@@ -744,7 +744,6 @@
 })();
 </script>
 
-{# Inline stats refresh — load badge counts from ajax_schedule_stats on page load #}
 <script>
 (function () {
   // Populate the custom-report year <select> dynamically, same window as main year filter
@@ -771,27 +770,6 @@
     baseYearInput.value = baseYearInput.value || cy;
   }
 
-  var urls = window.CalibrationURLs || {};
-  if (!urls.ajaxStats) return;
-  fetch(urls.ajaxStats)
-    .then(function (r) { return r.json(); })
-    .then(function (d) {
-      var set = function (id, v) {
-        var el = document.getElementById(id);
-        if (el) el.textContent = (v !== undefined && v !== null) ? v : '0';
-      };
-      set('badge-pending',    d.pending);
-      set('badge-completed',  d.completed);
-      set('badge-unscheduled', '');  // will be set by ajax tab load
-      set('stat-pending',    d.pending);
-      set('stat-overdue',    d.overdue);
-      set('stat-completed',  d.completed);
-
-      // Dim overdue stat if zero
-      var ovEl = document.getElementById('cs-stat-overdue');
-      if (ovEl) ovEl.style.opacity = d.overdue > 0 ? '1' : '0.45';
-    })
-    .catch(function () {});
 })();
 </script>
 

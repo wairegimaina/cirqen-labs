@@ -281,7 +281,7 @@
     </li>
 
     <li class="menu-entry" role="none">
-      <a href="#" class="menu-link {% if 'calibration' in request.path or module_label == 'Calibration' %}active-link{% endif %}" data-toggle="submenu"
+      <a href="#" class="menu-link {% if 'calibration' in request.path or module_label == 'Calibration' or request.resolver_match.url_name == 'pending_calibrations' %}active-link{% endif %}" data-toggle="submenu"
         role="menuitem" aria-haspopup="true" aria-expanded="false">
         <div class="link-icon" aria-hidden="true">
           <i class="fas fa-drafting-compass"></i>
@@ -291,60 +291,24 @@
       </a>
       <ul class="dropdown-menu" role="menu">
 
-        <!-- Procedures -->
+        <!-- Procedures: opens on Create; View is the other tab -->
         <li class="dropdown-entry" role="none">
-          <a href="#" class="dropdown-link" data-toggle="nested-submenu" role="menuitem" aria-haspopup="true"
-            aria-expanded="false">
+          <a href="{% url 'calibration:procedure_create' %}"
+            class="dropdown-link {% if module_label == 'Procedures' %}active-dropdown{% endif %}"
+            role="menuitem">
             <i class="fas fa-book-open" aria-hidden="true"></i>
             <span class="link-label">Procedures</span>
-            <i class="fas fa-chevron-down nested-toggle-arrow" aria-hidden="true"></i>
           </a>
-          <ul class="nested-dropdown" role="menu">
-            <li class="nested-entry" role="none">
-              <a href="{% url 'calibration:procedure_list' %}"
-                class="nested-link {% if request.resolver_match.url_name == 'procedure_list' %}active-nested{% endif %}"
-                role="menuitem">
-                <i class="fas fa-list-ul" aria-hidden="true"></i>
-                <span class="link-label">View Procedures</span>
-              </a>
-            </li>
-            <li class="nested-entry" role="none">
-              <a href="{% url 'calibration:procedure_create' %}"
-                class="nested-link {% if request.resolver_match.url_name == 'procedure_create' %}active-nested{% endif %}"
-                role="menuitem">
-                <i class="fas fa-plus" aria-hidden="true"></i>
-                <span class="link-label">Create Procedure</span>
-              </a>
-            </li>
-          </ul>
         </li>
 
-        <!-- Standards -->
+        <!-- Standards: opens on Create; View is the other tab -->
         <li class="dropdown-entry" role="none">
-          <a href="#" class="dropdown-link" data-toggle="nested-submenu" role="menuitem" aria-haspopup="true"
-            aria-expanded="false">
+          <a href="{% url 'calibration:standard_create' %}"
+            class="dropdown-link {% if module_label == 'Standards' %}active-dropdown{% endif %}"
+            role="menuitem">
             <i class="fas fa-ruler-combined" aria-hidden="true"></i>
             <span class="link-label">Standards</span>
-            <i class="fas fa-chevron-down nested-toggle-arrow" aria-hidden="true"></i>
           </a>
-          <ul class="nested-dropdown" role="menu">
-            <li class="nested-entry" role="none">
-              <a href="{% url 'calibration:StandardsParameters_lists' %}"
-                class="nested-link {% if request.resolver_match.url_name == 'StandardsParameters_lists' %}active-nested{% endif %}"
-                role="menuitem">
-                <i class="fas fa-list-ul" aria-hidden="true"></i>
-                <span class="link-label">View Standards</span>
-              </a>
-            </li>
-            <li class="nested-entry" role="none">
-              <a href="{% url 'calibration:standard_create' %}"
-                class="nested-link {% if request.resolver_match.url_name == 'standard_create' %}active-nested{% endif %}"
-                role="menuitem">
-                <i class="fas fa-plus" aria-hidden="true"></i>
-                <span class="link-label">Create Standard</span>
-              </a>
-            </li>
-          </ul>
         </li>
 
         <!-- Pending Approval -->
@@ -367,6 +331,16 @@
             role="menuitem">
             <i class="fas fa-calendar-check" aria-hidden="true"></i>
             <span class="link-label">Calibration Schedules</span>
+          </a>
+        </li>
+
+        <!-- Perform Calibration -->
+        <li class="dropdown-entry" role="none">
+          <a href="{% url 'schedule:pending_calibrations' %}"
+            class="dropdown-link {% if request.resolver_match.url_name == 'pending_calibrations' %}active-dropdown{% endif %}"
+            role="menuitem">
+            <i class="fas fa-clock" aria-hidden="true"></i>
+            <span class="link-label">Perform Calibration</span>
           </a>
         </li>
 

@@ -20,7 +20,10 @@ from celery.result import AsyncResult
 logger = logging.getLogger(__name__)
 
 # sibling modules in this package
-from .helpers import scheduling_context, calculate_ppm_statistics, get_current_month_year, get_user_access_context
+from .helpers import (
+    scheduling_context, department_breakdown, filtered_statistics, get_current_month_year,
+    get_user_access_context,
+)
 
 
 @login_required
@@ -157,9 +160,6 @@ def ppm_by_department(request, dept_id):
             active_status=True
         )
 
-        # Calculate statistics BEFORE filtering by month/year
-        statistics = calculate_ppm_statistics(schedules_base, equipment_queryset)
-
         # NOW apply month/year filters for display
         schedules_filtered = schedules_base.filter(
             scheduled_month__month=month_filter_int,
@@ -211,6 +211,9 @@ def ppm_by_department(request, dept_id):
     except Exception as e:
         logger.error(f"Error querying unscheduled equipment: {e}", exc_info=True)
         unscheduled_equipment = Equipment.objects.none()
+
+    # Every count on the page is of the schedules the table shows.
+    statistics = filtered_statistics(schedules_filtered, equipment_queryset, unscheduled_equipment)
 
     # ==================== GET EQUIPMENT DESCRIPTIONS ====================
     try:
@@ -304,6 +307,8 @@ def ppm_by_department(request, dept_id):
             'current_month': current_month,
             'current_year': current_year,
             'statistics': statistics,
+            'department_breakdown': department_breakdown(schedules_filtered, equipment_queryset),
+            'selected_month_name': datetime(2000, month_filter_int, 1).strftime('%B'),
             'show_sidebar': True,  # Added sidebar context
         }
 

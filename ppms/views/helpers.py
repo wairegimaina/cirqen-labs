@@ -1,6 +1,6 @@
 """ppms.views — shared user-access context and PPM statistics helpers."""
 from calendar import monthrange
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, render, redirect
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, HttpResponse
@@ -170,7 +170,7 @@ def get_user_access_context(request):
 
 def get_current_month_year():
     """Returns current month and year as integers"""
-    today = datetime.today()
+    today = localdate()
     return today.month, today.year
 
 
@@ -238,6 +238,42 @@ def calculate_ppm_statistics(schedules, equipment_queryset):
         'pushed_percentage': round(pushed_percentage, 1),
         'completion_rate': round(completion_rate, 1),
     }
+
+
+def filtered_statistics(schedules, equipment_queryset, unscheduled):
+    """Summary counts for exactly the schedules the page shows (the selected
+    month, week and department). Unscheduled is equipment with no schedule
+    at all, which no month narrows."""
+    statistics = calculate_ppm_statistics(schedules, equipment_queryset)
+    statistics['unscheduled'] = unscheduled.count()
+    return statistics
+
+
+def department_breakdown(schedules, equipment_queryset):
+    """Per-department counts of the shown schedules, for the Summary tab."""
+    counts = {
+        row['equipment__department_id']: row
+        for row in schedules.order_by().values('equipment__department_id').annotate(
+            scheduled=Count('id'),
+            pending=Count('id', filter=Q(status='pending')),
+            completed=Count('id', filter=Q(status='completed')),
+        )
+    }
+    rows = []
+    for dept in (equipment_queryset.order_by().values('department_id', 'department__name')
+                 .annotate(equipment=Count('id')).order_by('department__name')):
+        c = counts.get(dept['department_id'], {})
+        scheduled = c.get('scheduled', 0)
+        completed = c.get('completed', 0)
+        rows.append({
+            'name': dept['department__name'],
+            'equipment': dept['equipment'],
+            'scheduled': scheduled,
+            'pending': c.get('pending', 0),
+            'completed': completed,
+            'completion_rate': round(completed / scheduled * 100, 1) if scheduled else 0,
+        })
+    return rows
 
 
 def scheduling_context(request, access_context):

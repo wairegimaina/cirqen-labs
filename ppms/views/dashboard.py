@@ -20,7 +20,10 @@ from celery.result import AsyncResult
 logger = logging.getLogger(__name__)
 
 # sibling modules in this package
-from .helpers import scheduling_context, calculate_ppm_statistics, get_current_month_year, get_user_access_context
+from .helpers import (
+    scheduling_context, department_breakdown, filtered_statistics, get_current_month_year,
+    get_user_access_context,
+)
 
 
 @login_required
@@ -114,9 +117,6 @@ def ppm_dashboard(request):
             active_status=True
         )
 
-    # Calculate statistics BEFORE filtering by month/year for overall stats
-    all_schedules_stats = calculate_ppm_statistics(schedules, equipment_queryset)
-
     # Now apply month/year filters for display
     filtered_schedules = schedules
     if month_filter:
@@ -149,10 +149,7 @@ def ppm_dashboard(request):
             id=selected_department_id,
             workshop_id=access_context['workshop_id']
         )
-        filtered_schedules = filtered_schedules.filter(
-            equipment__department_id=selected_department_id,
-            department_id=selected_department_id
-        )
+        filtered_schedules = filtered_schedules.filter(equipment__department_id=selected_department_id)
 
     # Get unscheduled equipment
     scheduled_equipment_ids = schedules.values_list('equipment_id', flat=True)
@@ -164,6 +161,11 @@ def ppm_dashboard(request):
         unscheduled_equipment = unscheduled_equipment.filter(
             department_id=selected_department_id
         )
+
+    # Every count on the page is of the schedules the table shows.
+    shown_equipment = (equipment_queryset.filter(department_id=selected_department_id)
+                       if selected_department else equipment_queryset)
+    statistics = filtered_statistics(filtered_schedules, shown_equipment, unscheduled_equipment)
 
     equipment_descriptions = EquipmentDescription.objects.filter(
         equipment__in=equipment_queryset
@@ -200,7 +202,8 @@ def ppm_dashboard(request):
         'weeks_in_month': weeks_in_month,
         'current_month': current_month,
         'current_year': current_year,
-        'statistics': all_schedules_stats,  # Pass overall statistics
+        'statistics': statistics,
+        'department_breakdown': department_breakdown(filtered_schedules, shown_equipment),
         'months_list': months_list,
         'selected_month_name': selected_month_name,
         'show_sidebar': True,  # Added sidebar context

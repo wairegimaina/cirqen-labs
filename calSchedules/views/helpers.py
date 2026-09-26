@@ -30,8 +30,39 @@ def get_current_month_year():
     """
     Returns current month and year as integers
     """
-    today = datetime.today()
+    from core.eat import today_eat
+    today = today_eat()
     return today.month, today.year
+
+
+def selected_period(request):
+    """The month the schedules page shows, as (month, year).
+
+    ?month= and ?year= choose it and it defaults to the current month;
+    ?period=all shows every month and returns None.
+    """
+    if request.GET.get("period") == "all":
+        return None
+    current_month, current_year = get_current_month_year()
+    try:
+        month = int(request.GET.get("month") or current_month)
+        if not 1 <= month <= 12:
+            month = current_month
+    except (TypeError, ValueError):
+        month = current_month
+    try:
+        year = int(request.GET.get("year") or current_year)
+    except (TypeError, ValueError):
+        year = current_year
+    return month, year
+
+
+def in_period(schedules, period):
+    """Narrow schedules to the selected month (all months when period is None)."""
+    if period is None:
+        return schedules
+    month, year = period
+    return schedules.filter(scheduled_month__month=month, scheduled_month__year=year)
 
 
 def check_overdue_schedules(schedules_queryset):

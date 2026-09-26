@@ -26,7 +26,9 @@ User = get_user_model()
 from ..calibration_pdf_generator import create_calibration_pdf_response
 
 # sibling modules in this package
-from .helpers import check_overdue_schedules, get_current_month_year, get_user_access_context
+from .helpers import (
+    check_overdue_schedules, get_current_month_year, get_user_access_context, in_period, selected_period,
+)
 
 
 
@@ -43,6 +45,46 @@ def _scheduling_context(request, access_context):
         "scheduling_panels": panels(workshops, "calibration"),
         "scheduling_can_manage": can_manage(request.user),
     }
+
+def _period_context(period, search_query, department_id):
+    """The month filter as the template and its AJAX tabs need it.
+
+    filter_query carries the same filters to page links and to the tabs'
+    AJAX calls, so every table and count on the page agrees.
+    """
+    from urllib.parse import urlencode
+
+    current_month, current_year = get_current_month_year()
+    month, year = period or (current_month, current_year)
+    params = {"month": month, "year": year} if period else {"period": "all"}
+    if search_query:
+        params["search"] = search_query
+    if department_id:
+        params["department"] = department_id
+    return {
+        "selected_month": str(month),
+        "selected_year": str(year),
+        "period_all": period is None,
+        "current_month": current_month,
+        "current_year": current_year,
+        "search_query": search_query,
+        "filter_query": urlencode(params),
+    }
+
+
+def _schedule_counts(period_schedules, overdue_info):
+    """Counts of the filtered month's schedules; "pending" is every open one,
+    matching the Pending tab."""
+    return {
+        "total": period_schedules.count(),
+        "pending": period_schedules.exclude(status="completed").count(),
+        "pushed": period_schedules.filter(status="pushed").count(),
+        "in_progress": period_schedules.filter(status="in_progress").count(),
+        "completed": period_schedules.filter(status="completed").count(),
+        "overdue": overdue_info["overdue_count"],
+        "warning": overdue_info["warning_count"],
+    }
+
 
 @login_required
 def calibration_dashboard(request):
@@ -67,10 +109,8 @@ def calibration_dashboard(request):
         request.session["department_id"] = str(access_context["department_id"])
     request.session.modified = True
 
-    # ✅ Get filter parameters (no defaults - only apply if explicitly provided)
-    current_month, current_year = get_current_month_year()
-    month_filter = request.GET.get('month')  # Don't default
-    year_filter = request.GET.get('year')    # Don't default
+    # The month shown: the current one unless another (or ?period=all) is chosen.
+    period = selected_period(request)
     search_query = request.GET.get('search', '').strip()  # ✅ NEW: Search parameter
 
     # Base querysets based on access level
@@ -150,20 +190,10 @@ def calibration_dashboard(request):
         )
         logger.info(f"Search applied: '{search_query}' - Found {schedules_list.count()} schedules")
 
-    # ✅ Apply month and year filters ONLY if provided
-    if month_filter:
-        try:
-            schedules_list = schedules_list.filter(scheduled_month__month=int(month_filter))
-            logger.info(f"Month filter applied: {month_filter}")
-        except (ValueError, TypeError):
-            logger.warning(f"Invalid month filter: {month_filter}")
-
-    if year_filter:
-        try:
-            schedules_list = schedules_list.filter(scheduled_month__year=int(year_filter))
-            logger.info(f"Year filter applied: {year_filter}")
-        except (ValueError, TypeError):
-            logger.warning(f"Invalid year filter: {year_filter}")
+    # Every table and count below is of the selected month's schedules: the
+    # Pending tab lists the open ones, the Completed tab the rest.
+    period_schedules = in_period(schedules_list, period)
+    schedules_list = period_schedules.exclude(status="completed")
 
     # ✅ ENHANCED: Order by status priority (pending first), then department, then date
     schedules_list = schedules_list.annotate(
@@ -214,35 +244,8 @@ def calibration_dashboard(request):
     except EmptyPage:
         unscheduled_equipment = unscheduled_paginator.page(unscheduled_paginator.num_pages)
 
-    # ── Completed schedules — last 30 days only (for the Completed tab) ──
-    thirty_days_ago = timezone.localdate() - timedelta(days=30)
-
-    completed_list_qs = CalibrationSchedule.objects.select_related(
-        "equipment__department", "equipment__description"
-    ).filter(
-        status="completed",
-        completed_date__gte=thirty_days_ago,   # last 30 days
-        equipment__active_status=True,
-    )
-
-    # Respect the same department / search filters as the pending tab
-    if access_context["access_type"] == "department":
-        completed_list_qs = completed_list_qs.filter(
-            equipment__department_id=access_context["department_id"]
-        )
-    if selected_department_id and not show_all:
-        completed_list_qs = completed_list_qs.filter(
-            equipment__department_id=selected_department_id
-        )
-    if search_query:
-        completed_list_qs = completed_list_qs.filter(
-            Q(equipment__description__name__icontains=search_query) |
-            Q(equipment__model__icontains=search_query) |
-            Q(equipment__serial_number__icontains=search_query) |
-            Q(equipment__department__name__icontains=search_query)
-        )
-
-    completed_list_qs = completed_list_qs.order_by(
+    # Completed tab: the selected month's completed schedules.
+    completed_list_qs = period_schedules.filter(status="completed").order_by(
         "-completed_date", "equipment__department__name"
     )
 
@@ -272,27 +275,12 @@ def calibration_dashboard(request):
         "equipment_descriptions": equipment_descriptions,
         "access_context": access_context,
         "user": request.user,
-        'selected_month': month_filter if month_filter else str(current_month),
-        'selected_year': year_filter if year_filter else str(current_year),
-        'month_filter': month_filter,   # raw value — None when not applied
-        'year_filter': year_filter,     # raw value — None when not applied
-        'current_month': current_month,
-        'current_year': current_year,
-        'search_query': search_query,  # ✅ Pass search query to template
-        'has_filters': bool(month_filter or year_filter or search_query),  # ✅ Indicator for active filters
+        **_period_context(period, search_query, selected_department_id if not show_all else None),
         'completed_schedules': completed_schedules,  # ✅ NEW: Completed schedules for tab
         'month_choices': month_choices,
         'last_task_id': last_task_id,
         # ✅ NEW: Add stats and overdue info
-        'stats': {
-            'total': schedules_list.count(),
-            'pending': schedules_list.filter(status='pending').count(),
-            'pushed': schedules_list.filter(status='pushed').count(),
-            'in_progress': schedules_list.filter(status='in_progress').count(),
-            'completed': schedules_list.filter(status='completed').count(),
-            'overdue': overdue_info['overdue_count'],
-            'warning': overdue_info['warning_count']
-        },
+        'stats': _schedule_counts(period_schedules, overdue_info),
         'overdue_info': overdue_info,
         **_scheduling_context(request, access_context),
     }
@@ -331,10 +319,8 @@ def calibration_by_department(request, dept_id):
             )
             return redirect("schedule:calibration_dashboard")
 
-    # ✅ Get filter parameters
-    current_month, current_year = get_current_month_year()
-    month_filter = request.GET.get('month')
-    year_filter = request.GET.get('year')
+    # The month shown: the current one unless another (or ?period=all) is chosen.
+    period = selected_period(request)
     search_query = request.GET.get('search', '').strip()  # ✅ NEW
 
     # Base queryset for this department
@@ -354,18 +340,10 @@ def calibration_by_department(request, dept_id):
         )
         logger.info(f"Department {dept_id} search: '{search_query}' - Found {schedules_list.count()} schedules")
 
-    # Apply month and year filters
-    if month_filter:
-        try:
-            schedules_list = schedules_list.filter(scheduled_month__month=int(month_filter))
-        except (ValueError, TypeError):
-            logger.warning(f"Invalid month filter: {month_filter}")
-
-    if year_filter:
-        try:
-            schedules_list = schedules_list.filter(scheduled_month__year=int(year_filter))
-        except (ValueError, TypeError):
-            logger.warning(f"Invalid year filter: {year_filter}")
+    # Every table and count below is of the selected month's schedules: the
+    # Pending tab lists the open ones, the Completed tab the rest.
+    period_schedules = in_period(schedules_list, period)
+    schedules_list = period_schedules.exclude(status="completed")
 
     # ✅ ENHANCED: Order with pending first
     schedules_list = schedules_list.annotate(
@@ -432,24 +410,8 @@ def calibration_by_department(request, dept_id):
     except EmptyPage:
         unscheduled_equipment = unscheduled_paginator.page(unscheduled_paginator.num_pages)
 
-    # ── Completed schedules — last 30 days only (for the Completed tab) ──
-    thirty_days_ago = timezone.localdate() - timedelta(days=30)
-    completed_list_qs = CalibrationSchedule.objects.select_related(
-        "equipment__department", "equipment__description"
-    ).filter(
-        status="completed",
-        completed_date__gte=thirty_days_ago,
-        equipment__department_id=dept_id,
-        equipment__active_status=True,
-    )
-    if search_query:
-        completed_list_qs = completed_list_qs.filter(
-            Q(equipment__description__name__icontains=search_query) |
-            Q(equipment__model__icontains=search_query) |
-            Q(equipment__serial_number__icontains=search_query) |
-            Q(equipment__department__name__icontains=search_query)
-        )
-    completed_list_qs = completed_list_qs.order_by("-completed_date")
+    # Completed tab: the selected month's completed schedules.
+    completed_list_qs = period_schedules.filter(status="completed").order_by("-completed_date")
 
     completed_with_status = [{"schedule": s} for s in completed_list_qs]
     completed_page = request.GET.get("cpage", 1)
@@ -481,27 +443,12 @@ def calibration_by_department(request, dept_id):
         "title": f"Calibration Equipment in {selected_department.name}",
         "access_context": access_context,
         "user": request.user,
-        'selected_month': month_filter if month_filter else str(current_month),
-        'selected_year': year_filter if year_filter else str(current_year),
-        'month_filter': month_filter,   # raw value — None when not applied
-        'year_filter': year_filter,     # raw value — None when not applied
-        'current_month': current_month,
-        'current_year': current_year,
-        'search_query': search_query,  # ✅ Pass search query
-        'has_filters': bool(month_filter or year_filter or search_query),
+        **_period_context(period, search_query, str(selected_department.id)),
         'completed_schedules': completed_schedules,  # ✅ NEW: Completed schedules for tab
         'month_choices': month_choices,
         'last_task_id': last_task_id,
         # ✅ NEW: Add stats and overdue info
-        'stats': {
-            'total': schedules_list.count(),
-            'pending': schedules_list.filter(status='pending').count(),
-            'pushed': schedules_list.filter(status='pushed').count(),
-            'in_progress': schedules_list.filter(status='in_progress').count(),
-            'completed': schedules_list.filter(status='completed').count(),
-            'overdue': overdue_info['overdue_count'],
-            'warning': overdue_info['warning_count']
-        },
+        'stats': _schedule_counts(period_schedules, overdue_info),
         'overdue_info': overdue_info,
         **_scheduling_context(request, access_context),
     }
