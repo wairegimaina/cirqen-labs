@@ -205,10 +205,12 @@ class MachineRepairHistory(models.Model):
         else:
             end_date = date(self.year, self.month + 1, 1)
 
-        # Query calibration sessions through schedules reverse relationship
-        # CalibrationSchedule.calibration_session -> CalibrationSession (related_name='schedules')
+        # Sessions link to calSchedules.CalibrationSchedule through
+        # CalibrationSession.schedule; older sessions only carry the serial.
+        from django.db.models import Q
+
         return CalibrationSession.objects.filter(
-            schedules__equipment=self.equipment,
+            Q(schedule__equipment=self.equipment) | Q(device_serial=self.equipment.serial_number),
             timestamp__gte=start_date,
             timestamp__lt=end_date,
             active_status=True

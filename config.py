@@ -432,7 +432,6 @@ class CirqenConfig:
                 "public.CalSoft_calibrationprocedure",
                 "public.CalSoft_calibrationreading",
                 "public.CalSoft_calibrationreport",
-                "public.CalSoft_calibrationschedule",
                 "public.CalSoft_calibrationsession",
                 "public.CalSoft_calibrationworkflow",
                 "public.CalSoft_equipmentcalibrationprocedure",

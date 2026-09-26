@@ -16,13 +16,13 @@ from django.conf import settings
 
 from CalSoft.models import (
     CalibrationSession,
-    CalibrationSchedule,
     CalibrationProcedure,
     Equipment,
     CalibrationAuditLog,
     PendingCertificate,
     HistoricalCalibration,
 )
+from calSchedules.models import CalibrationSchedule
 from Inventory.models import Department
 from workshop.models import Workshop
 from CalSoft.pdf_generators import BtwelveHospitalCertificateGenerator, generate_btwelve_certificate

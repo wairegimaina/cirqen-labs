@@ -900,104 +900,6 @@ class StandardParameter(models.Model):
         return f"{self.standard.name} - {self.parameter.name}"
 
 
-class CalibrationSchedule(models.Model):
-    """Schedule for equipment calibration"""
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    equipment = models.ForeignKey(Equipment, on_delete=models.CASCADE, related_name='calsoft_schedules')
-    workshop = models.ForeignKey(Workshop, on_delete=models.CASCADE, related_name='calsoft_schedules', help_text="Workshop managing this calibration schedule")
-    calibration_procedure = models.ForeignKey(CalibrationProcedure, on_delete=models.SET_NULL, null=True, blank=True, related_name='schedules')
-    calibration_session = models.ForeignKey(CalibrationSession, on_delete=models.SET_NULL, null=True, blank=True, related_name='schedules')
-    scheduled_month = models.DateField()
-    status = models.CharField(max_length=20, choices=[
-        ('pending', 'Pending'),
-        ('completed', 'Completed'),
-        ('pushed', 'Pushed'),
-        ('in_progress', 'In Progress'),
-    ], default='pending')
-    planning_logic = models.CharField(
-        max_length=50,
-        choices=[
-            ('description_based', 'Description Based'),
-            ('date_based', 'Date Based'),
-        ],
-        null=True,
-        blank=True,
-        help_text="Logic used to plan this schedule (e.g., description-based)"
-    )
-    calibration_period = models.PositiveIntegerField(
-        choices=[
-            (6, '6 Months'),
-            (12, '12 Months'),
-        ],
-        default=12,
-        help_text="Calibration interval in months"
-    )
-    estimated_duration = models.DurationField(null=True, blank=True, help_text="Estimated duration for the calibration procedure")
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    active_status = models.BooleanField(default=True)
-    # offline sync
-    pending_delete = models.BooleanField(default=False)
-
-    updated_at = models.DateTimeField(auto_now=True)
-    syncable = True  # <- important, so sync task knows to sync this model
-
-    class Meta:
-
-        unique_together = ['equipment', 'scheduled_month']
-        indexes = [
-            models.Index(fields=['workshop', 'scheduled_month']),
-            models.Index(fields=['equipment', 'status']),
-        ]
-
-    def save(self, *args, **kwargs):
-        if not self.workshop_id and self.equipment_id:
-            self.workshop = self.equipment.workshop
-        self.needs_sync = True  # mark for sync
-        super().save(*args, **kwargs)
-
-    @property
-    def manufacturer(self):
-        return self.equipment.manufacturer
-
-    @property
-    def model(self):
-        return self.equipment.model
-
-    @property
-    def serial_number(self):
-        return self.equipment.serial_number
-
-    @property
-    def due_date(self):
-        """The last day of the scheduled month — the official due date.
-
-        Matches ``calSchedules.CalibrationSchedule.due_date``. Both models are
-        in use (the machine reports read this one, calibration sessions the
-        other), and they previously disagreed: this one measured to the raw
-        ``scheduled_month``, so a device could show as overdue in the reports
-        while its certificate said it still had most of the month.
-        """
-        from calSchedules.grouping import month_end
-
-        return month_end(self.scheduled_month)
-
-    @property
-    def days_until_due(self):
-        from calSchedules.grouping import days_until_due as _days_until_due
-
-        return _days_until_due(self.due_date, localdate())
-
-    @property
-    def is_overdue(self):
-        from calSchedules.grouping import is_overdue as _is_overdue
-
-        return _is_overdue(self.due_date, localdate())
-
-    def __str__(self):
-        return f"Calibration Schedule for {self.equipment.description} on {self.scheduled_month}"
-
-
 class CalibrationAuditLog(models.Model):
     """Audit log for calibration-related actions"""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -1060,7 +962,7 @@ class EquipmentCalibrationProcedure(models.Model):
 class CalibrationWorkflow(models.Model):
     """Workflow steps for a calibration schedule"""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    schedule = models.ForeignKey(CalibrationSchedule, on_delete=models.CASCADE, related_name='workflow_steps')
+    schedule = models.ForeignKey('calSchedules.CalibrationSchedule', on_delete=models.CASCADE, related_name='workflow_steps')
     step_name = models.CharField(max_length=100)
     step_order = models.PositiveIntegerField()
     status = models.CharField(max_length=20, choices=[

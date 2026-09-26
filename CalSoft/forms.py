@@ -3,7 +3,7 @@ from django.forms import inlineformset_factory, formset_factory
 from decimal import Decimal
 import json
 from .models import (
-    CalibrationProcedure, CalibrationParameter, CalibrationSchedule, EquipmentCalibrationProcedure,Parameter, Standard, StandardParameter, StandardType, SubParameter, SetValue,
+    CalibrationProcedure, CalibrationParameter, EquipmentCalibrationProcedure,Parameter, Standard, StandardParameter, StandardType, SubParameter, SetValue,
     CalibrationSession, CalibrationReading
 )
 
@@ -866,14 +866,6 @@ StandardParameterFormSet = inlineformset_factory(
     min_num=1,
     validate_min=True
 )
-
-class CalibrationScheduleForm(forms.ModelForm):
-    class Meta:
-        model = CalibrationSchedule
-        fields = ['calibration_procedure', 'estimated_duration']
-        widgets = {
-            'estimated_duration': forms.TimeInput(format='%H:%M:%S'),
-        }
 
 class EquipmentProcedureMappingForm(forms.ModelForm):
     class Meta:

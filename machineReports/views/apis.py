@@ -22,7 +22,7 @@ from CalSoft.models import CalibrationSession
 from ..models import EquipmentStatusReport, MachineRepairHistory, WorkshopEquipmentReport, EquipmentCategory
 from Inventory.models import Equipment, Workshop
 from jobcard.models import jobcard, SparePartUsed
-from CalSoft.models import CalibrationSession, CalibrationSchedule
+from CalSoft.models import CalibrationSession
 logger = logging.getLogger(__name__)
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required

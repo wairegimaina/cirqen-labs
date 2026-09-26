@@ -116,10 +116,6 @@ CLIENT_TABLE_DEPENDENCIES: Dict[str, List[str]] = {
         "public.Inventory_equipment",
         "public.users_customuser",
     ],
-    "public.CalSoft_calibrationschedule": [
-        "public.Inventory_equipment",
-        "public.users_customuser",
-    ],
     "public.CalSoft_driftdatapoint": ["public.CalSoft_calibrationreport"],
     "public.workshop_workshopassignment": [
         "public.workshop_workshop",
