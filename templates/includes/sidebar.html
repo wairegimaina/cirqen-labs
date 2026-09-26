@@ -114,6 +114,18 @@
         </a>
       </li>
 
+      <!-- Work order checklists -->
+      <li class="menu-entry" role="none">
+        <a href="{% url 'jobcard:checklist_templates' %}"
+          class="menu-link {% if request.resolver_match.url_name == 'checklist_templates' %}active-link{% endif %}"
+          role="menuitem">
+          <div class="link-icon" aria-hidden="true">
+            <i class="fas fa-clipboard-check"></i>
+          </div>
+          <span class="link-label">Work order checklists</span>
+        </a>
+      </li>
+
       <!-- Workshop Management (dropdown) -->
       <li class="menu-entry" role="none">
         <a href="{% url 'workshop:create_workshop' %}"
@@ -266,6 +278,17 @@
             <span class="link-label">Declined Work Orders</span>
           </a>
         </li>
+
+        {% if nav.is_tech %}
+        <li class="dropdown-entry" role="none">
+          <a href="{% url 'jobcard:checklist_templates' %}"
+            class="dropdown-link {% if request.resolver_match.url_name == 'checklist_templates' %}active-dropdown{% endif %}"
+            role="menuitem">
+            <i class="fas fa-clipboard-check" aria-hidden="true"></i>
+            <span class="link-label">Checklists</span>
+          </a>
+        </li>
+        {% endif %}
 
       </ul>
     </li>

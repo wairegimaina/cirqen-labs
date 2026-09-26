@@ -6,6 +6,7 @@ app_name = 'jobcard'
 urlpatterns = [
     path('', views.create_job_card, name='create_job_card'),
     path('ajax/load-equipment/', views.load_equipment, name='load_equipment'),
+    path('checklists/', views.checklist_templates, name='checklist_templates'),
     path('jobcards/waiting/', views.waiting_jobcards, name='waiting_jobcards'),
     path('jobcards/approved/', views.approved_jobcards, name='approved_jobcards'),
     path('jobcards/declined/', views.declined_jobcards, name='declined_jobcards'),

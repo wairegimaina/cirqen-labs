@@ -69,3 +69,5 @@ __all__ = [
     "check_stock_availability",
     "load_equipment",
 ]
+
+from .checklists import checklist_templates  # noqa: E402,F401

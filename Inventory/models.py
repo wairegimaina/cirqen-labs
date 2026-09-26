@@ -64,6 +64,13 @@ class EquipmentDescription(models.Model):
         blank=True
     )
 
+    # Work order checklist for this equipment type: an ordered list of item
+    # texts, e.g. ["Check alarms", "Electrical safety test"]. Filled in on each
+    # work order (jobcard.checklist). Edited at /jobcard/checklists/.
+    # Nullable so a row synced from a site or HQ without the column still
+    # inserts; None means no checklist.
+    checklist_template = models.JSONField(default=list, blank=True, null=True)
+
         # offline sync
     needs_sync = models.BooleanField(default=True)
     pending_delete = models.BooleanField(default=False)

@@ -79,6 +79,13 @@
                 </div>
             </div>
 
+            <!-- Checklist for the selected equipment type (filled by jobcards.js) -->
+            <div class="info-box checklist-panel" id="checklist-panel" hidden>
+                <h5><i class='fas fa-clipboard-check'></i> Checklist</h5>
+                <p class="checklist-hint">Mark every item Pass, Fail or N/A for this equipment type.</p>
+                <div id="checklist-items"></div>
+            </div>
+
             <!-- Job Description -->
             <div class="form-group">
                 <label for="job_description"><i class='fas fa-edit'></i> Job Description</label>
@@ -260,6 +267,7 @@
                     <strong>Remarks:</strong>
                     <span>{{ selected_job_card.remarks|default:"None" }}</span>
                 </div>
+                {% include 'jobcard/_checklist_detail.html' with checklist=selected_job_card.checklist %}
                 <div class="row">
                     <strong>Technician:</strong>
                     <span>{{ selected_job_card.performed_by.get_full_name|default:"N/A" }}</span>
@@ -344,6 +352,7 @@
                     <strong>Remarks:</strong>
                     <span>{{ selected_job_card.remarks|default:"None" }}</span>
                 </div>
+                {% include 'jobcard/_checklist_detail.html' with checklist=selected_job_card.checklist %}
             </div>
 
             <!-- Cost Summary for Nurse -->
@@ -448,6 +457,7 @@
 
 </div>
 
+{{ form_data.checklist_values|json_script:"checklist-values" }}
 <script>
     // API URLs
     window.LOAD_EQUIPMENT_URL = "{% url 'jobcard:load_equipment' %}";
@@ -456,6 +466,9 @@
     window.GET_SIGNATURE_URL = "{% url 'jobcard:get_user_signature_data' %}";
     window.GET_PPM_SCHEDULES_URL = "{% url 'jobcard:get_pending_ppm_schedules' %}";
     window.WORKSHOP_ID = "{{ workshop.id|default:'' }}";
+
+    // Checklist answers to restore when the form is shown again after an error
+    window.CHECKLIST_VALUES = JSON.parse(document.getElementById('checklist-values').textContent || 'null') || {};
 
     // Form Data
     window.FORM_DATA = {

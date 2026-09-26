@@ -19,6 +19,7 @@ from django.utils.timezone import now
 from Inventory.models import Department, Equipment
 from parts_tools.models import Accessories
 
+from ..checklists import ChecklistIncomplete, completed_from_post, template_for
 from ..models import SparePartUsed, jobcard
 from .helpers import get_or_create_user_signature
 
@@ -58,6 +59,12 @@ def _read_form(request):
         "additional_costs": post.get("additional_costs", "0.00"),
         "additional_costs_description": post.get("additional_costs_description", ""),
         "ppm_schedule_id": post.get("ppm_schedule_id"),
+        # Kept so a re-rendered form shows the technician's answers again.
+        "checklist_values": {
+            key.rsplit("_", 1)[-1]: {"result": post.get(key, ""),
+                                     "note": post.get(f"checklist_note_{key.rsplit('_', 1)[-1]}", "")}
+            for key in post if key.startswith("checklist_result_")
+        },
     }
 
 
@@ -306,6 +313,10 @@ def handle_technician_job_card(request, workshop):
         _validate(workshop, form)
         schedule_id = _usable_ppm_schedule_id(request, workshop, form)
         department, equipment = _department_and_equipment(workshop, form)
+        try:
+            checklist = completed_from_post(request.POST, template_for(equipment))
+        except ChecklistIncomplete as incomplete:
+            raise FormRejected(str(incomplete))
     except FormRejected as rejection:
         messages.error(request, str(rejection), extra_tags="jobcard")
         return _render_form(request, workshop, form)
@@ -330,6 +341,7 @@ def handle_technician_job_card(request, workshop):
                 priority_level=form["priority_level"],
                 job_description=form["job_description"],
                 remarks=(form["remarks"] or "").strip() or None,
+                checklist=checklist,
                 action_taken=form["action_taken"],
                 time_started=form["time_started"],
                 time_completed=form["time_completed"] or None,

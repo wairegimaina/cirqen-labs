@@ -12,6 +12,7 @@ from unittest.mock import patch
 from dateutil.relativedelta import relativedelta
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone
 
 from Inventory.models import Department, Equipment, EquipmentDescription
 from workshop.models import Workshop
@@ -73,9 +74,9 @@ class CertCompleteRescheduleCycleTests(NoSyncMixin, TestCase):
         self.assertEqual(self.schedule.status, "completed")
         self.assertTrue(self.schedule.is_locked)
         # completed_date records the ACTUAL calibration date (the session timestamp),
-        # NOT the scheduled month. Compare against the session's own timestamp to
-        # avoid UTC-vs-local date-boundary flakiness.
-        self.assertEqual(self.schedule.completed_date, session.timestamp.date())
+        # NOT the scheduled month, as a local (EAT) date. session.timestamp.date()
+        # is the UTC date, which is a day behind between 21:00 and 24:00 UTC.
+        self.assertEqual(self.schedule.completed_date, timezone.localdate(session.timestamp))
 
     def test_next_schedule_created_one_period_later(self):
         self._approve_with_certificate()

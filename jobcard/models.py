@@ -71,6 +71,11 @@ class jobcard(models.Model):
 
     decline_reason = models.TextField(blank=True, null=True)
     remarks = models.TextField(blank=True, null=True)
+    # The equipment type's checklist as completed on this work order: a list of
+    # {"item": text, "result": "pass" | "fail" | "na", "note": text}. The item
+    # text is copied, so later edits to the template do not rewrite history.
+    # Nullable for rows synced from a schema without the column.
+    checklist = models.JSONField(default=list, blank=True, null=True)
     nurse_signed_date = models.DateTimeField(null=True, blank=True)
     nurse_name = models.CharField(max_length=100, null=True, blank=True)
     verified_by_nurse = models.ForeignKey(
