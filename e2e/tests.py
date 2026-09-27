@@ -14,6 +14,7 @@ Opt-in (it needs Chromium): CIRQEN_E2E=1 python manage.py test e2e
 Set CIRQEN_E2E_BROWSER to a Chromium binary if Playwright's own is not installed.
 """
 import os
+import secrets
 import unittest
 
 from django.contrib.auth import get_user_model
@@ -27,7 +28,7 @@ from workshop.models import Workshop
 
 User = get_user_model()
 E2E = os.getenv("CIRQEN_E2E") == "1"
-PASSWORD = "E2e-pass-123!"
+PASSWORD = secrets.token_urlsafe(16)  # throwaway test users only
 
 
 @unittest.skipUnless(E2E, "browser tests: set CIRQEN_E2E=1")

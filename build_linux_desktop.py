@@ -1451,9 +1451,9 @@ def step_create_readme(distro: dict) -> bool:
         ──────────────────────────────────────────────────────────────────────
 
           Username : hod
-          Password : one-time, shown by the setup screen and saved in
-                     ~/.local/share/cirqen/first_login.txt
-          You choose your own password at first login.
+          The first sign-in secret is shown by the setup screen and saved in
+          ~/.local/share/cirqen/first_login.txt; you choose your own at
+          first login.
 
         ──────────────────────────────────────────────────────────────────────
         LOG FILES  (~/.local/share/cirqen/logs/)
