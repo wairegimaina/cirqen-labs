@@ -2454,7 +2454,6 @@ def generate_spec():
     'debug_toolbar._stubs',
 
     # ===== CHARTJS =====
-    'chartjs',
 
     # ===== KAFKA/REDPANDA =====
     'kafka',

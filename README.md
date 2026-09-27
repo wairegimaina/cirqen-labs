@@ -19,6 +19,11 @@ so every site works offline and converges when connected.
 | Build | `build.py` |
 | Security notes, credential handling | `SECURITY.md` |
 | Field runbook | `docs/RUNBOOK.md` |
+| Hospital server install, operations | `docs/SERVER_MODE.md`, `docs/OPERATIONS.md` |
+| User manuals and FAQ | `docs/manuals/` |
+| ISO/IEC 17025 validation pack | `docs/validation/ISO17025_VALIDATION.md` |
+| Data protection, licences, EULA and service terms (drafts) | `docs/legal/` |
+| Support, releases, changelog, pilot | `SUPPORT.md`, `RELEASES.md`, `CHANGELOG.md`, `PILOT_PLAN.md` |
 
 ## Configuration
 
@@ -124,3 +129,6 @@ suites against PostgreSQL on every push.
 4. For in-app updates, publish the package through HQ (`hq_server/build_package.py`);
    clients check, snapshot their database, apply, health-check and roll back
    automatically on failure.
+
+The full release checklist (staged rollout, validation, licences) is in
+`RELEASES.md`.

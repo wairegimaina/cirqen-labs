@@ -98,3 +98,24 @@ class TwoFactorFlowTests(TestCase):
         response = self.client.get(reverse("dashboard:hod_dashboard"))
         self.assertRedirects(response, reverse("two_factor_setup"), fetch_redirect_response=False)
         self.assertEqual(self.client.get(reverse("two_factor_setup")).status_code, 200)
+
+
+class ResetCommandTests(TestCase):
+    def test_removes_the_device_and_logs_it(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        from users.models import UserSecurityLog
+
+        user = get_user_model().objects.create_user("lost_phone", password="x")
+        TwoFactorDevice.objects.create(user=user, secret="JBSWY3DPEHPK3PXP")
+        call_command("reset_two_factor", "lost_phone", stdout=StringIO())
+        self.assertFalse(TwoFactorDevice.objects.filter(user=user).exists())
+        self.assertTrue(UserSecurityLog.objects.filter(user=user, event_type="TWO_FACTOR_DISABLED").exists())
+
+    def test_unknown_user_is_an_error(self):
+        from django.core.management import CommandError, call_command
+
+        with self.assertRaises(CommandError):
+            call_command("reset_two_factor", "nobody")

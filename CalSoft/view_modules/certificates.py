@@ -1,6 +1,7 @@
 import logging
 import re
-import zipstream
+import tempfile
+import zipfile
 from datetime import timedelta
 from dateutil.relativedelta import relativedelta
 from django.utils import timezone
@@ -473,8 +474,7 @@ def get_accessible_sessions(user, date_from=None, date_to=None):
 def bulk_certificates_download(request):
     """Stream calibration certificates in bulk for a date range."""
     from django.utils.dateparse import parse_date
-    from django.http import StreamingHttpResponse
-    from zipstream import ZipFile
+    from django.http import FileResponse
 
     today = timezone.localdate()
     week_start = today - timedelta(days=today.weekday())
@@ -501,7 +501,9 @@ def bulk_certificates_download(request):
         return JsonResponse({"count": sessions.count()})
 
     try:
-        z = ZipFile(mode="w", compression=zipstream.ZIP_STORED)
+        # Spooled: small bundles stay in memory, large ones go to a temp file.
+        bundle = tempfile.SpooledTemporaryFile(max_size=64 * 1024 * 1024)
+        z = zipfile.ZipFile(bundle, mode="w", compression=zipfile.ZIP_STORED)
 
         for session in sessions:
             try:
@@ -558,11 +560,10 @@ def bulk_certificates_download(request):
                 )
                 continue
 
-        response = StreamingHttpResponse(z, content_type="application/zip")
-        response["Content-Disposition"] = (
-            f'attachment; filename="certificates_{date_from}_to_{date_to}.zip"'
-        )
-        return response
+        z.close()
+        bundle.seek(0)
+        return FileResponse(bundle, as_attachment=True, content_type="application/zip",
+                            filename=f"certificates_{date_from}_to_{date_to}.zip")
 
     except Exception as e:
         logger.error(f"Error creating ZIP file: {str(e)}", exc_info=True)

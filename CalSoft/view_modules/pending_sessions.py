@@ -333,6 +333,17 @@ def approve_calibration_session_ajax(request, pk):
                     status=400,
                 )
 
+            # ISO/IEC 17025 7.8.1.2: results are reviewed and authorised by
+            # someone other than the person who produced them.
+            if locked_session.performed_by_id == request.user.id:
+                return JsonResponse(
+                    {
+                        "success": False,
+                        "error": "You performed this calibration, so another reviewer or the HOD must approve it.",
+                    },
+                    status=403,
+                )
+
             now = timezone.now()
 
             # Certificate numbers are allocated by the HQ server only.

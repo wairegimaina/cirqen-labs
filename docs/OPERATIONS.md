@@ -60,3 +60,18 @@ if it were the hospital.
 3. Point the DNS name at the new server; install the TLS certificate.
 4. Start `cirqen-sync` last: it pushes anything newer than HQ has and pulls
    what HQ has that the backup missed.
+
+## Two-factor reset
+
+Someone who lost their authenticator app signs in with one of their
+recovery codes. If they have none left, after confirming who they are
+(in person, or a call-back to the number on record):
+
+```bash
+sudo -u cirqen bash -c 'set -a; source /etc/cirqen/cirqen.env; set +a;
+  cd /opt/cirqen/app && /opt/cirqen/venv/bin/python manage.py reset_two_factor <username>'
+```
+
+On a desktop install, run `manage.py reset_two_factor <username>` from the
+Cirqen folder. The reset is recorded in the user's security log. They sign
+in with their password and set two-factor up again.

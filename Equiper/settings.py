@@ -100,7 +100,6 @@ INSTALLED_APPS = [
     "reporthub",
     "calSchedules",
     "CalSoft",
-    "chartjs",
     "machineReports",
     "django_celery_beat",
     "updates",
