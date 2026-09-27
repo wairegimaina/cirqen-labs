@@ -4,21 +4,37 @@ Ansur template runs each calibration procedure.
 One page, one form per job, each posted with an ``action`` so the page stays
 a single place to set everything up and to see what still needs doing.
 """
+import logging
+from decimal import Decimal, InvalidOperation
+from pathlib import Path
+
 from django import forms
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db import IntegrityError, transaction
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from django.utils import timezone
+from django.views.decorators.http import require_GET, require_POST
 
-from CalSoft.ansur import setup
-from CalSoft.models import AnsurSettings, AnsurTemplateMap, CalibrationProcedure
-from users.control import role_required
+from calSchedules.models import CalibrationSchedule
+from CalSoft.ansur import jobfile, launcher, setup, watcher
+from CalSoft.ansur.importer import ImportRefused, import_record, refuse
+from CalSoft.models import AnsurJob, AnsurSettings, AnsurTemplateMap, CalibrationProcedure
+from CalSoft.view_modules.calibration_helpers import _reference_standard_status
+from Inventory.models import Equipment
+from users.control import get_user_role, role_required
 
 
 class AnsurSettingsForm(forms.ModelForm):
     class Meta:
         model = AnsurSettings
-        fields = ["program_path", "base_folder", "delete_job_files", "archive_years", "enabled"]
+        fields = ["program_path", "base_folder", "delete_job_files", "archive_years", "enabled",
+                  "launch_arguments", "pdf_arguments"]
         labels = {
+            "launch_arguments": "Start Ansur with",
+            "pdf_arguments": "Make Ansur's PDF with",
             "program_path": "Ansur program",
             "base_folder": "Work folder",
             "delete_job_files": "Delete work orders after import",
@@ -39,6 +55,18 @@ class AnsurSettingsForm(forms.ModelForm):
         if error:
             raise forms.ValidationError(error)
         return path
+
+    def clean_launch_arguments(self):
+        value = self.cleaned_data["launch_arguments"].strip()
+        if "{job}" not in value:
+            raise forms.ValidationError("Include {job}, where the work order file goes.")
+        return value
+
+    def clean_pdf_arguments(self):
+        value = self.cleaned_data["pdf_arguments"].strip()
+        if "{record}" not in value:
+            raise forms.ValidationError("Include {record}, where the test record goes.")
+        return value
 
     def clean(self):
         cleaned = super().clean()
@@ -71,6 +99,45 @@ class TemplateMapForm(forms.ModelForm):
         if not name.lower().endswith(setup.TEMPLATE_SUFFIX):
             raise forms.ValidationError("Ansur templates end in .mtt.")
         return name
+
+
+def _save_parameter_links(procedure, post):
+    """Ansur step, limit type and analyser accuracy for each parameter."""
+    errors, updates = [], []
+    for parameter in procedure.parameters.filter(active_status=True, pending_delete=False):
+        prefix = f"p{parameter.pk}-"
+        step = (post.get(prefix + "ansur_step") or "").strip()[:150]
+        limit_type = post.get(prefix + "limit_type") or parameter.limit_type
+        if limit_type not in ("two_sided", "upper", "lower"):
+            errors.append(f"{parameter.name}: choose how it is judged.")
+            continue
+        values = {}
+        for name in ("analyser_accuracy_pct", "analyser_accuracy_floor", "analyser_resolution"):
+            raw = (post.get(prefix + name) or "").strip()
+            if raw == "":
+                values[name] = None
+                continue
+            try:
+                number = Decimal(raw)
+            except InvalidOperation:
+                number = None
+            if number is None or not number.is_finite() or number < 0:
+                errors.append(f"{parameter.name}: {raw} is not a valid number.")
+                break
+            values[name] = number
+        else:
+            if limit_type == "two_sided" and parameter.tolerance is None:
+                errors.append(f"{parameter.name}: a ± limit needs a tolerance on the procedure.")
+                continue
+            updates.append((parameter, step, limit_type, values))
+    if errors:
+        return errors
+    for parameter, step, limit_type, values in updates:
+        parameter.ansur_step, parameter.limit_type = step, limit_type
+        for name, value in values.items():
+            setattr(parameter, name, value)
+        parameter.save()
+    return []
 
 
 @login_required
@@ -124,6 +191,16 @@ def ansur_settings(request):
                 messages.success(request, f"{link.procedure} now runs with {link.template_file}.")
                 return redirect("calibration:ansur_settings")
 
+        elif action == "save_parameters":
+            link = get_object_or_404(AnsurTemplateMap, pk=request.POST.get("map_id"))
+            errors = _save_parameter_links(link.procedure, request.POST)
+            if errors:
+                for error in errors:
+                    messages.error(request, error)
+            else:
+                messages.success(request, f"Ansur steps for {link.procedure} saved.")
+            return redirect("calibration:ansur_settings")
+
         elif action == "remove_map":
             link = get_object_or_404(AnsurTemplateMap, pk=request.POST.get("map_id"))
             link.delete()
@@ -140,6 +217,19 @@ def ansur_settings(request):
     for link in maps:
         link.file_found = link.template_file.lower() in available
     checks = setup.readiness(cfg, maps)
+    for link in maps:
+        link.problems = procedure_problems(link.procedure)
+        link.parameters = list(link.procedure.parameters.filter(active_status=True, pending_delete=False)
+                               .order_by("order", "name"))
+    if maps:
+        usable = [m for m in maps if not m.problems]
+        checks.append(setup.Check(
+            "Procedure set-up", bool(usable),
+            f"{len(usable)} of {len(maps)} linked procedure(s) ready." if usable else
+            "No linked procedure is fully set up yet.",
+            "" if len(usable) == len(maps) else "Fill in the Ansur step and analyser accuracy for each "
+                                                 "parameter below.",
+        ))
 
     return render(request, "Calibrition/ansur_settings.html", {
         "form": form,
@@ -151,3 +241,194 @@ def ansur_settings(request):
         "ready": all(c.ok for c in checks),
         "folders": setup.folder_paths(cfg.base_folder),
     })
+
+
+# ── Start with Ansur (Perform Calibration) ───────────────────────────────────
+
+logger = logging.getLogger(__name__)
+
+STATUS_TEXT = {
+    AnsurJob.PREPARED: "Work order written. Starting Ansur…",
+    AnsurJob.SENT: "Ansur is open with this job. Run the test, then save it in Ansur.",
+    AnsurJob.IMPORTED: "Result received and checked. The session is waiting for approval.",
+    AnsurJob.REJECTED: "Ansur's record was refused. Fix the reason below, run the test again and save.",
+    AnsurJob.CANCELLED: "Cancelled.",
+}
+
+
+def procedure_problems(procedure):
+    """Why a procedure cannot run with Ansur yet (empty when it can)."""
+    problems = []
+    if not AnsurTemplateMap.objects.filter(procedure=procedure).exists():
+        return ["The procedure is not linked to an Ansur template."]
+    for parameter in procedure.parameters.filter(active_status=True, pending_delete=False):
+        if not parameter.ansur_step:
+            problems.append(f"{parameter.name} is not linked to an Ansur test step.")
+        if parameter.analyser_accuracy_pct is None and parameter.analyser_accuracy_floor is None:
+            problems.append(f"{parameter.name} has no analyser accuracy.")
+        if parameter.sub_parameters.filter(active_status=True).exists():
+            problems.append(f"{parameter.name} has sub-parameters, which Ansur results cannot fill.")
+    return problems
+
+
+def ansur_available(procedure_ids=None):
+    """Procedure ids that show Start with Ansur, or an empty set when the
+    connection is off or not ready."""
+    cfg = AnsurSettings.load()
+    maps = list(AnsurTemplateMap.objects.select_related("procedure"))
+    if not cfg.enabled or not setup.is_ready(cfg, maps):
+        return set()
+    return {str(m.procedure_id) for m in maps if not procedure_problems(m.procedure)}
+
+
+def job_payload(job):
+    data = {
+        "id": str(job.id),
+        "job_number": job.job_number,
+        "status": job.status,
+        "label": job.get_status_display(),
+        "text": STATUS_TEXT.get(job.status, ""),
+        "error": job.error,
+        "warning": job.warning,
+        "open": job.is_open,
+        "session_url": "",
+    }
+    if job.session_id:
+        data["session_url"] = reverse("calibration:session_detail", args=[job.session_id])
+    return data
+
+
+def _decimal(value):
+    try:
+        return Decimal(str(value).strip()) if str(value or "").strip() else None
+    except InvalidOperation:
+        return None
+
+
+def _error(message, status=400):
+    return JsonResponse({"success": False, "error": message}, status=status)
+
+
+@login_required
+@require_POST
+def ansur_start(request):
+    equipment = Equipment.objects.filter(pk=request.POST.get("equipment") or None).first()
+    procedure = CalibrationProcedure.objects.filter(
+        pk=request.POST.get("procedure") or None, active_status=True).first()
+    if equipment is None or procedure is None:
+        return _error("Choose the equipment and the procedure first.")
+    if str(procedure.pk) not in ansur_available():
+        problems = procedure_problems(procedure)
+        return _error("This procedure cannot run with Ansur yet"
+                      + (": " + " ".join(problems) if problems else ". Check the Ansur connection page."))
+
+    temperature = _decimal(request.POST.get("actual_temperature"))
+    humidity = _decimal(request.POST.get("actual_humidity"))
+    if temperature is None or humidity is None:
+        return _error("Enter the room temperature and humidity before starting.")
+
+    expired, _ = _reference_standard_status(procedure)
+    if expired:
+        return _error("A reference standard is past its calibration due date: "
+                      + ", ".join(f"{s.name} (S/N {s.serial_number})" for s in expired) + ".")
+
+    schedule = CalibrationSchedule.objects.filter(pk=request.POST.get("schedule") or None).first()
+    cfg = AnsurSettings.load()
+    link = AnsurTemplateMap.objects.get(procedure=procedure)
+
+    try:
+        with transaction.atomic():
+            job = (AnsurJob.objects.select_for_update()
+                   .filter(equipment=equipment, status__in=AnsurJob.OPEN).first())
+            if job is None:
+                job = AnsurJob(equipment=equipment, job_number=jobfile.new_job_number(), created_by=request.user)
+            job.procedure, job.schedule, job.template_file = procedure, schedule, link.template_file
+            job.actual_temperature, job.actual_humidity = temperature, humidity
+            job.actual_pressure = _decimal(request.POST.get("actual_pressure"))
+            job.notes = (request.POST.get("notes") or "").strip()
+            job.status, job.error, job.warning = AnsurJob.PREPARED, "", ""
+            job.save()
+    except IntegrityError:
+        return _error("Another Ansur job was just started for this equipment. Reload the page.")
+
+    try:
+        job.job_file = str(jobfile.write(job, cfg, link))
+        launcher.start(cfg, job.job_file)
+    except (OSError, launcher.LaunchError) as exc:
+        job.error = str(exc)
+        job.save(update_fields=["job_file", "error", "updated_at"])
+        return JsonResponse({"success": False, "error": str(exc), "job": job_payload(job)}, status=502)
+
+    job.status, job.sent_at = AnsurJob.SENT, timezone.now()
+    job.save(update_fields=["job_file", "status", "sent_at", "updated_at"])
+    return JsonResponse({"success": True, "job": job_payload(job)})
+
+
+@login_required
+@require_GET
+def ansur_job_status(request):
+    job = get_object_or_404(AnsurJob, pk=request.GET.get("job"))
+    if job.status == AnsurJob.SENT:
+        try:
+            watcher.scan()
+        except Exception:
+            logger.exception("Ansur scan from the status check failed")
+        job.refresh_from_db()
+    return JsonResponse({"success": True, "job": job_payload(job)})
+
+
+def _may_manage(user, job):
+    return job.created_by_id == user.id or get_user_role(user) in ("HOD", "NIC")
+
+
+@login_required
+@require_POST
+def ansur_job_action(request):
+    job = get_object_or_404(AnsurJob, pk=request.POST.get("job"))
+    if not _may_manage(request.user, job):
+        return _error("Only the person who started this job, the in-charge or the HOD can change it.", 403)
+    if not job.is_open:
+        return _error(f"Job {job.job_number} is {job.get_status_display().lower()}.")
+
+    action = request.POST.get("action")
+    if action == "cancel":
+        job.status = AnsurJob.CANCELLED
+        job.save(update_fields=["status", "updated_at"])
+        if job.job_file:
+            Path(job.job_file).unlink(missing_ok=True)
+        return JsonResponse({"success": True, "job": job_payload(job)})
+    if action == "reopen":
+        cfg = AnsurSettings.load()
+        try:
+            link = AnsurTemplateMap.objects.get(procedure=job.procedure)
+            job.job_file = str(jobfile.write(job, cfg, link))
+            launcher.start(cfg, job.job_file)
+        except (AnsurTemplateMap.DoesNotExist, OSError, launcher.LaunchError) as exc:
+            return _error(str(exc) or "The procedure is no longer linked to an Ansur template.", 502)
+        job.status, job.error, job.sent_at = AnsurJob.SENT, "", timezone.now()
+        job.save(update_fields=["job_file", "status", "error", "sent_at", "updated_at"])
+        return JsonResponse({"success": True, "job": job_payload(job)})
+    return _error("Unknown action.")
+
+
+@login_required
+@require_POST
+def ansur_upload(request):
+    """Fallback: import a record the technician picks by hand."""
+    job = get_object_or_404(AnsurJob, pk=request.POST.get("job"))
+    if not _may_manage(request.user, job):
+        return _error("Only the person who started this job, the in-charge or the HOD can import for it.", 403)
+    upload = request.FILES.get("record")
+    if upload is None or not upload.name.lower().endswith(".mtr"):
+        return _error("Choose the Ansur test record (.mtr) to import.")
+    if not job.is_open:
+        return _error(f"Job {job.job_number} is {job.get_status_display().lower()}.")
+    try:
+        import_record(job, upload.read(), file_name=upload.name)
+    except ImportRefused as exc:
+        refuse(job, exc.reasons)
+        job.refresh_from_db()
+        return JsonResponse({"success": False, "error": "The record was refused.", "job": job_payload(job)},
+                            status=422)
+    job.refresh_from_db()
+    return JsonResponse({"success": True, "job": job_payload(job)})

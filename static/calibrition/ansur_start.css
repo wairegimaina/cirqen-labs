@@ -1,0 +1,19 @@
+/* Start with Ansur panel on Perform Calibration. */
+.ansur-job { font-size: .85rem; color: var(--text-muted, #6b7280); font-family: ui-monospace, Consolas, monospace; }
+.ansur-steps { list-style: none; margin: 0 0 .8rem; padding: 0; display: grid; gap: .4rem; counter-reset: step; }
+.ansur-steps li { counter-increment: step; display: flex; align-items: center; gap: .55rem; color: var(--text-muted, #6b7280); }
+.ansur-steps li::before {
+  content: counter(step); width: 1.5rem; height: 1.5rem; border-radius: 50%; display: grid; place-items: center;
+  font-size: .75rem; font-weight: 600; border: 1px solid var(--border-color); flex: none;
+}
+.ansur-steps li.active { color: var(--text-primary, inherit); font-weight: 600; }
+.ansur-steps li.active::before { border-color: var(--primary, #15803d); color: var(--primary, #15803d); }
+.ansur-steps li.done { color: var(--text-primary, inherit); }
+.ansur-steps li.done::before { content: "\2713"; background: var(--success, #15803d); border-color: transparent; color: #fff; }
+.ansur-steps li.failed::before { content: "!"; background: var(--danger, #b91c1c); border-color: transparent; color: #fff; }
+.ansur-text { margin: 0 0 .6rem; }
+.ansur-error, .ansur-warning { white-space: pre-line; padding: .6rem .8rem; border-radius: var(--radius-sm); margin-bottom: .6rem; font-size: .9rem; }
+.ansur-error { background: rgba(185, 28, 28, .1); color: var(--danger, #b91c1c); }
+.ansur-warning { background: rgba(180, 83, 9, .1); color: var(--warning, #b45309); }
+.ansur-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+.ansur-upload { margin: 0; cursor: pointer; }

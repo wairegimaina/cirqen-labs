@@ -39,6 +39,11 @@
 .an-tag { font-size: .78rem; padding: .1rem .45rem; border-radius: 999px; white-space: nowrap; }
 .an-tag.ok { background: rgba(21,128,61,.12); color: var(--success, #15803d); }
 .an-tag.bad { background: rgba(185,28,28,.12); color: var(--danger, #b91c1c); }
+.an-params input, .an-params select { padding: .35rem .5rem; border: 1px solid var(--input-border, var(--border-color));
+  border-radius: var(--radius-sm); background: var(--input-bg, var(--bg-card)); color: var(--text-primary, inherit);
+  font: inherit; width: 100%; min-width: 6rem; }
+.an-advanced summary { cursor: pointer; font-weight: 600; font-size: .9rem; }
+.section-card-head .an-tag { margin-left: auto; }
 </style>
 {% endblock %}
 
@@ -116,6 +121,23 @@
           {% if form.archive_years.errors %}<div class="an-errors">{{ form.archive_years.errors|join:" " }}</div>{% endif %}
         </div>
       </div>
+      <details class="an-advanced"{% if form.launch_arguments.errors or form.pdf_arguments.errors %} open{% endif %}>
+        <summary>Advanced: how Cirqen calls Ansur</summary>
+        <div class="an-grid" style="margin-top:.6rem">
+          <div class="an-field">
+            <label for="{{ form.launch_arguments.id_for_label }}">{{ form.launch_arguments.label }}</label>
+            {{ form.launch_arguments }}
+            <span class="an-help">Arguments after Ansur's program. <code>{job}</code> is the work order file. Change only if Ansur opens without the device filled in.</span>
+            {% if form.launch_arguments.errors %}<div class="an-errors">{{ form.launch_arguments.errors|join:" " }}</div>{% endif %}
+          </div>
+          <div class="an-field">
+            <label for="{{ form.pdf_arguments.id_for_label }}">{{ form.pdf_arguments.label }}</label>
+            {{ form.pdf_arguments }}
+            <span class="an-help"><code>{record}</code> is the saved test record. Ansur's /f option writes its detailed PDF beside it.</span>
+            {% if form.pdf_arguments.errors %}<div class="an-errors">{{ form.pdf_arguments.errors|join:" " }}</div>{% endif %}
+          </div>
+        </div>
+      </details>
       <label class="an-check">{{ form.delete_job_files }} {{ form.delete_job_files.label }}</label>
       <label class="an-check">{{ form.enabled }} {{ form.enabled.label }}</label>
 
@@ -201,7 +223,49 @@
     </div>
   </div>
 
-  {# ── 4. Ansur-side notes ──────────────────────────────────────── #}
+  {# ── 4. Parameters -> Ansur steps ─────────────────────────────── #}
+  {% for link in maps %}
+  <div class="section-card">
+    <div class="section-card-head"><h2 class="section-card-title">Ansur steps: {{ link.procedure.name }}</h2>
+      {% if link.problems %}<span class="an-tag bad">needs set-up</span>{% else %}<span class="an-tag ok">ready</span>{% endif %}</div>
+    <div class="section-card-body">
+      <p class="an-help">For each parameter: the test step name exactly as Ansur prints it, how it is judged, and the analyser's accuracy from its datasheet. The set values and tolerances stay on the procedure; Ansur's must match them.</p>
+      {% if link.problems %}<ul class="an-fix" style="margin:.2rem 0 .8rem;padding-left:1.1rem">{% for p in link.problems %}<li>{{ p }}</li>{% endfor %}</ul>{% endif %}
+      <form method="post" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="save_parameters">
+        <input type="hidden" name="map_id" value="{{ link.id }}">
+        <div class="an-table-wrap">
+          <table class="an-table an-params">
+            <thead><tr><th>Parameter</th><th>Ansur step</th><th>Judged as</th><th>Accuracy ± % of reading</th><th>± fixed part</th><th>Resolution</th></tr></thead>
+            <tbody>
+            {% for p in link.parameters %}
+              <tr>
+                <td>{{ p.name }}{% if p.unit %} ({{ p.unit }}){% endif %}{% if p.tolerance and p.limit_type == 'two_sided' %}<div class="an-help">± {{ p.tolerance|floatformat:"-6" }}</div>{% endif %}</td>
+                <td><input type="text" name="p{{ p.pk }}-ansur_step" value="{{ p.ansur_step }}" placeholder="e.g. Energy 360 J" aria-label="Ansur step for {{ p.name }}"></td>
+                <td><select name="p{{ p.pk }}-limit_type" aria-label="How {{ p.name }} is judged">
+                  <option value="two_sided"{% if p.limit_type == 'two_sided' %} selected{% endif %}>Set value ± tolerance</option>
+                  <option value="upper"{% if p.limit_type == 'upper' %} selected{% endif %}>At most the set value</option>
+                  <option value="lower"{% if p.limit_type == 'lower' %} selected{% endif %}>At least the set value</option>
+                </select></td>
+                <td><input type="number" step="any" min="0" name="p{{ p.pk }}-analyser_accuracy_pct" value="{{ p.analyser_accuracy_pct|default_if_none:''|floatformat:'-4' }}" aria-label="Accuracy percent for {{ p.name }}"></td>
+                <td><input type="number" step="any" min="0" name="p{{ p.pk }}-analyser_accuracy_floor" value="{{ p.analyser_accuracy_floor|default_if_none:''|floatformat:'-6' }}" aria-label="Accuracy fixed part for {{ p.name }}"></td>
+                <td><input type="number" step="any" min="0" name="p{{ p.pk }}-analyser_resolution" value="{{ p.analyser_resolution|default_if_none:''|floatformat:'-6' }}" aria-label="Resolution for {{ p.name }}"></td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="6" class="an-help">This procedure has no parameters yet.</td></tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <p class="an-help" style="margin-top:.5rem">The analyser's certificate uncertainty is the parameter's reference uncertainty on the procedure, and its serial the reference standard.</p>
+        <div class="an-actions"><button type="submit" class="btn btn-primary">Save steps</button></div>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+
+  {# ── 5. Ansur-side notes ──────────────────────────────────────── #}
   <div class="section-card">
     <div class="section-card-head"><h2 class="section-card-title">In Ansur, once</h2></div>
     <div class="section-card-body">

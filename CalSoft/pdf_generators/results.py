@@ -44,6 +44,7 @@ from CalSoft.utils import (
     TUR_FLOOR,
     coverage_factor_for_95,
     guarded_decision,
+    reading_conformity,
     test_uncertainty_ratio,
 )
 from .watermark import _LogoWatermarkCanvas
@@ -200,7 +201,13 @@ class ResultsMixin:
             tur = test_uncertainty_ratio(tol_value, expanded)
             tur_display = f"{tur:.1f}:1" if tur is not None else 'N/A'
 
-            if reading.error is not None and tol_value is not None:
+            limit_type = getattr(reading.parameter, 'limit_type', 'two_sided') if reading.parameter else 'two_sided'
+            if limit_type in ('upper', 'lower'):
+                # The set value is the limit itself; tolerance and TUR do not apply.
+                tolerance = f"{'max' if limit_type == 'upper' else 'min'} {set_value}"
+                tur_display = 'N/A'
+                verdict = reading_conformity(reading)
+            elif reading.error is not None and tol_value is not None:
                 verdict, _, _ = guarded_decision(reading.error, tol_value, expanded)
             else:
                 verdict = 'PASS' if passes_tolerance else 'FAIL'

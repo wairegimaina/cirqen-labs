@@ -42,7 +42,8 @@ class AnsurSettingsPageTests(TestCase):
 
     def _save(self, **overrides):
         data = {"action": "save", "program_path": str(self.exe), "base_folder": self.base,
-                "delete_job_files": "on", "archive_years": "10", **overrides}
+                "delete_job_files": "on", "archive_years": "10",
+                "launch_arguments": '"{job}"', "pdf_arguments": '/f "{record}" /h', **overrides}
         return self.client.post(URL, data)
 
     def _ready_setup(self):

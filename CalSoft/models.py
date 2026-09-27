@@ -315,6 +315,25 @@ class CalibrationParameter(models.Model):
     tolerance = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True, help_text="±tolerance")
     order = models.PositiveIntegerField(default=0)
 
+    # How the set value is judged. Two-sided: set value ± tolerance. Upper or
+    # lower: the set value is itself the limit (e.g. leakage at most 500 uA)
+    # and the tolerance is not used. See CalSoft.utils.reading_conformity.
+    limit_type = models.CharField(
+        max_length=12, default='two_sided',
+        choices=[('two_sided', 'Set value ± tolerance'), ('upper', 'At most the set value'),
+                 ('lower', 'At least the set value')],
+    )
+
+    # Fluke Ansur: which test step in an Ansur record gives this parameter,
+    # and what the analyser's datasheet says about its accuracy. Used only by
+    # procedures linked to an Ansur template (CalSoft.ansur).
+    ansur_step = models.CharField(max_length=150, blank=True)
+    analyser_accuracy_pct = models.DecimalField(
+        max_digits=8, decimal_places=4, null=True, blank=True, help_text="± % of reading")
+    analyser_accuracy_floor = models.DecimalField(
+        max_digits=15, decimal_places=6, null=True, blank=True, help_text="± fixed part, in the parameter's unit")
+    analyser_resolution = models.DecimalField(max_digits=15, decimal_places=6, null=True, blank=True)
+
     # offline sync
     needs_sync = models.BooleanField(default=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -479,6 +498,18 @@ class CalibrationSession(models.Model):
     next_calibration_due = models.DateField(null=True, blank=True)
     notes = models.TextField(blank=True)
 
+    # Where the readings came from. An Ansur session holds one analyser
+    # measurement per test point (the instrument rule) instead of the manual
+    # minimum of three, and keeps a fingerprint of the Ansur record it came
+    # from. ansur_disagreements counts points where Ansur's own Pass/Fail
+    # differs from Cirqen's guard-banded verdict; a reviewer must acknowledge
+    # them before approving.
+    source = models.CharField(
+        max_length=10, default='manual', choices=[('manual', 'Manual entry'), ('ansur', 'Fluke Ansur')])
+    ansur_operator = models.CharField(max_length=150, blank=True)
+    ansur_record_sha256 = models.CharField(max_length=64, blank=True)
+    ansur_disagreements = models.PositiveSmallIntegerField(default=0)
+
     # offline sync
     needs_sync = models.BooleanField(default=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -572,6 +603,9 @@ class CalibrationReading(models.Model):
 
     passes_tolerance = models.BooleanField(default=False)
 
+    # Ansur's own verdict for this point (Pass / Fail), kept beside Cirqen's.
+    ansur_status = models.CharField(max_length=20, blank=True)
+
     # offline sync
     pending_delete = models.BooleanField(default=False)
     needs_sync = models.BooleanField(default=True)
@@ -594,8 +628,49 @@ class CalibrationReading(models.Model):
         except (InvalidOperation, TypeError) as e:
             logger.error(f"Invalid reading_{index}: {value} - {str(e)}")
 
+    def calculate_single_reading_statistics(self):
+        """Budget and verdict for one analyser reading (Ansur sessions).
+
+        The analyser's accuracy, resolution and certificate uncertainty come
+        from the parameter; the resolution in force is the session's.
+        """
+        from CalSoft.utils import compute_single_reading_budget, within_limit
+
+        readings = self.get_readings_list()
+        if not readings:
+            self.passes_tolerance = False
+            self.save()
+            return False
+        parameter = self.parameter
+        try:
+            resolution = self.session.parameter_resolutions.get(parameter=parameter).resolution
+        except SessionParameterResolution.DoesNotExist:
+            resolution = parameter.analyser_resolution or Decimal('0')
+        budget = compute_single_reading_budget(
+            readings[0], resolution, parameter.reference_uncertainty or Decimal('0'),
+            parameter.coverage_factor or Decimal('2'),
+            accuracy_percent=parameter.analyser_accuracy_pct,
+            accuracy_floor=parameter.analyser_accuracy_floor,
+            coverage_factor=Decimal('2'),
+        )
+        self.mean = budget['mean']
+        self.standard_deviation = None
+        self.error = (self.set_value.value - self.mean).quantize(Decimal('0.000001'), rounding=ROUND_HALF_UP)
+        self.type_a_uncertainty = budget['type_a']
+        self.type_b_uncertainty = budget['type_b']
+        self.reference_uncertainty_component = budget['reference']
+        self.combined_uncertainty = budget['combined']
+        self.expanded_uncertainty = budget['expanded']
+        tolerance = self.sub_parameter.tolerance if self.sub_parameter else parameter.tolerance
+        self.passes_tolerance = within_limit(
+            parameter.limit_type, self.set_value.value, self.mean, tolerance)
+        self.save()
+        return True
+
     def calculate_statistics(self):
         """Calculate all statistical measures and uncertainties using CalibrationCalculator"""
+        if getattr(self.session, 'source', 'manual') == 'ansur':
+            return self.calculate_single_reading_statistics()
         calculator = CalibrationCalculator()
         readings = self.get_readings_list()
 
@@ -662,10 +737,15 @@ class CalibrationReading(models.Model):
 
             # Check tolerance
             tolerance = self.sub_parameter.tolerance if self.sub_parameter else self.parameter.tolerance
-            if tolerance is None:
+            if tolerance is None and self.parameter.limit_type not in ('upper', 'lower'):
                 logger.error(f"No tolerance defined for parameter {self.parameter.name}")
                 raise ValueError("Tolerance must be defined for parameters")
-            self.passes_tolerance = calculator.check_tolerance(self.error, tolerance)
+            if self.parameter.limit_type in ('upper', 'lower'):
+                from CalSoft.utils import within_limit
+                self.passes_tolerance = within_limit(
+                    self.parameter.limit_type, self.set_value.value, self.mean, tolerance)
+            else:
+                self.passes_tolerance = calculator.check_tolerance(self.error, tolerance)
 
             self.save()
             logger.info(f"Statistics calculated for reading {self.id}: mean={self.mean}, expanded_uncertainty={self.expanded_uncertainty}")
@@ -1101,6 +1181,11 @@ class AnsurSettings(models.Model):
         default=True, help_text="Remove the work-order file once its result is imported.")
     archive_years = models.PositiveSmallIntegerField(
         default=10, validators=[MinValueValidator(1), MaxValueValidator(50)])
+    # How Ansur is started, as arguments after the program. {job} is the work
+    # order file, {record} a saved test record. Kept editable because Ansur's
+    # manual does not print the job-file switch; the site confirms it once.
+    launch_arguments = models.CharField(max_length=300, default='"{job}"')
+    pdf_arguments = models.CharField(max_length=300, default='/f "{record}" /h')
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
 
@@ -1138,3 +1223,67 @@ class AnsurTemplateMap(models.Model):
 
     def __str__(self):
         return f"{self.procedure} -> {self.template_file}"
+
+
+class AnsurJob(models.Model):
+    """One Ansur test started from Perform Calibration.
+
+    The job number travels to Ansur in the work order (as the Cirqen Job
+    device field and in the result file name) and is how the record Ansur
+    saves is matched back. Kept on this machine only: the session it creates
+    is what syncs.
+    """
+    PREPARED, SENT, IMPORTED, REJECTED, CANCELLED = "prepared", "sent", "imported", "rejected", "cancelled"
+    STATUS_CHOICES = [
+        (PREPARED, "Prepared"),
+        (SENT, "Sent to Ansur"),
+        (IMPORTED, "Awaiting approval"),
+        (REJECTED, "Record refused"),
+        (CANCELLED, "Cancelled"),
+    ]
+    OPEN = (PREPARED, SENT, REJECTED)
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    job_number = models.CharField(max_length=30, unique=True)
+    equipment = models.ForeignKey(Equipment, on_delete=models.CASCADE, related_name="ansur_jobs")
+    schedule = models.ForeignKey(
+        'calSchedules.CalibrationSchedule', null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    procedure = models.ForeignKey(CalibrationProcedure, on_delete=models.PROTECT, related_name="+")
+    template_file = models.CharField(max_length=255)
+    created_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name="+")
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default=PREPARED)
+
+    actual_temperature = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    actual_humidity = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    actual_pressure = models.DecimalField(max_digits=8, decimal_places=3, null=True, blank=True)
+    notes = models.TextField(blank=True)
+
+    job_file = models.CharField(max_length=500, blank=True)
+    record_copy = models.FileField(upload_to="ansur/%Y/%m/", blank=True)
+    record_sha256 = models.CharField(max_length=64, blank=True)
+    pdf_copy = models.FileField(upload_to="ansur/%Y/%m/", blank=True)
+    pdf_sha256 = models.CharField(max_length=64, blank=True)
+    error = models.TextField(blank=True)
+    warning = models.TextField(blank=True)
+    session = models.OneToOneField(
+        CalibrationSession, null=True, blank=True, on_delete=models.SET_NULL, related_name="ansur_job")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    imported_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["equipment"], condition=models.Q(status__in=["prepared", "sent", "rejected"]),
+                name="ansur_one_open_job_per_equipment"),
+        ]
+
+    @property
+    def is_open(self):
+        return self.status in self.OPEN
+
+    def __str__(self):
+        return f"{self.job_number} ({self.get_status_display()})"

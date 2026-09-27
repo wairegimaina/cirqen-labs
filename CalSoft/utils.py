@@ -486,6 +486,155 @@ def compute_uncertainty_budget(
     }
 
 
+# ── Limits other than ±tolerance, and single readings ───────────────────────
+#
+# Instrument-driven tests (Fluke Ansur) mostly judge against one-sided limits
+# ("leakage at most 500 uA", "insulation at least 2 MOhm") and record one
+# measurement per test point. Both still get a guard-banded verdict, and a
+# budget built from what is known about the analyser instead of from scatter.
+
+TWO_SIDED = 'two_sided'
+UPPER = 'upper'
+LOWER = 'lower'
+LIMIT_TYPES = (TWO_SIDED, UPPER, LOWER)
+
+
+def one_sided_decision(measured, limit, expanded_uncertainty, limit_type):
+    """Guard-banded verdict against a single limit.
+
+    For an upper limit L:  x <= L - U  PASS,  x >= L + U  FAIL.
+    For a lower limit L:   x >= L + U  PASS,  x <= L - U  FAIL.
+    In between the measurement cannot decide: INDETERMINATE.
+
+    Returns ``(verdict, acceptance_limit, rejection_limit)``, degrading to
+    simple acceptance (``None`` limits) when there is no usable uncertainty,
+    exactly as ``guarded_decision`` does.
+    """
+    try:
+        x = Decimal(str(measured))
+        lim = Decimal(str(limit))
+    except (InvalidOperation, TypeError, ValueError):
+        return (INDETERMINATE, None, None)
+    try:
+        expanded = abs(Decimal(str(expanded_uncertainty)))
+    except (InvalidOperation, TypeError, ValueError):
+        expanded = None
+
+    if limit_type == UPPER:
+        if not expanded:
+            return (PASS if x <= lim else FAIL, None, None)
+        acceptance, rejection = lim - expanded, lim + expanded
+        if x <= acceptance:
+            return (PASS, acceptance, rejection)
+        if x >= rejection:
+            return (FAIL, acceptance, rejection)
+        return (INDETERMINATE, acceptance, rejection)
+
+    if limit_type == LOWER:
+        if not expanded:
+            return (PASS if x >= lim else FAIL, None, None)
+        acceptance, rejection = lim + expanded, lim - expanded
+        if x >= acceptance:
+            return (PASS, acceptance, rejection)
+        if x <= rejection:
+            return (FAIL, acceptance, rejection)
+        return (INDETERMINATE, acceptance, rejection)
+
+    raise ValueError(f"not a one-sided limit type: {limit_type!r}")
+
+
+def within_limit(limit_type, set_value, measured, tolerance):
+    """Simple acceptance (no guard band), the value kept in ``passes_tolerance``."""
+    if limit_type == UPPER:
+        return Decimal(str(measured)) <= Decimal(str(set_value))
+    if limit_type == LOWER:
+        return Decimal(str(measured)) >= Decimal(str(set_value))
+    if tolerance is None:
+        return False
+    error = Decimal(str(set_value)) - Decimal(str(measured))
+    return abs(error) <= abs(Decimal(str(tolerance)))
+
+
+def reading_conformity(reading):
+    """The guard-banded verdict for a stored ``CalibrationReading``.
+
+    One place for the certificate, the review page and the importer, so a
+    one-sided limit is judged the same way everywhere. For a one-sided limit
+    the set value *is* the limit and the tolerance is not used.
+    """
+    parameter = getattr(reading, 'parameter', None)
+    limit_type = getattr(parameter, 'limit_type', TWO_SIDED) or TWO_SIDED
+    expanded = getattr(reading, 'expanded_uncertainty', None)
+
+    if limit_type in (UPPER, LOWER):
+        if reading.mean is None or reading.set_value is None:
+            return INDETERMINATE
+        verdict, _, _ = one_sided_decision(reading.mean, reading.set_value.value, expanded, limit_type)
+        return verdict
+
+    sub = getattr(reading, 'sub_parameter', None)
+    tolerance = sub.tolerance if sub is not None and sub.tolerance else getattr(parameter, 'tolerance', None)
+    if reading.error is None or tolerance is None:
+        return PASS if getattr(reading, 'passes_tolerance', False) else FAIL
+    verdict, _, _ = guarded_decision(reading.error, tolerance, expanded)
+    return verdict
+
+
+def compute_single_reading_budget(
+    value,
+    resolution,
+    reference_uncertainty,
+    reference_k=Decimal('2'),
+    *,
+    accuracy_percent=None,
+    accuracy_floor=None,
+    coverage_factor=Decimal('2'),
+):
+    """Uncertainty budget for one measurement taken by an analyser.
+
+    With a single reading there is no scatter to measure, so Type A is zero
+    and the budget comes from the analyser:
+
+      u_spec = (|x| * accuracy% / 100 + floor) / sqrt(3)   rectangular
+      u_res  = resolution / sqrt(12)                      rectangular
+      u_cal  = certificate uncertainty / its k            normal
+      u_c    = sqrt(u_spec^2 + u_res^2 + u_cal^2),  U = k * u_c
+
+    ``reference`` in the result is the analyser's whole contribution,
+    sqrt(u_spec^2 + u_cal^2), so the stored components still add up to u_c the
+    way they do for a manual budget. Components are computed at full precision
+    and each result rounded to six places.
+    """
+    x = Decimal(str(value))
+    pct = Decimal(str(accuracy_percent or 0))
+    floor = Decimal(str(accuracy_floor or 0))
+    half_width = abs(x) * pct / Decimal('100') + floor
+    u_spec = half_width / Decimal('3').sqrt()
+    u_res = Decimal(str(resolution or 0)) / Decimal('12').sqrt()
+    k_ref = Decimal(str(reference_k or 2))
+    u_cal = Decimal(str(reference_uncertainty or 0)) / k_ref
+    analyser = (u_spec ** 2 + u_cal ** 2).sqrt()
+    combined = (analyser ** 2 + u_res ** 2).sqrt()
+    k = Decimal(str(coverage_factor or 2))
+
+    def q(v):
+        return v.quantize(SIX_DP, rounding=ROUND_HALF_UP)
+
+    return {
+        'mean': q(x),
+        'std_dev': None,
+        'count': 1,
+        'type_a': q(Decimal('0')),
+        'type_b': q(u_res),
+        'spec': q(u_spec),
+        'calibration': q(u_cal),
+        'reference': q(analyser),
+        'combined': q(combined),
+        'expanded': q(k * combined),
+        'coverage_factor': k,
+    }
+
+
 # ── Drift grading ────────────────────────────────────────────────────────────
 #
 # Drift is a dimensioned rate, so a bare number cannot be graded. The previous
