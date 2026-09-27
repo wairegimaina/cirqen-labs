@@ -1,0 +1,209 @@
+{% extends 'base.html' %}
+
+{% block title %}Ansur connection — {{ site_name }}{% endblock %}
+
+{% block page_title %}Ansur connection{% endblock %}
+
+{% block extra_css %}
+<style>
+.an-wrap { display: grid; gap: 1rem; max-width: 900px; }
+.an-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; }
+.an-step { display: grid; grid-template-columns: 1.6rem 1fr; gap: .6rem; align-items: start; }
+.an-dot { width: 1.4rem; height: 1.4rem; border-radius: 50%; display: grid; place-items: center;
+  font-size: .75rem; color: #fff; }
+.an-dot.ok { background: var(--success, #15803d); }
+.an-dot.bad { background: var(--danger, #b91c1c); }
+.an-step b { display: block; }
+.an-help { color: var(--text-muted, #6b7280); font-size: .85rem; }
+.an-fix { color: var(--danger, #b91c1c); font-size: .85rem; }
+.an-banner { padding: .7rem .9rem; border-radius: var(--radius-sm); font-weight: 600; }
+.an-banner.ok { background: rgba(21,128,61,.12); color: var(--success, #15803d); }
+.an-banner.bad { background: rgba(180,83,9,.12); color: var(--warning, #b45309); }
+.an-grid { display: grid; gap: .9rem; }
+.an-field { display: grid; gap: .3rem; }
+.an-field label { font-weight: 600; font-size: .9rem; }
+.an-field input[type=text], .an-field input[type=number], .an-field select {
+  padding: .5rem .65rem; border: 1px solid var(--input-border, var(--border-color));
+  border-radius: var(--radius-sm); background: var(--input-bg, var(--bg-card));
+  color: var(--text-primary, inherit); font: inherit; width: 100%; min-width: 0;
+}
+.an-check { display: flex; gap: .5rem; align-items: center; font-weight: 600; font-size: .9rem; }
+.an-row { display: flex; gap: .5rem; align-items: end; flex-wrap: wrap; }
+.an-row .an-field { flex: 1 1 14rem; }
+.an-errors { color: var(--danger, #b91c1c); font-size: .85rem; }
+.an-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+.an-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.an-table th, .an-table td { text-align: left; padding: .5rem; border-bottom: 1px solid var(--border-color); vertical-align: middle; }
+.an-table-wrap { overflow-x: auto; }
+.an-folders { font-family: ui-monospace, Consolas, monospace; font-size: .82rem; margin: .3rem 0 0; padding-left: 1.1rem; }
+.an-tag { font-size: .78rem; padding: .1rem .45rem; border-radius: 999px; white-space: nowrap; }
+.an-tag.ok { background: rgba(21,128,61,.12); color: var(--success, #15803d); }
+.an-tag.bad { background: rgba(185,28,28,.12); color: var(--danger, #b91c1c); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Ansur connection</h1>
+    <p class="page-subtitle">Set up this PC once so technicians can press <b>Start with Ansur</b> on Perform Calibration.</p>
+  </div>
+</div>
+
+<div class="an-wrap">
+
+  {# ── 1. Readiness ─────────────────────────────────────────────── #}
+  <div class="section-card">
+    <h2 class="section-title">Status</h2>
+    {% if ready and cfg.enabled %}
+      <div class="an-banner ok">Ready. Technicians see Start with Ansur for the linked procedures.</div>
+    {% elif ready %}
+      <div class="an-banner ok">Everything checks out. Tick "Show Start with Ansur" below and save to switch it on.</div>
+    {% else %}
+      <div class="an-banner bad">Not ready yet. Work down the list; each red item says what to do.</div>
+    {% endif %}
+    <ol class="an-steps" style="margin-top:.8rem">
+      {% for c in checks %}
+        <li class="an-step">
+          <span class="an-dot {% if c.ok %}ok{% else %}bad{% endif %}" aria-hidden="true">{% if c.ok %}&#10003;{% else %}!{% endif %}</span>
+          <div>
+            <b>{{ c.name }}</b>
+            <span class="an-help">{{ c.detail }}</span>
+            {% if c.fix %}<div class="an-fix">{{ c.fix }}</div>{% endif %}
+          </div>
+        </li>
+      {% endfor %}
+    </ol>
+  </div>
+
+  {# ── 2. Connection ────────────────────────────────────────────── #}
+  <div class="section-card">
+    <h2 class="section-title">Connection</h2>
+    <form method="post" class="an-grid" novalidate>
+      {% csrf_token %}
+      <input type="hidden" name="action" value="save">
+      {% if form.non_field_errors %}<div class="an-errors">{{ form.non_field_errors|join:" " }}</div>{% endif %}
+
+      <div class="an-field">
+        <label for="{{ form.program_path.id_for_label }}">{{ form.program_path.label }}</label>
+        {{ form.program_path }}
+        <span class="an-help">Usually found for you with <b>Find Ansur</b>. Otherwise paste the full path to Ansur's .exe.</span>
+        {% if form.program_path.errors %}<div class="an-errors">{{ form.program_path.errors|join:" " }}</div>{% endif %}
+      </div>
+
+      <div class="an-field">
+        <label for="{{ form.base_folder.id_for_label }}">{{ form.base_folder.label }}</label>
+        {{ form.base_folder }}
+        <span class="an-help">On this PC's own disk (not a network share). Cirqen uses these folders inside it:</span>
+        <ul class="an-folders">
+          <li>{{ folders.jobs }}: work orders Cirqen sends to Ansur</li>
+          <li>{{ folders.results }}: where Ansur saves its test records</li>
+          <li>{{ folders.archive }}: records already imported</li>
+          <li>{{ folders.quarantine }}: records refused, with the reason</li>
+          <li>{{ folders.templates }}: the Ansur templates (.mtt) procedures use</li>
+        </ul>
+        <span class="an-help">Add this folder to the antivirus exclusions and to the PC's backup.</span>
+        {% if form.base_folder.errors %}<div class="an-errors">{{ form.base_folder.errors|join:" " }}</div>{% endif %}
+      </div>
+
+      <div class="an-row">
+        <div class="an-field">
+          <label for="{{ form.archive_years.id_for_label }}">{{ form.archive_years.label }}</label>
+          {{ form.archive_years }}
+          {% if form.archive_years.errors %}<div class="an-errors">{{ form.archive_years.errors|join:" " }}</div>{% endif %}
+        </div>
+      </div>
+      <label class="an-check">{{ form.delete_job_files }} {{ form.delete_job_files.label }}</label>
+      <label class="an-check">{{ form.enabled }} {{ form.enabled.label }}</label>
+
+      <div class="an-actions">
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+
+    <div class="an-actions" style="margin-top:.8rem">
+      <form method="post">{% csrf_token %}<input type="hidden" name="action" value="detect">
+        <button type="submit" class="btn btn-secondary"><i class="fas fa-search"></i> Find Ansur</button></form>
+      <form method="post">{% csrf_token %}<input type="hidden" name="action" value="create_folders">
+        <button type="submit" class="btn btn-secondary"><i class="fas fa-folder-plus"></i> Create folders</button></form>
+    </div>
+    <p class="an-help" style="margin-top:.5rem">Save a changed work folder before pressing Create folders.</p>
+  </div>
+
+  {# ── 3. Procedures -> templates ───────────────────────────────── #}
+  <div class="section-card">
+    <h2 class="section-title">Procedures run with Ansur</h2>
+    <p class="an-help">Only procedures listed here get the Start with Ansur button. Copy each template file into
+      <code>{{ folders.templates }}</code> first, then link it.</p>
+
+    {% if maps %}
+      <div class="an-table-wrap">
+        <table class="an-table">
+          <thead><tr><th>Procedure</th><th>Ansur template</th><th>Standard</th><th>Service event</th><th></th></tr></thead>
+          <tbody>
+          {% for link in maps %}
+            <tr>
+              <td>{{ link.procedure.name }}</td>
+              <td>{{ link.template_file }}
+                {% if link.file_found %}<span class="an-tag ok">found</span>{% else %}<span class="an-tag bad">missing</span>{% endif %}</td>
+              <td>{{ link.ansur_standard|default:"—" }}</td>
+              <td>{{ link.service_event }}</td>
+              <td>
+                <form method="post">{% csrf_token %}
+                  <input type="hidden" name="action" value="remove_map">
+                  <input type="hidden" name="map_id" value="{{ link.id }}">
+                  <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+
+    <form method="post" class="an-grid" style="margin-top:1rem" novalidate>
+      {% csrf_token %}
+      <input type="hidden" name="action" value="add_map">
+      {% if map_form.non_field_errors %}<div class="an-errors">{{ map_form.non_field_errors|join:" " }}</div>{% endif %}
+      <div class="an-row">
+        <div class="an-field">
+          <label for="{{ map_form.procedure.id_for_label }}">Procedure</label>
+          {{ map_form.procedure }}
+          {% if map_form.procedure.errors %}<div class="an-errors">{{ map_form.procedure.errors|join:" " }}</div>{% endif %}
+        </div>
+        <div class="an-field">
+          <label for="{{ map_form.template_file.id_for_label }}">{{ map_form.template_file.label }}</label>
+          <input type="text" name="template_file" id="{{ map_form.template_file.id_for_label }}"
+                 list="ansur-templates" value="{{ map_form.template_file.value|default:'' }}" placeholder="Defibrillator.mtt">
+          <datalist id="ansur-templates">{% for t in templates %}<option value="{{ t }}">{% endfor %}</datalist>
+          {% if not templates %}<span class="an-help">No templates in the folder yet.</span>{% endif %}
+          {% if map_form.template_file.errors %}<div class="an-errors">{{ map_form.template_file.errors|join:" " }}</div>{% endif %}
+        </div>
+      </div>
+      <div class="an-row">
+        <div class="an-field">
+          <label for="{{ map_form.ansur_standard.id_for_label }}">{{ map_form.ansur_standard.label }}</label>
+          {{ map_form.ansur_standard }}
+        </div>
+        <div class="an-field">
+          <label for="{{ map_form.service_event.id_for_label }}">Service event</label>
+          {{ map_form.service_event }}
+        </div>
+      </div>
+      <div class="an-actions"><button type="submit" class="btn btn-primary">Link procedure</button></div>
+    </form>
+  </div>
+
+  {# ── 4. Ansur-side notes ──────────────────────────────────────── #}
+  <div class="section-card">
+    <h2 class="section-title">In Ansur, once</h2>
+    <ul class="an-help" style="margin:0;padding-left:1.1rem;display:grid;gap:.3rem">
+      <li>Add a custom device (DUT) field named <b>Cirqen Job</b> to each linked template. Cirqen uses it to match a record to its job.</li>
+      <li>Leave <b>Restrict access</b> off for test records, or Cirqen cannot read them.</li>
+      <li>Keep device serial numbers the same in Ansur and Cirqen.</li>
+    </ul>
+  </div>
+
+</div>
+{% endblock %}

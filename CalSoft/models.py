@@ -1083,3 +1083,58 @@ class IssuedCertificate(models.Model):
 
     def __str__(self):
         return f"{self.certificate_number} ({self.sha256[:12]})"
+
+
+class AnsurSettings(models.Model):
+    """How this PC reaches Fluke Ansur, set on the Ansur connection page.
+
+    One row per machine, and kept on this machine only (not in sync_tables):
+    the paths belong to the Windows desktop that has Ansur installed, not to
+    the site. Read through AnsurSettings.load(); CalSoft.ansur.setup checks
+    whether what is saved actually works.
+    """
+    enabled = models.BooleanField(
+        default=False, help_text="Show the Start with Ansur button on Perform Calibration.")
+    program_path = models.CharField(max_length=500, blank=True)
+    base_folder = models.CharField(max_length=500, default=r"C:\CirqenAnsur")
+    delete_job_files = models.BooleanField(
+        default=True, help_text="Remove the work-order file once its result is imported.")
+    archive_years = models.PositiveSmallIntegerField(
+        default=10, validators=[MinValueValidator(1), MaxValueValidator(50)])
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+
+    def save(self, *args, **kwargs):
+        self.pk = 1  # one row per machine
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def load(cls):
+        return cls.objects.filter(pk=1).first() or cls(pk=1)
+
+    def __str__(self):
+        return "Ansur connection"
+
+
+class AnsurTemplateMap(models.Model):
+    """Which Ansur template (.mtt) runs a calibration procedure.
+
+    A procedure with no row here has no Start with Ansur button. The template
+    is named by file only; it lives in the templates folder under
+    AnsurSettings.base_folder, so every Ansur test starts from a controlled copy.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    procedure = models.OneToOneField(
+        CalibrationProcedure, on_delete=models.CASCADE, related_name="ansur_template")
+    template_file = models.CharField(max_length=255)
+    ansur_standard = models.CharField(
+        max_length=100, blank=True, help_text="Safety standard in Ansur, e.g. IEC 62353.")
+    service_event = models.CharField(max_length=60, default="PM")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["procedure__name"]
+
+    def __str__(self):
+        return f"{self.procedure} -> {self.template_file}"

@@ -19,6 +19,7 @@ urlpatterns = [
     ),
     # 🔧 Performing Calibration
     path("perform/", views.perform_calibration_global, name="perform_calibration"),
+    path("settings/ansur/", views.ansur_settings, name="ansur_settings"),
     path(
         "complete-calibration/<uuid:session_id>/",
         views.complete_calibration_from_session,

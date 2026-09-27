@@ -258,6 +258,16 @@
           <span class="link-label">Site details</span>
         </a>
       </li>
+      <li class="menu-entry" role="none">
+        <a href="{% url 'calibration:ansur_settings' %}"
+          class="menu-link {% if request.resolver_match.url_name == 'ansur_settings' %}active-link{% endif %}"
+          role="menuitem">
+          <div class="link-icon" aria-hidden="true">
+            <i class="fas fa-plug"></i>
+          </div>
+          <span class="link-label">Ansur connection</span>
+        </a>
+      </li>
     {% endif %}
 
     {# ══════════════════════════════════════════════════════ #}
