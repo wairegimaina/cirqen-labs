@@ -72,6 +72,11 @@ app.conf.beat_schedule = {
         "task": "core.tasks.prune_report_cache",
         "schedule": crontab(minute="*/30"),
     },
+    # Sign-in security events past their retention (SECURITY_LOG_DAYS).
+    "prune-security-log": {
+        "task": "core.tasks.prune_security_log",
+        "schedule": crontab(hour=2, minute=41),
+    },
     # ============================================================================
     # PPM (PREVENTIVE MAINTENANCE) TASKS - KEEP AS IS
     # ============================================================================

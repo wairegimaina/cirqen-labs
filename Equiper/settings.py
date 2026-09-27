@@ -251,6 +251,9 @@ CERTIFICATE_PREFIX = os.getenv("CIRQEN_CERT_PREFIX") or config.get("certificates
 # Second backup location (core.backups.copy_dir); CIRQEN_BACKUP_COPY_DIR wins.
 BACKUP_COPY_DIR = config.get("backups.copy_dir") or ""
 BACKUP_KEEP = int(os.getenv("CIRQEN_BACKUP_KEEP") or config.get("backups.keep") or 14)
+# Sign-in security log retention in days (docs/legal/DATA_PROTECTION.md);
+# 0 keeps it forever. HQ prunes its copy on its own schedule.
+SECURITY_LOG_DAYS = int(os.getenv("CIRQEN_SECURITY_LOG_DAYS") or config.get("security.log_days") or 365)
 
 # ============================================================
 # 🔴 REDIS & CACHING

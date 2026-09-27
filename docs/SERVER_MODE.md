@@ -166,6 +166,9 @@ one covering the new names is made.
   heads of department.
 - In-charges can approve work orders from a phone: menu, Work Orders,
   Approve (phone view).
+- Sign-in security events are deleted after 365 days. Change it with
+  `CIRQEN_SECURITY_LOG_DAYS` (0 keeps them); agree the period with the
+  hospital's data protection officer.
 
 - Only nginx listens on the network; the app, database and Redis listen on
   127.0.0.1 only. Open port 443 (and 80, for the redirect) in the firewall.

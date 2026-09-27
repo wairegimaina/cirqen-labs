@@ -19,7 +19,7 @@ All must be true. Owner in brackets.
 | 7 | Validation pack signed on the installed copy (worked example matches) | Hospital calibration centre |
 | 8 | Server installed (or desktops for a smaller site); second backup copy location set; first restore drill passed | Hospital IT + Cirqen Labs |
 | 9 | Two engineers trained on support; on-call rota published | Cirqen Labs |
-| 10 | Security-log retention prune in place (see `docs/legal/DATA_PROTECTION.md`) | Cirqen Labs |
+| 10 | Retention periods agreed with the hospital and set (`CIRQEN_SECURITY_LOG_DAYS` at the site, `SECURITY_LOG_DAYS` at HQ; default 365) | Cirqen Labs + hospital |
 
 ## 2. Timeline
 

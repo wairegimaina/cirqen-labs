@@ -51,6 +51,8 @@ using the new version for certificates.
   second copy off the server's disk.
 - Per-site branding: hospital name, address and logo on documents.
 - Bulk user import from a spreadsheet.
+- Sign-in security events are deleted after 365 days
+  (`CIRQEN_SECURITY_LOG_DAYS`; 0 keeps them).
 
 ### Upgrade notes
 - HQ must be updated first and `public.assets_supplier` and

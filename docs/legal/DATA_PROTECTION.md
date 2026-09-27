@@ -55,7 +55,7 @@ advocate should confirm this reading.
 | Calibration records, certificates, audit trail | Life of the equipment + 1 calibration interval, at least 5 years (confirm against the hospital's quality manual and records policy) | Archived with the equipment record |
 | Work orders, PPM records | Life of the equipment + 2 years | As above |
 | Staff user accounts | While employed; deactivated (not deleted) when they leave, because their name is on quality records | HOD deactivates the account |
-| Sign-in security log | 12 months (proposed) | Not yet automatic: Cirqen keeps it until deleted. A scheduled prune is a follow-up before go-live |
+| Sign-in security log | 12 months | Deleted automatically each night at the site (`CIRQEN_SECURITY_LOG_DAYS`) and daily at HQ (`SECURITY_LOG_DAYS`); default 365 days |
 | Backups | Desktop 14 copies; server 30 days (`CIRQEN_BACKUP_KEEP`) | Rotated automatically |
 | HQ copy after a contract ends | Returned as an export, then deleted within 90 days | Written confirmation to the hospital |
 

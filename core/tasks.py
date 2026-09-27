@@ -298,6 +298,27 @@ def prune_report_cache():
 
 
 @shared_task
+def prune_security_log(today=None):
+    """Delete sign-in security events older than SECURITY_LOG_DAYS.
+
+    Local only: sync sends changed rows, not deletions, so HQ's copy is pruned
+    by HQ itself. Returns how many rows were removed.
+    """
+    from datetime import timedelta
+
+    from users.models import UserSecurityLog
+
+    days = settings.SECURITY_LOG_DAYS
+    if days <= 0:
+        return 0
+    cutoff = (today or timezone.now()) - timedelta(days=days)
+    removed, _ = UserSecurityLog.objects.filter(timestamp__lt=cutoff).delete()
+    if removed:
+        logger.info("Pruned %d security log events older than %d days", removed, days)
+    return removed
+
+
+@shared_task
 def verify_latest_backup():
     """Daily: the newest backup exists, is recent and can be read back.
 
