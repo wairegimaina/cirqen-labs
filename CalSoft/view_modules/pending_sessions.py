@@ -16,6 +16,7 @@ from django.http import JsonResponse, HttpResponseForbidden
 from django.core.paginator import Paginator
 from django.core.exceptions import ValidationError
 
+from CalSoft.cert_signal import announce_pending_certificate
 from CalSoft.models import (
     CalibrationSession,
     CalibrationAuditLog,
@@ -380,6 +381,7 @@ def approve_calibration_session_ajax(request, pk):
             )
 
             _mark_schedule_for_session_approval(locked_session.schedule, "pushed", now)
+            announce_pending_certificate(locked_session.id)
 
             logger.info(
                 "Session %s approved; certificate number requested from HQ",
@@ -558,3 +560,26 @@ def download_declined_certificate(request, pk):
     response["Content-Disposition"] = f'attachment; filename="{filename}"'
 
     return response
+
+
+@login_required
+@require_http_methods(["GET"])
+@calibration_reviewer_required
+def certificate_status(request):
+    """Status and certificate number of up to 50 sessions (?ids=a,b,c).
+
+    Polled every couple of seconds by the approval page while any session on
+    it is waiting for HQ to allocate its number, so the number appears
+    without a reload.
+    """
+    ids = []
+    for raw in request.GET.get("ids", "").split(",")[:50]:
+        try:
+            ids.append(uuid.UUID(raw.strip()))
+        except ValueError:
+            continue
+    rows = CalibrationSession.objects.filter(pk__in=ids).values("id", "status", "certificate_number")
+    return JsonResponse({"sessions": {
+        str(row["id"]): {"status": row["status"], "certificate_number": row["certificate_number"] or None}
+        for row in rows
+    }})

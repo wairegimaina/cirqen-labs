@@ -362,7 +362,7 @@ class CirqenConfig:
             "max_retries": 3,
             "retry_backoff": 3.0,
             "heartbeat_interval": 60,
-            "certificate_interval": 30,
+            "certificate_interval": 10,
             "conflict_resolution": "last_write_wins",
             "wait_for_hq": True,
             "max_wait_for_hq": 300,

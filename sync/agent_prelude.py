@@ -445,7 +445,7 @@ def load_config_from_env_fallback():
             "retry_backoff_base": float(os.getenv("SYNC_RETRY_BACKOFF", "2.0")),
             "max_retry_backoff": 300.0,
             "heartbeat_interval": int(os.getenv("SYNC_HEARTBEAT_INTERVAL", "60")),
-            "certificate_sync_interval": int(os.getenv("SYNC_CERTIFICATE_INTERVAL", "30")),
+            "certificate_sync_interval": int(os.getenv("SYNC_CERTIFICATE_INTERVAL", "10")),
             "conflict_resolution": os.getenv("SYNC_CONFLICT_RESOLUTION", "last_write_wins"),
             "state_dir": os.getenv("SYNC_STATE_DIR", "~/.cmms"),
             "wait_for_hq": os.getenv("WAIT_FOR_HQ", "true").lower() == "true",

@@ -247,7 +247,7 @@ class LifecycleMixin(SmartDeleteMixin):
             LOG.info("⏱️  Sync Intervals:")
             LOG.info("   • 📤 Upload: Every %ds", self.sync_cfg.get("poll_interval_seconds", 10))
             LOG.info("   • 📥 Download: Every %ds", self.sync_cfg.get("download_interval_seconds", 15))
-            LOG.info("   • 📜 Certificates: Every %ds", self.sync_cfg.get("certificate_sync_interval", 30))
+            LOG.info("   • 📜 Certificates: Every %ds", self.sync_cfg.get("certificate_sync_interval", 10))
             LOG.info("   • 💓 Heartbeat: Every %ds", self.sync_cfg.get("heartbeat_interval", 60))
             LOG.info(
                 "   • 🛡️  Cert conflict guard: Every %ds",

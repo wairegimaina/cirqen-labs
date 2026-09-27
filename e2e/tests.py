@@ -221,8 +221,17 @@ class CalibrationJourney(BrowserJourneys):
         session.refresh_from_db()
         self.assertEqual(session.status, "approved_pending_certificate")
 
-        # HQ allocates the number (hq_server); simulate that step.
+        # The awaiting tab shows "Pending" and fills the number in live, with no
+        # reload, when HQ allocates it (hq_server; simulated here).
+        review.goto(self.live_server_url + "/calibration/sessions/pending-approval/?tab=awaiting_certificate")
+        cell = review.locator(f"[data-awaiting-cert='{session.pk}']")
+        self.assertEqual(cell.inner_text(), "Pending")
+        review.evaluate("window.__noReload = true")
         CalibrationSession.objects.filter(pk=session.pk).update(status="approved", certificate_number="BNH-0500")
+        review.wait_for_selector("text=BNH-0500", timeout=6000)
+        self.assertTrue(review.evaluate("window.__noReload === true"), "the page reloaded")
+        self.assertEqual(review.locator(f"[data-awaiting-cert='{session.pk}']").count(), 0)
+
         review.goto(f"{self.live_server_url}/calibration/sessions/{session.pk}/")
         with review.expect_download() as download:
             review.click(f"a[href$='/sessions/{session.pk}/certificate/comprehensive/']")

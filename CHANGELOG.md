@@ -18,6 +18,9 @@ using the new version for certificates.
   same number. A clash made offline by an older version is repaired
   automatically and recorded in the audit trail.
 - Certificate QR codes open HQ's public check page.
+- Certificate numbers arrive in seconds instead of up to a minute or more:
+  approving wakes the sync agent at once, HQ allocates in the same request
+  and returns the number, and the approval page shows it without a reload.
 - Certificate prefix is set per site.
 - One calibration schedule list (the duplicate schedule table was retired).
 - Bulk certificate download no longer uses a GPL-licensed library.

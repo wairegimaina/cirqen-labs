@@ -58,6 +58,7 @@ from .view_modules.certificates import (
 from .view_modules.pending_sessions import (
     sessions_pending_approval,
     approve_calibration_session_ajax,
+    certificate_status,
     reject_calibration_session,
     restore_rejected_session,
     download_declined_certificate,
