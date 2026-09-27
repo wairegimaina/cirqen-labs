@@ -211,7 +211,7 @@ def _read_steps(root, skip=None):
         value = parse_number(raw_value)
         if value is None:
             # A Pass/Fail-only step (visual inspection, alarms), not a measurement.
-            if status in ("Pass", "Fail", "Not performed") and len(element) <= 12:
+            if status in ("Pass", "Fail", "NA", "Not performed") and len(element) <= 12:
                 checks.append((name.strip(), status))
             continue
         steps.append(Step(

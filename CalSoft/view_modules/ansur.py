@@ -376,7 +376,12 @@ def ansur_job_status(request):
         except Exception:
             logger.exception("Ansur scan from the status check failed")
         job.refresh_from_db()
-    return JsonResponse({"success": True, "job": job_payload(job)})
+    payload = job_payload(job)
+    if job.status == AnsurJob.SENT:
+        # Lets the page say "Ansur is closed" when the technician shut it
+        # without saving; None when it cannot tell (not Windows).
+        payload["ansur_running"] = launcher.is_running(AnsurSettings.load())
+    return JsonResponse({"success": True, "job": payload})
 
 
 def _may_manage(user, job):
@@ -463,4 +468,5 @@ def ansur_review_details(session):
         "disagreements": session.ansur_disagreements,
         "pdf_url": reverse("calibration:ansur_session_pdf", args=[session.pk]) if job and job.pdf_copy else "",
         "record_sha256": session.ansur_record_sha256,
+        "checks": session.ansur_checks or [],
     }

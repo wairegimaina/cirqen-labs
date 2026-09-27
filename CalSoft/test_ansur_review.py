@@ -43,6 +43,7 @@ class AnsurReviewTests(AnsurFixture, TestCase):
         self.assertEqual(data["source"], "ansur")
         self.assertEqual(data["ansur"]["job_number"], self.job.job_number)
         self.assertEqual(data["ansur"]["disagreements"], 1)
+        self.assertEqual(data["ansur"]["checks"], [{"name": "Visual inspection", "status": "Pass"}])
         leakage = next(r for r in data["readings"] if r["parameter"] == "Earth leakage")
         self.assertEqual((leakage["verdict"], leakage["ansur_status"], leakage["limit_type"]),
                          ("INDETERMINATE", "Pass", "upper"))
@@ -123,5 +124,7 @@ class AnsurReviewTests(AnsurFixture, TestCase):
         reader = PdfReader(io.BytesIO(content))
         text = " ".join(page.extract_text() for page in reader.pages)
         self.assertIn("MEASURED WITH FLUKE ANSUR", text)
+        self.assertIn("CHECKS RECORDED IN ANSUR", text)
+        self.assertIn("Visual inspection", text)
         self.assertIn("Annex A", text)
         self.assertIn("Ansur report", text)

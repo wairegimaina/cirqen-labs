@@ -64,8 +64,13 @@
     el.text.textContent = data.text || "";
     el.error.hidden = !data.error;
     el.error.textContent = data.error || "";
-    el.warning.hidden = !data.warning;
-    el.warning.textContent = data.warning || "";
+    let warning = data.warning || "";
+    if (data.status === "sent" && data.ansur_running === false) {
+      warning = "Ansur is not running. If you saved the test it will appear here in a few seconds; " +
+        "otherwise press Open Ansur again.";
+    }
+    el.warning.hidden = !warning;
+    el.warning.textContent = warning;
 
     ["sent", "run", "imported", "approval"].forEach((s) => setStep(s, ""));
     if (data.status === "prepared") setStep("sent", "active");

@@ -509,6 +509,9 @@ class CalibrationSession(models.Model):
     ansur_operator = models.CharField(max_length=150, blank=True)
     ansur_record_sha256 = models.CharField(max_length=64, blank=True)
     ansur_disagreements = models.PositiveSmallIntegerField(default=0)
+    # Ansur's Pass/Fail-only steps (visual inspection, alarms...), as
+    # [{"name": ..., "status": "Pass" | "Fail" | "NA"}], in record order.
+    ansur_checks = models.JSONField(default=list, blank=True)
 
     # offline sync
     needs_sync = models.BooleanField(default=True)

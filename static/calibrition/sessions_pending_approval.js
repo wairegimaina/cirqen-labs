@@ -299,6 +299,13 @@
           ? "<div class=\"mt-1\"><strong>Ansur's verdict differs from Cirqen's at " + a.disagreements +
             " test point(s)</strong>, highlighted below. Cirqen's guard-banded verdict is the one on the certificate.</div>"
           : "") +
+        (a.checks && a.checks.length
+          ? '<div class="mt-1">Checks: ' + a.checks.map(function (c) {
+              const failed = c.status === "Fail";
+              return (failed ? "<strong class=\"text-danger\">" : "") + escapeHTML(c.name) + ": " +
+                escapeHTML(c.status) + (failed ? "</strong>" : "");
+            }).join("; ") + "</div>"
+          : "") +
         "</div>";
     }
 

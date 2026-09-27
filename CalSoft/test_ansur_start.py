@@ -145,3 +145,25 @@ class StartWithAnsurTests(AnsurFixture, TestCase):
         self._start()
         page = self.client.get(reverse("calibration:perform_calibration"), {"equipment": self.equipment.pk})
         self.assertContains(page, AnsurJob.objects.get().job_number)
+
+
+class AnsurRunningTests(AnsurFixture, TestCase):
+    def setUp(self):
+        self.make_ansur_site()
+
+    def test_reads_tasklist(self):
+        from CalSoft.ansur import launcher
+
+        found = mock.Mock(stdout='"Ansur.exe","4120","Console","1","210,000 K"\n')
+        with mock.patch("CalSoft.ansur.launcher.subprocess.run", return_value=found):
+            self.assertTrue(launcher.is_running(self.cfg))
+        none = mock.Mock(stdout="INFO: No tasks are running which match the specified criteria.\n")
+        with mock.patch("CalSoft.ansur.launcher.subprocess.run", return_value=none):
+            self.assertFalse(launcher.is_running(self.cfg))
+
+    def test_status_says_when_ansur_was_closed(self):
+        job = self.make_job()
+        self.client.force_login(self.tech)
+        with mock.patch("CalSoft.ansur.launcher.is_running", return_value=False):
+            data = self.client.get(STATUS, {"job": job.pk}).json()["job"]
+        self.assertIs(data["ansur_running"], False)

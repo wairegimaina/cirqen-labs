@@ -59,3 +59,18 @@ def make_pdf(cfg, record_path) -> Path | None:
              if p not in before or p.stat().st_mtime > before[p]]
     matching = [p for p in fresh if record_path.stem.lower() in p.stem.lower()]
     return (matching or fresh or [None])[0]
+
+
+def is_running(cfg) -> bool | None:
+    """Whether Ansur's program is running on this PC; None if unknown."""
+    if not setup.is_windows() or not cfg.program_path:
+        return None
+    name = Path(cfg.program_path).name
+    try:
+        result = subprocess.run(
+            ["tasklist", "/FI", f"IMAGENAME eq {name}", "/NH", "/FO", "CSV"],
+            capture_output=True, text=True, timeout=5,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return f'"{name.lower()}"' in result.stdout.lower()

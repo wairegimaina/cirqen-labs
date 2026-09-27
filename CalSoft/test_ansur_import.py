@@ -230,3 +230,31 @@ class WatcherTests(AnsurFixture, TestCase):
         (old / "a.mtr").write_text("x")
         self.assertEqual(watcher.prune_archive(), 1)
         self.assertFalse(old.exists())
+
+
+class AnsurHistoryAndChecksTests(AnsurFixture, TestCase):
+    def setUp(self):
+        self.make_ansur_site()
+
+    def test_checks_are_kept_as_data(self):
+        job = self.make_job()
+        session = import_record(job, record_xml(job=job.job_number, visual="Fail"))
+        self.assertEqual(session.ansur_checks, [{"name": "Visual inspection", "status": "Fail"}])
+
+    def test_ansur_results_feed_the_drift_history(self):
+        from CalSoft.models import HistoricalCalibration
+        from CalSoft.utils import DriftAnalyzer
+
+        first = self.make_job(job_number="CQ-250101-0001")
+        session = import_record(first, record_xml(job=first.job_number, energy="352.4"))
+        CalibrationSession.objects.filter(pk=session.pk).update(
+            timestamp=session.timestamp.replace(year=session.timestamp.year - 1))
+        HistoricalCalibration.objects.filter(device_serial="DF-44102").update(
+            calibration_date=session.timestamp.replace(year=session.timestamp.year - 1))
+        second = self.make_job(job_number="CQ-260101-0002")
+        import_record(second, record_xml(job=second.job_number, energy="356.0"))
+
+        rows = HistoricalCalibration.objects.filter(device_serial="DF-44102", parameter_name="Energy")
+        self.assertEqual(sorted(r.measured_value for r in rows), [D("352.4"), D("356.0")])
+        drift = DriftAnalyzer.analyze_drift("DF-44102")
+        self.assertIn(360.0, drift["Energy"])

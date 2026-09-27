@@ -24,6 +24,10 @@ using the new version for certificates.
   procedures too.
 - Ansur's own Pass/Fail is kept beside Cirqen's; where they differ the
   reviewer sees it highlighted and must tick to confirm before approving.
+- Ansur's Pass/Fail-only checks (visual inspection, alarms) are kept with
+  the session, shown to the reviewer and printed on the certificate; a
+  failed check fails the calibration. The page says when Ansur has been
+  closed without a saved record.
 - The certificate says the readings were taken with Ansur, and Ansur's
   detailed PDF is attached as Annex A inside the issued copy.
 - New **Ansur connection** page (HOD): find Ansur, create the work folders,

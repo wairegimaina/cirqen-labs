@@ -62,6 +62,10 @@ Ansur's manual does not print everything Cirqen relies on. On the real PC:
 
 ## Review (calibration centre or HOD)
 
+Ansur's Pass/Fail-only steps (visual inspection, alarms) are listed in the
+review and printed on the certificate as "Checks recorded in Ansur"; a failed
+check fails the calibration.
+
 The review shows the Ansur job, operator, Ansur's Pass/Fail beside Cirqen's
 verdict for every point, and a link to Ansur's PDF. Where the two verdicts
 differ (usually a reading close to a limit, which Cirqen calls

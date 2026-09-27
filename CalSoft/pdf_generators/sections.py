@@ -2,6 +2,7 @@
 """CalSoft.pdf_generators — the B-12 hospital certificate generator + thin wrapper."""
 import base64
 import calendar
+from xml.sax.saxutils import escape
 import io
 import os
 from datetime import datetime, timedelta
@@ -309,6 +310,32 @@ class SectionsMixin:
             + ", ".join(factors)
             + "), each derived from that parameter's effective degrees of freedom"
         )
+
+    def build_ansur_checks_content(self):
+        """Ansur's Pass/Fail-only steps (visual inspection, alarms...).
+
+        Not measurements, so they carry no uncertainty; a failed check fails
+        the calibration, as a failed reading does.
+        """
+        rows = [['Check', 'Result']]
+        for check in getattr(self.session, 'ansur_checks', None) or []:
+            rows.append([Paragraph(escape(str(check.get('name', ''))), self.styles['NormalText']),
+                         str(check.get('status', ''))])
+        table = Table(rows, colWidths=[5.2 * inch, 1.6 * inch])
+        style = [
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('BACKGROUND', (0, 0), (-1, 0), HexColor('#e5e7eb')),
+            ('BOX', (0, 0), (-1, -1), 0.5, HexColor('#d1d5db')),
+            ('INNERGRID', (0, 0), (-1, -1), 0.25, HexColor('#d1d5db')),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ]
+        for i, row in enumerate(rows[1:], 1):
+            if row[1] == 'Fail':
+                style += [('TEXTCOLOR', (1, i), (1, i), HexColor('#dc2626')),
+                          ('FONTNAME', (1, i), (1, i), 'Helvetica-Bold')]
+        table.setStyle(TableStyle(style))
+        return [table]
 
     def build_notes_content(self):
         """Build notes content with failure-specific notes."""

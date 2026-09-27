@@ -228,6 +228,7 @@ def import_record(job: AnsurJob, data: bytes, *, pdf: bytes | None = None, file_
             actual_humidity=job.actual_humidity, actual_pressure=job.actual_pressure,
             notes=_notes(job, record, plan), status="pending_review", source="ansur",
             ansur_operator=record.operator[:150], ansur_record_sha256=sha,
+            ansur_checks=[{"name": name[:150], "status": status[:20]} for name, status in record.checks],
         )
 
         for parameter in {row[0] for row in plan.rows}:
