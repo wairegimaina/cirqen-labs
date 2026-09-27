@@ -24,6 +24,8 @@ from CalSoft.models import (
     CalibrationReading,
 )
 from calSchedules.models import CalibrationSchedule
+from CalSoft.utils import reading_conformity
+from CalSoft.view_modules.ansur import ansur_review_details
 from core.eat import fmt_eat
 
 
@@ -252,10 +254,15 @@ def session_details(request, pk):
                     float(r.expanded_uncertainty) if r.expanded_uncertainty is not None else None
                 ),
                 "passes_tolerance": r.passes_tolerance,
+                "verdict": reading_conformity(r),
+                "limit_type": r.parameter.limit_type if r.parameter else "two_sided",
+                "ansur_status": r.ansur_status,
             }
         )
 
     data = {
+        "source": session.source,
+        "ansur": ansur_review_details(session),
         "id": str(session.id),
         "status": session.status,
         "overall_pass": session.overall_pass,
@@ -345,6 +352,21 @@ def approve_calibration_session_ajax(request, pk):
                     status=403,
                 )
 
+            # Ansur's own Pass/Fail disagreed with Cirqen's guard-banded
+            # verdict somewhere: the reviewer has to say they have seen it.
+            if locked_session.ansur_disagreements and request.POST.get("acknowledge_ansur") != "1":
+                return JsonResponse(
+                    {
+                        "success": False,
+                        "needs_ansur_acknowledgement": True,
+                        "error": (
+                            f"Ansur's verdict differs from Cirqen's at {locked_session.ansur_disagreements} "
+                            "test point(s). Tick the box to confirm you have reviewed them."
+                        ),
+                    },
+                    status=400,
+                )
+
             now = timezone.now()
 
             # Certificate numbers are allocated by the HQ server only.
@@ -381,6 +403,12 @@ def approve_calibration_session_ajax(request, pk):
             )
 
             _mark_schedule_for_session_approval(locked_session.schedule, "pushed", now)
+            if locked_session.ansur_disagreements:
+                CalibrationAuditLog.objects.create(
+                    user=request.user, action="approve_calibration", session=locked_session,
+                    description=(f"Approved with {locked_session.ansur_disagreements} point(s) where Ansur's "
+                                 "verdict differs from Cirqen's, acknowledged by the reviewer."),
+                )
             announce_pending_certificate(locked_session.id)
 
             logger.info(

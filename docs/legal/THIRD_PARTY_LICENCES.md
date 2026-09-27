@@ -95,6 +95,7 @@ Obligations, met as follows:
 | aiohttp | 3.14.3 | Apache-2.0 AND MIT |
 | flask | 3.1.3 | BSD-3-Clause |
 | reportlab | 5.0.1 | BSD License |
+| pypdf | 6.19.0 | BSD-3-Clause |
 | openpyxl | 3.1.5 | MIT License |
 | python-docx | 1.2.0 | MIT License |
 | docxtpl | 0.20.2 | LGPL-2.1-only |

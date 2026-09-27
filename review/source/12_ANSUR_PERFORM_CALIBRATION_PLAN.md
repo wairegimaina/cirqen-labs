@@ -192,7 +192,7 @@ Ansur records one measurement per test point, so there is no Type A spread. The 
 | Resolution | Display step of the analyser | Rectangular, step / $\sqrt{12}$ |
 | Analyser calibration | Expanded uncertainty on the analyser's own certificate / its k | Normal |
 
-Combined as the root sum of squares, with k = 2. The specifications live in a new **analyser specification library** attached to each standard in the register. It is entered once per analyser model from Fluke's datasheet and reviewed by the calibration-centre lead.
+Combined as the root sum of squares, with k = 2. The analyser's accuracy (± % of reading and ± fixed part) and resolution are entered per procedure parameter on the Ansur connection page, from Fluke's datasheet, and reviewed by the calibration-centre lead; its certificate uncertainty is the parameter's reference uncertainty, as for manual work. (Built this way rather than as a separate specification library: each parameter already names its analyser as the reference standard.)
 
 **Worked example: defibrillator energy, two-sided.** The figures are illustrative; use the analyser's datasheet.
 
@@ -241,7 +241,7 @@ The flow is unchanged: `pending` -> reviewer -> `approved_pending_certificate` -
 |---|---|---|
 | Models | `CalibrationSession.source` (manual / ansur); `CalibrationParameter.limit_type` (two-sided / upper / lower) | `CalSoft/models.py` + migration |
 | Models | `AnsurJob` (equipment, schedule, job number, status, job/record/PDF paths, hashes, error, timestamps), with at most one open job per equipment | new, `CalSoft/models.py` |
-| Models | `AnsurTemplateMap` (procedure or equipment description -> `.mtt`); `AnalyserSpec` (standard, range, % of reading, floor, resolution) | new |
+| Models | `AnsurTemplateMap` (procedure -> `.mtt`); on `CalibrationParameter`: `ansur_step`, analyser accuracy (% of reading, fixed part) and resolution | new |
 | Maths | One-sided `guarded_decision`; single-reading uncertainty budget | `CalSoft/utils.py` (re-validation) |
 | Connector | `jobfile.py` (writer), `launcher.py`, `watcher.py`, `parser.py` (`.mtr` -> plain data), `importer.py` (data -> session + readings) | new package `CalSoft/ansur/` |
 | Views | `start_ansur` (POST), `ansur_job_status` (GET, JSON), `ansur_import` (manual fallback upload), Ansur connection settings | `CalSoft/view_modules/ansur.py`, `CalSoft/urls.py` |
@@ -267,7 +267,7 @@ For the HOD or an admin only.
 - **Ansur program path.** Auto-detected, with a *Test connection* button (runs Ansur's version check or opens and closes it).
 - **Folders.** `jobs`, `results`, `archive`, `quarantine`, `templates`. The default is `C:\CirqenAnsur\...` on the **local disk**, not a network share.
 - **Template map.** Procedure -> `.mtt` file, with the Ansur standard and service event. A procedure with no mapping does not show the Ansur button.
-- **Analyser specifications.** Per standard in the register.
+- **Ansur steps.** Per parameter of each linked procedure: the Ansur step name, how it is judged, and the analyser's accuracy and resolution.
 - **Behaviour.** Delete job files after import (yes/no); keep the archive for N years (default: the record retention in the validation pack).
 
 ## 10. Phases: the way to follow
@@ -277,7 +277,7 @@ Do them **in order**. Phase 0 is not optional: every later phase is built and te
 | Phase | Work | Exit when | Weeks |
 |---|---|---|---|
 | **0. Samples** | On the hospital PC: collect 10–20 `.mtr` records with their Ansur PDFs (defib, ECG simulator, electrical safety, infusion, NIBP), the `.mtt` templates, and the analyser datasheets and certificates. Confirm the section 12 items. | Every section 12 question answered in writing | 1 |
-| **1. Maths** | `limit_type`, one-sided verdict, single-reading budget, `AnalyserSpec`; pinned tests for the two worked examples | Tests green; the lead agrees with the numbers | 1–2 |
+| **1. Maths** | `limit_type`, one-sided verdict, single-reading budget, analyser accuracy per parameter; pinned tests for the two worked examples | Tests green; the lead agrees with the numbers | 1–2 |
 | **2. Parser and import** | `parser.py` + `importer.py`; manual **Import Ansur record** upload (the fallback) working end-to-end to an approved certificate | Every Phase 0 sample imports correctly, or is refused for the right reason | 2 |
 | **3. Start with Ansur** | Job-file writer, launcher, watcher, status panel, settings page, fake-Ansur e2e test | A technician runs a real test from the button with no typing | 2–3 |
 | **4. Extras** | Pass/Fail steps into the job-card checklist; PPM auto-close; trend of Ansur results per device | Agreed with the calibration-centre lead | 1–2 |

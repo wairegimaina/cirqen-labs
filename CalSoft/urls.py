@@ -24,6 +24,7 @@ urlpatterns = [
     path("ansur/status/", views.ansur_job_status, name="ansur_job_status"),
     path("ansur/action/", views.ansur_job_action, name="ansur_job_action"),
     path("ansur/upload/", views.ansur_upload, name="ansur_upload"),
+    path("ansur/session/<uuid:pk>/pdf/", views.ansur_session_pdf, name="ansur_session_pdf"),
     path(
         "complete-calibration/<uuid:session_id>/",
         views.complete_calibration_from_session,

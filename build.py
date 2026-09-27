@@ -2355,6 +2355,7 @@ def generate_spec():
     'reportlab.graphics',
     'reportlab.graphics.shapes',
     'reportlab.graphics.charts',
+    'pypdf',
     'PyPDF2',
     'PyPDF2.generic',
     'PyPDF2.pdf',

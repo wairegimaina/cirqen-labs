@@ -41,7 +41,8 @@
 
   function toggleButton() {
     const show = procedures.has(procedureSelect ? procedureSelect.value : "");
-    startBtn.hidden = !show || (job && job.open);
+    // One Ansur job at a time: hidden while a job is open or just imported.
+    startBtn.hidden = !show || (job && job.status !== "cancelled");
   }
 
   function setStep(name, state) {
@@ -74,6 +75,10 @@
       ["sent", "run", "imported"].forEach((s) => setStep(s, "done"));
       setStep("approval", "active");
     }
+
+    // While an Ansur job is under way (or just imported) the manual readings
+    // and their submit button are not the way forward; hide them.
+    form.classList.toggle("ansur-active", data.status !== "cancelled");
 
     el.link.hidden = !data.session_url;
     if (data.session_url) el.link.href = data.session_url;

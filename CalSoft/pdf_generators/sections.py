@@ -327,6 +327,18 @@ class SectionsMixin:
             "5. Where the test uncertainty ratio is below 4:1 the measurement is not sharp enough to judge the tolerance by simple comparison, and the guarded rule above governs."
         ]
 
+        # Readings taken by Fluke Ansur: say so, and how the budget differs.
+        if getattr(self.session, 'source', 'manual') == 'ansur':
+            job = getattr(self.session, 'ansur_job', None)  # reverse one-to-one; None if absent
+            job_text = f" (job {job.job_number}, template {job.template_file})" if job else ""
+            annex = " Ansur's detailed report is attached as Annex A." if job and job.pdf_copy else ""
+            base_notes.append(
+                f"{len(base_notes) + 1}. MEASURED WITH FLUKE ANSUR{job_text}: one analyser reading per test "
+                f"point. The uncertainty is computed by this laboratory from the analyser's specified "
+                f"accuracy, resolution and calibration certificate; where a limit is one-sided (max or min) "
+                f"the guard band is applied on that side only.{annex}"
+            )
+
         # Name the parameters that fall below the ratio, rather than leaving
         # the reader to compare every printed TUR against the floor.
         capability = self.measurement_capability_warnings()
@@ -335,7 +347,7 @@ class SectionsMixin:
                 f"{w['parameter']} ({w['tur']:.1f}:1)" for w in capability
             )
             base_notes.append(
-                f"6. MEASUREMENT CAPABILITY: the following parameters were measured "
+                f"{len(base_notes) + 1}. MEASUREMENT CAPABILITY: the following parameters were measured "
                 f"with a test uncertainty ratio below the customary 4:1 floor: "
                 f"{listed}. For these, the guarded decision rule in note 3 governs, "
                 f"and a result reported PASS close to the tolerance should be "

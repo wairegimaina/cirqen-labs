@@ -39,6 +39,7 @@ flask>=3.0
 
 # ── PDF Generation ────────────────────────────────────────────
 reportlab>=4.1
+pypdf>=4.2          # appends Fluke Ansur's report to Ansur certificates
 
 # ── Excel / Spreadsheets ──────────────────────────────────────
 openpyxl>=3.1

@@ -242,3 +242,62 @@ class CalibrationJourney(BrowserJourneys):
             review.click(f"a[href$='/sessions/{session.pk}/certificate/comprehensive/']")
         with open(again.value.path(), "rb") as pdf:
             self.assertEqual(pdf.read(), first)  # the stored copy, byte for byte
+
+
+@unittest.skipUnless(E2E, "browser tests: set CIRQEN_E2E=1")
+class AnsurJourney(BrowserJourneys):
+    """Start with Ansur: the button, the live panel, and the record Ansur
+    saves turning into a session without the technician touching the page."""
+
+    def test_work_order_raised_signed_approved_and_printed(self):
+        """Covered by BrowserJourneys; not repeated here."""
+
+    def setUp(self):
+        from unittest import mock
+
+        from CalSoft.ansur.testing import AnsurFixture
+
+        self.dialogs = []
+        fixture = type("F", (AnsurFixture,), {})()
+        fixture.addCleanup = self.addCleanup
+        fixture._make_user = self._ansur_user
+        fixture.make_ansur_site()
+        self.ansur = fixture
+        for target in ("CalSoft.ansur.launcher.subprocess.Popen", "CalSoft.ansur.launcher.make_pdf"):
+            patcher = mock.patch(target, return_value=None)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def _ansur_user(self, username, role, **profile):
+        return self._user(username, username.title(), "User", role=role, **profile)
+
+    def test_start_with_ansur_follows_the_job_to_approval(self):
+        import os
+        import time
+
+        from CalSoft.ansur.testing import record_xml
+        from CalSoft.models import AnsurJob
+
+        page = self._page()
+        self._sign_in(page, "ansur_tech")
+        page.goto(f"{self.live_server_url}/calibration/perform/?equipment={self.ansur.equipment.pk}")
+        page.select_option("#procedure", str(self.ansur.procedure.pk))
+        page.fill("#actual_temperature", "23.0")
+        page.fill("#actual_humidity", "50")
+        page.click("#ansurStartBtn")
+        page.wait_for_selector("text=Ansur is open with this job")
+        job = AnsurJob.objects.get()
+        self.assertEqual(job.status, AnsurJob.SENT)
+
+        # Ansur saves its record; the panel picks it up on its own.
+        path = self.ansur.base / "results" / f"CIRQEN-{job.job_number}.mtr"
+        path.write_bytes(record_xml(job=job.job_number))
+        past = time.time() - 10
+        os.utime(path, (past, past))
+        page.wait_for_selector("#ansurSessionLink:not([hidden])", timeout=10000)
+        self.assertIn("waiting for approval", page.locator("#ansurText").inner_text())
+        self.assertFalse(page.locator("#reading-fields").is_visible(), "manual readings stay hidden")
+        job.refresh_from_db()
+        self.assertEqual(job.status, AnsurJob.IMPORTED)
+        self.assertEqual(job.session.source, "ansur")
+        self.assertEqual(self.dialogs, [])

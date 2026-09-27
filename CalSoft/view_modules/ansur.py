@@ -4,15 +4,17 @@ Ansur template runs each calibration procedure.
 One page, one form per job, each posted with an ``action`` so the page stays
 a single place to set everything up and to see what still needs doing.
 """
+import hashlib
 import logging
 from decimal import Decimal, InvalidOperation
+from io import BytesIO
 from pathlib import Path
 
 from django import forms
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import IntegrityError, transaction
-from django.http import JsonResponse
+from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -432,3 +434,33 @@ def ansur_upload(request):
                             status=422)
     job.refresh_from_db()
     return JsonResponse({"success": True, "job": job_payload(job)})
+
+
+@login_required
+@require_GET
+def ansur_session_pdf(request, pk):
+    """Ansur's own detailed PDF for an Ansur session, as it was imported."""
+    job = AnsurJob.objects.filter(session_id=pk).first()
+    if job is None or not job.pdf_copy:
+        raise Http404("No Ansur PDF for this session")
+    with job.pdf_copy.open("rb") as handle:
+        data = handle.read()
+    if job.pdf_sha256 and hashlib.sha256(data).hexdigest() != job.pdf_sha256:
+        logger.error("Ansur PDF for job %s no longer matches its fingerprint", job.job_number)
+        raise Http404("The stored Ansur PDF has changed since it was imported")
+    return FileResponse(BytesIO(data), content_type="application/pdf",
+                        filename=f"Ansur-{job.job_number}.pdf")
+
+
+def ansur_review_details(session):
+    """What the review modal shows about an Ansur session, or None."""
+    if session.source != "ansur":
+        return None
+    job = AnsurJob.objects.filter(session=session).first()
+    return {
+        "job_number": job.job_number if job else "",
+        "operator": session.ansur_operator,
+        "disagreements": session.ansur_disagreements,
+        "pdf_url": reverse("calibration:ansur_session_pdf", args=[session.pk]) if job and job.pdf_copy else "",
+        "record_sha256": session.ansur_record_sha256,
+    }

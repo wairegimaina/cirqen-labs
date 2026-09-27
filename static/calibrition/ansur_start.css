@@ -17,3 +17,8 @@
 .ansur-warning { background: rgba(180, 83, 9, .1); color: var(--warning, #b45309); }
 .ansur-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
 .ansur-upload { margin: 0; cursor: pointer; }
+
+/* Manual entry is set aside while an Ansur job is active. */
+#calibrationForm.ansur-active #reading-fields,
+#calibrationForm.ansur-active #submitBtn,
+#calibrationForm.ansur-active .form-actions-hint { display: none; }
