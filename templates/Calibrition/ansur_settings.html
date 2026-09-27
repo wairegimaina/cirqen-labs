@@ -54,7 +54,8 @@
 
   {# ── 1. Readiness ─────────────────────────────────────────────── #}
   <div class="section-card">
-    <h2 class="section-title">Status</h2>
+    <div class="section-card-head"><h2 class="section-card-title">Status</h2></div>
+    <div class="section-card-body">
     {% if ready and cfg.enabled %}
       <div class="an-banner ok">Ready. Technicians see Start with Ansur for the linked procedures.</div>
     {% elif ready %}
@@ -74,11 +75,13 @@
         </li>
       {% endfor %}
     </ol>
+    </div>
   </div>
 
   {# ── 2. Connection ────────────────────────────────────────────── #}
   <div class="section-card">
-    <h2 class="section-title">Connection</h2>
+    <div class="section-card-head"><h2 class="section-card-title">Connection</h2></div>
+    <div class="section-card-body">
     <form method="post" class="an-grid" novalidate>
       {% csrf_token %}
       <input type="hidden" name="action" value="save">
@@ -128,11 +131,13 @@
         <button type="submit" class="btn btn-secondary"><i class="fas fa-folder-plus"></i> Create folders</button></form>
     </div>
     <p class="an-help" style="margin-top:.5rem">Save a changed work folder before pressing Create folders.</p>
+    </div>
   </div>
 
   {# ── 3. Procedures -> templates ───────────────────────────────── #}
   <div class="section-card">
-    <h2 class="section-title">Procedures run with Ansur</h2>
+    <div class="section-card-head"><h2 class="section-card-title">Procedures run with Ansur</h2></div>
+    <div class="section-card-body">
     <p class="an-help">Only procedures listed here get the Start with Ansur button. Copy each template file into
       <code>{{ folders.templates }}</code> first, then link it.</p>
 
@@ -193,16 +198,19 @@
       </div>
       <div class="an-actions"><button type="submit" class="btn btn-primary">Link procedure</button></div>
     </form>
+    </div>
   </div>
 
   {# ── 4. Ansur-side notes ──────────────────────────────────────── #}
   <div class="section-card">
-    <h2 class="section-title">In Ansur, once</h2>
+    <div class="section-card-head"><h2 class="section-card-title">In Ansur, once</h2></div>
+    <div class="section-card-body">
     <ul class="an-help" style="margin:0;padding-left:1.1rem;display:grid;gap:.3rem">
       <li>Add a custom device (DUT) field named <b>Cirqen Job</b> to each linked template. Cirqen uses it to match a record to its job.</li>
       <li>Leave <b>Restrict access</b> off for test records, or Cirqen cannot read them.</li>
       <li>Keep device serial numbers the same in Ansur and Cirqen.</li>
     </ul>
+    </div>
   </div>
 
 </div>
