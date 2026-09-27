@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+{% block title %}QR labels — {{ site_name }}{% endblock %}
+{% block page_title %}QR labels{% endblock %}
+{% block extra_css %}{% include 'assets/_styles.html' %}{% endblock %}
+{% block content %}
+<div class="page-head"><div>
+  <h1 class="page-title">Equipment QR labels</h1>
+  <p class="page-subtitle">A4 sheets of 24 labels (70 × 37 mm). Scanning a label opens the machine's page: history, contracts and a button to start a work order.</p>
+</div></div>
+<div class="section-card as-pad">
+  <form method="get" class="as-form">
+    <label>Department
+      <select name="department" required>
+        <option value="">Choose…</option>
+        {% for d in departments %}<option value="{{ d.id }}" {% if d == department %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <div><button type="submit" class="btn btn-secondary">Choose</button></div>
+  </form>
+  {% if department %}
+    <p>{{ count }} machine{{ count|pluralize }} in {{ department.name }}.</p>
+    {% if count %}<a class="btn btn-primary" href="?department={{ department.id }}&download=1"><i class="fas fa-print"></i> Download labels (PDF)</a>{% endif %}
+  {% endif %}
+</div>
+{% endblock %}

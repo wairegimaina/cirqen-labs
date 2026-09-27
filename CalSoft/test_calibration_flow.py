@@ -38,6 +38,7 @@ class CalibrationReviewFlowTests(TestCase):
         self.reviewer = self._user("cal_rev", "Tech", workshop=self.cal_centre, level="Engineer Incharge")
         self.maintenance_tech = self._user("biomed_tech", "Tech", workshop=maintenance, level="Engineer")
         self.nic = self._user("icu_nic", "NIC", department=self.department)
+        self.performer = self._user("cal_tech", "Tech", workshop=self.cal_centre, level="Engineer")
 
         procedure = CalibrationProcedure.objects.create(name="Flow rate", created_by=self.reviewer)
         self.schedule = CalibrationSchedule.objects.create(
@@ -45,7 +46,7 @@ class CalibrationReviewFlowTests(TestCase):
             scheduled_month=datetime.date.today().replace(day=1),
         )
         self.session = CalibrationSession.objects.create(
-            procedure=procedure, performed_by=self.reviewer, schedule=self.schedule,
+            procedure=procedure, performed_by=self.performer, schedule=self.schedule,
             device_model="P1", device_serial="PUMP-1", Department=self.department,
             status="pending_review", overall_pass=True,
         )
@@ -136,6 +137,33 @@ class CalibrationReviewFlowTests(TestCase):
                 self.assertEqual(self.approve(user).status_code, 403)
         self.session.refresh_from_db()
         self.assertEqual(self.session.status, "pending_review")
+
+    def test_the_person_who_performed_it_cannot_approve_it(self):
+        response = self.approve(self.performer)
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("another reviewer", response.json()["error"])
+        self.session.refresh_from_db()
+        self.assertEqual(self.session.status, "pending_review")
+
+    def test_approval_wakes_the_sync_agent(self):
+        with mock.patch("CalSoft.view_modules.pending_sessions.announce_pending_certificate") as announce:
+            self.assertEqual(self.approve(self.reviewer).status_code, 200)
+        announce.assert_called_once_with(self.session.pk)
+
+    def test_certificate_status_reports_numbers_as_they_arrive(self):
+        self.approve(self.reviewer)
+        url = reverse("calibration:certificate_status")
+        self.client.force_login(self.reviewer)
+        pending = self.client.get(url, {"ids": f"{self.session.pk},not-a-uuid"}).json()["sessions"]
+        self.assertEqual(pending, {str(self.session.pk): {
+            "status": "approved_pending_certificate", "certificate_number": None}})
+
+        CalibrationSession.objects.filter(pk=self.session.pk).update(status="approved", certificate_number="BNH-0412")
+        issued = self.client.get(url, {"ids": str(self.session.pk)}).json()["sessions"]
+        self.assertEqual(issued[str(self.session.pk)]["certificate_number"], "BNH-0412")
+
+        self.client.force_login(self.nic)
+        self.assertEqual(self.client.get(url, {"ids": str(self.session.pk)}).status_code, 403)
 
     def test_rejection_keeps_the_reason(self):
         self.client.force_login(self.reviewer)

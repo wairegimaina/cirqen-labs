@@ -33,6 +33,11 @@ urlpatterns = [
         name="sessions_pending_approval",
     ),
     path(
+        "sessions/certificate-status/",
+        views.certificate_status,
+        name="certificate_status",
+    ),
+    path(
         "sessions/<uuid:pk>/approve/",
         views.approve_calibration_session_ajax,
         name="approve_calibration_session_ajax",

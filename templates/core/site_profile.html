@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+
+{% block title %}Site details — {{ site_name }}{% endblock %}
+
+{% block page_title %}Site details{% endblock %}
+
+{% block extra_css %}
+<style>
+.sp-grid { display: grid; gap: 1rem; max-width: 720px; }
+.sp-field { display: grid; gap: .35rem; }
+.sp-field label { font-weight: 600; font-size: .9rem; }
+.sp-field input[type=text], .sp-field input[type=email], .sp-field textarea {
+  padding: .55rem .7rem; border: 1px solid var(--input-border, var(--border-color));
+  border-radius: var(--radius-sm); background: var(--input-bg, var(--bg-card));
+  color: var(--text-primary, inherit); font: inherit; width: 100%;
+}
+.sp-help { color: var(--text-muted, #6b7280); font-size: .85rem; }
+.sp-errors { color: var(--danger, #b91c1c); font-size: .85rem; }
+.sp-logo { max-height: 80px; max-width: 240px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: .4rem; background: #fff; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Site details</h1>
+    <p class="page-subtitle">Printed on page titles, work orders, reports and calibration certificates.</p>
+  </div>
+</div>
+
+<div class="section-card">
+  <form method="post" enctype="multipart/form-data" class="sp-grid" novalidate>
+    {% csrf_token %}
+    {% for field in form %}
+      <div class="sp-field">
+        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+        {% if field.name == 'logo' and profile.logo %}
+          <img src="{% url 'core:site_logo' %}?v={{ profile.updated_at|date:'U' }}" alt="Current logo" class="sp-logo">
+        {% endif %}
+        {{ field }}
+        {% if field.name == 'name' %}
+          <span class="sp-help">Leave blank to keep the name this installation was set up with{% if effective_name %} ({{ effective_name }}){% endif %}.</span>
+        {% endif %}
+        {% if field.errors %}<div class="sp-errors">{{ field.errors|join:" " }}</div>{% endif %}
+      </div>
+    {% endfor %}
+    <p class="sp-help">Certificates already issued keep the details they were issued with.</p>
+    <div><button type="submit" class="btn btn-primary">Save</button></div>
+  </form>
+</div>
+{% endblock %}

@@ -78,7 +78,6 @@ psutil>=5.9
 networkx>=3.2
 
 # ── Streaming Archives ────────────────────────────────────────
-zipstream-new>=1.1.8
 
 # ── Environment / Config ──────────────────────────────────────
 python-dotenv>=1.0
@@ -95,4 +94,3 @@ sentry-sdk>=2.0
 
 pytest>=8.0
 pytest-django>=4.9
-chartjs

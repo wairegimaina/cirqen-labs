@@ -1,8 +1,7 @@
 """Hermetic test settings.
 
 Runs the suite entirely in-process:
-  * in-memory SQLite for both DB aliases (never touches the real local or the
-    remote HQ Postgres),
+  * in-memory SQLite (never touches the real local database),
   * the database router disabled so every model lives in one test DB,
   * local-memory cache + DB sessions so nothing reaches out to Redis,
   * fast password hashing.
@@ -14,7 +13,6 @@ from Equiper.settings import *  # noqa: F401,F403
 
 DATABASES = {
     "default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"},
-    "hq": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"},
 }
 
 # All models resolve to the single default test DB.

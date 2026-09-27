@@ -5,9 +5,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Equiper — Computerized Maintenance Management System" />
+  <meta name="description" content="Cirqen — medical equipment maintenance and calibration" />
   <meta name="csrf-token" content="{{ csrf_token }}" />
-  <title>{% block title %}Equiper — National Hospital{% endblock %}</title>
+  <title>{% block title %}{{ site_name }} — Cirqen{% endblock %}</title>
 
   <!-- ═══════════════════════════════════════
        ANTI-FLASH: runs before ANY paint
@@ -346,5 +346,23 @@
     });
   </script>
 
+<script>
+  // Idle timeout (IdleTimeoutMiddleware): typing and clicking count as
+  // activity even when a page makes no requests, e.g. a long calibration entry.
+  (function () {
+    var last = Date.now(), url = "{% url 'activity_ping' %}";
+    var token = (document.querySelector('meta[name="csrf-token"]') || {}).content;
+    function ping() {
+      if (Date.now() - last < 240000) return;
+      last = Date.now();
+      fetch(url, { method: "POST", credentials: "same-origin", headers: { "X-CSRFToken": token } })
+        .then(function (r) { if (r.status === 401 || r.status === 403) { window.location.href = "/"; } })
+        .catch(function () {});
+    }
+    ["keydown", "pointerdown", "wheel", "touchstart"].forEach(function (evt) {
+      document.addEventListener(evt, ping, { passive: true });
+    });
+  })();
+</script>
 </body>
 </html>

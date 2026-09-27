@@ -69,6 +69,31 @@ app.conf.beat_schedule = {
         "schedule": crontab(hour=12, minute=30),
         "options": {"expires": 6 * 3600},
     },
+    # Due/overdue PPM and calibration, expiring standards and contracts, low stock.
+    "assets-daily-alerts": {
+        "task": "assets.tasks.daily_alerts",
+        "schedule": crontab(hour=6, minute=47),
+    },
+    # Last month's maintenance report to each head of department.
+    "assets-monthly-hod-report": {
+        "task": "assets.tasks.monthly_hod_report",
+        "schedule": crontab(day_of_month=1, hour=7, minute=13),
+    },
+    # An hour after the backup, check it can be read back.
+    "verify-latest-backup": {
+        "task": "core.tasks.verify_latest_backup",
+        "schedule": crontab(hour=13, minute=30),
+    },
+    # Background PDF reports are kept 15 minutes (core.report_jobs).
+    "prune-report-cache": {
+        "task": "core.tasks.prune_report_cache",
+        "schedule": crontab(minute="*/30"),
+    },
+    # Sign-in security events past their retention (SECURITY_LOG_DAYS).
+    "prune-security-log": {
+        "task": "core.tasks.prune_security_log",
+        "schedule": crontab(hour=2, minute=41),
+    },
     # ============================================================================
     # SCHEDULING (PPM and calibration): one planner for both, see scheduling/
     # ============================================================================

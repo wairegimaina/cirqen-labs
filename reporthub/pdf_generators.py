@@ -1,3 +1,4 @@
+from core.branding import logo_path as site_logo_path
 import io
 import os
 import logging
@@ -81,7 +82,8 @@ class PDFReportGenerator:
         self.styles = getSampleStyleSheet()
         self.width, self.height = A4
         self.setup_custom_styles()
-        self.logo_path = self._find_logo()
+        # The logo uploaded on the Site details page wins.
+        self.logo_path = site_logo_path() or self._find_logo()
 
     def _find_logo(self):
         """

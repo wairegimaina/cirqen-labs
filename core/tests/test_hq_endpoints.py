@@ -30,6 +30,9 @@ NEW_UPDATES = "https://new-updates.example.com"
 CLEARED_ENV = list(HQ_ENDPOINT_ENV.values()) + [
     "SYNC_AUTH_TOKEN", "HQ_API_KEY", "POSTGRES_HQ_PASSWORD", "CIRQEN_PROVISIONING_FILE",
     config.ENDPOINTS_FROM_CONFIG_VAR,
+    # Django startup copies config into these; server mode sets them itself.
+    "POSTGRES_LOCAL_HOST", "POSTGRES_LOCAL_DB", "POSTGRES_LOCAL_USER", "POSTGRES_LOCAL_PASSWORD",
+    "REDIS_HOST", "REDIS_PORT", "REDIS_PASSWORD", "CLIENT_NAME",
 ]
 
 
@@ -75,7 +78,8 @@ class FleetMigrationTests(EndpointTestCase):
         return {
             "sync": {"api_url": next(iter(PRE_LAYERING_DEFAULTS["sync.api_url"]))},
             "update": {"server_url": next(iter(PRE_LAYERING_DEFAULTS["update.server_url"]))},
-            "hq_db": {"host": next(iter(PRE_LAYERING_DEFAULTS["hq_db.host"]))},
+            # Older builds kept HQ database settings, password included.
+            "hq_db": {"host": "aws-0-eu-north-1.pooler.supabase.com", "password": "old-hq-secret"},
         }
 
     def test_installed_machine_follows_a_changed_default(self):
@@ -100,6 +104,23 @@ class FleetMigrationTests(EndpointTestCase):
         self.assertNotIn("server_url", saved.get("update", {}))
         self.assertEqual(saved[ENDPOINT_MARKER], ENDPOINT_MARKER_VALUE)
         self.assertTrue((self.data / "config.json.pre-endpoints").exists())
+
+    def test_old_hq_database_settings_leave_the_disk(self):
+        self.write_json(self.old_style_file())
+        cfg = self.load()
+        self.assertNotIn("hq_db", self.on_disk())
+        self.assertIsNone(cfg.get("hq_db.password"))
+        # The pre-migration copy must not keep the password either.
+        copy = json.loads((self.data / "config.json.pre-endpoints").read_text())
+        self.assertNotIn("hq_db", copy)
+
+    def test_hq_database_settings_are_dropped_from_an_already_layered_file(self):
+        self.write_json({ENDPOINT_MARKER: ENDPOINT_MARKER_VALUE,
+                         "hq_db": {"password": "old-hq-secret"}, "client": {"name": "Renal"}})
+        cfg = self.load()
+        saved = self.on_disk()
+        self.assertNotIn("hq_db", saved)
+        self.assertEqual(cfg.get("client.name"), "Renal")
 
     def test_hand_edited_address_in_an_old_file_is_kept(self):
         self.write_json({"sync": {"api_url": "https://hand-edited.example.com/api/sync"}})
@@ -172,10 +193,10 @@ class PrecedenceTests(EndpointTestCase):
         self.assertNotIn("api_url", self.on_disk().get("sync", {}))
 
     def test_describe_endpoints_names_every_source(self):
-        with mock.patch.dict(os.environ, {"POSTGRES_HQ_HOST": "db.example.com"}):
+        with mock.patch.dict(os.environ, {"HQ_SERVER_URL": "https://updates.example.com"}):
             described = {row["key"]: row for row in self.load().describe_endpoints()}
         self.assertEqual(set(described), set(HQ_ENDPOINT_DEFAULTS))
-        self.assertEqual(described["hq_db.host"]["source"], "env")
+        self.assertEqual(described["update.server_url"]["source"], "env")
         self.assertEqual(described["sync.api_url"]["source"], "default")
 
 
@@ -219,19 +240,16 @@ class ValidationTests(EndpointTestCase):
         bad = validate_endpoints(self.values(**{"update.server_url": "https://u.example.com/api/updates"}))
         self.assertTrue(any("update.server_url" in e for e in bad), bad)
 
-    def test_database_host_must_be_bare(self):
-        bad = validate_endpoints(self.values(**{"hq_db.host": "postgres://db.example.com"}))
-        self.assertTrue(any("hq_db.host" in e for e in bad), bad)
-
-    def test_database_port_and_sslmode_are_checked(self):
-        self.assertTrue(validate_endpoints(self.values(**{"hq_db.port": 0})))
-        self.assertTrue(validate_endpoints(self.values(**{"hq_db.sslmode": "sometimes"})))
+    def test_no_hq_database_setting_exists(self):
+        self.assertFalse([key for key in HQ_ENDPOINT_DEFAULTS if key.startswith("hq_db.")])
+        self.assertNotIn("hq_db", CirqenConfig.DEFAULT_CONFIG)
+        self.assertNotIn("hq_db.password", CirqenConfig.SECRET_ENV)
 
     def test_every_error_names_the_setting(self):
-        errors = validate_endpoints(self.values(**{"sync.api_url": "ftp://x", "hq_db.host": ""}))
+        errors = validate_endpoints(self.values(**{"sync.api_url": "ftp://x", "update.server_url": ""}))
         self.assertTrue(errors)
         for message in errors:
-            self.assertRegex(message, r"(sync|update|hq_db)\.")
+            self.assertRegex(message, r"(sync|update)\.")
 
     def test_validate_config_reports_a_bad_address(self):
         with mock.patch.dict(os.environ, {"SYNC_API_URL": "http://hq.example.com/api/sync"}):

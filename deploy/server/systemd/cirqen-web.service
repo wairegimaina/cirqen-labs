@@ -1,0 +1,28 @@
+[Unit]
+Description=Cirqen web application (uvicorn)
+After=network-online.target postgresql.service redis-server.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=cirqen
+Group=cirqen
+WorkingDirectory=/opt/cirqen/app
+EnvironmentFile=/etc/cirqen/cirqen.env
+# Django runs sync views one at a time per process under ASGI, so concurrency
+# comes from workers: about 2 per CPU core. 4 serves a Level 6 hospital.
+ExecStart=/opt/cirqen/venv/bin/uvicorn Equiper.asgi:application \
+    --host 127.0.0.1 --port 8000 --workers 4 \
+    --proxy-headers --forwarded-allow-ips 127.0.0.1 \
+    --lifespan off --timeout-keep-alive 5
+Restart=always
+RestartSec=5
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/cirqen
+
+[Install]
+WantedBy=multi-user.target

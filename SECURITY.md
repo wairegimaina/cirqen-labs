@@ -3,11 +3,11 @@
 ## Where credentials live now
 
 `config.py` and `sync/config.py` carry **no secrets** in `DEFAULT_CONFIG`
-(checked by `core/tests/test_config_secrets.py`). The three HQ secrets —
-`sync.auth_token`, `update.api_key`, `hq_db.password` — are resolved at runtime
-from, in order:
+(checked by `core/tests/test_config_secrets.py`). The HQ secrets —
+`sync.auth_token` (or a one-time `sync.enrollment_code`) and `update.api_key` —
+are resolved at runtime from, in order:
 
-1. **Environment variables**: `SYNC_AUTH_TOKEN`, `HQ_API_KEY`, `POSTGRES_HQ_PASSWORD`
+1. **Environment variables**: `SYNC_AUTH_TOKEN` / `SYNC_ENROLLMENT_CODE`, `HQ_API_KEY`
    (used for that run, never written to disk by the config manager)
 2. **`<data dir>/config.json`**: `~/.cirqen/data/config.json` on Linux, the
    running app's per-machine config, outside the repo
@@ -48,29 +48,26 @@ make them safe — they must be rotated. Assume all of these are compromised:
 | Local PostgreSQL password (`cirqen1` role) | `ALTER ROLE cirqen1 WITH PASSWORD '<new>';` on each client, then update `.env` / config.json |
 | Sync auth token (`SYNC_AUTH_TOKEN`) | Regenerate on the HQ server; issue **per-client** tokens (see below) and redistribute |
 | HQ update API key (`HQ_API_KEY`) | Render → HQ FastAPI service → Environment → regenerate |
-| HQ Supabase database password (`postgres.nwlwaeeyduxroykrgksi`) | Supabase → Project settings → Database → reset password; then Render env `POSTGRES_HQ_PASSWORD` and every client's config.json |
+| HQ Supabase database password (`postgres.nwlwaeeyduxroykrgksi`) | Supabase → Project settings → Database → reset password; then Render env `POSTGRES_HQ_PASSWORD`. Clients no longer hold it (they reach HQ through its API), so nothing changes on hospital machines |
 
 After rotating, update `~/.cirqen/data/config.json` on each client (and `.env`
 for dev) with the new values.
 
 ### Optional but recommended: purge history
 
-The Supabase password was also committed (in `config.py`, `sync/config.py` and
-`helper_scripts/patch_config.py`) and is not listed below: add it to your local
-replacement file rather than writing it into this document again.
+The Supabase password was also committed (in `config.py`, `sync/config.py`,
+`helper_scripts/patch_config.py`, and inside `hq.tar.xz` in the `hq_server`
+repository). Purge both repositories. Never write the old values into this
+document or any other tracked file.
 
 Rotation is the real fix. If you also want the old values gone from history:
 
+Write the old values, one per line as `<old value>==>REDACTED`, into a local
+file **outside the repository** (never commit it), then:
+
 ```bash
 # with git-filter-repo installed
-git filter-repo --replace-text <(cat <<'EOF'
-cTAU3kJL3NNlUYA9rR07kh87FKHA6c24==>REDACTED
-Btwelvetech@2024==>REDACTED
-58f8605e1966ce148990c477dcb99d02==>REDACTED
-G6PScpbnjBWe4PMhi9c_31FzFzzxnHkyfnyzqsdE-JgIYwe4WBRBkBgLyuje43F5==>REDACTED
-RyJEzkPmYWrdC2472TzWnFUMaOIueaye==>REDACTED
-EOF
-)
+git filter-repo --replace-text /path/outside/repo/old-secrets.txt
 # then force-push and have every collaborator re-clone
 ```
 

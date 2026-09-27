@@ -3,6 +3,7 @@
 Modern PDF Generators for Tools and Accessories Reports
 Matches PPM Schedule styling with professional header/footer and watermark
 """
+from core.branding import logo_path as site_logo_path
 import io
 import os
 import logging
@@ -74,7 +75,8 @@ class ModernPDFReportBase:
         self.subtitle = subtitle
         self.styles = getSampleStyleSheet()
         self.setup_custom_styles()
-        self.logo_path = self._find_logo()
+        # The logo uploaded on the Site details page wins.
+        self.logo_path = site_logo_path() or self._find_logo()
 
     def _find_logo(self):
         """

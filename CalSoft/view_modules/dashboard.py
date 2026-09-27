@@ -11,12 +11,12 @@ from django.db import transaction
 from django.contrib.auth import get_user_model
 
 from CalSoft.models import (
-    CalibrationSchedule,
     CalibrationSession,
     CalibrationProcedure,
     CalibrationNotification,
     Equipment,
 )
+from calSchedules.models import CalibrationSchedule
 
 User = get_user_model()
 from calSchedules.grouping import is_overdue, month_end

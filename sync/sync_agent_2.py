@@ -8,7 +8,7 @@ from .agent_prelude import (
 )
 from .agent_prelude import load_config_from_unified_manager, load_config_from_env_fallback
 from .agent_prelude import sleep_with_jitter, is_online, CERT_TABLES, DEFAULT_CONFIG
-from .agent_prelude import SyncDirection, DEVICE_ID_MODULE_AVAILABLE, get_or_create_client_id
+from .agent_prelude import DEVICE_ID_MODULE_AVAILABLE, get_or_create_client_id
 from .event_identity import stable_event_id
 import os
 import time
@@ -40,110 +40,6 @@ RETIRE_NOT_DELETE_TABLES = {"ppms_ppmschedule", "calSchedules_calibrationschedul
 
 class SchemaAndChangeDetectionMixin(SmartDeleteMixin):
     """DB pool/schema introspection, download checkpoint, and timestamp-based change detection (the legacy poller)."""
-    def perform_mirror_sync_now(self, direction: str = "bidirectional") -> Dict:
-        """Perform immediate mirror sync"""
-        if not self.mirror:
-            return {"success": False, "error": "Mirror not initialized"}
-
-        try:
-            LOG.info("🔄 Manual mirror sync triggered...")
-
-            direction_map = {
-                "bidirectional": SyncDirection.BIDIRECTIONAL,
-                "hq_to_local": SyncDirection.HQ_TO_LOCAL,
-                "local_to_hq": SyncDirection.LOCAL_TO_HQ,
-            }
-
-            sync_direction = direction_map.get(direction, SyncDirection.BIDIRECTIONAL)
-
-            if not self.mirror.connect():
-                return {"success": False, "error": "Connection failed"}
-
-            try:
-                stats = self.mirror.mirror_all_tables(
-                    tables=self.tables,
-                    direction=sync_direction,
-                    conflict_strategy="last_write_wins",
-                )
-
-                total_synced_to_hq = sum(s.synced_to_hq for s in stats)
-                total_synced_to_local = sum(s.synced_to_local for s in stats)
-                total_conflicts = sum(s.conflicts for s in stats)
-                total_errors = sum(s.errors for s in stats)
-                total_changes = total_synced_to_hq + total_synced_to_local
-
-                if total_changes > 0:
-                    LOG.info(f"📡 Broadcasting {total_changes} changes...")
-                    self.mirror.broadcast_changes_to_agents(stats)
-
-                return {
-                    "success": True,
-                    "tables_processed": len(stats),
-                    "synced_to_hq": total_synced_to_hq,
-                    "synced_to_local": total_synced_to_local,
-                    "conflicts_resolved": total_conflicts,
-                    "errors": total_errors,
-                    "changes_broadcasted": total_changes > 0,
-                }
-            finally:
-                self.mirror.disconnect()
-
-        except Exception as e:
-            LOG.error(f"❌ Mirror sync failed: {e}")
-            return {"success": False, "error": str(e)}
-
-    def mirror_sync_loop(self):
-        """Background thread for periodic mirror sync"""
-        interval_seconds = int(self.mirror_interval_hours * 3600)
-
-        LOG.info("🔄 Mirror sync loop started (interval: %.1fh)", self.mirror_interval_hours)
-
-        sync_count = 0
-
-        while not self.stop_event.is_set():
-            try:
-                sync_count += 1
-
-                LOG.info("")
-                LOG.info("🔄 Scheduled Mirror Sync #%d", sync_count)
-
-                result = self.perform_mirror_sync_now(direction="bidirectional")
-
-                if result["success"]:
-                    total_changes = result.get("synced_to_hq", 0) + result.get("synced_to_local", 0)
-
-                    if total_changes > 0:
-                        LOG.info(f"✅ {total_changes} changes synced")
-                    else:
-                        LOG.info(f"✅ All databases consistent")
-                else:
-                    LOG.error(f"❌ Mirror sync failed: {result.get('error')}")
-
-                next_sync = datetime.now() + timedelta(seconds=interval_seconds)
-                LOG.info(f"⏰ Next sync: {next_sync.strftime('%Y-%m-%d %H:%M:%S')}")
-
-            except Exception as e:
-                LOG.error(f"❌ Mirror loop error: {e}")
-
-            for _ in range(interval_seconds):
-                if self.stop_event.is_set():
-                    break
-                time.sleep(1)
-
-        LOG.info("🔄 Mirror sync loop exiting")
-
-    def get_mirror_status(self) -> Dict:
-        """Get mirror system status"""
-        if not self.mirror:
-            return {"enabled": False, "status": "not_initialized"}
-
-        return {
-            "enabled": self.mirror_enabled,
-            "status": "active",
-            "interval_hours": self.mirror_interval_hours,
-            "tables_monitored": len(self.tables),
-            "client_id": self.client_id,
-        }
 
     def get_table_schema_info(self, table):
         """Get schema information about table columns"""
@@ -244,7 +140,7 @@ class SchemaAndChangeDetectionMixin(SmartDeleteMixin):
                         schema, tbl = "public", table
 
                     # Check updated_at (required for the poller) AND created_at
-                    # (required by the mirror recovery path) in one query.
+                    # in one query.
                     cur.execute(
                         """
                             SELECT
@@ -274,13 +170,11 @@ class SchemaAndChangeDetectionMixin(SmartDeleteMixin):
                     len(self.config["tables"]),
                 )
 
-                # created_at is a hard requirement of the mirror (it SELECTs
-                # created_at when reconciling). Surface this loudly so a table
-                # that syncs fine via the poller doesn't silently break recovery.
+                # Reported so a table without created_at is visible; the poller
+                # itself only needs updated_at.
                 if missing_created_at:
                     LOG.warning(
-                        "⚠️  %d synced table(s) lack a created_at column — the mirror "
-                        "recovery path REQUIRES it and will error for these: %s",
+                        "⚠️  %d synced table(s) lack a created_at column: %s",
                         len(missing_created_at),
                         ", ".join(missing_created_at),
                     )
@@ -362,7 +256,7 @@ class SchemaAndChangeDetectionMixin(SmartDeleteMixin):
         Get last successful download time.
 
         If no checkpoint exists (fresh install or reinstall that wiped state),
-        we set a flag so start() knows to run a full mirror sync instead of
+        we set a flag so start() knows to run a full data-checker bootstrap instead of
         relying on the audit-log-based download, which only knows about changes
         since the audit log started — it cannot reconstruct a full DB from scratch.
         """
@@ -371,11 +265,11 @@ class SchemaAndChangeDetectionMixin(SmartDeleteMixin):
             return last_time
 
         # No checkpoint = state was wiped (reinstall) or this is a new machine.
-        # Signal that a full mirror is needed by setting the flag — start() reads
+        # Signal that a full bootstrap is needed by setting the flag — start() reads
         # this before launching threads.
         LOG.warning("⚠️  No download checkpoint found — state was wiped or this is a new install.")
-        LOG.warning("   Will use epoch timestamp for audit-log download, but a mirror sync")
-        LOG.warning("   is strongly recommended to recover records predating the audit log.")
+        LOG.warning("   Will use epoch timestamp for audit-log download; the data checker")
+        LOG.warning("   bootstraps records predating the audit log at start-up.")
         self._needs_mirror_sync = True
 
         # ── FIX: Also wipe the upload checkpoint so the upload loop re-scans

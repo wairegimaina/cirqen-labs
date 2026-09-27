@@ -3,7 +3,7 @@ from django.forms import inlineformset_factory, formset_factory
 from decimal import Decimal
 import json
 from .models import (
-    CalibrationProcedure, CalibrationParameter, CalibrationSchedule, EquipmentCalibrationProcedure,Parameter, Standard, StandardParameter, StandardType, SubParameter, SetValue,
+    CalibrationProcedure, CalibrationParameter, EquipmentCalibrationProcedure,Parameter, Standard, StandardParameter, StandardType, SubParameter, SetValue,
     CalibrationSession, CalibrationReading
 )
 
@@ -78,7 +78,7 @@ class CalibrationParameterForm(forms.ModelForm):
             'num_readings': forms.NumberInput(attrs={
                 'class': 'form-control',
                 'min': '3',
-                'max': '20',
+                'max': '10',
                 'value': '5'
             }),
             'standard_reference': forms.TextInput(attrs={
@@ -110,6 +110,8 @@ class CalibrationParameterForm(forms.ModelForm):
         num_readings = self.cleaned_data.get('num_readings')
         if num_readings is not None and num_readings < 3:
             raise forms.ValidationError("Minimum 3 readings required for statistical analysis")
+        if num_readings is not None and num_readings > 10:
+            raise forms.ValidationError("At most 10 readings per test point can be recorded")
         return num_readings
 
     def clean_resolution(self):
@@ -864,14 +866,6 @@ StandardParameterFormSet = inlineformset_factory(
     min_num=1,
     validate_min=True
 )
-
-class CalibrationScheduleForm(forms.ModelForm):
-    class Meta:
-        model = CalibrationSchedule
-        fields = ['calibration_procedure', 'estimated_duration']
-        widgets = {
-            'estimated_duration': forms.TimeInput(format='%H:%M:%S'),
-        }
 
 class EquipmentProcedureMappingForm(forms.ModelForm):
     class Meta:

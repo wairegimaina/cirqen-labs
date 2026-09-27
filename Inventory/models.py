@@ -64,6 +64,7 @@ class EquipmentDescription(models.Model):
         blank=True
     )
 
+
         # offline sync
     needs_sync = models.BooleanField(default=True)
     pending_delete = models.BooleanField(default=False)
@@ -212,6 +213,11 @@ class Equipment(models.Model):
         null=True,
         blank=True
     )
+
+    # Asset life (assets app: KPIs, replacement planning). Purchase date and
+    # warranty live on Warranty rows.
+    purchase_cost = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    expected_life_years = models.PositiveSmallIntegerField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
 

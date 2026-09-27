@@ -1,3 +1,6 @@
+from django.conf import settings
+from core.branding import organisation_name
+
 from users.control import get_user_role
 
 
@@ -59,6 +62,8 @@ def nav_context(request):
     role = get_user_role(user) if is_authenticated else None
 
     return {
+        # Site details page (core.SiteProfile), else client.name from config.json.
+        "site_name": organisation_name(default=getattr(settings, "SITE_NAME", "Cirqen")),
         "nav": {
             "role": role,
             "is_hod": role == "HOD",
@@ -103,7 +108,7 @@ _WARRANTY_PAGES = {"warranty_list", "warranty_create", "warranty_detail", "warra
                    "equipment_warranty"}
 _SUPPLIER_PAGES = {"supplier_list", "supplier_create", "supplier_update"}
 _WORK_ORDER_PAGES = {"jobcard:create_job_card", "jobcard:waiting_jobcards", "jobcard:approved_jobcards",
-                     "jobcard:declined_jobcards", "jobcard:work_order_detail"}
+                     "jobcard:declined_jobcards", "jobcard:work_order_detail", "jobcard:approvals"}
 _CALIBRATION_PAGES = {"schedule:calibration_dashboard", "schedule:calibration_by_department"}
 _PROCEDURE_PAGES = {"calibration:procedure_list", "calibration:procedure_create", "calibration:procedure_detail",
                     "calibration:procedure_edit"}
@@ -170,6 +175,10 @@ def _module(request, role, name):
             _tab("Declined", "fa-times-circle", reverse("jobcard:declined_jobcards"),
                  name == "jobcard:declined_jobcards"),
         ]
+        if role == "NIC":
+            # Approve with a finger signature from a phone (jobcard:approvals).
+            tabs.append(_tab("Phone approval", "fa-mobile-alt", reverse("jobcard:approvals"),
+                             name == "jobcard:approvals"))
         if is_tech:
             tabs.append(_tab("Checklists", "fa-clipboard-check", reverse("jobcard:checklist_settings"),
                              checklist))

@@ -20,12 +20,12 @@ from CalSoft.models import (
     Equipment,
     CalibrationAuditLog,
     PendingCertificate,
-    CalibrationSchedule,
     SessionParameterResolution,
     CalibrationParameter,
     SubParameter,
     SetValue,
 )
+from calSchedules.models import CalibrationSchedule
 from CalSoft.forms import SessionSearchForm
 from CalSoft.utils import (
     QualityAssurance,

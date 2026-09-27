@@ -26,9 +26,7 @@ GROWTH_ALLOWANCE = 5
 QUERY_BUDGET = 100
 
 # Known to scale with rows today; each entry needs fixing, then removing from here.
-KNOWN_N_PLUS_ONE = {
-    "ppms/api/analytics/",  # per-month / per-department loops; cached (core.aggregate_cache)
-}
+KNOWN_N_PLUS_ONE: set[str] = set()
 
 
 @override_settings(QUERY_BUDGET=1)  # installs the counter; the header carries the count

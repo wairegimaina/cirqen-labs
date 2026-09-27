@@ -265,11 +265,72 @@ CELERY_BEAT_SCHEDULE = {
 
 
 @shared_task(soft_time_limit=1800, time_limit=2400)
-def backup_local_database(keep=14):
+def backup_local_database(keep=None):
     """Daily local database backup (core.backups); same as manage.py backup_db."""
     from core import backups
 
+    keep = keep or backups.keep_count()
     path = backups.create_backup()
     removed = backups.prune(keep)
     logger.info("Local database backup written to %s (%d old backup(s) removed)", path, len(removed))
+    try:
+        copy = backups.copy_offsite(path, keep)
+        if copy:
+            logger.info("Backup copied to %s", copy)
+    except OSError:
+        logger.exception("Backup %s was written locally but could not be copied off this machine", path)
     return str(path)
+
+
+@shared_task(soft_time_limit=600, time_limit=900)
+def build_report(name, params, user_id, key):
+    """Build a large PDF report in the background (core.report_jobs)."""
+    from core import report_jobs
+
+    report_jobs.build(name, params, user_id, key)
+
+
+@shared_task
+def prune_report_cache():
+    from core import report_jobs
+
+    return report_jobs.prune()
+
+
+@shared_task
+def prune_security_log(today=None):
+    """Delete sign-in security events older than SECURITY_LOG_DAYS.
+
+    Local only: sync sends changed rows, not deletions, so HQ's copy is pruned
+    by HQ itself. Returns how many rows were removed.
+    """
+    from datetime import timedelta
+
+    from users.models import UserSecurityLog
+
+    days = settings.SECURITY_LOG_DAYS
+    if days <= 0:
+        return 0
+    cutoff = (today or timezone.now()) - timedelta(days=days)
+    removed, _ = UserSecurityLog.objects.filter(timestamp__lt=cutoff).delete()
+    if removed:
+        logger.info("Pruned %d security log events older than %d days", removed, days)
+    return removed
+
+
+@shared_task
+def verify_latest_backup():
+    """Daily: the newest backup exists, is recent and can be read back.
+
+    A failure is logged at ERROR (reaching Sentry when configured), because a
+    backup that silently stopped is only found out when it is needed.
+    """
+    from core import backups
+
+    try:
+        summary = backups.verify_latest()
+    except backups.BackupCheckFailed as exc:
+        logger.error("BACKUP CHECK FAILED: %s", exc)
+        return {"ok": False, "error": str(exc)}
+    logger.info("Backup check passed: %s", summary)
+    return {"ok": True, **summary}

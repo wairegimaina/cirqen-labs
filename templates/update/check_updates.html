@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}App Updates — Equiper{% endblock %}
+{% block title %}App Updates — Cirqen{% endblock %}
 
 {% block page_title %}Updates{% endblock %}
 
@@ -96,7 +96,7 @@
   <div class="page-head">
     <div>
       <h1 class="page-heading">Application updates</h1>
-      <p class="page-subtitle">Manage and apply Equiper updates · Current version <span class="mono-chip">v{{ current_version }}</span></p>
+      <p class="page-subtitle">Manage and apply Cirqen updates · Current version <span class="mono-chip">v{{ current_version }}</span></p>
     </div>
     <div class="page-actions">
       {% if update_settings.last_check %}
@@ -135,7 +135,7 @@
       <span class="upd-status-icon"><i class="fas fa-check" aria-hidden="true"></i></span>
       <div>
         <div class="upd-status-title">You're up to date</div>
-        <div class="small text-muted">Equiper v{{ current_version }} is the latest version.</div>
+        <div class="small text-muted">Cirqen v{{ current_version }} is the latest version.</div>
       </div>
     </div>
   </div>
@@ -397,7 +397,7 @@
 {% block extra_js %}
 <script>
 // ═══════════════════════════════════════════════════════════
-//  Equiper Updates — Full JavaScript
+//  Cirqen Updates — Full JavaScript
 // ═══════════════════════════════════════════════════════════
 
 const CSRF = (function() {

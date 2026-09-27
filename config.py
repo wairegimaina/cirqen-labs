@@ -39,22 +39,13 @@ HQ_ENDPOINT_DEFAULTS = {
     "sync.api_url": "https://hq-server-dgs6.onrender.com/api/sync",
     # Update server (cirqen-labs/hq_server, FastAPI). A different service.
     "update.server_url": "https://cirqen-hq.onrender.com",
-    # HQ database, reached directly by the sync agent and Django's HQ alias.
-    "hq_db.host": "aws-0-eu-north-1.pooler.supabase.com",
-    "hq_db.port": 5432,
-    "hq_db.database": "postgres",
-    "hq_db.user": "postgres.nwlwaeeyduxroykrgksi",
-    "hq_db.sslmode": "require",
+    # There is no HQ database entry: clients reach HQ through these two
+    # services only, and no install carries HQ database credentials.
 }
 
 HQ_ENDPOINT_ENV = {
     "sync.api_url": "SYNC_API_URL",
     "update.server_url": "HQ_SERVER_URL",
-    "hq_db.host": "POSTGRES_HQ_HOST",
-    "hq_db.port": "POSTGRES_HQ_PORT",
-    "hq_db.database": "POSTGRES_HQ_DB",
-    "hq_db.user": "POSTGRES_HQ_USER",
-    "hq_db.sslmode": "POSTGRES_SSLMODE",
 }
 
 # Values every config.json written BEFORE endpoint layering may contain because
@@ -67,18 +58,10 @@ HQ_ENDPOINT_ENV = {
 PRE_LAYERING_DEFAULTS = {
     "sync.api_url": {"https://hq-server-dgs6.onrender.com/api/sync"},
     "update.server_url": {"https://cirqen-hq.onrender.com"},
-    "hq_db.host": {
-        "aws-0-eu-north-1.pooler.supabase.com",
-        "dpg-d7rk2sa8qa3s73diimb0-a.ohio-postgres.render.com",  # decommissioned
-    },
-    "hq_db.port": {5432},
-    "hq_db.database": {"postgres", "cirqen_hq", "b12technologies"},
-    "hq_db.user": {"postgres.nwlwaeeyduxroykrgksi", "cirqen_hq", "b12technologies"},
-    "hq_db.sslmode": {"require"},
 }
 
 # setup_environment_variables() exports every resolved value into os.environ so
-# that legacy code (and child processes) can read POSTGRES_HQ_HOST and friends.
+# that legacy code (and child processes) can read SYNC_API_URL and friends.
 # Those exports are this layer's own output, not an operator's choice, and a
 # child process inherits them. Without this marker the child would read its
 # parent's export back as an "env" override, mislabel the source and make the
@@ -105,13 +88,26 @@ PLAIN_ENV = {
     # The desktop launcher moves the embedded DB off the configured port when
     # another postgres holds it, and hands the live port to its children here.
     "local_db.port": "POSTGRES_LOCAL_PORT",
+    # Hospital server mode (deploy/server) supplies the database, cache and site
+    # name through /etc/cirqen/cirqen.env. Before these were listed, the env
+    # file was ignored in production mode and the server connected as the
+    # desktop's default role with a random password.
+    "local_db.host": "POSTGRES_LOCAL_HOST",
+    "local_db.database": "POSTGRES_LOCAL_DB",
+    "local_db.user": "POSTGRES_LOCAL_USER",
+    # Not in SECRET_ENV on purpose: those are copied into installers'
+    # provisioning.json, and this password is per machine.
+    "local_db.password": "POSTGRES_LOCAL_PASSWORD",
+    "redis.host": "REDIS_HOST",
+    "redis.port": "REDIS_PORT",
+    "redis.password": "REDIS_PASSWORD",
+    "client.name": "CLIENT_NAME",
 }
 
 ENDPOINT_MARKER = "_endpoints_v"
 ENDPOINT_MARKER_VALUE = 2
 
 _LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
-_SSLMODES = ("disable", "allow", "prefer", "require", "verify-ca", "verify-full")
 
 
 def _get_path(cfg: dict, dotted: str):
@@ -142,16 +138,12 @@ def _del_path(cfg: dict, dotted: str) -> None:
         node.pop(leaf, None)
 
 
+# Tables a release stopped syncing (the model was removed).
 def coerce_endpoint(key: str, value):
     """Public: used by the settings page and the hq_endpoint command.
 
     Normalise a raw value: ports become int, URLs and hosts lose whitespace
     and trailing slashes. Raises ValueError naming the setting."""
-    if key == "hq_db.port":
-        try:
-            return int(str(value).strip())
-        except ValueError:
-            raise ValueError(f"{key} must be a whole number, got {value!r}")
     text = str(value).strip()
     if key in ("sync.api_url", "update.server_url"):
         text = text.rstrip("/")
@@ -218,7 +210,7 @@ def layer_endpoints(stored: dict, provisioning: dict, env, migrating: bool, remo
     return values, sources, overrides
 
 
-def validate_endpoints(values: dict, sync_enabled: bool = True, db_enabled: bool = True) -> list:
+def validate_endpoints(values: dict, sync_enabled: bool = True) -> list:
     """Problems with the resolved addresses, each naming the setting."""
     from urllib.parse import urlparse
 
@@ -247,21 +239,6 @@ def validate_endpoints(values: dict, sync_enabled: bool = True, db_enabled: bool
     check_url("sync.api_url", sync_enabled, suffix="/api/sync")
     check_url("update.server_url", True, forbid_suffix=True)
 
-    if db_enabled:
-        host = str(values.get("hq_db.host") or "")
-        if not host:
-            errors.append("hq_db.host is required")
-        elif "://" in host or "/" in host or any(ch.isspace() for ch in host):
-            errors.append(f"hq_db.host must be a bare host name, got {host!r}")
-        port = values.get("hq_db.port")
-        if not isinstance(port, int) or not 1 <= port <= 65535:
-            errors.append(f"hq_db.port must be between 1 and 65535, got {port!r}")
-        if not values.get("hq_db.database"):
-            errors.append("hq_db.database is required")
-        if not values.get("hq_db.user"):
-            errors.append("hq_db.user is required")
-        if values.get("hq_db.sslmode") not in _SSLMODES:
-            errors.append(f"hq_db.sslmode must be one of {', '.join(_SSLMODES)}")
     return errors
 
 
@@ -347,6 +324,8 @@ def resolve_endpoints(data_path=None, env=None) -> dict:
 # lists them; they are dropped instead of being carried along as "extra".
 RETIRED_SYNC_TABLES = {
     "public.integrations_metcalresult",  # Fluke MET/CAL import, removed
+    "public.CalSoft_calibrationschedule",  # merged into calSchedules
+    "public.assets_supplier",  # suppliers are Inventory_supplier
 }
 
 class CirqenConfig:
@@ -371,7 +350,7 @@ class CirqenConfig:
             "max_retries": 3,
             "retry_backoff": 3.0,
             "heartbeat_interval": 60,
-            "certificate_interval": 30,
+            "certificate_interval": 10,
             "conflict_resolution": "last_write_wins",
             "wait_for_hq": True,
             "max_wait_for_hq": 300,
@@ -385,16 +364,6 @@ class CirqenConfig:
             # secret: generated on a machine's first run and kept in config.json
             # (the embedded database is created with it), or env POSTGRES_LOCAL_PASSWORD.
             "password": "",
-        },
-        # ===== HQ DATABASE (Supabase pooler) =====
-        "hq_db": {
-            "host": HQ_ENDPOINT_DEFAULTS["hq_db.host"],
-            "port": HQ_ENDPOINT_DEFAULTS["hq_db.port"],
-            "database": HQ_ENDPOINT_DEFAULTS["hq_db.database"],
-            "user": HQ_ENDPOINT_DEFAULTS["hq_db.user"],
-            "password": "",  # secret: env POSTGRES_HQ_PASSWORD or provisioning.json
-            "sslmode": HQ_ENDPOINT_DEFAULTS["hq_db.sslmode"],
-            "enabled": True,
         },
         # ===== REDIS (Custom Port 7788) =====
         "redis": {
@@ -473,7 +442,6 @@ class CirqenConfig:
                 "public.CalSoft_calibrationprocedure",
                 "public.CalSoft_calibrationreading",
                 "public.CalSoft_calibrationreport",
-                "public.CalSoft_calibrationschedule",
                 "public.CalSoft_calibrationsession",
                 "public.CalSoft_calibrationworkflow",
                 "public.CalSoft_equipmentcalibrationprocedure",
@@ -593,6 +561,8 @@ class CirqenConfig:
             "public.ppms_auditlog",
             "public.ppms_ppmschedule",
             "public.reporthub_report",
+            # ── Assets ───────────────────────────────────────────────────────
+            "public.assets_servicecontract",
         ],
         # ===== SYSTEM =====
         "system": {
@@ -707,14 +677,6 @@ class CirqenConfig:
             cfg["local_db"]["password"] = os.getenv(
                 "POSTGRES_LOCAL_PASSWORD", cfg["local_db"]["password"]
             )
-
-            # hq_db
-            cfg["hq_db"]["host"] = os.getenv("POSTGRES_HQ_HOST", cfg["hq_db"]["host"])
-            cfg["hq_db"]["port"] = int(os.getenv("POSTGRES_HQ_PORT", cfg["hq_db"]["port"]))
-            cfg["hq_db"]["database"] = os.getenv("POSTGRES_HQ_DB", cfg["hq_db"]["database"])
-            cfg["hq_db"]["user"] = os.getenv("POSTGRES_HQ_USER", cfg["hq_db"]["user"])
-            cfg["hq_db"]["password"] = os.getenv("POSTGRES_HQ_PASSWORD", cfg["hq_db"]["password"])
-            cfg["hq_db"]["sslmode"] = os.getenv("POSTGRES_SSLMODE", cfg["hq_db"]["sslmode"])
 
             # redis
             cfg["redis"]["host"] = os.getenv("REDIS_HOST", cfg["redis"]["host"])
@@ -855,12 +817,17 @@ class CirqenConfig:
         stored: dict = {}
         first_run = not self.config_file.exists()
         recreated = False
+        scrub_hq_db = False
         if not first_run:
             try:
                 with open(self.config_file, "r") as f:
                     stored = json.load(f)
                 if not isinstance(stored, dict):
                     raise ValueError("top level is not an object")
+                # Clients no longer connect to the HQ database. Older files
+                # carry its settings, possibly with the password: drop them
+                # and rewrite the file below so the password leaves the disk.
+                scrub_hq_db = stored.pop("hq_db", None) is not None
                 self._deep_merge(cfg, stored)
                 cfg["sync_tables"] = self._with_default_tables(cfg.get("sync_tables") or [])
                 print(f"✓ Configuration loaded from {self.config_file}")
@@ -888,6 +855,11 @@ class CirqenConfig:
             print("   Migrating config.json: HQ addresses now follow the shipped defaults")
             self._keep_copy("config.json.pre-endpoints")
             self._save_json(self._persistable(cfg))
+        elif scrub_hq_db:
+            print("   Removing the HQ database settings from config.json (no longer used)")
+            self._save_json(self._persistable(cfg))
+        if scrub_hq_db:
+            self._scrub_hq_db_copies()
 
         if self._apply_secret_sources(cfg):
             # Persist secrets that came from a provisioning file, so the file
@@ -943,6 +915,20 @@ class CirqenConfig:
         saved[ENDPOINT_MARKER] = ENDPOINT_MARKER_VALUE
         return saved
 
+    def _scrub_hq_db_copies(self) -> None:
+        """Drop the old HQ database settings from the copies _keep_copy made."""
+        for name in ("config.json.pre-endpoints", "config.json.corrupt"):
+            copy = self.config_file.with_name(name)
+            try:
+                data = json.loads(copy.read_text())
+            except (OSError, ValueError):
+                continue
+            if isinstance(data, dict) and data.pop("hq_db", None) is not None:
+                try:
+                    copy.write_text(json.dumps(data, indent=2))
+                except OSError as exc:
+                    print(f"⚠️  Could not remove HQ database settings from {name}: {exc}")
+
     def _keep_copy(self, suffix_name: str) -> None:
         """Copy config.json beside itself once, before it is rewritten."""
         target = self.config_file.with_name(suffix_name)
@@ -982,7 +968,6 @@ class CirqenConfig:
         "sync.auth_token": "SYNC_AUTH_TOKEN",
         "sync.enrollment_code": "SYNC_ENROLLMENT_CODE",
         "update.api_key": "HQ_API_KEY",
-        "hq_db.password": "POSTGRES_HQ_PASSWORD",
     }
 
     def _provisioning_candidates(self):
@@ -1059,8 +1044,6 @@ class CirqenConfig:
             self.get("sync.auth_token") or self.get("sync.enrollment_code")
         ):
             missing.append("sync.auth_token (SYNC_AUTH_TOKEN) or sync.enrollment_code (SYNC_ENROLLMENT_CODE)")
-        if self.get("hq_db.enabled") and not self.get("hq_db.password"):
-            missing.append("hq_db.password (POSTGRES_HQ_PASSWORD)")
         if not self.get("update.api_key"):
             missing.append("update.api_key (HQ_API_KEY)")
         if not self.get("local_db.password"):
@@ -1207,21 +1190,6 @@ class CirqenConfig:
         os.environ["POSTGRES_LOCAL_USER"] = self.get("local_db.user")
         os.environ["POSTGRES_LOCAL_PASSWORD"] = self.get("local_db.password")
 
-        # hq_db  (Supabase pooler, port 5432)
-        os.environ["POSTGRES_HQ_HOST"] = self.get("hq_db.host")
-        os.environ["POSTGRES_HQ_PORT"] = str(self.get("hq_db.port"))
-        os.environ["POSTGRES_HQ_DB"] = self.get("hq_db.database")
-        os.environ["POSTGRES_HQ_USER"] = self.get("hq_db.user")
-        os.environ["POSTGRES_HQ_PASSWORD"] = self.get("hq_db.password")
-        os.environ["POSTGRES_SSLMODE"] = self.get("hq_db.sslmode", "require")
-        # aliases used by Django settings
-        os.environ["HQ_DB_HOST"] = self.get("hq_db.host")
-        os.environ["HQ_DB_PORT"] = str(self.get("hq_db.port"))
-        os.environ["HQ_DB_NAME"] = self.get("hq_db.database")
-        os.environ["HQ_DB_USER"] = self.get("hq_db.user")
-        os.environ["HQ_DB_PASSWORD"] = self.get("hq_db.password")
-        os.environ["HQ_DB_SSLMODE"] = self.get("hq_db.sslmode", "require")
-
         # redis  (port 7788 by default) — same story as local_db above:
         # PortManager dynamically reallocates this port when the default is
         # busy (typically a just-closed previous session's redis-server
@@ -1314,12 +1282,13 @@ class CirqenConfig:
         os.environ["EXTERNAL_SERVICE_TIMEOUT"] = str(self.get("system.external_service_timeout"))
         os.environ["STATS_PRINT_INTERVAL"] = str(self.get("system.stats_print_interval"))
 
-        # email
-        os.environ["EMAIL_HOST"] = self.get("email.host", "smtp.gmail.com")
-        os.environ["EMAIL_PORT"] = str(self.get("email.port", 587))
-        os.environ["EMAIL_USE_TLS"] = "true" if self.get("email.use_tls", True) else "false"
-        os.environ["EMAIL_HOST_USER"] = self.get("email.host_user", "")
-        os.environ["EMAIL_HOST_PASSWORD"] = self.get("email.host_password", "")
+        # email (a value already in the environment, e.g. server mode's
+        # /etc/cirqen/cirqen.env, is kept)
+        os.environ.setdefault("EMAIL_HOST", self.get("email.host", "smtp.gmail.com"))
+        os.environ.setdefault("EMAIL_PORT", str(self.get("email.port", 587)))
+        os.environ.setdefault("EMAIL_USE_TLS", "true" if self.get("email.use_tls", True) else "false")
+        os.environ.setdefault("EMAIL_HOST_USER", self.get("email.host_user", ""))
+        os.environ.setdefault("EMAIL_HOST_PASSWORD", self.get("email.host_password", ""))
 
         # sync state dir
         sync_state_dir = self.data_path / "sync_state"
@@ -1328,8 +1297,11 @@ class CirqenConfig:
 
         # django
         os.environ["DEBUG"] = str(self.get("app.debug"))
-        os.environ["DJANGO_SECRET_KEY"] = self._get_or_create_secret_key()
-        os.environ["DJANGO_ALLOWED_HOSTS"] = "localhost,127.0.0.1"
+        # setdefault, not assignment: hospital server mode sets the hosts people
+        # browse to and its own secret key in the environment. Assigning here
+        # replaced them with localhost, so every request to the server got 400.
+        os.environ.setdefault("DJANGO_SECRET_KEY", self._get_or_create_secret_key())
+        os.environ.setdefault("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1")
 
         missing = self.missing_secrets()
         if missing:
@@ -1346,7 +1318,6 @@ class CirqenConfig:
 
         print("✓ Environment variables configured")
         print(f"  • Local DB  : {self.get('local_db.host')}:{self.get('local_db.port')}")
-        print(f"  • HQ DB     : {self.get('hq_db.host')}:{self.get('hq_db.port')}")
         print(f"  • Redis     : {self.get('redis.host')}:{self.get('redis.port')}")
         print(f"  • HQ Server : {self.get('update.server_url')}")
         print(f"  • Updates   : every {self.get('update.check_interval_hours')}h")
@@ -1373,15 +1344,12 @@ class CirqenConfig:
             errors.append("local_db.user is required")
         if self.get("local_db.port") != 2215:
             errors.append("⚠ local_db.port should be 2215")
-        if self.get("hq_db.port") not in (3315, 5432, 6543):
-            errors.append("⚠ hq_db.port should be 5432/6543 (Supabase pooler) or 3315 (custom)")
         if self.get("redis.port") != 7788:
             errors.append("⚠ redis.port should be 7788")
         errors.extend(
             validate_endpoints(
                 {key: self.get(key) for key in HQ_ENDPOINT_DEFAULTS},
                 sync_enabled=bool(self.get("sync.enabled", True)),
-                db_enabled=bool(self.get("hq_db.enabled")),
             )
         )
         for secret in self.missing_secrets():
@@ -1416,7 +1384,6 @@ class CirqenConfig:
     def test_connections(self) -> dict:
         results = {
             "local_db": False,
-            "hq_db": False,
             "redis": False,
             "redpanda": False,
             "update_server": False,
@@ -1439,28 +1406,6 @@ class CirqenConfig:
             print(f"✓ local_db  ({self.get('local_db.port')})")
         except Exception as exc:
             print(f"✗ local_db: {exc}")
-
-        # hq_db
-        if self.get("hq_db.enabled"):
-            try:
-                import psycopg2
-
-                c = psycopg2.connect(
-                    host=self.get("hq_db.host"),
-                    port=self.get("hq_db.port"),
-                    database=self.get("hq_db.database"),
-                    user=self.get("hq_db.user"),
-                    password=self.get("hq_db.password"),
-                    sslmode=self.get("hq_db.sslmode", "require"),
-                    connect_timeout=5,
-                )
-                c.close()
-                results["hq_db"] = True
-                print(f"✓ hq_db  ({self.get('hq_db.port')})")
-            except Exception as exc:
-                print(f"✗ hq_db: {exc}")
-        else:
-            results["hq_db"] = None
 
         # redis
         if self.get("redis.enabled"):
@@ -1537,11 +1482,6 @@ DataDir: {self.data_path}
 │  {self.get('local_db.host')}:{self.get('local_db.port')}  db={self.get('local_db.database')}  user={self.get('local_db.user')}
 └─────────────────────────────────────────────────────────────┘
 
-┌─ HQ DB (Supabase pooler) ───────────────────────────────────┐
-│  enabled={self.get('hq_db.enabled')}
-│  {self.get('hq_db.host')}:{self.get('hq_db.port')}  db={self.get('hq_db.database')}  sslmode={self.get('hq_db.sslmode')}
-└─────────────────────────────────────────────────────────────┘
-
 ┌─ REDIS (port 7788) ─────────────────────────────────────────┐
 │  {self.get('redis.host')}:{self.get('redis.port')}  enabled={self.get('redis.enabled')}
 └─────────────────────────────────────────────────────────────┘
@@ -1588,14 +1528,6 @@ DataDir: {self.data_path}
             f"POSTGRES_LOCAL_DB={self.get('local_db.database')}",
             f"POSTGRES_LOCAL_USER={self.get('local_db.user')}",
             f"POSTGRES_LOCAL_PASSWORD={self.get('local_db.password')}",
-            "",
-            "# HQ DB (Supabase pooler)",
-            f"POSTGRES_HQ_HOST={self.get('hq_db.host')}",
-            f"POSTGRES_HQ_PORT={self.get('hq_db.port')}",
-            f"POSTGRES_HQ_DB={self.get('hq_db.database')}",
-            f"POSTGRES_HQ_USER={self.get('hq_db.user')}",
-            f"POSTGRES_HQ_PASSWORD={self.get('hq_db.password')}",
-            f"POSTGRES_SSLMODE={self.get('hq_db.sslmode')}",
             "",
             "# Redis (port 7788)",
             f"REDIS_HOST={self.get('redis.host')}",

@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 # sibling modules in this package
 from .signatures import SignatureImageLoader
 from .watermark import _LogoWatermarkCanvas
-from core.branding import contact_line, organisation_name
+from core.branding import contact_line, organisation_address, organisation_name
 
 
 
@@ -133,13 +133,13 @@ class HeaderMixin:
         canvas.setFillColor(HexColor('#374151'))
         canvas.setFont('Helvetica', 11)
         canvas.drawCentredString(self.page_width / 2, self.page_height - 50, 'Biomedical Engineering Department')
-        canvas.drawCentredString(self.page_width / 2, self.page_height - 65, 'Issued By: Btwelve CALIBRATION LABORATORY')
+        canvas.drawCentredString(self.page_width / 2, self.page_height - 65, f'Issued By: {organisation_name()} Calibration Laboratory')
 
         # Contact information
         canvas.setFont('Helvetica', 8)
         canvas.setFillColor(HexColor('#6b7280'))
         canvas.drawCentredString(self.page_width / 2, self.page_height - 80,
-                               contact_line("ISO/IEC 17025:2017"))
+                               contact_line(" ".join(organisation_address().split()), "ISO/IEC 17025:2017"))
 
         # QR Code in header (top right)
         qr_path = self.generate_qr_code()

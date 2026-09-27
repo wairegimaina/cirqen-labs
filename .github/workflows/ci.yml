@@ -38,10 +38,32 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-      - run: pip install -r requirements.txt
+      - run: pip install -r requirements.txt -r requirements-dev.txt
       - run: python manage.py check --settings=Equiper.test_settings
       - run: python manage.py makemigrations --check --dry-run --settings=Equiper.test_settings
-      - run: python manage.py test --settings=Equiper.test_settings
+      # No GPL, AGPL or unlicensed package may ship in the desktop build.
+      - run: python helper_scripts/licence_report.py > /dev/null
+      # Coverage of money, certificate and permission code must stay >= 80% (.coveragerc).
+      - run: coverage run manage.py test --settings=Equiper.test_settings
+      - run: coverage report
+
+  e2e:
+    # Browser journeys (e2e/tests.py): work order raised, signed, approved on
+    # the phone page and printed; calibration performed, reviewed, certified.
+    runs-on: ubuntu-latest
+    env:
+      CIRQEN_DATA_DIR: /tmp/cirqen-data
+      DJANGO_SECRET_KEY: ci-only-not-a-secret
+      CIRQEN_E2E: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - run: python -m playwright install --with-deps chromium
+      - run: python manage.py test e2e --settings=Equiper.test_settings -v 2
 
   sync-tests:
     runs-on: ubuntu-latest

@@ -27,7 +27,8 @@ class MonthFilterBase(TestCase):
         self.desc = EquipmentDescription.objects.create(name="Scale")
         user = User.objects.create_user(username="tech", password="pass")
         UserProfile.objects.update_or_create(
-            user=user, defaults={"role": "Tech", "level": "Engineer Incharge", "workshop": self.workshop},
+            user=user, defaults={"role": "Tech", "level": "Engineer Incharge", "workshop": self.workshop,
+                                "must_change_password": False},
         )
         self.client.login(username="tech", password="pass")
         self.serial = 0

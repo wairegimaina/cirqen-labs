@@ -19,6 +19,11 @@ so every site works offline and converges when connected.
 | Build | `build.py` |
 | Security notes, credential handling | `SECURITY.md` |
 | Field runbook | `docs/RUNBOOK.md` |
+| Hospital server install, operations | `docs/SERVER_MODE.md`, `docs/OPERATIONS.md` |
+| User manuals and FAQ | `docs/manuals/` |
+| ISO/IEC 17025 validation pack | `docs/validation/ISO17025_VALIDATION.md` |
+| Data protection, licences, EULA and service terms (drafts) | `docs/legal/` |
+| Support, releases, changelog, pilot | `SUPPORT.md`, `RELEASES.md`, `CHANGELOG.md`, `PILOT_PLAN.md` |
 
 ## Configuration
 
@@ -40,7 +45,7 @@ Useful switches:
 
 ## Where HQ is hosted
 
-The HQ addresses and the HQ database host are written in **one place**:
+The HQ addresses are written in **one place**:
 `HQ_ENDPOINT_DEFAULTS` at the top of `config.py`. Nothing else in the code names
 a host, and `core/tests/test_hq_endpoints.py` fails if one appears elsewhere.
 Sync and updates are two different services, so they are two settings.
@@ -49,7 +54,11 @@ Sync and updates are two different services, so they are two settings.
 |---|---|---|
 | `sync.api_url` | `SYNC_API_URL` | Sync and certificate API (ends in `/api/sync`) |
 | `update.server_url` | `HQ_SERVER_URL` | Update server (a bare address, no `/api/...`) |
-| `hq_db.host` `.port` `.database` `.user` `.sslmode` | `POSTGRES_HQ_HOST` `_PORT` `_DB` `_USER`, `POSTGRES_SSLMODE` | HQ database |
+
+Clients never connect to the HQ database: the app and the sync agent reach HQ
+through these two services only, so no install or `config.json` holds an HQ
+database password. A `config.json` from an older build has its `hq_db` section
+removed on the next start.
 
 Each is resolved in this order: environment variable, then `config.json`, then
 `provisioning.json`, then the default. This works in the packaged app as well as
@@ -120,3 +129,6 @@ suites against PostgreSQL on every push.
 4. For in-app updates, publish the package through HQ (`hq_server/build_package.py`);
    clients check, snapshot their database, apply, health-check and roll back
    automatically on failure.
+
+The full release checklist (staged rollout, validation, licences) is in
+`RELEASES.md`.

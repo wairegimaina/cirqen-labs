@@ -1,5 +1,6 @@
 """CalSoft.pdf_generators.certificate — the B-12 certificate generator (composed from mixins)."""
 """CalSoft.pdf_generators — the B-12 hospital certificate generator + thin wrapper."""
+from core.branding import logo_path as site_logo_path
 import base64
 import calendar
 import io
@@ -127,7 +128,8 @@ class BtwelveHospitalCertificateGenerator(
         self.is_failed_report = self.failure_stats['overall_failure_rate'] >= 0.40
 
         # Resolve logo once; reused by both the header and the watermark canvas
-        self.logo_path = self._get_logo_path()
+        # The logo uploaded on the Site details page wins.
+        self.logo_path = site_logo_path() or self._get_logo_path()
 
     def _determine_conformity_failure(self):
         """Strict conformity: any reading outside tolerance fails the session.

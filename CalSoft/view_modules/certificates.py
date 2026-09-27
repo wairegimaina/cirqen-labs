@@ -1,5 +1,7 @@
 import logging
-import zipstream
+import re
+import tempfile
+import zipfile
 from datetime import timedelta
 from dateutil.relativedelta import relativedelta
 from django.utils import timezone
@@ -16,16 +18,17 @@ from django.conf import settings
 
 from CalSoft.models import (
     CalibrationSession,
-    CalibrationSchedule,
     CalibrationProcedure,
     Equipment,
     CalibrationAuditLog,
     PendingCertificate,
     HistoricalCalibration,
 )
+from calSchedules.models import CalibrationSchedule
 from Inventory.models import Department
 from workshop.models import Workshop
 from CalSoft.pdf_generators import BtwelveHospitalCertificateGenerator, generate_btwelve_certificate
+from CalSoft.issued import CertificateTampered, issued_pdf
 
 from calSchedules.grouping import days_until_due, is_overdue, next_due_date
 from users.control import get_user_role
@@ -177,8 +180,9 @@ def certificate_list(request):
         cert_numeric=Case(
             When(
                 certificate_number__isnull=False,
-                certificate_number__regex=r"^BNH-\d+$",
-                then=Cast(Substr("certificate_number", 5), output_field=IntegerField()),
+                certificate_number__regex=rf"^{re.escape(settings.CERTIFICATE_PREFIX)}\d+$",
+                then=Cast(Substr("certificate_number", len(settings.CERTIFICATE_PREFIX) + 1),
+                          output_field=IntegerField()),
             ),
             default=Value(0),
             output_field=IntegerField(),
@@ -328,8 +332,15 @@ def generate_comprehensive_certificate(request, session_pk):
                 }
             )
 
-        pdf_buffer = generate_btwelve_certificate(session, context)
-        response = HttpResponse(pdf_buffer.getvalue(), content_type="application/pdf")
+        # An issued certificate is stored the first time and served unchanged
+        # afterwards (CalSoft.issued).
+        try:
+            pdf_bytes = issued_pdf(
+                session, request.user, lambda: generate_btwelve_certificate(session, context).getvalue())
+        except CertificateTampered as exc:
+            messages.error(request, str(exc))
+            return redirect("calibration:session_detail", pk=session_pk)
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
         filename = f"certificate_{session.certificate_number or session.id}.pdf"
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
         return response
@@ -463,8 +474,7 @@ def get_accessible_sessions(user, date_from=None, date_to=None):
 def bulk_certificates_download(request):
     """Stream calibration certificates in bulk for a date range."""
     from django.utils.dateparse import parse_date
-    from django.http import StreamingHttpResponse
-    from zipstream import ZipFile
+    from django.http import FileResponse
 
     today = timezone.localdate()
     week_start = today - timedelta(days=today.weekday())
@@ -491,7 +501,9 @@ def bulk_certificates_download(request):
         return JsonResponse({"count": sessions.count()})
 
     try:
-        z = ZipFile(mode="w", compression=zipstream.ZIP_STORED)
+        # Spooled: small bundles stay in memory, large ones go to a temp file.
+        bundle = tempfile.SpooledTemporaryFile(max_size=64 * 1024 * 1024)
+        z = zipfile.ZipFile(bundle, mode="w", compression=zipfile.ZIP_STORED)
 
         for session in sessions:
             try:
@@ -536,9 +548,11 @@ def bulk_certificates_download(request):
                     ),
                 }
 
-                pdf_buffer = generate_btwelve_certificate(session, context)
+                pdf_bytes = issued_pdf(
+                    session, request.user,
+                    lambda: generate_btwelve_certificate(session, context).getvalue())
                 filename = f"certificate_{session.certificate_number or session.id}.pdf"
-                z.writestr(filename, pdf_buffer.getvalue())
+                z.writestr(filename, pdf_bytes)
 
             except Exception as e:
                 logger.error(
@@ -546,11 +560,10 @@ def bulk_certificates_download(request):
                 )
                 continue
 
-        response = StreamingHttpResponse(z, content_type="application/zip")
-        response["Content-Disposition"] = (
-            f'attachment; filename="certificates_{date_from}_to_{date_to}.zip"'
-        )
-        return response
+        z.close()
+        bundle.seek(0)
+        return FileResponse(bundle, as_attachment=True, content_type="application/zip",
+                            filename=f"certificates_{date_from}_to_{date_to}.zip")
 
     except Exception as e:
         logger.error(f"Error creating ZIP file: {str(e)}", exc_info=True)

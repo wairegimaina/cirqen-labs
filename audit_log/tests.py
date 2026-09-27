@@ -36,6 +36,7 @@ class AuditTestCase(TestCase):
         if profile is None:
             profile = UserProfile(user=cls.hod, role="HOD")
         profile.role = "HOD"
+        profile.must_change_password = False
         profile.save()
         cls.procedure = CalibrationProcedure.objects.create(name="NIBP", created_by=cls.hod)
 
@@ -174,6 +175,7 @@ class AuditViewTests(AuditTestCase):
         profile.role = "Tech"
         profile.level = "Engineer"
         profile.workshop = workshop
+        profile.must_change_password = False
         profile.save()
 
         self.client.force_login(other)

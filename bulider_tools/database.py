@@ -20,7 +20,7 @@ class FirstRunSetup(QObject):
         self.pg_logs = DATA_PATH / 'logs'
         self.runtime_dir = RUNTIME_DIR
         self.pg_dir = self.runtime_dir / 'postgresql'
-        self.db_config, _ = setup_environment(port_manager)
+        self.db_config = setup_environment(port_manager)
 
     def is_first_run(self):
         """Check if this is the first run"""
@@ -125,18 +125,21 @@ class FirstRunSetup(QObject):
 
             self.progress_update.emit("Setup complete!", 100)
 
+            login = getattr(self, 'first_login', None)
+            login_text = (
+                "Head of department account:\n"
+                f"- Username: {login['username']}\n"
+                f"- One-time password: {login['password']}\n"
+                f"  (also saved in {DATA_PATH / 'first_login.txt'})\n"
+                "You will choose your own password at first login.\n\n"
+            ) if login else ""
             success_msg = (
                 "First-run setup completed successfully!\n\n"
-                "HOD User Created:\n"
-                "â€¢ Username: maina.wairegi\n"
-                "â€¢ Email: mosemaina5@gmail.com\n"
-                "â€¢ Password: ChangeMe123!\n\n"
-                "âš ï¸ Please change the password on first login!\n\n"
-                f"Allocated Ports:\n"
-                f"â€¢ PostgreSQL Local: {self.port_manager.get_port('postgresql_local')}\n"
-                f"â€¢ PostgreSQL HQ: {self.port_manager.get_port('postgresql_hq')}\n"
-                f"â€¢ Redis: {self.port_manager.get_port('redis')}\n"
-                f"â€¢ Django: {self.port_manager.get_port('django')}"
+                + login_text
+                + "Allocated Ports:\n"
+                f"- PostgreSQL Local: {self.port_manager.get_port('postgresql_local')}\n"
+                f"- Redis: {self.port_manager.get_port('redis')}\n"
+                f"- Django: {self.port_manager.get_port('django')}"
             )
             logger.info("First-run setup completed successfully")
             self.setup_complete.emit(True, success_msg)
@@ -623,9 +626,8 @@ class FirstRunSetup(QObject):
 
     def _run_migrations(self):
         """
-        Run Django migrations on BOTH the local database and the Render HQ database.
-        Uses --database=hq flag for the second pass so Django applies each set
-        to the right DB.  HQ failure is non-fatal — local app still works.
+        Run Django migrations on the local database. HQ's schema is not
+        changed from here: HQ applies its own migrations.
         """
         manage_py = APPLICATION_PATH / 'manage.py'
         if not manage_py.exists():
@@ -669,51 +671,6 @@ class FirstRunSetup(QObject):
             import traceback; logger.error(traceback.format_exc())
             return False
 
-        # ── 2. HQ database (Render PostgreSQL from CirqenConfig) ─────────
-        _, hq = setup_environment(self.port_manager)
-        hq_enabled = hq.get('enabled', True)
-        hq_host    = hq.get('host', '')
-
-        if not hq_enabled or not hq_host:
-            logger.info("HQ DB not configured / disabled — skipping HQ migrations")
-            return True
-
-        logger.info("=" * 60)
-        logger.info("RUNNING MIGRATIONS — HQ database (Render)")
-        logger.info(f"  {hq_host}:{hq['port']}  db={hq['database']}")
-        logger.info("=" * 60)
-
-        hq_env = base_env.copy()
-        hq_env['POSTGRES_HQ_HOST']     = str(hq['host'])
-        hq_env['POSTGRES_HQ_PORT']     = str(hq['port'])
-        hq_env['POSTGRES_HQ_DATABASE'] = str(hq['database'])
-        hq_env['POSTGRES_HQ_USER']     = str(hq['user'])
-        hq_env['POSTGRES_HQ_PASSWORD'] = str(hq['password'])
-        hq_env['HQ_DB_HOST']     = str(hq['host'])
-        hq_env['HQ_DB_PORT']     = str(hq['port'])
-        hq_env['HQ_DB_NAME']     = str(hq['database'])
-        hq_env['HQ_DB_USER']     = str(hq['user'])
-        hq_env['HQ_DB_PASSWORD'] = str(hq['password'])
-
-        try:
-            result = subprocess.run(
-                [sys.executable, str(manage_py), 'migrate', '--noinput', '--database=hq'],
-                capture_output=True, text=True,
-                cwd=str(APPLICATION_PATH), env=hq_env,
-                check=True, timeout=300,
-            )
-            logger.info("HQ migrations completed")
-            if result.stdout:
-                logger.debug(f"Output:\n{result.stdout}")
-        except subprocess.CalledProcessError as e:
-            logger.warning(f"HQ migration failed (exit {e.returncode}) — continuing")
-            logger.warning(f"stdout:\n{e.stdout}")
-            logger.warning(f"stderr:\n{e.stderr}")
-        except subprocess.TimeoutExpired:
-            logger.warning("HQ migration timeout — continuing without HQ schema")
-        except Exception as e:
-            logger.warning(f"HQ migration error: {e} — continuing")
-
         return True
 
 
@@ -746,38 +703,48 @@ class FirstRunSetup(QObject):
 
             User = get_user_model()
 
-            # Check if HOD user exists
-            if User.objects.filter(email='mosemaina5@gmail.com').exists():
-                logger.info("âœ… HOD user already exists")
+            # One first HOD per installation. Earlier builds created the same
+            # named superuser with the same published password on every
+            # machine; now each install gets its own random one-time password,
+            # shown once in the setup dialog and kept in first_login.txt
+            # (owner-only) until the HOD changes it at first login.
+            self.first_login = None
+            if has_user_profile and UserProfile.objects.filter(role='HOD').exists():
+                logger.info("An HOD account already exists")
+                return True
+            if not has_user_profile and User.objects.filter(username='hod').exists():
                 return True
 
-            logger.info("Creating HOD user...")
-
-            # Create HOD user
+            import secrets
+            password = secrets.token_urlsafe(12)
             user = User.objects.create_user(
-                username='maina.wairegi',
-                email='mosemaina5@gmail.com',
-                password='ChangeMe123!',
-                first_name='Maina',
-                last_name='Wairegi',
+                username='hod',
+                password=password,
                 is_staff=True,
-                is_superuser=True
+                is_superuser=False,
             )
+            logger.info(f"Created user: {user.username}")
 
-            logger.info(f"âœ… Created user: {user.username}")
-
-            # Create UserProfile if model exists
             if has_user_profile:
-                UserProfile.objects.create(
-                    user=user,
-                    role='HOD',
-                    must_change_password=True,
-                    has_uploaded_signature=False,
-                    is_approved=True
-                )
-                logger.info("âœ… Created UserProfile for HOD")
+                UserProfile.objects.update_or_create(user=user, defaults={
+                    'role': 'HOD',
+                    'must_change_password': True,
+                    'has_uploaded_signature': False,
+                    'is_approved': True,
+                })
 
-            logger.info("âœ… HOD user creation complete")
+            self.first_login = {'username': user.username, 'password': password}
+            note = DATA_PATH / 'first_login.txt'
+            note.write_text(
+                "Cirqen first login (delete this file after signing in)\n"
+                f"Username: {user.username}\nOne-time password: {password}\n"
+                "You will be asked to choose a new password and draw your signature.\n"
+            )
+            try:
+                note.chmod(0o600)
+            except OSError:
+                pass
+            logger.info("HOD user creation complete")
             return True
 
         except Exception as e:

@@ -58,6 +58,7 @@ from .view_modules.certificates import (
 from .view_modules.pending_sessions import (
     sessions_pending_approval,
     approve_calibration_session_ajax,
+    certificate_status,
     reject_calibration_session,
     restore_rejected_session,
     download_declined_certificate,
@@ -82,8 +83,7 @@ from .view_modules.notifications import (
     notifications_mark_all_read_ajax,
 )
 
-from .models import CalibrationSession, CalibrationSchedule, CalibrationAuditLog
-from .forms import CalibrationScheduleForm
+from .models import CalibrationSession, CalibrationAuditLog
 
 
 def require_certificate_access(view_func):

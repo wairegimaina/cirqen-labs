@@ -1047,41 +1047,10 @@ def setup_environment(port_manager: PortManager):
             'password': os.getenv('POSTGRES_LOCAL_PASSWORD', ''),
         }
 
-    # ── HQ DB — Render PostgreSQL pulled straight from config ─────────────────
-    if _cfg:
-        _hq = _cfg.get('hq_db', {})
-        HQ_DB_CONFIG = {
-            'host':     _hq.get('host',     ''),
-            'port':     _hq.get('port',     5432),
-            'database': _hq.get('database', ''),
-            'user':     _hq.get('user',     ''),
-            'password': _hq.get('password', ''),
-            'enabled':  _hq.get('enabled',  True),
-        }
-    else:
-        # Fallback — HQ creds from environment (never hardcoded).
-        HQ_DB_CONFIG = {
-            'host':     os.getenv('POSTGRES_HQ_HOST', ''),
-            'port':     int(os.getenv('POSTGRES_HQ_PORT', '5432')),
-            'database': os.getenv('POSTGRES_HQ_DB', ''),
-            'user':     os.getenv('POSTGRES_HQ_USER', ''),
-            'password': os.getenv('POSTGRES_HQ_PASSWORD', ''),
-            'enabled':  True,
-        }
-
     # ── Publish env-vars for Django settings / subprocesses ───────────────────
     for key, value in DB_CONFIG.items():
         os.environ[f'POSTGRES_LOCAL_{key.upper()}'] = str(value)
 
-    for key, value in HQ_DB_CONFIG.items():
-        os.environ[f'POSTGRES_HQ_{key.upper()}'] = str(value)
-
-    # Django settings aliases
-    os.environ['HQ_DB_HOST']     = str(HQ_DB_CONFIG['host'])
-    os.environ['HQ_DB_PORT']     = str(HQ_DB_CONFIG['port'])
-    os.environ['HQ_DB_NAME']     = str(HQ_DB_CONFIG['database'])
-    os.environ['HQ_DB_USER']     = str(HQ_DB_CONFIG['user'])
-    os.environ['HQ_DB_PASSWORD'] = str(HQ_DB_CONFIG['password'])
 
     os.environ['REDIS_HOST'] = '127.0.0.1'
     os.environ['REDIS_PORT'] = str(port_manager.get_port('redis'))
@@ -1089,10 +1058,10 @@ def setup_environment(port_manager: PortManager):
     logger.info("=" * 70)
     logger.info("DATABASE CONFIGURATION (setup_environment)")
     logger.info(f"  Local DB : {DB_CONFIG['host']}:{DB_CONFIG['port']}  db={DB_CONFIG['database']}")
-    logger.info(f"  HQ DB    : {HQ_DB_CONFIG['host']}:{HQ_DB_CONFIG['port']}  db={HQ_DB_CONFIG['database']}")
     logger.info("=" * 70)
 
-    return DB_CONFIG, HQ_DB_CONFIG
+    # No HQ database settings: the desktop reaches HQ through its API only.
+    return DB_CONFIG
 
 # ============================================================================
 # DJANGO SERVER RUNNER — MODULE-LEVEL (required for multiprocessing 'spawn')
@@ -1216,44 +1185,9 @@ def run_django_server(port, db_config, redis_port, log_file_path, app_path):
             else:
                 print(f"[DJANGO] No pending local migrations", flush=True)
 
-            # HQ DB (Render PostgreSQL) — optional, and checked in the
-            # background: this is a network call to the remote HQ database
-            # (connect_timeout=10s), so doing it inline here would make every
-            # single app launch wait on HQ reachability just to check for
-            # schema migrations that only ever change rarely. The local
-            # server starts immediately regardless of how this turns out.
-            hq_host = (
-                os.environ.get('HQ_DB_HOST', '') or
-                os.environ.get('POSTGRES_HQ_HOST', '')
-            )
-            if hq_host:
-                def _check_hq_migrations():
-                    print(f"[DJANGO] Checking HQ migrations ({hq_host})...", flush=True)
-                    try:
-                        hq_conn = connections['hq']
-                        hq_conn.prepare_database()
-                        hq_exec = MigrationExecutor(hq_conn)
-                        hq_plan = hq_exec.migration_plan(
-                            hq_exec.loader.graph.leaf_nodes()
-                        )
-                        if hq_plan:
-                            print(
-                                f"[DJANGO] Found {len(hq_plan)} unapplied HQ migrations",
-                                flush=True,
-                            )
-                            call_command('migrate', '--noinput', '--database=hq', verbosity=1)
-                            print(f"[DJANGO] HQ migrations completed", flush=True)
-                        else:
-                            print(f"[DJANGO] No pending HQ migrations", flush=True)
-                    except Exception as hq_e:
-                        print(f"[DJANGO] HQ migration skipped: {hq_e}", flush=True)
-
-                import threading as _threading
-                _threading.Thread(
-                    target=_check_hq_migrations, name="HQMigrationCheck", daemon=True
-                ).start()
-            else:
-                print(f"[DJANGO] HQ DB not configured — skipping HQ migrations", flush=True)
+            # HQ's schema is not this machine's to change: HQ applies its own
+            # migrations (hq_server/migrations) and this app has no HQ database
+            # connection.
 
         except Exception as mig_e:
             print(f"[DJANGO] Migration check/run failed: {mig_e}", flush=True)

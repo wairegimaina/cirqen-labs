@@ -2,6 +2,7 @@
 Complete Standalone Equipment Report PDF Generator
 Includes base template, generator logic, and all necessary components
 """
+from core.branding import logo_path as site_logo_path
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -9,7 +10,7 @@ from reportlab.lib.units import cm
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.platypus import (
     BaseDocTemplate, Frame, PageTemplate, Paragraph,
-    Table, TableStyle, Spacer, PageBreak
+    Table, LongTable, TableStyle, Spacer, PageBreak
 )
 from reportlab.pdfgen import canvas as rl_canvas  # FIX: was missing entirely
 from django.http import HttpResponse
@@ -119,7 +120,8 @@ class EquipmentPDFTemplate(BaseDocTemplate):
         self.page_width, self.page_height = pagesize
 
         # Get logo path
-        self.logo_path = self._find_logo(logo_path)
+        # The logo uploaded on the Site details page wins.
+        self.logo_path = site_logo_path() or self._find_logo(logo_path)
 
         # Setup page templates
         self._setup_page_templates()
@@ -503,29 +505,21 @@ class EquipmentReportPDFGenerator:
             not_working = sum(1 for eq in equipment_list if eq.status == "Not working")
             elements.append(Spacer(1, 0.3*cm))
 
-        # Table headers
-        table_data = [[
-            'NO:', 'Equipment Name', 'Serial Number',
-            'Model', 'Manufacturer', 'Status'
-        ]]
-
-        # Add equipment rows
-        for i, equipment in enumerate(equipment_list, 1):
-            table_data.append([
+        header = ['NO:', 'Equipment Name', 'Serial Number', 'Model', 'Manufacturer', 'Status']
+        rows = [
+            [
                 str(i),
                 equipment.description.name if equipment.description else 'N/A',
                 equipment.serial_number or 'Unknown',
                 equipment.model or 'N/A',
                 equipment.manufacturer.name if equipment.manufacturer else 'Unknown',
                 equipment.status or 'Unknown',
-            ])
+            ]
+            for i, equipment in enumerate(equipment_list, 1)
+        ]
 
-        # Create table
         col_widths = [2*cm, 7*cm, 5*cm, 5*cm, 5*cm, 4*cm]
-        table = Table(table_data, colWidths=col_widths, repeatRows=1)
-
-        # Style table
-        table_style = [
+        base_style = [
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#6366F1')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
             ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
@@ -539,29 +533,27 @@ class EquipmentReportPDFGenerator:
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('TOPPADDING', (0, 0), (-1, -1), 6),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            # One command for the alternating rows instead of one per row.
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F9FAFB')]),
         ]
+        status_colors = {
+            'Working': colors.HexColor('#059669'),
+            'Under repair': colors.HexColor('#D97706'),
+            'Not working': colors.HexColor('#DC2626'),
+            'Due calibration': colors.HexColor('#2563EB'),
+        }
 
-        # Add alternating row colors and status-based coloring
-        for row in range(1, len(table_data)):
-            # Alternating rows
-            bg_color = colors.HexColor('#F9FAFB') if row % 2 == 0 else colors.white
-            table_style.append(('BACKGROUND', (0, row), (-1, row), bg_color))
-
-            # Status-based coloring
-            status = table_data[row][5]
-            status_colors_map = {
-                'Working': (colors.HexColor('#059669'), colors.white),
-                'Under repair': (colors.HexColor('#D97706'), colors.white),
-                'Not working': (colors.HexColor('#DC2626'), colors.white),
-                'Due calibration': (colors.HexColor('#2563EB'), colors.white),
-            }
-
-            if status in status_colors_map:
-                text_color, font = status_colors_map[status]
-                table_style.append(('TEXTCOLOR', (5, row), (5, row), text_color))
-                table_style.append(('FONTNAME', (5, row), (5, row), 'Helvetica-Bold'))
-
-        table.setStyle(TableStyle(table_style))
+        # LongTable lays out long tables without re-measuring every remaining
+        # row at each page break; a plain Table did, which made 12,000 machines
+        # take ~40 s. Per-row styling is limited to the status cell.
+        style = list(base_style)
+        for offset, row in enumerate(rows, 1):
+            text_color = status_colors.get(row[5])
+            if text_color:
+                style.append(('TEXTCOLOR', (5, offset), (5, offset), text_color))
+                style.append(('FONTNAME', (5, offset), (5, offset), 'Helvetica-Bold'))
+        table = LongTable([header] + rows, colWidths=col_widths, repeatRows=1)
+        table.setStyle(TableStyle(style))
         elements.append(table)
 
         return elements

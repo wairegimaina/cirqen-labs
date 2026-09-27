@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+{% block title %}Two-factor sign-in — {{ site_name }}{% endblock %}
+{% block page_title %}Two-factor sign-in{% endblock %}
+{% block extra_css %}
+<style>
+.tf-card { max-width: 640px; }
+.tf-qr { width: 200px; height: 200px; background: #fff; padding: 8px; border-radius: 8px; }
+.tf-secret { font-family: ui-monospace, monospace; letter-spacing: .08em; word-break: break-all; }
+.tf-codes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .4rem; font-family: ui-monospace, monospace; }
+.tf-row { display: grid; gap: .5rem; margin: 1rem 0; }
+.tf-row input { max-width: 220px; padding: .55rem .7rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); }
+.tf-error { color: var(--danger, #b91c1c); }
+</style>
+{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Two-factor sign-in</h1>
+    <p class="page-subtitle">After your password, Cirqen asks for a code from an authenticator app on your phone.</p>
+  </div>
+</div>
+
+<div class="section-card tf-card">
+  {% if error %}<p class="tf-error">{{ error }}</p>{% endif %}
+
+  {% if recovery_codes %}
+    <h2 class="section-card-title">{% if just_enabled %}Two-factor sign-in is on. {% endif %}Save these recovery codes</h2>
+    <p>Each code works once, if you lose your phone. They are shown only now: print them or keep them somewhere safe.</p>
+    <div class="tf-codes">{% for code in recovery_codes %}<span>{{ code }}</span>{% endfor %}</div>
+    <p><a href="{% url 'two_factor_setup' %}" class="btn btn-primary">Done</a></p>
+
+  {% elif device %}
+    <p><strong>On.</strong> Turned on {{ device.confirmed_at|date:"j M Y" }}. {{ device.recovery_codes|length }} recovery code{{ device.recovery_codes|length|pluralize }} left.</p>
+    <form method="post" class="tf-row">
+      {% csrf_token %}
+      <label for="code">Current code from your app</label>
+      <input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" required maxlength="12">
+      <div>
+        <button type="submit" name="action" value="recovery" class="btn btn-secondary">New recovery codes</button>
+        {% if not required %}
+          <button type="submit" name="action" value="disable" class="btn btn-danger">Turn off</button>
+        {% else %}
+          <span class="text-muted">Required for heads of department at this site.</span>
+        {% endif %}
+      </div>
+    </form>
+
+  {% else %}
+    {% if required %}<p><strong>Required:</strong> heads of department at this site sign in with a second step.</p>{% endif %}
+    <ol>
+      <li>Install an authenticator app (Google Authenticator, Microsoft Authenticator or similar).</li>
+      <li>Scan this code with it, or type the key below.</li>
+      <li>Enter the 6-digit code the app shows.</li>
+    </ol>
+    <img src="{{ qr }}" alt="QR code to add Cirqen to your authenticator app" class="tf-qr">
+    <p>Key: <span class="tf-secret">{{ secret }}</span></p>
+    <form method="post" class="tf-row">
+      {% csrf_token %}
+      <label for="code">Code from the app</label>
+      <input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" required maxlength="6" autofocus>
+      <div><button type="submit" class="btn btn-primary">Turn on</button></div>
+    </form>
+  {% endif %}
+</div>
+{% endblock %}

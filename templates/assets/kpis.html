@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+{% block title %}Maintenance KPIs — {{ site_name }}{% endblock %}
+{% block page_title %}Maintenance KPIs{% endblock %}
+{% block extra_css %}{% include 'assets/_styles.html' %}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Maintenance KPIs</h1>
+    <p class="page-subtitle">{{ k.machines }} machine{{ k.machines|pluralize }}{% if selected_workshop %} in {{ selected_workshop.name }}{% endif %}, last {{ months }} months.</p>
+  </div>
+</div>
+<div class="as-grid">
+  <form method="get" class="as-filters">
+    {% for p in periods %}<a href="?months={{ p }}{% if selected_workshop %}&workshop={{ selected_workshop.id }}{% endif %}" class="{% if p == months %}on{% endif %}">{{ p }} months</a>{% endfor %}
+    {% if workshops %}
+      <input type="hidden" name="months" value="{{ months }}">
+      <select name="workshop" onchange="this.form.submit()" aria-label="Workshop">
+        <option value="">All workshops</option>
+        {% for w in workshops %}<option value="{{ w.id }}" {% if w == selected_workshop %}selected{% endif %}>{{ w.name }}</option>{% endfor %}
+      </select>
+    {% endif %}
+  </form>
+
+  <div class="as-tiles">
+    <div class="as-tile"><div class="v">{{ k.mtbf_days|default:"—" }}</div><div class="l">MTBF, days per machine per failure</div></div>
+    <div class="as-tile"><div class="v">{{ k.mttr_hours|default:"—" }}</div><div class="l">MTTR, hours per repair</div></div>
+    <div class="as-tile"><div class="v">{% if k.uptime_percent is not None %}{{ k.uptime_percent }}%{% else %}—{% endif %}</div><div class="l">Uptime (from repair hours)</div></div>
+    <div class="as-tile"><div class="v">{% if k.ppm_completion_percent is not None %}{{ k.ppm_completion_percent }}%{% else %}—{% endif %}</div><div class="l">PPM done: {{ k.ppm_completed }} of {{ k.ppm_due }}</div></div>
+    <div class="as-tile"><div class="v">{{ k.failures }}</div><div class="l">Failures (repair work orders)</div></div>
+    <div class="as-tile"><div class="v">{{ k.backlog }}</div><div class="l">Awaiting approval{% if k.backlog %}, oldest {{ k.backlog_oldest_days }} days{% endif %}</div></div>
+  </div>
+
+  <div class="section-card">
+    <h2 class="section-card-title">Machines likely to need repair</h2>
+    <p class="as-muted">Failure risk is worked out from each machine's repair history on the <a href="{% url 'failure_risk' %}">Failure Risk</a> page in Machine Reports.</p>
+  </div>
+
+  {% if k.by_type %}
+  <div class="section-card">
+    <h2 class="section-card-title">Failures by equipment type</h2>
+    <div class="as-scroll"><table class="as-table">
+      <thead><tr><th>Type</th><th>Machines</th><th>Failures</th><th>MTBF (days)</th></tr></thead>
+      <tbody>{% for t in k.by_type %}<tr><td>{{ t.type }}</td><td>{{ t.machines }}</td><td>{{ t.failures }}</td><td>{{ t.mtbf_days }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </div>
+  {% endif %}
+
+  <details class="section-card">
+    <summary><strong>How these are counted</strong></summary>
+    <ul class="as-muted">
+      <li><strong>Failure</strong>: a Repair work order that was not declined.</li>
+      <li><strong>MTBF</strong>: machine-days in the period divided by failures.</li>
+      <li><strong>MTTR</strong>: average time between a repair's recorded start and finish.</li>
+      <li><strong>Uptime</strong>: 100% minus recorded repair hours as a share of machine hours. Waiting for a repair is not recorded, so this is an upper bound.</li>
+      <li><strong>PPM done</strong>: completed PPM schedules out of those due in the period up to this month.</li>
+    </ul>
+  </details>
+</div>
+{% endblock %}

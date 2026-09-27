@@ -608,6 +608,9 @@ class UserSecurityLog(models.Model):
         ('SIGNATURE_UPLOADED', 'Signature Uploaded'),
         ('PROFILE_UPDATED', 'Profile Updated'),
         ('FIRST_LOGIN_SETUP', 'First Login Setup Completed'),
+        ('SESSION_EXPIRED', 'Signed Out After Inactivity'),
+        ('TWO_FACTOR_ENABLED', 'Two-Factor Sign-In Turned On'),
+        ('TWO_FACTOR_DISABLED', 'Two-Factor Sign-In Turned Off'),
     ]
 
     user = models.ForeignKey(
@@ -782,3 +785,35 @@ def mark_user_for_sync_on_saved_filter(sender, instance, **kwargs):
         needs_sync=True,
         updated_at=timezone.now()
     )
+
+
+class TwoFactorDevice(models.Model):
+    """An authenticator app registered for a user's second sign-in step.
+
+    Created only once the user has entered a correct code (users.two_factor).
+    Not synced: the secret stays on the machine the user signs in to.
+    """
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="two_factor")
+    secret = models.CharField(max_length=64)
+    recovery_codes = models.JSONField(default=list)
+    last_used_step = models.BigIntegerField(default=0)
+    confirmed_at = models.DateTimeField(auto_now_add=True)
+
+    def verify(self, code):
+        """Accept a current authenticator code (once) or an unused recovery code."""
+        from users import two_factor
+
+        step = two_factor.matching_step(self.secret, code)
+        if step is not None and step > self.last_used_step:
+            self.last_used_step = step
+            self.save(update_fields=["last_used_step"])
+            return True
+        remaining = two_factor.use_recovery_code(self.recovery_codes, code)
+        if remaining is not None:
+            self.recovery_codes = remaining
+            self.save(update_fields=["recovery_codes"])
+            return True
+        return False
+
+    def __str__(self):
+        return f"Two-factor for {self.user}"

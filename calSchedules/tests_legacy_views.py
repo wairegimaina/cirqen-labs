@@ -29,7 +29,8 @@ class CalibrationViewsTest(TestCase):
         # an Engineer Incharge gets workshop-wide edit + schedule access.
         UserProfile.objects.update_or_create(
             user=self.admin_user,
-            defaults={"role": "Tech", "level": "Engineer Incharge", "workshop": self.workshop},
+            defaults={"role": "Tech", "level": "Engineer Incharge", "workshop": self.workshop,
+                      "must_change_password": False},
         )
 
         # Equipment + Description

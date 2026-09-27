@@ -22,7 +22,7 @@ from .dependency_manager import DependencyManager
 from .smart_delete import SmartDeleteMixin
 
 class LifecycleMixin(SmartDeleteMixin):
-    """Agent lifecycle: start() thread orchestration, background init, stop(), and mirror loops."""
+    """Agent lifecycle: start() thread orchestration, background init, stop(), and thread supervision."""
     def start(self):
             """
             ⚡ OPTIMIZED: Instant startup - threads start immediately
@@ -43,57 +43,45 @@ class LifecycleMixin(SmartDeleteMixin):
 
             # ============================================================
             # DETECT REINSTALL / NEW MACHINE
-            # Trigger a full mirror sync (HQ → Local) before any threads
-            # start if EITHER:
-            #   (a) The local DB is completely empty, OR
-            #   (b) The sync state was wiped (no download checkpoint) — this
-            #       covers reinstalls where some stale data already exists but
-            #       may be days/weeks behind HQ.
-            #
-            # Why mirror instead of the normal download loop?
-            # The download loop pulls from the audit_log (changes since a
-            # timestamp). If state was wiped, there is no reliable timestamp,
-            # and the audit log does not contain records created before it
-            # existed. The mirror does a direct DB-to-DB ID + timestamp
-            # comparison and fills every gap regardless of audit history.
+            # Bootstrap from HQ (data checker, over the API) before any
+            # threads start if EITHER:
+            #   (a) the local DB is completely empty, OR
+            #   (b) the sync state was wiped (no download checkpoint), which
+            #       covers reinstalls where stale data exists but may be days
+            #       or weeks behind HQ.
+            # The download loop pulls from the audit log (changes since a
+            # timestamp); with no reliable timestamp it cannot fill the gap.
             # ============================================================
-            needs_mirror = False
-            mirror_reason = ""
-
-            if self.mirror_enabled and self.mirror:
-                # Touch get_last_download_time so it can set _needs_mirror_sync
-                self.get_last_download_time()
-
-                local_count = self.get_local_record_count()
-
-                if local_count == 0:
-                    needs_mirror = True
-                    mirror_reason = "empty local DB (new install or wiped reinstall)"
-                elif getattr(self, "_needs_mirror_sync", False):
-                    needs_mirror = True
-                    mirror_reason = "sync state was wiped (reinstall with existing data)"
+            # Touch get_last_download_time so it can set _needs_mirror_sync
+            self.get_last_download_time()
+            needs_bootstrap = False
+            bootstrap_reason = ""
+            local_count = self.get_local_record_count()
+            if local_count == 0:
+                needs_bootstrap = True
+                bootstrap_reason = "empty local DB (new install or wiped reinstall)"
+            elif getattr(self, "_needs_mirror_sync", False):
+                needs_bootstrap = True
+                bootstrap_reason = "sync state was wiped (reinstall with existing data)"
 
             # ============================================================
-            # DATA CHECKER: fast row-count bootstrap via HTTP API.
-            # Runs BEFORE the mirror so it can satisfy the need without
-            # requiring a direct DB-to-DB connection.  If it succeeds,
-            # the mirror is skipped.  If HQ is unreachable, we fall back
-            # to the mirror as before.  If neither is available, the normal
-            # audit-log download loop continues as a last resort.
+            # DATA CHECKER: fast row-count bootstrap via the HQ API. If HQ is
+            # unreachable, the normal audit-log download loop continues and
+            # the next start tries again.
             # ============================================================
-            if self.data_checker and is_online and needs_mirror:
+            if self.data_checker and is_online and needs_bootstrap:
                 LOG.info("=" * 80)
                 LOG.info("🔍 DATA CHECKER: bootstrapping from HQ via API…")
-                LOG.info(f"   Reason for sync: {mirror_reason}")
+                LOG.info(f"   Reason for sync: {bootstrap_reason}")
                 LOG.info("=" * 80)
                 try:
                     dc_result = self.data_checker.check_and_sync(
                         send_checksums=False,
-                        force=(mirror_reason == "empty local DB (new install or wiped reinstall)"),
+                        force=(bootstrap_reason == "empty local DB (new install or wiped reinstall)"),
                     )
                     if dc_result.get("error"):
                         LOG.warning(
-                            "⚠️  data_checker could not reach HQ (%s) — falling back to mirror",
+                            "⚠️  data_checker could not reach HQ (%s) — will retry on the next start",
                             dc_result["error"],
                         )
                     elif dc_result.get("client_leads"):
@@ -109,7 +97,7 @@ class LifecycleMixin(SmartDeleteMixin):
                             dc_result.get("hq_total_rows", 0),
                         )
                         LOG.warning("=" * 80)
-                        needs_mirror = False
+                        needs_bootstrap = False
                         self._needs_mirror_sync = False
                         try:
                             push_result = self.data_checker.push_all_to_hq(
@@ -143,11 +131,11 @@ class LifecycleMixin(SmartDeleteMixin):
                             self.state.set("last_upload_time", "1970-01-01T00:00:00+00:00")
                     elif dc_result["synced_tables"]:
                         LOG.info(
-                            "✅ data_checker bootstrapped %d table(s) in %.1fs — skipping mirror",
+                            "✅ data_checker bootstrapped %d table(s) in %.1fs",
                             len(dc_result["synced_tables"]),
                             dc_result["total_duration_s"],
                         )
-                        needs_mirror = False
+                        needs_bootstrap = False
                         self._needs_mirror_sync = False
                         # ── FIX: Force the upload loop to re-upload ALL local records
                         # to HQ.  data_checker only syncs HQ → local; the local DB may
@@ -159,12 +147,12 @@ class LifecycleMixin(SmartDeleteMixin):
                         )
                         self.state.set("last_upload_time", "1970-01-01T00:00:00+00:00")
                     else:
-                        LOG.info("✅ data_checker: local DB already matches HQ — skipping mirror")
-                        needs_mirror = False
+                        LOG.info("✅ data_checker: local DB already matches HQ")
+                        needs_bootstrap = False
                         self._needs_mirror_sync = False
                 except Exception as _dc_err:
-                    LOG.error("❌ data_checker raised an exception: %s — falling back to mirror", _dc_err)
-            elif self.data_checker and is_online and not needs_mirror:
+                    LOG.error("❌ data_checker raised an exception: %s — will retry on the next start", _dc_err)
+            elif self.data_checker and is_online and not needs_bootstrap:
                 # DB seems intact — still run a lightweight count-only check
                 # to catch any silent drift (mismatched counts, missed changes).
                 LOG.info("🔍 data_checker: running routine integrity check (with checksums)…")
@@ -179,27 +167,6 @@ class LifecycleMixin(SmartDeleteMixin):
                         LOG.info("✅ data_checker: all tables in sync")
                 except Exception as _dc_err:
                     LOG.warning("⚠️  data_checker routine check failed: %s", _dc_err)
-
-            if needs_mirror:
-                LOG.info("=" * 80)
-                LOG.info("🔄 RECOVERY MIRROR SYNC REQUIRED")
-                LOG.info(f"   Reason: {mirror_reason}")
-                LOG.info("   Running full HQ → Local mirror before starting threads...")
-                LOG.info("=" * 80)
-                try:
-                    sync_ok = self.perform_initial_mirror_sync()
-                    if sync_ok:
-                        LOG.info("✅ Recovery mirror sync complete — proceeding to normal operation")
-                        self._needs_mirror_sync = False
-                    else:
-                        LOG.warning("⚠️  Recovery mirror sync failed — normal loops will continue")
-                        LOG.warning("   Stale or missing data may exist until the next mirror run")
-                except Exception as _init_err:
-                    LOG.error("❌ Recovery mirror sync raised an exception: %s", _init_err)
-                    LOG.info("   Agent will continue; scheduled mirror loop will retry later")
-            elif self.mirror_enabled:
-                LOG.info("✅ Local DB has %d records and state is intact — skipping recovery sync",
-                         self.get_local_record_count())
 
             # ============================================================
             # START ALL THREADS IMMEDIATELY - NO BLOCKING
@@ -228,10 +195,6 @@ class LifecycleMixin(SmartDeleteMixin):
                 ("CertificateSyncThread", self.certificate_sync_loop, "Certificate sync thread"),
                 ("HeartbeatThread", self.heartbeat_loop, "Heartbeat thread"),
             ]
-            if self.mirror_enabled:
-                self._thread_specs.append(
-                    ("MirrorSyncThread", self.delayed_mirror_sync_loop, "Mirror sync thread (delayed)")
-                )
             self._thread_specs.append(
                 ("CertificatePullThread", self.certificate_pull_loop, "Certificate pull thread")
             )
@@ -284,21 +247,17 @@ class LifecycleMixin(SmartDeleteMixin):
             LOG.info("⏱️  Sync Intervals:")
             LOG.info("   • 📤 Upload: Every %ds", self.sync_cfg.get("poll_interval_seconds", 10))
             LOG.info("   • 📥 Download: Every %ds", self.sync_cfg.get("download_interval_seconds", 15))
-            LOG.info("   • 📜 Certificates: Every %ds", self.sync_cfg.get("certificate_sync_interval", 30))
+            LOG.info("   • 📜 Certificates: Every %ds", self.sync_cfg.get("certificate_sync_interval", 10))
             LOG.info("   • 💓 Heartbeat: Every %ds", self.sync_cfg.get("heartbeat_interval", 60))
             LOG.info(
                 "   • 🛡️  Cert conflict guard: Every %ds",
                 self.sync_cfg.get("cert_conflict_check_interval", int(os.getenv("CERT_CONFLICT_CHECK_INTERVAL", "1800"))),
             )
-            if self.mirror_enabled:
-                LOG.info("   • 🔄 Mirror: Every %.1fh (starts in 5 min)", self.mirror_interval_hours)
             LOG.info("")
             LOG.info("🛠️  Features:")
             LOG.info("   • 🔄 Status System: Active")
             LOG.info("   • 🗑️  Soft Delete: Enabled")
             LOG.info("   • 🔄 Smart Delete: %s", "Available" if SMART_DELETE_AVAILABLE else "Not Available")
-            if self.mirror_enabled:
-                LOG.info("   • 🔄 Mirror System: Enabled")
             LOG.info("")
             LOG.info("=" * 80)
             LOG.info("✅ NOW LIVE - Actively monitoring for changes!")
@@ -455,33 +414,6 @@ class LifecycleMixin(SmartDeleteMixin):
             # Keep self.threads in sync — stop() and __del__ still iterate it.
             self.threads = list(self._named_threads.values())
             return t
-    def delayed_mirror_sync_loop(self):
-            """
-            🔄 Mirror sync with delayed start to avoid blocking startup
-            First sync happens 5 minutes after agent starts
-            """
-            delay_minutes = int(os.getenv("MIRROR_STARTUP_DELAY_MINUTES", "5"))
-
-            LOG.info(f"🔄 Mirror sync: First sync in {delay_minutes} minutes...")
-
-            # Wait before first sync
-            for i in range(delay_minutes * 60):
-                if self.stop_event.is_set():
-                    LOG.info("Mirror sync cancelled during startup delay")
-                    return
-                time.sleep(1)
-
-                # Log countdown every minute
-                if (i + 1) % 60 == 0:
-                    remaining = delay_minutes - ((i + 1) // 60)
-                    if remaining > 0:
-                        LOG.debug(f"🔄 Mirror sync starts in {remaining} minute(s)...")
-
-            LOG.info("🔄 Starting delayed mirror sync...")
-
-            # Now run normal mirror sync loop
-            self.mirror_sync_loop()
-
     def _count_pending_changes(self) -> int:
         """Real local backlog count for status reporting while offline.
 
