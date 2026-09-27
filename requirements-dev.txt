@@ -1,0 +1,4 @@
+# Test and CI tools (not needed to run Cirqen).
+coverage>=7.6
+playwright>=1.47
+ruff

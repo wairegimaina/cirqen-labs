@@ -58,55 +58,39 @@ class ParentRecoveryMixin(SmartDeleteMixin):
         LOG.info("=" * 80)
 
         try:
-            # Query HQ database directly for the missing parent
-            # Same settings the rest of the agent uses (config.json / env). No
-            # fallback host: a stale default once pointed this at a decommissioned
-            # database and failed quietly.
-            hq_config = dict((getattr(self, "config", None) or {}).get("hq_db") or {})
-            hq_config.pop("enabled", None)
-            if not hq_config.get("host"):
-                LOG.error("HQ database host is not configured (hq_db.host); cannot fetch parent")
+            # Ask HQ for the parent through the API (the same tables and row
+            # encoding as the bootstrap download). The agent no longer holds
+            # HQ database credentials.
+            if "." in parent_table:
+                schema, tbl = parent_table.split(".", 1)
+            else:
+                schema, tbl = "public", parent_table
+            full_table = qualified(schema, tbl)
+
+            response = requests.post(
+                f"{self.api_url}/data_checker/fetch_rows",
+                json={"client_id": self.client_id, "table": f"{schema}.{tbl}", "ids": [str(parent_id)]},
+                headers=self._http_headers(),
+                timeout=30,
+            )
+            if response.status_code != 200:
+                LOG.error(f"   ❌ HQ could not return the parent ({response.status_code}): {response.text[:200]}")
+                return False
+            rows = (response.json() or {}).get("rows") or []
+            if not rows:
+                LOG.warning(
+                    f"   ❌ Parent record NOT FOUND in HQ: {parent_table}[{parent_id}]"
+                )
+                LOG.warning(f"      This is an orphaned reference!")
                 return False
 
-            # Connect to HQ database
-            import psycopg2
-            from psycopg2.extras import RealDictCursor
-
-            hq_conn = psycopg2.connect(**hq_config, cursor_factory=RealDictCursor)
-
             try:
-                if "." in parent_table:
-                    schema, tbl = parent_table.split(".", 1)
-                else:
-                    schema, tbl = "public", parent_table
+                from .data_checker_client import _decode_row
+            except ImportError:  # loaded as a top-level module with sync/ on sys.path
+                from data_checker_client import _decode_row
 
-                full_table = qualified(schema, tbl)
-
-                # Fetch parent record from HQ
-                with hq_conn.cursor() as cur:
-                    cur.execute(
-                        f"""
-                            SELECT to_jsonb(t.*) as data
-                            FROM {full_table} t
-                            WHERE id = %s
-                        """,
-                        (parent_id,),
-                    )
-
-                    result = cur.fetchone()
-
-                    if not result:
-                        LOG.warning(
-                            f"   ❌ Parent record NOT FOUND in HQ: {parent_table}[{parent_id}]"
-                        )
-                        LOG.warning(f"      This is an orphaned reference!")
-                        return False
-
-                    parent_data = result["data"]
-                    LOG.info(f"   ✅ Found parent in HQ: {parent_table}[{parent_id}]")
-
-            finally:
-                hq_conn.close()
+            parent_data = _decode_row(rows[0])
+            LOG.info(f"   ✅ Found parent in HQ: {parent_table}[{parent_id}]")
 
             # Now insert the parent record locally
             conn = None

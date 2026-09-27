@@ -23,7 +23,7 @@ from CalSoft.models import CalibrationSession
 from ..models import EquipmentStatusReport, MachineRepairHistory, WorkshopEquipmentReport, EquipmentCategory
 from Inventory.models import Equipment, Workshop
 from jobcard.models import jobcard, SparePartUsed
-from CalSoft.models import CalibrationSession, CalibrationSchedule
+from CalSoft.models import CalibrationSession
 logger = logging.getLogger(__name__)
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
@@ -61,10 +61,21 @@ def calculate_manufacturer_performance(equipment_qs):
 
     Returns:
         dict: Performance metrics for each manufacturer
+
+    Counts and costs are summed in the database. Building a model instance per
+    repair (with its spare parts) took ~12 s for 12,000 machines and 36,000
+    repairs; only the downtime needs per-row values, read as plain tuples.
     """
     from collections import defaultdict
     from datetime import datetime
-    from jobcard.models import jobcard
+    from decimal import Decimal
+
+    from django.db.models import Count, DecimalField, ExpressionWrapper, F, Q, Sum
+
+    from jobcard.models import SparePartUsed, jobcard
+
+    def name(value):
+        return value or 'Unknown'
 
     manufacturers = defaultdict(lambda: {
         'equipment_count': 0,
@@ -77,43 +88,33 @@ def calculate_manufacturer_performance(equipment_qs):
         'avg_repair_cost': 0
     })
 
-    active_equipment = equipment_qs.filter(active_status=True).select_related('manufacturer')
+    active_equipment = equipment_qs.filter(active_status=True)
 
-    # All approved repairs for these devices in one query (plus one for their
-    # parts), grouped by device, instead of a query per device.
-    repairs_by_equipment = defaultdict(list)
-    for repair in jobcard.objects.filter(
-        equipment__in=active_equipment,
-        action_taken='Repair',
-        status='Approved',
-    ).prefetch_related('spare_parts__part'):
-        repairs_by_equipment[repair.equipment_id].append(repair)
+    for row in (active_equipment.order_by().values('manufacturer__name')
+                .annotate(n=Count('id'), working=Count('id', filter=Q(status='Working')))):
+        metrics = manufacturers[name(row['manufacturer__name'])]
+        metrics['equipment_count'] += row['n']
+        metrics['working_equipment'] += row['working']
 
-    # Get equipment data grouped by manufacturer - filter active_status
-    for equipment in active_equipment:
-        # Get manufacturer name instead of manufacturer instance
-        manufacturer_name = equipment.manufacturer.name if equipment.manufacturer else 'Unknown'
-        manufacturers[manufacturer_name]['equipment_count'] += 1
+    repairs = jobcard.objects.filter(equipment__in=active_equipment, action_taken='Repair', status='Approved')
 
-        if equipment.status == 'Working':
-            manufacturers[manufacturer_name]['working_equipment'] += 1
+    for maker, day, started, completed in repairs.values_list(
+            'equipment__manufacturer__name', 'date_issued', 'time_started', 'time_completed').iterator(chunk_size=2000):
+        metrics = manufacturers[name(maker)]
+        metrics['total_repairs'] += 1
+        if started and completed:
+            metrics['total_downtime'] += (
+                datetime.combine(day, completed) - datetime.combine(day, started)
+            ).total_seconds() / 3600
 
-        for repair in repairs_by_equipment[equipment.id]:
-            manufacturers[manufacturer_name]['total_repairs'] += 1
-
-            # Calculate downtime
-            if repair.time_started and repair.time_completed:
-                start_time = datetime.combine(repair.date_issued, repair.time_started)
-                end_time = datetime.combine(repair.date_issued, repair.time_completed)
-                downtime = (end_time - start_time).total_seconds() / 3600
-                manufacturers[manufacturer_name]['total_downtime'] += downtime
-
-            # Calculate repair costs
-            repair_cost = sum(
-                sp.quantity * float(sp.part.unit_cost if sp.part else 0)
-                for sp in repair.spare_parts.all()
-            )
-            manufacturers[manufacturer_name]['total_repair_cost'] += repair_cost
+    # Parts at the part's current unit cost, as before; a spare-part row whose
+    # part was deleted contributes nothing.
+    line_cost = ExpressionWrapper(F('quantity') * F('part__unit_cost'),
+                                  output_field=DecimalField(max_digits=18, decimal_places=2))
+    for row in (SparePartUsed.objects.filter(job_card__in=repairs, part__isnull=False).order_by()
+                .values('job_card__equipment__manufacturer__name').annotate(cost=Sum(line_cost))):
+        manufacturers[name(row['job_card__equipment__manufacturer__name'])]['total_repair_cost'] += float(
+            row['cost'] or Decimal(0))
 
     # Calculate derived metrics
     for manufacturer, metrics in manufacturers.items():

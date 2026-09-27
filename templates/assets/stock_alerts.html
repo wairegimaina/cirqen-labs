@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block title %}Stock alerts — {{ site_name }}{% endblock %}
+{% block page_title %}Stock alerts{% endblock %}
+{% block extra_css %}{% include 'assets/_styles.html' %}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1 class="page-title">Spare parts stock</h1>
+  <p class="page-subtitle">When a part reaches its reorder level, a restock request is raised and the workshop in-charge is told.</p></div></div>
+<div class="as-grid">
+  <div class="section-card">
+    <h2 class="section-card-title">At or below reorder level</h2>
+    {% if low %}<div class="as-scroll"><table class="as-table">
+      <thead><tr><th>Part</th><th>In stock</th><th>Reorder at</th><th>Supplier</th><th>Workshop</th></tr></thead>
+      <tbody>{% for p in low %}<tr><td>{{ p.name }}</td><td><span class="as-pill {% if p.stock_count == 0 %}as-bad{% else %}as-warn{% endif %}">{{ p.stock_count }}</span></td><td>{{ p.reorder_level }}</td><td>{{ p.supplier|default:"—" }}</td><td>{{ p.workshop }}</td></tr>{% endfor %}</tbody>
+    </table></div>{% else %}<p class="as-muted">Nothing is low.</p>{% endif %}
+  </div>
+
+  <div class="section-card">
+    <h2 class="section-card-title">Reorder levels</h2>
+    <form method="get" class="as-filters"><input name="q" value="{{ q }}" placeholder="Search parts or suppliers" aria-label="Search"><button class="btn btn-secondary btn-sm">Search</button></form>
+    <div class="as-scroll"><table class="as-table">
+      <thead><tr><th>Part</th><th>In stock</th><th>Reorder at / supplier</th></tr></thead>
+      <tbody>{% for p in parts %}<tr>
+        <td>{{ p.name }}<br><span class="as-muted">{{ p.workshop }}</span></td>
+        <td>{{ p.stock_count }}</td>
+        <td>{% if can_manage %}
+          <form method="post" class="as-filters">{% csrf_token %}
+            <input type="hidden" name="part" value="{{ p.id }}"><input type="hidden" name="q" value="{{ q }}">
+            <input type="number" name="reorder_level" min="0" value="{{ p.reorder_level }}" style="width:6rem" aria-label="Reorder level">
+            <select name="supplier" aria-label="Supplier"><option value="">No supplier</option>{% for s in suppliers %}<option value="{{ s.id }}" {% if s.id == p.supplier_id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select>
+            <button class="btn btn-primary btn-sm">Save</button>
+          </form>{% else %}{{ p.reorder_level|default:"—" }}{% if p.supplier %} · {{ p.supplier }}{% endif %}{% endif %}</td>
+      </tr>{% empty %}<tr><td colspan="3" class="as-muted">No parts.</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% if parts.has_other_pages %}<p class="as-muted">Page {{ parts.number }} of {{ parts.paginator.num_pages }}.
+      {% if parts.has_previous %}<a href="?q={{ q }}&page={{ parts.previous_page_number }}">Previous</a>{% endif %}
+      {% if parts.has_next %}<a href="?q={{ q }}&page={{ parts.next_page_number }}">Next</a>{% endif %}</p>{% endif %}
+  </div>
+</div>
+{% endblock %}

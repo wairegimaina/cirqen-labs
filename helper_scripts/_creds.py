@@ -100,7 +100,7 @@ def require(*dbs: str) -> None:
     for name in dbs:
         db = checks[name]
         if not db.get("password") or (name == "hq" and not db.get("host")):
-            raise SystemExit(
-                f"❌ Missing {name} DB credentials. Set them in .env "
-                f"or ~/.cirqen/data/config.json (see .env.example)."
-            )
+            where = ("POSTGRES_HQ_* in the environment or .env (the app itself no longer "
+                     "stores HQ database credentials)" if name == "hq"
+                     else ".env or ~/.cirqen/data/config.json")
+            raise SystemExit(f"❌ Missing {name} DB credentials. Set {where}; see .env.example.")

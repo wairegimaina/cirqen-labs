@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+{% block title %}Contracts and warranties — {{ site_name }}{% endblock %}
+{% block page_title %}Contracts and warranties{% endblock %}
+{% block extra_css %}{% include 'assets/_styles.html' %}{% endblock %}
+{% block content %}
+<div class="page-head"><div>
+  <h1 class="page-title">Contracts and warranties</h1>
+  <p class="page-subtitle">Current service contracts, and warranties ending in the next 60 days. Heads of department and in-charges are alerted 60 days before either ends.</p>
+</div><div><a href="{% url 'assets:suppliers' %}" class="btn btn-secondary">Suppliers</a></div></div>
+<div class="as-grid">
+  <div class="section-card">
+    <h2 class="section-card-title">Service contracts</h2>
+    {% if contracts %}<div class="as-scroll"><table class="as-table">
+      <thead><tr><th>Machine</th><th>Cover</th><th>Supplier</th><th>Ends</th><th>Annual cost</th></tr></thead>
+      <tbody>{% for c in contracts %}<tr>
+        <td><a href="{% url 'assets:machine' c.equipment.id %}">{{ c.equipment.description }}</a><br><span class="as-muted">S/N {{ c.equipment.serial_number }} · {{ c.equipment.department }}</span></td>
+        <td>{{ c.get_cover_display }}{% if c.contract_number %}<br><span class="as-muted">{{ c.contract_number }}</span>{% endif %}</td>
+        <td>{{ c.supplier|default:"—" }}</td>
+        <td>{{ c.end_date|date:"j M Y" }}{% if c.end_date <= horizon %} <span class="as-pill as-warn">soon</span>{% endif %}</td>
+        <td>{% if c.annual_cost %}KSh {{ c.annual_cost|floatformat:2 }}{% else %}—{% endif %}</td>
+      </tr>{% endfor %}</tbody></table></div>
+      {% if contracts.has_other_pages %}<p class="as-muted">Page {{ contracts.number }} of {{ contracts.paginator.num_pages }}.
+        {% if contracts.has_previous %}<a href="?page={{ contracts.previous_page_number }}">Previous</a>{% endif %}
+        {% if contracts.has_next %}<a href="?page={{ contracts.next_page_number }}">Next</a>{% endif %}</p>{% endif %}
+    {% else %}<p class="as-muted">No current contracts.</p>{% endif %}
+  </div>
+
+  <div class="section-card">
+    <h2 class="section-card-title">Warranties ending within 60 days</h2>
+    {% if warranties %}<ul>{% for m in warranties %}<li><a href="{% url 'assets:machine' m.id %}">{{ m.description }} (S/N {{ m.serial_number }})</a>, {{ m.department }}: {{ m.warranty_end|date:"j M Y" }}</li>{% endfor %}</ul>
+    {% else %}<p class="as-muted">None. Warranty dates are set on each machine's page.</p>{% endif %}
+  </div>
+
+  {% if can_manage %}
+  <div class="section-card">
+    <h2 class="section-card-title">Add a service contract</h2>
+    <form method="post" class="as-form">
+      {% csrf_token %}
+      {% for field in form %}<label>{{ field.label }}{{ field }}{% if field.errors %}<span class="as-err">{{ field.errors|join:" " }}</span>{% endif %}</label>{% endfor %}
+      <div><button type="submit" class="btn btn-primary">Save contract</button></div>
+    </form>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

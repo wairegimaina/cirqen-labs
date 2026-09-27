@@ -46,7 +46,7 @@ class ServiceManager(QObject):
         self.startup_failed = False
         import threading
         self.stop_event = threading.Event()
-        self.db_config, self.hq_db_config = setup_environment(port_manager)
+        self.db_config = setup_environment(port_manager)
 
         # ---- systemd PostgreSQL manager ----
         _pg_d = RUNTIME_DIR / 'postgresql'
@@ -72,13 +72,6 @@ class ServiceManager(QObject):
         logger.info(f"    Port:     {port_manager.get_port('postgresql_local')}")
         logger.info(f"    Database: {self.db_config['database']}")
         logger.info(f"    User:     {self.db_config['user']}")
-        logger.info(f"    Password: [REDACTED]")
-        logger.info(f"")
-        logger.info(f"  HQ DB:")
-        logger.info(f"    Host:     {self.hq_db_config['host']}")
-        logger.info(f"    Port:     {port_manager.get_port('postgresql_hq')}")
-        logger.info(f"    Database: {self.hq_db_config['database']}")
-        logger.info(f"    User:     {self.hq_db_config['user']}")
         logger.info(f"    Password: [REDACTED]")
         logger.info("="*70)
 
@@ -160,24 +153,6 @@ class ServiceManager(QObject):
             # ready (see _ensure_pg_user_and_db_safe), so no extra wait is needed
             # here beyond a brief settle margin.
             time.sleep(0.5)
-
-            # ============================================================
-            # SERVICE 2: PostgreSQL HQ (OPTIONAL)
-            # ============================================================
-            self.progress_update.emit("Starting PostgreSQL HQ...", 20)
-            logger.info("")
-            logger.info("📊 [2/7] Starting PostgreSQL HQ...")
-
-            if not self.start_postgresql_hq():
-                logger.warning("⚠️  PostgreSQL HQ startup failed")
-                logger.warning("   Application will continue without HQ database")
-                logger.warning("   Sync functionality will be limited")
-            else:
-                logger.info("✅ PostgreSQL HQ started successfully")
-
-            # No wait here: HQ is the remote Supabase DB in normal operation,
-            # so this step is a fast no-op skip (missing local data dir) on
-            # every startup — there's nothing to let "settle".
 
             # ============================================================
             # SERVICE 3: Redis (REQUIRED)
@@ -851,147 +826,6 @@ class ServiceManager(QObject):
                     pass
 
         return success
-
-    def start_postgresql_hq(self):
-        """
-        Start PostgreSQL HQ (optional second database) with auto-creation
-        FIXED: Now creates HQ database if needed
-        """
-        try:
-            pg_dir = self.runtime_dir / 'postgresql'
-            pg_data_hq = DATA_PATH / 'postgres_hq'
-            pg_log = DATA_PATH / 'logs' / 'postgres_hq.log'
-            port = self.port_manager.get_port('postgresql_hq')
-
-            # Create HQ data directory if not exists
-            pg_data_hq.mkdir(exist_ok=True)
-
-            if sys.platform == 'win32':
-                pg_bin = pg_dir / 'bin' / 'postgres.exe'
-            else:
-                pg_bin = pg_dir / 'bin' / 'postgres'
-
-            # Check if HQ database cluster is initialized
-            if not (pg_data_hq / 'PG_VERSION').exists():
-                logger.info("PostgreSQL HQ data directory not initialized - skipping")
-                return False
-
-            logger.info("="*70)
-            logger.info("STARTING POSTGRESQL HQ")
-            logger.info("="*70)
-            logger.info(f"Port: {port}")
-            logger.info(f"Database: {self.hq_db_config['database']}")
-            logger.info("="*70)
-
-            # ---- HQ port reuse check ----
-            # If postgres is already listening on the HQ port (e.g. a
-            # previous run or an external instance) skip launching a new one.
-            import socket as _sock
-            with _sock.socket(_sock.AF_INET, _sock.SOCK_STREAM) as _s:
-                _s.settimeout(1)
-                _hq_port_busy = _s.connect_ex(('127.0.0.1', port)) == 0
-
-            if _hq_port_busy:
-                # Check if postgres owns the HQ port directly
-                # (not via _pg_systemd which checks local port)
-                hq_port_is_pg = False
-                try:
-                    for conn in psutil.net_connections(kind='inet'):
-                        if conn.laddr.port == port and conn.status == 'LISTEN' and conn.pid:
-                            proc = psutil.Process(conn.pid)
-                            if 'postgres' in proc.name().lower():
-                                hq_port_is_pg = True
-                                break
-                except (psutil.AccessDenied, psutil.NoSuchProcess, Exception):
-                    hq_port_is_pg = True  # Optimistic fallback
-                if hq_port_is_pg:
-                    logger.info(
-                        f"[PG-HQ] Port {port} already owned by postgres — reusing."
-                    )
-                    # Skip to the user/db setup below
-                else:
-                    logger.warning(
-                        f"[PG-HQ] Port {port} occupied by non-postgres process — "
-                        "skipping HQ database start."
-                    )
-                    return False
-            else:
-                # Port is free — start the bundled binary
-                rotate_log_if_large(pg_log)
-                log_file = open(pg_log, 'a')
-                process = subprocess.Popen(
-                    [str(pg_bin), '-D', str(pg_data_hq), '-p', str(port), '-k', str(pg_data_hq)],
-                    stdout=log_file,
-                    stderr=log_file
-                )
-                self.processes.append(('postgres_hq', process, log_file))
-
-            logger.info("Waiting for PostgreSQL HQ to be ready...")
-
-            # Wait for PostgreSQL HQ to accept connections
-            postgres_hq_ready = False
-
-            for i in range(20):
-                try:
-                    import psycopg2
-                    conn = psycopg2.connect(
-                        host=self.hq_db_config['host'],
-                        port=port,
-                        database='postgres',  # FIXED: Use 'postgres' database
-                        user=self.hq_db_config['user'],
-                        password=self.hq_db_config['password'],
-                        connect_timeout=3
-                    )
-                    conn.close()
-                    logger.info("✅ PostgreSQL HQ is ready")
-                    postgres_hq_ready = True
-                    break
-                except Exception:
-                    time.sleep(0.5)
-
-            if not postgres_hq_ready:
-                logger.warning("⚠️  PostgreSQL HQ timeout (non-critical)")
-                return False
-
-            # Create HQ database if needed (same logic as local)
-            try:
-                import psycopg2
-                from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
-
-                conn = psycopg2.connect(
-                    host=self.hq_db_config['host'],
-                    port=port,
-                    database='postgres',
-                    user=self.hq_db_config['user'],
-                    password=self.hq_db_config['password']
-                )
-                conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
-                cursor = conn.cursor()
-
-                cursor.execute(
-                    "SELECT 1 FROM pg_database WHERE datname = %s",
-                    (self.hq_db_config['database'],)
-                )
-                db_exists = cursor.fetchone() is not None
-
-                if not db_exists:
-                    logger.info(f"Creating HQ database: {self.hq_db_config['database']}")
-                    cursor.execute(f"CREATE DATABASE {self.hq_db_config['database']}")
-                    logger.info(f"✅ HQ database created: {self.hq_db_config['database']}")
-
-                cursor.close()
-                conn.close()
-
-                logger.info(f"✅ PostgreSQL HQ ready on port {port}")
-                return True
-
-            except Exception as e:
-                logger.warning(f"⚠️  PostgreSQL HQ database setup failed: {e}")
-                return False
-
-        except Exception as e:
-            logger.warning(f"⚠️  PostgreSQL HQ error (non-critical): {e}")
-            return False
 
     def start_redis(self):
         """Start Redis"""

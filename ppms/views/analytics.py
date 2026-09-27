@@ -71,54 +71,82 @@ def _ppm_analytics(access_context, today):
             active_status=True
         ).count()
 
-    # Calculate overdue schedules - NOT completed and past the LAST DAY of scheduled month
+    # One pass over the schedules, read as plain values. The per-month,
+    # per-department and per-type querysets this replaced cost ~195 queries
+    # and grew with the number of departments.
+    def month_end(d):
+        return d.replace(day=monthrange(d.year, d.month)[1])
+
+    rows = list(base_schedules.values(
+        'id', 'status', 'scheduled_month', 'updated_at', 'equipment_id',
+        'equipment__department_id', 'equipment__department__name',
+        'equipment__description_id', 'equipment__description__name',
+    ))
+
+    def label(row, key):
+        # 'N/A' only when the relation is missing, as before.
+        return row[key] if row[key.replace('__name', '_id')] else 'N/A'
+
     overdue_schedules = []
     pending_schedules = []
+    month_keys = [(current_month_start + relativedelta(months=i)) for i in range(12)]
+    monthly = {(m.year, m.month): {'total': 0, 'completed': 0, 'pending': 0, 'pushed': 0, 'overdue': 0}
+               for m in month_keys}
+    by_dept = {}
+    by_type = {}
+    completed_total = 0
+    completed_on_time = 0
+    upcoming_schedules = []
 
-    for schedule in base_schedules.select_related('equipment', 'equipment__department', 'equipment__description'):
-        if schedule.scheduled_month:
-            # Get the LAST DAY of the scheduled month
-            last_day = monthrange(schedule.scheduled_month.year, schedule.scheduled_month.month)[1]
-            month_end_date = schedule.scheduled_month.replace(day=last_day)
+    for row in rows:
+        status, month = row['status'], row['scheduled_month']
+        overdue = bool(month) and status != 'completed' and today > month_end(month)
+        if month and status != 'completed':
+            if overdue:
+                overdue_schedules.append(row)
+            elif status == 'pending':
+                pending_schedules.append(row)
 
-            if schedule.status != 'completed':
-                # Overdue if today is AFTER the last day of the scheduled month
-                if today > month_end_date:
-                    overdue_schedules.append(schedule)
-                elif schedule.status == 'pending':
-                    pending_schedules.append(schedule)
+        if month and (month.year, month.month) in monthly:
+            bucket = monthly[(month.year, month.month)]
+            bucket['total'] += 1
+            if status in ('completed', 'pending', 'pushed'):
+                bucket[status] += 1
+            bucket['overdue'] += overdue
+
+        for key, table in (('equipment__department_id', by_dept), ('equipment__description_id', by_type)):
+            counts = table.setdefault(row[key], {'scheduled': 0, 'completed': 0, 'pending': 0, 'overdue': 0})
+            counts['scheduled'] += 1
+            if status in ('completed', 'pending'):
+                counts[status] += 1
+            counts['overdue'] += overdue
+
+        if status == 'completed':
+            completed_total += 1
+            if month and row['updated_at'] and timezone.localdate(row['updated_at']) <= month_end(month):
+                completed_on_time += 1
+
+        if (status == 'pending' and month and month.year == today.year and month.month == today.month):
+            upcoming_schedules.append({
+                'id': str(row['id']),
+                'equipment': label(row, 'equipment__description__name'),
+                'department': label(row, 'equipment__department__name'),
+                'scheduled_date': month.strftime('%Y-%m-%d'),
+                'days_remaining': (month_end(month) - today).days,
+            })
 
     # Status breakdown
     status_counts = base_schedules.values('status').annotate(
         count=Count('id')
     ).order_by('status')
 
-    # Monthly distribution (next 12 months)
-    monthly_data = []
-    for i in range(12):
-        month_date = current_month_start + relativedelta(months=i)
-        month_schedules = base_schedules.filter(
-            scheduled_month__year=month_date.year,
-            scheduled_month__month=month_date.month
-        )
+    monthly_data = [
+        {'month': m.strftime('%b %Y'), **{k: monthly[(m.year, m.month)][k]
+                                          for k in ('total', 'completed', 'pending', 'pushed', 'overdue')}}
+        for m in month_keys
+    ]
 
-        # Count overdue for this specific month
-        month_overdue = 0
-        for s in month_schedules:
-            if s.scheduled_month and s.status != 'completed':
-                last_day = monthrange(s.scheduled_month.year, s.scheduled_month.month)[1]
-                month_end_date = s.scheduled_month.replace(day=last_day)
-                if today > month_end_date:
-                    month_overdue += 1
-
-        monthly_data.append({
-            'month': month_date.strftime('%b %Y'),
-            'total': month_schedules.count(),
-            'completed': month_schedules.filter(status='completed').count(),
-            'pending': month_schedules.filter(status='pending').count(),
-            'pushed': month_schedules.filter(status='pushed').count(),
-            'overdue': month_overdue
-        })
+    empty = {'scheduled': 0, 'completed': 0, 'pending': 0, 'overdue': 0}
 
     # Department breakdown (for workshop-level users)
     department_data = []
@@ -127,87 +155,45 @@ def _ppm_analytics(access_context, today):
             workshop_id=access_context['workshop_id'],
             active_status=True
         )
-
+        equipment_per_dept = dict(
+            Equipment.objects.filter(department__in=departments, active_status=True)
+            .order_by().values_list('department_id').annotate(n=Count('id'))
+        )
         for dept in departments:
-            dept_schedules = base_schedules.filter(equipment__department=dept)
-            dept_equipment = Equipment.objects.filter(
-                department=dept,
-                active_status=True
-            ).count()
-
-            # Count overdue for this department
-            dept_overdue = 0
-            for s in dept_schedules:
-                if s.scheduled_month and s.status != 'completed':
-                    last_day = monthrange(s.scheduled_month.year, s.scheduled_month.month)[1]
-                    month_end_date = s.scheduled_month.replace(day=last_day)
-                    if today > month_end_date:
-                        dept_overdue += 1
-
+            counts = by_dept.get(dept.id, empty)
             department_data.append({
                 'name': dept.name,
-                'total_equipment': dept_equipment,
-                'scheduled': dept_schedules.count(),
-                'completed': dept_schedules.filter(status='completed').count(),
-                'pending': dept_schedules.filter(status='pending').count(),
-                'overdue': dept_overdue
+                'total_equipment': equipment_per_dept.get(dept.id, 0),
+                'scheduled': counts['scheduled'],
+                'completed': counts['completed'],
+                'pending': counts['pending'],
+                'overdue': counts['overdue'],
             })
 
     # Equipment type breakdown
-    equipment_type_data = []
     descriptions = EquipmentDescription.objects.filter(
         equipment__department__workshop_id=access_context['workshop_id'],
         equipment__active_status=True
     ).distinct()
-
+    equipment_type_data = []
     for desc in descriptions[:10]:  # Top 10 equipment types
-        type_schedules = base_schedules.filter(equipment__description=desc)
+        counts = by_type.get(desc.id, empty)
         equipment_type_data.append({
             'name': desc.name,
-            'scheduled': type_schedules.count(),
-            'completed': type_schedules.filter(status='completed').count(),
-            'pending': type_schedules.filter(status='pending').count()
+            'scheduled': counts['scheduled'],
+            'completed': counts['completed'],
+            'pending': counts['pending'],
         })
 
-    # Compliance rate calculation
-    total_scheduled = base_schedules.count()
-    completed_on_time = 0
-
-    for schedule in base_schedules.filter(status='completed'):
-        if schedule.scheduled_month:
-            last_day = monthrange(schedule.scheduled_month.year, schedule.scheduled_month.month)[1]
-            month_end_date = schedule.scheduled_month.replace(day=last_day)
-            # Completed on time if done before or on the last day of scheduled month
-            if schedule.updated_at and timezone.localdate(schedule.updated_at) <= month_end_date:
-                completed_on_time += 1
-
+    total_scheduled = len(rows)
     compliance_rate = (completed_on_time / total_scheduled * 100) if total_scheduled > 0 else 0
-
-    # Upcoming maintenance (current month and not completed)
-    upcoming_schedules = []
-
-    for schedule in base_schedules.filter(status='pending').select_related('equipment', 'equipment__description', 'equipment__department'):
-        if schedule.scheduled_month:
-            # Include if scheduled for current month
-            if schedule.scheduled_month.year == today.year and schedule.scheduled_month.month == today.month:
-                last_day = monthrange(schedule.scheduled_month.year, schedule.scheduled_month.month)[1]
-                month_end_date = schedule.scheduled_month.replace(day=last_day)
-                days_remaining = (month_end_date - today).days
-
-                upcoming_schedules.append({
-                    'id': str(schedule.id),
-                    'equipment': schedule.equipment.description.name if schedule.equipment.description else 'N/A',
-                    'department': schedule.equipment.department.name if schedule.equipment.department else 'N/A',
-                    'scheduled_date': schedule.scheduled_month.strftime('%Y-%m-%d'),
-                    'days_remaining': days_remaining
-                })
 
     response_data = {
         'summary': {
             'total_equipment': total_equipment,
             'total_scheduled': total_scheduled,
-            'unscheduled': total_equipment - len(set(base_schedules.values_list('equipment_id', flat=True))),
-            'completed': base_schedules.filter(status='completed').count(),
+            'unscheduled': total_equipment - len({row['equipment_id'] for row in rows}),
+            'completed': completed_total,
             'pending': len(pending_schedules),
             'overdue': len(overdue_schedules),
             'compliance_rate': round(compliance_rate, 2)
@@ -218,13 +204,13 @@ def _ppm_analytics(access_context, today):
         'equipment_types': equipment_type_data,
         'upcoming_maintenance': sorted(upcoming_schedules, key=lambda x: x['days_remaining'])[:10],
         'overdue_list': [{
-            'id': str(s.id),
-            'equipment': s.equipment.description.name if s.equipment.description else 'N/A',
-            'department': s.equipment.department.name if s.equipment.department else 'N/A',
-            'scheduled_date': s.scheduled_month.strftime('%Y-%m-%d'),
-            'days_overdue': (today - s.scheduled_month.replace(day=monthrange(s.scheduled_month.year, s.scheduled_month.month)[1])).days,
-            'status': s.status
-        } for s in overdue_schedules[:10]]
+            'id': str(row['id']),
+            'equipment': label(row, 'equipment__description__name'),
+            'department': label(row, 'equipment__department__name'),
+            'scheduled_date': row['scheduled_month'].strftime('%Y-%m-%d'),
+            'days_overdue': (today - month_end(row['scheduled_month'])).days,
+            'status': row['status']
+        } for row in overdue_schedules[:10]]
     }
 
     return response_data

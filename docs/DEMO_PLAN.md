@@ -34,7 +34,8 @@ These come from reading the code, and each has a fix or a workaround in the plan
    `curl https://<hq-host>/api/sync/health`.
 4. **Secrets and defaults on screen.** `dist/Cirqen/` ships a `provisioning.json`
    with credentials; `.env` and `.env.build` hold real values; `QUICK_START.txt`
-   prints the first-run login (`maina.wairegi` / `ChangeMe123!`).
+   no longer prints a fixed login: each install makes a one-time password
+   (shown once, saved in `first_login.txt`).
    `SECURITY.md` also still lists the old credentials in plain text (the
    `git filter-repo` block). Do not open any of these on the projector, do not
    hand out the `dist/` archive, and change the default password before the demo.

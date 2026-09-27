@@ -25,7 +25,7 @@
             {% for session in page_obj %}
             <tr class="{% if session.performed_by == user %}own-session{% endif %}">
                 <td>
-                    <div class="cell-title">{{ session.certificate_number|default:'Pending' }}</div>
+                    <div class="cell-title"{% if session.status == 'approved_pending_certificate' and not session.certificate_number %} data-awaiting-cert="{{ session.id }}"{% endif %}>{{ session.certificate_number|default:'Pending' }}</div>
                 </td>
                 <td>
                     <div class="cell-title">{{ session.device_description|truncatechars:30 }}</div>

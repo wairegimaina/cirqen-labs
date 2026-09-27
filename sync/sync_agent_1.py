@@ -8,7 +8,7 @@ from .agent_prelude import (
 )
 from .agent_prelude import load_config_from_unified_manager, load_config_from_env_fallback
 from .agent_prelude import sleep_with_jitter, is_online, CERT_TABLES, DEFAULT_CONFIG
-from .agent_prelude import REDIS_AVAILABLE, DatabaseMirror
+from .agent_prelude import REDIS_AVAILABLE
 import os
 import logging
 import threading
@@ -45,7 +45,7 @@ except ImportError:  # loaded as a top-level module with sync/ on sys.path
 
 
 class AgentInitMixin(SmartDeleteMixin):
-    """Agent construction: config load, Redis/pool wiring, client registration, mirror init, and data validation helpers."""
+    """Agent construction: config load, Redis/pool wiring, client registration and data validation helpers."""
 
     def __init__(self, config: Dict[str, Any] = None, data_path: Path = None):
         """
@@ -158,19 +158,12 @@ class AgentInitMixin(SmartDeleteMixin):
         self._json_columns_cache = {}
         self._table_schema_cache = {}
 
-        self.mirror_enabled = os.getenv("MIRROR_ENABLED", "false").lower() == "true"
-        self.mirror_interval_hours = float(os.getenv("MIRROR_INTERVAL_HOURS", "24"))
-        self.mirror = None
-
-        # Initialize mirror if enabled
-        if self.mirror_enabled:
-            self.initialize_mirror_system()
-
-        LOG.info("=" * 60)
-        LOG.info("🔄 Mirror System: %s", "ENABLED" if self.mirror_enabled else "DISABLED")
-        if self.mirror_enabled:
-            LOG.info("   Interval: %.1fh", self.mirror_interval_hours)
-        LOG.info("=" * 60)
+        # The DB-to-DB mirror needed HQ database credentials, which clients
+        # no longer have. New and reinstalled machines bootstrap through the
+        # data checker (HQ API) instead.
+        if os.getenv("MIRROR_ENABLED", "false").lower() == "true":
+            LOG.warning("MIRROR_ENABLED is set but the mirror has been removed from the agent; "
+                        "the data checker bootstraps this machine over the HQ API instead")
 
         LOG.info("=" * 60)
 
@@ -556,41 +549,6 @@ class AgentInitMixin(SmartDeleteMixin):
 
         LOG.info("📥 Certificate pull loop exiting")
 
-    def initialize_mirror_system(self):
-        """Initialize mirror system within SyncAgent"""
-        try:
-            LOG.info("🔄 Initializing integrated mirror system...")
-
-            # Create HQ config — sourced from the same loaded config as
-            # local_config below (config.json / unified manager), NOT from
-            # raw os.getenv() calls. Re-reading env vars here with hardcoded
-            # fallback defaults let this silently diverge from config.json
-            # (e.g. still pointing at an old/decommissioned Render host after
-            # hq_db was migrated to Supabase). sslmode is required by
-            # Supabase's pooler; it's a no-op/harmless for plain Postgres.
-            hq_config = dict(self.config["hq_db"])
-            hq_config.pop("enabled", None)
-            hq_config.setdefault("sslmode", os.getenv("POSTGRES_SSLMODE", "require"))
-
-            # Use existing local config
-            local_config = self.config["local_db"]
-
-            self.mirror = DatabaseMirror(
-                hq_config=hq_config,
-                local_config=local_config,
-                api_url=self.api_url,
-                auth_token=self.auth_token,
-                client_id=self.client_id,
-                machine_id=self.machine_id,
-            )
-
-            LOG.info("✅ Mirror system initialized")
-            return True
-
-        except Exception as e:
-            LOG.error(f"❌ Mirror initialization failed: {e}")
-            return False
-
     def check_if_new_machine(self) -> bool:
         """Check if this is a new machine that needs initial sync"""
         try:
@@ -651,31 +609,3 @@ class AgentInitMixin(SmartDeleteMixin):
         except Exception as e:
             LOG.warning("Could not get local record count: %s", e)
             return 0
-
-    def perform_initial_mirror_sync(self) -> bool:
-        """Perform initial mirror sync for new machine"""
-        if not self.mirror:
-            LOG.error("❌ Mirror system not initialized")
-            return False
-
-        try:
-            LOG.info("=" * 80)
-            LOG.info("🆕 INITIAL MIRROR SYNC - DOWNLOADING ALL DATA FROM HQ")
-            LOG.info("=" * 80)
-
-            if not self.mirror.connect():
-                return False
-
-            try:
-                success = self.mirror.initial_sync_new_machine(self.tables)
-
-                if success:
-                    LOG.info("🎉 Initial sync complete! Machine fully synchronized.")
-
-                return success
-            finally:
-                self.mirror.disconnect()
-
-        except Exception as e:
-            LOG.error(f"❌ Initial mirror sync failed: {e}")
-            return False

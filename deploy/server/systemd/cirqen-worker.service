@@ -1,0 +1,23 @@
+[Unit]
+Description=Cirqen background tasks (Celery worker)
+After=network-online.target postgresql.service redis-server.service
+Requires=redis-server.service
+
+[Service]
+Type=simple
+User=cirqen
+Group=cirqen
+WorkingDirectory=/opt/cirqen/app
+EnvironmentFile=/etc/cirqen/cirqen.env
+ExecStart=/opt/cirqen/venv/bin/celery -A Equiper worker --loglevel=INFO --concurrency=2
+Restart=always
+RestartSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/cirqen
+# Backups are copied here when CIRQEN_BACKUP_COPY_DIR points at a mount:
+# add that path to ReadWritePaths with `systemctl edit cirqen-worker`.
+
+[Install]
+WantedBy=multi-user.target

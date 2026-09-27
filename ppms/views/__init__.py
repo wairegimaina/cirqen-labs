@@ -42,7 +42,6 @@ from .tasks import (
     trigger_normalize_ppm,
 )
 from .diagnostics import (
-    test_celery_connection,
     check_task_status,
     view_logs,
 )
@@ -73,7 +72,6 @@ __all__ = [
     "_normalize_ppm_helper",
     "trigger_sync_initialization",
     "trigger_normalize_ppm",
-    "test_celery_connection",
     "check_task_status",
     "view_logs",
 ]

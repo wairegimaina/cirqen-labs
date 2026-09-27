@@ -2,6 +2,7 @@
 Modern PDF Generator for Job Cards
 Complete with header/footer, watermark, and proper accessories display
 """
+from core.branding import logo_path as site_logo_path
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.colors import HexColor
@@ -75,7 +76,8 @@ class ModernJobCardPDFGenerator:
         self.width, self.height = A4
         self.styles = getSampleStyleSheet()
         self.setup_custom_styles()
-        self.logo_path = self._find_logo()
+        # The logo uploaded on the Site details page wins.
+        self.logo_path = site_logo_path() or self._find_logo()
 
     def _find_logo(self):
         """
@@ -665,7 +667,48 @@ class ModernJobCardPDFGenerator:
             elements.append(remarks_table)
             elements.append(Spacer(1, 12))
 
+        elements.extend(self._create_checklist_block())
         return elements
+
+    def _create_checklist_block(self):
+        """The equipment type's checklist as completed on this work order."""
+        from .checklists import RESULTS, summary
+
+        checklist = self.job_card.checklist or []
+        if not checklist:
+            return []
+        counts = summary(checklist)
+        colours = {'pass': colors.HexColor('#15803d'), 'fail': colors.HexColor('#b91c1c'),
+                   'na': colors.HexColor('#4b5563')}
+        heading = (f"<b>Checklist</b>  ({counts['pass']} pass, {counts['fail']} fail, "
+                   f"{counts['na']} N/A)")
+        rows = [['#', 'Item', 'Result', 'Note']]
+        style = [
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('BACKGROUND', (0, 0), (-1, 0), self.COLOR_PALETTE['light_bg']),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+            ('GRID', (0, 0), (-1, -1), 0.5, self.COLOR_PALETTE['border']),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]
+        for n, entry in enumerate(checklist, 1):
+            result = entry.get('result', '')
+            rows.append([
+                str(n),
+                Paragraph(escape(str(entry.get('item', ''))), self.styles['NormalText']),
+                RESULTS.get(result, '-'),
+                Paragraph(escape(str(entry.get('note') or '')), self.styles['NormalText']),
+            ])
+            if result in colours:
+                style += [('TEXTCOLOR', (2, n), (2, n), colours[result]),
+                          ('FONTNAME', (2, n), (2, n), 'Helvetica-Bold')]
+        table = Table(rows, colWidths=[0.4*inch, 3.6*inch, 0.8*inch, 2.2*inch], repeatRows=1)
+        table.setStyle(TableStyle(style))
+        return [Paragraph(heading, self.styles['BoldText']), Spacer(1, 5), table, Spacer(1, 12)]
 
     def create_decline_section(self):
         """Decline reason if applicable"""

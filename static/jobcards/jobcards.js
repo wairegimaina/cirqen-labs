@@ -297,7 +297,9 @@ $(document).ready(function () {
       data: { department_id: deptId },
       success: function (data) {
         $eqSel.empty().append('<option value="">Select Equipment</option>');
+        window.EQUIPMENT_CHECKLISTS = {};
         data.forEach(function (eq) {
+          window.EQUIPMENT_CHECKLISTS[eq.id] = eq.checklist || [];
           $eqSel.append(
             '<option value="' + eq.id + '"' +
             ' data-description="' + escapeHTML(eq.description) + '"' +
@@ -325,12 +327,44 @@ $(document).ready(function () {
       $('#eq-model').text($opt.data('model') || '-');
       $('#eq-status').text($opt.data('status') || '-');
       $('#equipment-details').slideDown();
+      renderChecklist(id);
 
       if ($('#action_taken').val() === 'PPM') loadPendingPPMSchedules();
     } else {
       $('#equipment-details').slideUp();
+      renderChecklist(null);
     }
   });
+
+  // Work order checklist: one Pass / Fail / N/A choice and an optional note per
+  // item of the equipment type's checklist. Every item is required.
+  function renderChecklist(equipmentId) {
+    var items = (equipmentId && window.EQUIPMENT_CHECKLISTS && window.EQUIPMENT_CHECKLISTS[equipmentId]) || [];
+    var $panel = $('#checklist-panel');
+    var $list = $('#checklist-items').empty();
+    if (!items.length) { $panel.prop('hidden', true); return; }
+
+    var saved = window.CHECKLIST_VALUES || {};
+    var choices = [['pass', 'Pass'], ['fail', 'Fail'], ['na', 'N/A']];
+    items.forEach(function (item, n) {
+      var prior = saved[String(n)] || {};
+      var radios = choices.map(function (choice) {
+        var checked = prior.result === choice[0] ? ' checked' : '';
+        return '<label class="checklist-choice checklist-choice--' + choice[0] + '">' +
+          '<input type="radio" name="checklist_result_' + n + '" value="' + choice[0] + '" required' + checked + '> ' +
+          choice[1] + '</label>';
+      }).join('');
+      $list.append(
+        '<div class="checklist-row">' +
+          '<span class="checklist-item">' + (n + 1) + '. ' + escapeHTML(item) + '</span>' +
+          '<div class="checklist-choices" role="radiogroup" aria-label="' + escapeHTML(item) + '">' + radios + '</div>' +
+          '<input type="text" name="checklist_note_' + n + '" class="form-control checklist-note" maxlength="300"' +
+          ' placeholder="Note (optional)" value="' + escapeHTML(prior.note || '') + '">' +
+        '</div>'
+      );
+    });
+    $panel.prop('hidden', false);
+  }
 
   $('#action_taken').on('change', function () {
     if ($(this).val() === 'PPM') {

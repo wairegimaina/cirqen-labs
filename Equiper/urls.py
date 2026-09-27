@@ -56,6 +56,7 @@ urlpatterns = [
     ),
     path("audit-log/", include("audit_log.urls")),
     path("settings/", include("core.urls")),
+    path("assets/", include("assets.urls")),
     path("health/", health_check, name="health_check"),
 ]
 

@@ -358,7 +358,7 @@
     return `
             <div class="info-row">
                 <span class="info-label"><i class="fas fa-certificate me-2"></i>Certificate Number:</span>
-                <span class="info-value"><strong>${escapeHTML(certificateNumber || "Pending")}</strong></span>
+                <span class="info-value"><strong${certificateNumber ? "" : ` data-awaiting-cert="${escapeHTML(currentSessionId)}"`}>${escapeHTML(certificateNumber || "Requesting from HQ…")}</strong></span>
             </div>
             <div class="info-row">
                 <span class="info-label"><i class="fas fa-hashtag me-2"></i>Session ID:</span>
@@ -422,6 +422,65 @@
       reviewBody.innerHTML =
         '<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>Error loading session details. Please try again.</div>';
       showToast("Failed to load session details", "error");
+    }
+  }
+
+  // Live certificate numbers. Anything marked data-awaiting-cert="<session id>"
+  // is filled in the moment HQ allocates its number: the page polls a small
+  // status endpoint every 2 s while such elements exist, and stops when none do.
+  let certWatchTimer = null;
+  let certWatchErrors = 0;
+
+  function awaitingCertificateIds() {
+    const ids = new Set();
+    document.querySelectorAll("[data-awaiting-cert]").forEach((el) => {
+      ids.add(el.dataset.awaitingCert);
+    });
+    return [...ids];
+  }
+
+  function adjustAwaitingCount(delta) {
+    ["awaitingCertCount", "summaryAwaitingCert"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = Math.max(0, (parseInt(el.textContent, 10) || 0) + delta);
+    });
+  }
+
+  async function pollAwaitingCertificates() {
+    certWatchTimer = null;
+    const ids = awaitingCertificateIds();
+    if (!ids.length) return;
+    if (!document.hidden) {
+      try {
+        const response = await fetch(
+          `/calibration/sessions/certificate-status/?ids=${encodeURIComponent(ids.join(","))}`,
+          { headers: { Accept: "application/json" } },
+        );
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        certWatchErrors = 0;
+        Object.entries(data.sessions || {}).forEach(([id, info]) => {
+          if (!info.certificate_number) return;
+          document.querySelectorAll(`[data-awaiting-cert="${CSS.escape(id)}"]`).forEach((el) => {
+            el.textContent = info.certificate_number;
+            el.removeAttribute("data-awaiting-cert");
+            el.classList.add("cert-arrived");
+          });
+          adjustAwaitingCount(-1);
+          showToast(`Certificate ${info.certificate_number} issued`, "success");
+        });
+      } catch (error) {
+        certWatchErrors += 1;
+      }
+    }
+    // Back off only while the endpoint is failing (up to 30 s).
+    const delay = Math.min(2000 * 2 ** Math.min(certWatchErrors, 4), 30000);
+    certWatchTimer = setTimeout(pollAwaitingCertificates, delay);
+  }
+
+  function watchAwaitingCertificates() {
+    if (certWatchTimer === null && awaitingCertificateIds().length) {
+      certWatchTimer = setTimeout(pollAwaitingCertificates, 1000);
     }
   }
 
@@ -538,6 +597,7 @@
         } else {
           bootstrap.Modal.getOrCreateInstance(successModalEl).show();
         }
+        watchAwaitingCertificates();
       } else {
         throw new Error(result.error || "Unknown error occurred");
       }
@@ -736,6 +796,7 @@
       if (!response.ok) throw new Error(`Server error ${response.status}`);
       const data = await response.json();
       tableContainer.innerHTML = data.html;
+      watchAwaitingCertificates();
       updateCounts(data);
     } catch (error) {
       console.error("Failed to refresh sessions:", error);
@@ -796,6 +857,7 @@
 
   // Initialize event listeners
   function init() {
+    watchAwaitingCertificates();
     document.addEventListener("click", handleActionClick);
 
     // Handle browser back/forward navigation

@@ -19,14 +19,64 @@ from django.db import transaction
 from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
 from workshop.models import Workshop
+from django.conf import settings
 from Inventory.models import Department
 from ..forms import CustomLoginForm, UserCreationForm, ForgotPasswordForm, VerifyResetCodeForm, CustomSetPasswordForm
-from ..models import UserProfile, UserSecurityLog, UserSignature, UserPasswordReset
+from ..models import TwoFactorDevice, UserProfile, UserSecurityLog, UserSignature, UserPasswordReset
 from ..utils import UserManagementUtils
 from .. import throttle
 from ..control import hod_required, role_required
 User = get_user_model()
 logger = logging.getLogger(__name__)
+
+
+def _finish_login(request, user, profile):
+    """Start the session and send the user to their landing page."""
+    user_role = profile.role
+    login(request, user)
+    request.session['role'] = user_role
+
+    # Log successful login
+    try:
+        UserSecurityLog.log_event(
+            user=user,
+            event_type='LOGIN_SUCCESS',
+            description='User logged in successfully',
+            ip_address=request.META.get('REMOTE_ADDR'),
+            user_agent=request.META.get('HTTP_USER_AGENT', '')
+        )
+    except Exception as e:
+        # Don't fail login if logging fails
+        logger.error(f"Failed to log login event: {e}")
+
+    # Check if user needs first login setup
+    if profile.needs_first_login_setup():
+        messages.info(
+            request,
+            'Welcome! Please complete your account setup by changing your password and creating your digital signature.'
+        )
+        return redirect('force_setup')
+
+    # Redirect based on role if setup is complete
+    if user_role == 'HOD':
+        return redirect('dashboard:hod_dashboard')
+    elif user_role == 'Tech':
+        try:
+            workshop = profile.workshop
+            if workshop and workshop.category == 'maintenance':
+                return redirect('dashboard:dashboard-main')
+            elif workshop and workshop.category == 'calibration_center':
+                return redirect('calibration:cal-dashboard')
+            else:
+                messages.warning(request, 'No workshop category assigned. Redirecting to home.')
+                return redirect('dashboard:dashboard-main')
+        except (Workshop.DoesNotExist, AttributeError):
+            messages.error(request, 'No workshop assigned. Please contact administrator.')
+            return redirect('dashboard:dashboard-main')
+    elif user_role == 'NIC':
+        return redirect('dashboard:nic_dashboard')
+
+    return redirect('dashboard:dashboard-main')
 
 
 def custom_login_view(request):
@@ -79,51 +129,15 @@ def custom_login_view(request):
                 form.add_error(None, 'User profile not found. Please contact administrator.')
                 return render(request, 'users_login/login.html', {'form': form})
 
-            # Login user first
-            login(request, user)
-            request.session['role'] = user_role
+            # Second step for accounts with an authenticator app: the session
+            # only starts once the code is right (two_factor_verify).
+            if TwoFactorDevice.objects.filter(user=user).exists():
+                request.session['2fa_user_id'] = str(user.pk)
+                request.session['2fa_backend'] = getattr(user, 'backend', settings.AUTHENTICATION_BACKENDS[0])
+                request.session['2fa_attempts'] = 0
+                return redirect('two_factor_verify')
 
-            # Log successful login
-            try:
-                UserSecurityLog.log_event(
-                    user=user,
-                    event_type='LOGIN_SUCCESS',
-                    description='User logged in successfully',
-                    ip_address=request.META.get('REMOTE_ADDR'),
-                    user_agent=request.META.get('HTTP_USER_AGENT', '')
-                )
-            except Exception as e:
-                # Don't fail login if logging fails
-                logger.error(f"Failed to log login event: {e}")
-
-            # Check if user needs first login setup
-            if profile.needs_first_login_setup():
-                messages.info(
-                    request,
-                    'Welcome! Please complete your account setup by changing your password and creating your digital signature.'
-                )
-                return redirect('force_setup')
-
-            # Redirect based on role if setup is complete
-            if user_role == 'HOD':
-                return redirect('dashboard:hod_dashboard')
-            elif user_role == 'Tech':
-                try:
-                    workshop = profile.workshop
-                    if workshop and workshop.category == 'maintenance':
-                        return redirect('dashboard:dashboard-main')
-                    elif workshop and workshop.category == 'calibration_center':
-                        return redirect('calibration:cal-dashboard')
-                    else:
-                        messages.warning(request, 'No workshop category assigned. Redirecting to home.')
-                        return redirect('dashboard:dashboard-main')
-                except (Workshop.DoesNotExist, AttributeError):
-                    messages.error(request, 'No workshop assigned. Please contact administrator.')
-                    return redirect('dashboard:dashboard-main')
-            elif user_role == 'NIC':
-                return redirect('dashboard:nic_dashboard')
-
-            return redirect('dashboard:dashboard-main')
+            return _finish_login(request, user, profile)
         else:
             # Handle form validation errors
             throttle.LOGIN_PER_IP.hit(ip)
@@ -485,3 +499,110 @@ def reset_password_view(request):
         'user': user,
         'mode': 'reset_password'
     })
+
+
+@login_required
+@require_POST
+def activity_ping(request):
+    """Sent by base.html while someone types or clicks, so the idle timeout
+    (users.session_middleware.IdleTimeoutMiddleware) counts work that makes no
+    requests, such as a long calibration entry."""
+    from django.http import HttpResponse
+
+    return HttpResponse(status=204)
+
+
+@never_cache
+def two_factor_verify(request):
+    """Second sign-in step: a code from the user's authenticator app."""
+    user_id = request.session.get('2fa_user_id')
+    if not user_id:
+        return redirect('custom_login')
+    User = get_user_model()
+    user = User.objects.filter(pk=user_id).first()
+    device = TwoFactorDevice.objects.filter(user=user).first() if user else None
+    if not device:
+        request.session.pop('2fa_user_id', None)
+        return redirect('custom_login')
+
+    error = None
+    if request.method == 'POST':
+        attempts = request.session.get('2fa_attempts', 0) + 1
+        request.session['2fa_attempts'] = attempts
+        if attempts > 5:
+            for key in ('2fa_user_id', '2fa_backend', '2fa_attempts'):
+                request.session.pop(key, None)
+            messages.error(request, 'Too many wrong codes. Sign in again.')
+            UserSecurityLog.log_event(user=user, event_type='LOGIN_FAILURE',
+                                      description='Two-factor: too many wrong codes',
+                                      ip_address=request.META.get('REMOTE_ADDR'),
+                                      user_agent=request.META.get('HTTP_USER_AGENT', ''))
+            return redirect('custom_login')
+        if device.verify(request.POST.get('code', '')):
+            backend = request.session.pop('2fa_backend', settings.AUTHENTICATION_BACKENDS[0])
+            request.session.pop('2fa_user_id', None)
+            request.session.pop('2fa_attempts', None)
+            user.backend = backend
+            profile = UserProfile.objects.get(user=user)
+            return _finish_login(request, user, profile)
+        error = 'That code is not right. Use the current code from your authenticator app, or a recovery code.'
+    return render(request, 'users_login/two_factor_verify.html', {'error': error})
+
+
+@login_required
+def two_factor_setup(request):
+    """Turn on, check or turn off the authenticator app for the signed-in user."""
+    from users import two_factor
+
+    device = TwoFactorDevice.objects.filter(user=request.user).first()
+    context = {'device': device, 'required': _two_factor_required(request.user)}
+
+    if device is None:
+        secret = request.session.get('2fa_new_secret') or two_factor.new_secret()
+        request.session['2fa_new_secret'] = secret
+        if request.method == 'POST':
+            step = two_factor.matching_step(secret, request.POST.get('code', ''))
+            if step is None:
+                context['error'] = 'That code did not match. Check the time on your phone and try again.'
+            else:
+                plain, hashed = two_factor.new_recovery_codes()
+                TwoFactorDevice.objects.create(user=request.user, secret=secret, recovery_codes=hashed,
+                                               last_used_step=step)
+                request.session.pop('2fa_new_secret', None)
+                UserSecurityLog.log_event(user=request.user, event_type='TWO_FACTOR_ENABLED',
+                                          description='Two-factor sign-in turned on',
+                                          ip_address=request.META.get('REMOTE_ADDR'),
+                                          user_agent=request.META.get('HTTP_USER_AGENT', ''))
+                return render(request, 'users_login/two_factor_setup.html',
+                              {'device': True, 'recovery_codes': plain, 'just_enabled': True})
+        from core.branding import organisation_name
+        uri = two_factor.provisioning_uri(secret, request.user.get_username(), f"Cirqen ({organisation_name()})")
+        context.update(secret=secret, qr=two_factor.qr_data_uri(uri))
+        return render(request, 'users_login/two_factor_setup.html', context)
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        if not device.verify(request.POST.get('code', '')):
+            context['error'] = 'That code is not right.'
+        elif action == 'disable' and not context['required']:
+            device.delete()
+            UserSecurityLog.log_event(user=request.user, event_type='TWO_FACTOR_DISABLED',
+                                      description='Two-factor sign-in turned off',
+                                      ip_address=request.META.get('REMOTE_ADDR'),
+                                      user_agent=request.META.get('HTTP_USER_AGENT', ''))
+            messages.success(request, 'Two-factor sign-in is off.')
+            return redirect('two_factor_setup')
+        elif action == 'recovery':
+            plain, hashed = two_factor.new_recovery_codes()
+            device.recovery_codes = hashed
+            device.save(update_fields=['recovery_codes'])
+            context['recovery_codes'] = plain
+    return render(request, 'users_login/two_factor_setup.html', context)
+
+
+def _two_factor_required(user):
+    """HODs must use two-factor sign-in when CIRQEN_REQUIRE_HOD_2FA is set."""
+    if not getattr(settings, 'REQUIRE_HOD_TWO_FACTOR', False):
+        return False
+    profile = getattr(user, 'userprofile', None)
+    return bool(profile and profile.role == 'HOD')

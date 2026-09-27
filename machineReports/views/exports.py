@@ -1,4 +1,5 @@
 """machineReports views — Excel/PDF exports and their ReportLab doc templates."""
+from core.branding import logo_path as site_logo_path
 from uuid import UUID
 from django.shortcuts import redirect, render, get_object_or_404
 from django.http import HttpResponse, JsonResponse
@@ -22,7 +23,7 @@ from CalSoft.models import CalibrationSession
 from ..models import EquipmentStatusReport, MachineRepairHistory, WorkshopEquipmentReport, EquipmentCategory
 from Inventory.models import Equipment, Workshop
 from jobcard.models import jobcard, SparePartUsed
-from CalSoft.models import CalibrationSession, CalibrationSchedule
+from CalSoft.models import CalibrationSession
 logger = logging.getLogger(__name__)
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
@@ -51,6 +52,8 @@ from ..manufacturer_performance_pdf_generator import create_manufacturer_pdf_res
 from Inventory.models import Equipment, Workshop
 
 # sibling modules in this package
+from core.scoping import for_user
+
 from .helpers import calculate_manufacturer_performance, get_user_workshop_context
 from core.branding import contact_line
 from core.eat import fmt_eat
@@ -71,7 +74,7 @@ def export_equipment_history(request, equipment_id):
         messages.error(request, "Equipment not found.")
         return redirect('equipment_dashboard')
 
-    if not is_hod and equipment.workshop != selected_workshop:
+    if not is_hod and not for_user(Equipment.objects.filter(id=equipment.id), request.user).exists():
         messages.error(request, "You do not have permission to export this equipment's history.")
         return redirect('equipment_dashboard')
 
@@ -273,7 +276,10 @@ def export_equipment_category_detailed_pdf(request):
             except Workshop.DoesNotExist:
                 pass
     else:
-        # Regular users see only their workshop
+        # Tech: their workshop; NIC: their department (core.scoping). A NIC has
+        # no workshop, so the old `if selected_workshop` filter let them export
+        # every department in the hospital.
+        equipment_qs = for_user(equipment_qs, request.user)
         if selected_workshop:
             equipment_qs = equipment_qs.filter(workshop=selected_workshop)
 
@@ -367,7 +373,7 @@ class ManufacturerPerformanceDocTemplate(BaseDocTemplate):
         canvas.rect(0, A4[1]-3*cm, A4[0], 3*cm, fill=1, stroke=0)
 
         # Logo (if exists)
-        logo_path = os.path.join(settings.STATIC_ROOT or settings.STATICFILES_DIRS[0], 'images', 'logo.png')
+        logo_path = site_logo_path() or os.path.join(settings.STATIC_ROOT or settings.STATICFILES_DIRS[0], 'images', 'logo.png')
         if os.path.exists(logo_path):
             try:
                 canvas.drawImage(logo_path, 1*cm, A4[1]-2.5*cm, width=2*cm, height=1.5*cm, mask='auto')
@@ -463,7 +469,10 @@ def export_manufacturer_performance_pdf(request):
             except Workshop.DoesNotExist:
                 pass
     else:
-        # Regular users see only their workshop
+        # Tech: their workshop; NIC: their department (core.scoping). A NIC has
+        # no workshop, so the old `if selected_workshop` filter let them export
+        # every department in the hospital.
+        equipment_qs = for_user(equipment_qs, request.user)
         if selected_workshop:
             equipment_qs = equipment_qs.filter(workshop=selected_workshop)
 

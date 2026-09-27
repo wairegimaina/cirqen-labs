@@ -74,7 +74,8 @@ class ImportTestBase(TestCase):
         user = User.objects.create_user(username=username, password="pw12345!")
         UserProfile.objects.update_or_create(
             user=user,
-            defaults={"role": role, "workshop": workshop, "department": department, "level": level},
+            defaults={"role": role, "workshop": workshop, "department": department, "level": level,
+                      "must_change_password": False},
         )
         return user
 

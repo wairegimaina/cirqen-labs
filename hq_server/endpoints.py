@@ -16,8 +16,6 @@ Environment
 FLEET_SYNC_API_URL     the sync API every desktop should use (required to serve
                        anything; unset means "no opinion", see below)
 FLEET_SYNC_FALLBACKS   comma-separated addresses to try if the primary fails
-FLEET_HQ_DB_HOST/_PORT/_DATABASE/_USER/_SSLMODE   optional; only set these when
-                       the HQ database moves. Never a password.
 FLEET_POLL_SECONDS     how often clients should re-ask (default 900)
 FLEET_MAX_AGE_SECONDS  how long a fetched document stays valid (default 7 days)
 
@@ -35,16 +33,6 @@ from datetime import datetime, timezone
 
 DEFAULT_POLL_SECONDS = 900
 DEFAULT_MAX_AGE_SECONDS = 7 * 24 * 3600
-
-# Only these may be carried. A password is deliberately not in the list: the
-# document is served to every desktop and is not a secret channel.
-DB_FIELDS = {
-    "FLEET_HQ_DB_HOST": "hq_db.host",
-    "FLEET_HQ_DB_PORT": "hq_db.port",
-    "FLEET_HQ_DB_DATABASE": "hq_db.database",
-    "FLEET_HQ_DB_USER": "hq_db.user",
-    "FLEET_HQ_DB_SSLMODE": "hq_db.sslmode",
-}
 
 
 def _env(name: str) -> str:
@@ -67,17 +55,7 @@ def build_endpoints() -> dict:
     if sync_url:
         endpoints["sync.api_url"] = sync_url
 
-    for env_name, key in DB_FIELDS.items():
-        raw = _env(env_name)
-        if not raw:
-            continue
-        if key == "hq_db.port":
-            try:
-                endpoints[key] = int(raw)
-            except ValueError:
-                continue  # a malformed port is dropped, not advertised
-        else:
-            endpoints[key] = raw
+    # No HQ database addresses: desktops never connect to the HQ database.
 
     return endpoints
 

@@ -12,6 +12,7 @@ from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.utils.timezone import now
 
 from Inventory.models import Department
@@ -117,6 +118,15 @@ def _check_linked_ppm(job_card):
         )
 
 
+def _from_phone_page(request):
+    return request.POST.get("return_to") == "approvals"
+
+
+def _done(request, default):
+    """Back to the phone approvals page if that is where the decision came from."""
+    return redirect("jobcard:approvals" if _from_phone_page(request) else default)
+
+
 def _approve(request, job_card, form):
     _check_linked_ppm(job_card)
     try:
@@ -150,7 +160,7 @@ def _approve(request, job_card, form):
         job_card.action_taken, job_card.get_total_cost(), job_card.department.name, job_card.workshop.name,
         bool(schedule),
     )
-    return redirect("jobcard:approved_jobcards")
+    return _done(request, "jobcard:approved_jobcards")
 
 
 def _decline(request, job_card, form):
@@ -166,7 +176,7 @@ def _decline(request, job_card, form):
                      extra_tags="jobcard")
     logger.info("Job card #%s declined by %s (%s): %s",
                 job_card.id, request.user.get_full_name(), form["nurse_name"], form["decline_reason"][:100])
-    return redirect("jobcard:waiting_jobcards")
+    return _done(request, "jobcard:waiting_jobcards")
 
 
 def handle_nurse_approval(request, nurse_department):
@@ -188,6 +198,9 @@ def handle_nurse_approval(request, nurse_department):
 
     except FormRejected as rejection:
         messages.error(request, str(rejection), extra_tags="jobcard")
+        if _from_phone_page(request):
+            card = rejection.job_card or selected_job_card
+            return redirect(reverse("jobcard:approvals") + (f"?open={card.id}" if card else ""))
         return _render_form(request, nurse_department, form, rejection.job_card or selected_job_card)
     except jobcard.DoesNotExist:
         messages.error(request,

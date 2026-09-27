@@ -35,6 +35,7 @@ class InventoryViewTestBase(TestCase):
                 "workshop": workshop,
                 "department": department,
                 "level": level,
+                "must_change_password": False,
             },
         )
         return user

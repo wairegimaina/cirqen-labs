@@ -22,7 +22,7 @@ from CalSoft.models import CalibrationSession
 from ..models import EquipmentStatusReport, MachineRepairHistory, WorkshopEquipmentReport, EquipmentCategory
 from Inventory.models import Equipment, Workshop
 from jobcard.models import jobcard, SparePartUsed
-from CalSoft.models import CalibrationSession, CalibrationSchedule
+from CalSoft.models import CalibrationSession
 logger = logging.getLogger(__name__)
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
@@ -51,6 +51,8 @@ from ..manufacturer_performance_pdf_generator import create_manufacturer_pdf_res
 from Inventory.models import Equipment, Workshop
 
 # sibling modules in this package
+from core.scoping import for_user
+
 from .helpers import calculate_manufacturer_performance, get_user_workshop_context
 from core import aggregate_cache
 
@@ -69,6 +71,11 @@ def equipment_dashboard(request):
 
     # ---- Handle category assignment ----
     if request.method == "POST" and "assign_categories" in request.POST:
+        # Categories (and so which equipment counts as critical) are
+        # hospital-wide settings: only the HOD may change them.
+        if not is_hod:
+            messages.error(request, "Only the head of department can change equipment categories.")
+            return redirect("equipment_dashboard")
         updated_count = 0
         for desc in descriptions:
             category_id = request.POST.get(f"category_{desc.id}")
@@ -103,7 +110,9 @@ def equipment_dashboard(request):
             equipment_qs = equipment_qs.filter(workshop_id=workshop_id)
             selected_workshop = get_object_or_404(Workshop, id=workshop_id)
     else:
-        equipment_qs = equipment_qs.filter(workshop=selected_workshop)
+        equipment_qs = for_user(equipment_qs, request.user)
+        if selected_workshop:
+            equipment_qs = equipment_qs.filter(workshop=selected_workshop)
 
     # Category filter
     category_id = request.GET.get("category")
@@ -171,10 +180,17 @@ def equipment_dashboard(request):
         }
 
     # ---- Manufacturer Performance ----
-    # One job card query per device, so the unfiltered view is cached per
-    # workshop; a search or category filter is computed fresh.
+    # Cached per workshop (per department for NICs); a search or category
+    # filter is computed fresh.
     if not category_id and not search_query:
-        scope = (request.GET.get("workshop") or "all") if is_hod else getattr(selected_workshop, "id", "none")
+        if is_hod:
+            scope = request.GET.get("workshop") or "all"
+        elif selected_workshop:
+            scope = selected_workshop.id
+        else:
+            # NICs have no workshop; without this every NIC shared one cache
+            # entry and saw whichever department computed it first.
+            scope = f"dept-{profile.department_id}"
         manufacturer_performance = aggregate_cache.get_or_compute(
             "inv", ["manufacturer", scope],
             lambda: calculate_manufacturer_performance(equipment_qs),
@@ -208,18 +224,24 @@ def equipment_dashboard(request):
         "total_parts_cost": 0,
     }
 
-    total_downtime_seconds = 0
-    for jc in approved_job_cards:
-        if jc.time_started and jc.time_completed:
-            start_datetime = datetime.combine(jc.date_issued, jc.time_started)
-            end_datetime = datetime.combine(jc.date_issued, jc.time_completed)
-            downtime = end_datetime - start_datetime
-            total_downtime_seconds += downtime.total_seconds()
+    # Summed in the database; a model instance per repair took seconds at
+    # hospital scale. Total cost is labour + parts + additional (get_total_cost).
+    totals = approved_job_cards.aggregate(
+        labor=Sum("labor_cost"), parts=Sum("total_parts_cost"), extra=Sum("additional_costs")
+    )
+    repair_stats["total_labor_cost"] = float(totals["labor"] or 0)
+    repair_stats["total_parts_cost"] = float(totals["parts"] or 0)
+    repair_stats["total_repair_cost"] = (
+        repair_stats["total_labor_cost"] + repair_stats["total_parts_cost"] + float(totals["extra"] or 0)
+    )
 
-        # Add cost calculations
-        repair_stats["total_labor_cost"] += float(jc.labor_cost)
-        repair_stats["total_parts_cost"] += float(jc.total_parts_cost)
-        repair_stats["total_repair_cost"] += float(jc.get_total_cost())
+    total_downtime_seconds = 0
+    for day, started, completed in approved_job_cards.values_list(
+            "date_issued", "time_started", "time_completed").iterator(chunk_size=2000):
+        if started and completed:
+            total_downtime_seconds += (
+                datetime.combine(day, completed) - datetime.combine(day, started)
+            ).total_seconds()
 
     repair_stats["total_downtime_hours"] = round(total_downtime_seconds / 3600, 2)
 

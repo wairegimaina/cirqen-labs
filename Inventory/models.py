@@ -64,6 +64,13 @@ class EquipmentDescription(models.Model):
         blank=True
     )
 
+    # Work order checklist for this equipment type: an ordered list of item
+    # texts, e.g. ["Check alarms", "Electrical safety test"]. Filled in on each
+    # work order (jobcard.checklist). Edited at /jobcard/checklists/.
+    # Nullable so a row synced from a site or HQ without the column still
+    # inserts; None means no checklist.
+    checklist_template = models.JSONField(default=list, blank=True, null=True)
+
         # offline sync
     needs_sync = models.BooleanField(default=True)
     pending_delete = models.BooleanField(default=False)
@@ -166,6 +173,12 @@ class Equipment(models.Model):
         null=True,
         blank=True
     )
+
+    # Asset life (assets app: warranties, risk score, replacement ranking)
+    purchase_date = models.DateField(null=True, blank=True)
+    warranty_end = models.DateField(null=True, blank=True)
+    purchase_cost = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    expected_life_years = models.PositiveSmallIntegerField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
 

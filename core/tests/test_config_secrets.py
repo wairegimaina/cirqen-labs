@@ -36,11 +36,11 @@ class ConfigSecretsTests(SimpleTestCase):
     def test_defaults_carry_no_secrets(self):
         for dotted in CirqenConfig.SECRET_ENV:
             self.assertFalse(CirqenConfig._dig(CirqenConfig.DEFAULT_CONFIG, dotted), dotted)
-        self.assertEqual(len(self.load().missing_secrets()), 3)
+        self.assertEqual(len(self.load().missing_secrets()), 2)
 
     def test_provisioning_file_fills_and_persists_secrets(self):
         (self.data / "provisioning.json").write_text(json.dumps(
-            {"sync": {"auth_token": "t"}, "update": {"api_key": "k"}, "hq_db": {"password": "p"}}
+            {"sync": {"auth_token": "t"}, "update": {"api_key": "k"}}
         ))
         self.assertEqual(self.load().missing_secrets(), [])
         (self.data / "provisioning.json").unlink()

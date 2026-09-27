@@ -10,7 +10,6 @@ from django.core.paginator import Paginator
 
 from CalSoft.models import Standard, Parameter, CalibrationAuditLog
 from CalSoft.forms import (
-    CalibrationScheduleForm,
     StandardForm,
     ParameterForm,
     StandardParameterFormSet,

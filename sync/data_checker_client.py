@@ -108,6 +108,8 @@ CLIENT_TABLE_DEPENDENCIES: Dict[str, List[str]] = {
     "public.users_userprofile":           ["public.users_customuser"],
     "public.users_usersignature":         ["public.users_customuser"],
     "public.Inventory_equipment":         ["public.workshop_workshop"],
+    "public.assets_supplier":             [],
+    "public.assets_servicecontract":      ["public.Inventory_equipment", "public.assets_supplier"],
     "public.Inventory_equipmentdocument": ["public.Inventory_equipment"],
     "public.Inventory_equipmentimage":    ["public.Inventory_equipment"],
     "public.Inventory_maintenancelog":    [
@@ -115,10 +117,6 @@ CLIENT_TABLE_DEPENDENCIES: Dict[str, List[str]] = {
         "public.users_customuser",
     ],
     "public.CalSoft_calibrationreport":   [
-        "public.Inventory_equipment",
-        "public.users_customuser",
-    ],
-    "public.CalSoft_calibrationschedule": [
         "public.Inventory_equipment",
         "public.users_customuser",
     ],
@@ -1069,6 +1067,17 @@ class DataCheckerClient:
                 len(out_of_sync),
                 len(missing),
             )
+
+        # HQ may still list a table this client no longer has (for example
+        # CalSoft_calibrationschedule, retired in favour of
+        # calSchedules_calibrationschedule). Pulling into it can only fail.
+        if self.allowed_tables:
+            local = set(self.allowed_tables)
+            unknown = [t for t in tables_to_sync if t not in local]
+            if unknown:
+                self.logger.info("   Skipping %d table(s) this client does not have: %s",
+                                 len(unknown), ", ".join(unknown))
+                tables_to_sync = [t for t in tables_to_sync if t in local]
 
         if not tables_to_sync:
             self.logger.info("✅ All tables in sync – no bootstrap needed")

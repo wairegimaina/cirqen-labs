@@ -1,4 +1,4 @@
-"""ppms.views — celery test, task status, and debug/log endpoints."""
+"""ppms.views — task status and debug/log endpoints."""
 from calendar import monthrange
 from django.db.models import Count
 from django.shortcuts import get_object_or_404, render, redirect
@@ -22,89 +22,6 @@ logger = logging.getLogger(__name__)
 
 # sibling modules in this package
 from .helpers import get_user_access_context
-
-
-@login_required
-def test_celery_connection(request):
-    """Test endpoint to verify Celery is working properly"""
-    results = {
-        'timestamp': datetime.now().isoformat(),
-        'celery_status': 'unknown',
-        'broker_connection': 'unknown',
-        'test_task': 'unknown',
-        'ppm_task_import': 'unknown',
-        'errors': [],
-        'workshop_info': {}
-    }
-
-    try:
-        # Test 1: Celery app configuration
-        from Equiper.celery import app as celery_app
-        results['celery_status'] = 'configured'
-        results['broker_url'] = str(celery_app.conf.broker_url)
-        results['result_backend'] = str(celery_app.conf.result_backend)
-
-        # Test 2: Broker connection
-        try:
-            conn = celery_app.connection()
-            conn.ensure_connection(max_retries=3, timeout=5)
-            results['broker_connection'] = '✓ Connected'
-            conn.release()
-        except Exception as e:
-            results['broker_connection'] = f'✗ Failed: {str(e)}'
-            results['errors'].append(f'Broker connection: {str(e)}')
-
-        # Test 3: Simple test task
-        try:
-            from Equiper.celery import test_celery
-            task = test_celery.delay()
-            results['test_task'] = f'✓ Queued (ID: {task.id})'
-            results['test_task_id'] = str(task.id)
-        except Exception as e:
-            results['test_task'] = f'✗ Failed: {str(e)}'
-            results['errors'].append(f'Test task: {str(e)}')
-
-        # Test 4: PPM task import
-        try:
-            from ppms.tasks import initialize_ppm_schedule_with_logic
-            results['ppm_task_import'] = '✓ Imported successfully'
-            results['ppm_task_name'] = initialize_ppm_schedule_with_logic.name
-        except Exception as e:
-            results['ppm_task_import'] = f'✗ Failed: {str(e)}'
-            results['errors'].append(f'PPM task import: {str(e)}')
-
-        # Test 5: Workshop info
-        access_context = get_user_access_context(request)
-        if access_context and access_context['workshop_id']:
-            try:
-                workshop = Workshop.objects.get(id=access_context['workshop_id'])
-                active_equipment = Equipment.objects.filter(
-                    workshop_id=workshop.id,
-                    active_status=True
-                ).count()
-                scheduled_equipment = PPMSchedule.objects.filter(
-                    workshop_id=workshop.id,
-                    equipment__active_status=True
-                ).count()
-
-                results['workshop_info'] = {
-                    'id': str(workshop.id),
-                    'name': workshop.name,
-                    'active_equipment': active_equipment,
-                    'scheduled_equipment': scheduled_equipment,
-                    'unscheduled_equipment': active_equipment - scheduled_equipment
-                }
-            except Exception as e:
-                results['workshop_info'] = {'error': str(e)}
-
-        # Overall status
-        results['overall_status'] = '✓ All tests passed' if not results['errors'] else '✗ Some tests failed'
-
-    except Exception as e:
-        results['errors'].append(f'General error: {str(e)}')
-        results['overall_status'] = '✗ Test suite failed'
-
-    return JsonResponse(results, json_dumps_params={'indent': 2})
 
 
 @login_required

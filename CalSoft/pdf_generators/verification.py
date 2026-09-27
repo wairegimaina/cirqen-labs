@@ -248,17 +248,21 @@ def verify_certificate_qr(qr_data):
 
 
 def generate_verification_url(certificate_number, session):
-    """
-    Generate a verification URL for the certificate.
-    This could be used as an alternative to QR codes or in addition to them.
-    """
-    try:
-        base_url = getattr(settings, 'CERTIFICATE_VERIFICATION_URL', 'https://verify.btwelve.hospital')
-        verification_token = base64.urlsafe_b64encode(
-            f"{certificate_number}:{session.id}:{session.timestamp.timestamp()}".encode()
-        ).decode()
+    """The public verification link for an issued certificate, or None.
 
-        return f"{base_url}/verify/{verification_token}"
+    HQ's /verify/<certificate_number>/<session_id> page (hq_server
+    certificate_verify.py) looks the pair up in its own records. The session
+    UUID is what keeps certificates from being enumerated. None when no
+    verification address is configured or the certificate has no number yet.
+    """
+    from urllib.parse import quote
+
+    try:
+        # No default: a made-up domain printed on a certificate is worse than none.
+        base_url = getattr(settings, 'CERTIFICATE_VERIFICATION_URL', '')
+        if not base_url or not certificate_number:
+            return None
+        return f"{base_url.rstrip('/')}/{quote(str(certificate_number), safe='')}/{session.id}"
 
     except Exception as e:
         logger.error(f"Error generating verification URL: {str(e)}")

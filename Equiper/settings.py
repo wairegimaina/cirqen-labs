@@ -100,10 +100,10 @@ INSTALLED_APPS = [
     "reporthub",
     "calSchedules",
     "CalSoft",
-    "chartjs",
     "machineReports",
     "django_celery_beat",
     "updates",
+    "assets",
 ]
 
 # Only load debug toolbar in debug mode
@@ -141,7 +141,9 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "users.middleware.ActiveUserMiddleware",
+    "users.middleware.FirstLoginSetupMiddleware",
     "users.session_middleware.SessionExpiryMiddleware",
+    "users.session_middleware.IdleTimeoutMiddleware",
     "core.hq_link.HQInstantPushMiddleware",
 ]
 
@@ -192,21 +194,8 @@ DATABASES = {
             "options": "-c statement_timeout=30000",
         },
     },
-    "hq": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": config.get("hq_db.database"),
-        "USER": config.get("hq_db.user"),
-        "PASSWORD": config.get("hq_db.password"),
-        "HOST": config.get("hq_db.host"),
-        "PORT": config.get("hq_db.port"),
-        "CONN_MAX_AGE": 300,
-        "CONN_HEALTH_CHECKS": True,
-        "OPTIONS": {
-            "connect_timeout": 10,
-            "options": "-c statement_timeout=30000",
-            "sslmode": "require",
-        },
-    },
+    # No "hq" alias: this app never connects to the HQ database. HQ is
+    # reached through its sync API only.
 }
 
 # ============================================================
@@ -236,6 +225,35 @@ HQ_SYNC_API_URL = config.get("sync.api_url")
 SYNC_AUTH_TOKEN = config.get("sync.auth_token")
 SYNC_TABLES = config.get("sync_tables", [])
 HQ_INSTANT_PUSH = config.get("sync.instant_push", True)
+
+
+def _certificate_verification_url():
+    """Base of the public page a certificate's QR code opens (hq_server
+    certificate_verify.py). CIRQEN_CERT_VERIFY_URL, then
+    certificates.verification_url in config.json, then HQ's own address:
+    https://<hq>/api/sync -> https://<hq>/verify. Empty when nothing is known,
+    in which case certificates keep the data-only QR payload."""
+    explicit = os.getenv("CIRQEN_CERT_VERIFY_URL") or config.get("certificates.verification_url")
+    if explicit:
+        return explicit.rstrip("/")
+    sync_url = (HQ_SYNC_API_URL or "").rstrip("/")
+    if sync_url.startswith("https://") and sync_url.endswith("/api/sync"):
+        return sync_url[: -len("/api/sync")] + "/verify"
+    return ""
+
+
+CERTIFICATE_VERIFICATION_URL = _certificate_verification_url()
+
+# Certificate numbers are allocated by HQ with its CERT_PREFIX; this must
+# match it (the conflict guard takes HQ's value from each reply).
+CERTIFICATE_PREFIX = os.getenv("CIRQEN_CERT_PREFIX") or config.get("certificates.prefix") or "BNH-"
+
+# Second backup location (core.backups.copy_dir); CIRQEN_BACKUP_COPY_DIR wins.
+BACKUP_COPY_DIR = config.get("backups.copy_dir") or ""
+BACKUP_KEEP = int(os.getenv("CIRQEN_BACKUP_KEEP") or config.get("backups.keep") or 14)
+# Sign-in security log retention in days (docs/legal/DATA_PROTECTION.md);
+# 0 keeps it forever. HQ prunes its copy on its own schedule.
+SECURITY_LOG_DAYS = int(os.getenv("CIRQEN_SECURITY_LOG_DAYS") or config.get("security.log_days") or 365)
 
 # ============================================================
 # 🔴 REDIS & CACHING
@@ -488,7 +506,8 @@ REPORT_CONTACT = {
     "email": config.get("client.email", ""),
     "phone": config.get("client.phone", ""),
 }
-SITE_URL = "http://127.0.0.1:8000"
+# Address people use to reach this site, for links in emails and QR labels.
+SITE_URL = (os.getenv("CIRQEN_SITE_URL") or "http://127.0.0.1:8000").rstrip("/")
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -506,7 +525,11 @@ LOGOUT_REDIRECT_URL = "/login/"
 SESSION_ENGINE = "django.contrib.sessions.backends.cached_db"
 SESSION_CACHE_ALIAS = "sessions"
 SESSION_COOKIE_NAME = "sessionid"
-SESSION_COOKIE_AGE = 3600
+# Signed out after this long without a person's activity (IdleTimeoutMiddleware).
+SESSION_IDLE_SECONDS = int(os.getenv("CIRQEN_IDLE_MINUTES", "30")) * 60
+SESSION_COOKIE_AGE = max(3600, SESSION_IDLE_SECONDS)
+# Heads of department must sign in with an authenticator app as well.
+REQUIRE_HOD_TWO_FACTOR = os.getenv("CIRQEN_REQUIRE_HOD_2FA", "0").lower() in ("1", "true", "yes")
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 SESSION_SAVE_EVERY_REQUEST = True
 # Transport security. The desktop build serves plain HTTP on 127.0.0.1, so these
@@ -531,6 +554,16 @@ if os.getenv("CIRQEN_BEHIND_PROXY", "0").strip().lower() in ("1", "true", "yes",
 CSRF_COOKIE_HTTPONLY = True
 CSRF_COOKIE_SAMESITE = "Lax"
 CSRF_TRUSTED_ORIGINS = ["http://localhost:8000", "http://127.0.0.1:8000"]
+# Server mode (deploy/server): browsers post from https://<server name>, which
+# Django refuses unless the origin is trusted. Every non-local ALLOWED_HOSTS name
+# is trusted over HTTPS when CIRQEN_HTTPS is on; CIRQEN_CSRF_TRUSTED_ORIGINS
+# adds explicit origins (comma-separated, with scheme).
+if CIRQEN_HTTPS:
+    CSRF_TRUSTED_ORIGINS += [
+        f"https://{host.lstrip('.')}" for host in ALLOWED_HOSTS
+        if host and host not in ("localhost", "127.0.0.1", "*") and not host.startswith("*")
+    ]
+CSRF_TRUSTED_ORIGINS += [o.strip() for o in os.getenv("CIRQEN_CSRF_TRUSTED_ORIGINS", "").split(",") if o.strip()]
 
 PASSWORD_RESET_TIMEOUT = 1800
 PASSWORD_RESET_CODE_LENGTH = 6
@@ -539,12 +572,13 @@ PASSWORD_RESET_CODE_LENGTH = 6
 # 📧 EMAIL CONFIGURATION
 # ============================================================
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-EMAIL_HOST = "smtp.gmail.com"
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
+# Server mode sets these in cirqen.env; desktops use config.json.
+EMAIL_HOST = os.getenv("EMAIL_HOST") or config.get("email.host", "smtp.gmail.com")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT") or config.get("email.port", 587))
+EMAIL_USE_TLS = (os.getenv("EMAIL_USE_TLS") or str(config.get("email.use_tls", True))).lower() in ("1", "true", "yes")
 EMAIL_USE_SSL = False
-EMAIL_HOST_USER = config.get("email.host_user", "")
-EMAIL_HOST_PASSWORD = config.get("email.host_password", "")
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER") or config.get("email.host_user", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD") or config.get("email.host_password", "")
 # Guard: if host_user is blank, Django will try to send from "" and SMTP will reject it.
 # Fix the email.host_user value in config.json / CirqenConfig to resolve this.
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER or "no-reply@example.com"
@@ -637,18 +671,8 @@ DEBEZIUM_CONFIG = {
         "DBNAME": config.get("local_db.database"),
         "SERVER_NAME": "postgres_local",
     },
-    "HQ_DB": {
-        "HOSTNAME": config.get("hq_db.host"),
-        "PORT": str(config.get("hq_db.port")),
-        "USER": config.get("hq_db.user"),
-        "PASSWORD": config.get("hq_db.password"),
-        "DBNAME": config.get("hq_db.database"),
-        "SERVER_NAME": "postgres_hq",
-    },
     "SLOT_NAME_LOCAL": "debezium_local_slot",
-    "SLOT_NAME_HQ": "debezium_hq_slot",
     "PUBLICATION_NAME_LOCAL": "debezium_local_publication",
-    "PUBLICATION_NAME_HQ": "debezium_hq_publication",
     "INCLUDE_SCHEMA_CHANGES": False,
     "SCHEMA_INCLUDE_LIST": "public",
     "TABLE_INCLUDE_LIST": ",".join(config.get("debezium.table_include_list")),

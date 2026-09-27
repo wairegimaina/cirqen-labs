@@ -43,7 +43,6 @@ urlpatterns = [
     path('initialize-sync/', views.trigger_sync_initialization, name='trigger_sync_initialization'),
 
     # Debug/test endpoints
-    path('test-celery/', views.test_celery_connection, name='test_celery'),
     path('task-status/<str:task_id>/', views.check_task_status, name='check_task_status'),
 
     path('api/analytics/', views.get_analytics_data, name='get_analytics_data'),

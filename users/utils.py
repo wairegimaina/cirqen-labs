@@ -1,5 +1,6 @@
 # utils.py
 import random
+import secrets
 import string
 import uuid
 import logging
@@ -37,7 +38,8 @@ class UserManagementUtils:
     @staticmethod
     def generate_temp_password():
         """Generate a temporary password"""
-        return "".join(random.choices(string.ascii_letters + string.digits, k=12))
+        # secrets, not random: this is a password.
+        return "".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(12))
 
     @staticmethod
     def send_welcome_email(user, temp_password, created_by):
@@ -200,7 +202,7 @@ class UserManagementUtils:
                         <strong>Dear {user.get_full_name() or user.username},</strong>
                     </div>
 
-                    <p>Welcome to the <strong> Btwelve National hospital Biomedical Engineering Management System</strong>! We're excited to have you on board.</p>
+                    <p>Welcome to the <strong>{getattr(settings, 'SITE_NAME', 'Cirqen')} Biomedical Engineering Management System</strong>! We're excited to have you on board.</p>
 
                     <p>Your account has been created by <strong>{created_by.get_full_name() or created_by.username}</strong> and is ready for use.</p>
 
@@ -228,13 +230,13 @@ class UserManagementUtils:
                     <div class="signature">
                         <p><strong>Best regards,</strong><br>
                         System Administrator<br>
-                        Btwelve Technologies </p>
+                        Cirqen Labs </p>
                     </div>
                 </div>
 
                 <div class="footer">
                     <p>This is an automated message. Please do not reply to this email.</p>
-                    <p>© {datetime.now().year} Btwelve Technologies. All rights reserved.</p>
+                    <p>© {datetime.now().year} Cirqen Labs. All rights reserved.</p>
                 </div>
             </div>
         </body>
@@ -502,7 +504,7 @@ This is an automated message. Please do not reply to this email.
 
                 <div class="footer">
                     <p>This is an automated security message. Please do not reply to this email.</p>
-                    <p>© {datetime.now().year} Btwelve Technologies. All rights reserved.</p>
+                    <p>© {datetime.now().year} Cirqen Labs. All rights reserved.</p>
                     <p><small>Request IP: {getattr(settings, 'REQUEST_IP', 'Unknown')} | Time: {now_eat().strftime('%Y-%m-%d %H:%M:%S EAT')}</small></p>
                 </div>
             </div>

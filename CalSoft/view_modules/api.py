@@ -11,7 +11,6 @@ from CalSoft.models import (
     CalibrationProcedure,
     CalibrationParameter,
     CalibrationSession,
-    CalibrationSchedule,
     Equipment,
     CalibrationReading,
     SubParameter,
@@ -20,6 +19,7 @@ from CalSoft.models import (
     StandardParameter,
     SetValue,
 )
+from calSchedules.models import CalibrationSchedule
 from core.eat import fmt_eat
 
 logger = logging.getLogger(__name__)

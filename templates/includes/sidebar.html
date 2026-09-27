@@ -114,6 +114,18 @@
         </a>
       </li>
 
+      <!-- Work order checklists -->
+      <li class="menu-entry" role="none">
+        <a href="{% url 'jobcard:checklist_templates' %}"
+          class="menu-link {% if request.resolver_match.url_name == 'checklist_templates' %}active-link{% endif %}"
+          role="menuitem">
+          <div class="link-icon" aria-hidden="true">
+            <i class="fas fa-clipboard-check"></i>
+          </div>
+          <span class="link-label">Work order checklists</span>
+        </a>
+      </li>
+
       <!-- Workshop Management (dropdown) -->
       <li class="menu-entry" role="none">
         <a href="{% url 'workshop:create_workshop' %}"
@@ -128,6 +140,60 @@
 
     {% endif %}
     {# ── END HOD BLOCK ── #}
+
+    <li class="menu-section-header" role="none">
+      <span class="section-label">Assets</span>
+    </li>
+    <li class="menu-entry" role="none">
+      <a href="{% url 'assets:kpis' %}" class="menu-link {% if request.resolver_match.url_name == 'kpis' %}active-link{% endif %}" role="menuitem">
+        <div class="link-icon" aria-hidden="true"><i class="fas fa-chart-line"></i></div>
+        <span class="link-label">Maintenance KPIs</span>
+      </a>
+    </li>
+    {% if nav.is_hod or nav.is_tech %}
+    <li class="menu-entry" role="none">
+      <a href="{% url 'assets:contracts' %}" class="menu-link {% if request.resolver_match.url_name == 'contracts' or request.resolver_match.url_name == 'suppliers' %}active-link{% endif %}" role="menuitem">
+        <div class="link-icon" aria-hidden="true"><i class="fas fa-file-contract"></i></div>
+        <span class="link-label">Contracts &amp; warranties</span>
+      </a>
+    </li>
+    <li class="menu-entry" role="none">
+      <a href="{% url 'assets:stock_alerts' %}" class="menu-link {% if request.resolver_match.url_name == 'stock_alerts' %}active-link{% endif %}" role="menuitem">
+        <div class="link-icon" aria-hidden="true"><i class="fas fa-boxes"></i></div>
+        <span class="link-label">Stock alerts</span>
+      </a>
+    </li>
+    <li class="menu-entry" role="none">
+      <a href="{% url 'assets:labels' %}" class="menu-link {% if request.resolver_match.url_name == 'labels' %}active-link{% endif %}" role="menuitem">
+        <div class="link-icon" aria-hidden="true"><i class="fas fa-qrcode"></i></div>
+        <span class="link-label">QR labels</span>
+      </a>
+    </li>
+    {% endif %}
+
+    <li class="menu-entry" role="none">
+      <a href="{% url 'two_factor_setup' %}"
+        class="menu-link {% if request.resolver_match.url_name == 'two_factor_setup' %}active-link{% endif %}"
+        role="menuitem">
+        <div class="link-icon" aria-hidden="true">
+          <i class="fas fa-shield-alt"></i>
+        </div>
+        <span class="link-label">Two-factor sign-in</span>
+      </a>
+    </li>
+
+    {% if nav.is_hod %}
+      <li class="menu-entry" role="none">
+        <a href="{% url 'core:site_profile' %}"
+          class="menu-link {% if request.resolver_match.url_name == 'site_profile' %}active-link{% endif %}"
+          role="menuitem">
+          <div class="link-icon" aria-hidden="true">
+            <i class="fas fa-hospital"></i>
+          </div>
+          <span class="link-label">Site details</span>
+        </a>
+      </li>
+    {% endif %}
 
     {# ══════════════════════════════════════════════════════ #}
     {# ║  SYSTEM BLOCK — staff only, matching the view guard ║ #}
@@ -249,6 +315,17 @@
           </a>
         </li>
 
+        {% if nav.is_nic %}
+        <li class="dropdown-entry" role="none">
+          <a href="{% url 'jobcard:approvals' %}"
+            class="dropdown-link {% if request.resolver_match.url_name == 'approvals' %}active-dropdown{% endif %}"
+            role="menuitem">
+            <i class="fas fa-mobile-alt" aria-hidden="true"></i>
+            <span class="link-label">Approve (phone view)</span>
+          </a>
+        </li>
+        {% endif %}
+
         <li class="dropdown-entry" role="none">
           <a href="{% url 'jobcard:approved_jobcards' %}"
             class="dropdown-link {% if request.resolver_match.url_name == 'approved_jobcards' %}active-dropdown{% endif %}"
@@ -266,6 +343,17 @@
             <span class="link-label">Declined Work Orders</span>
           </a>
         </li>
+
+        {% if nav.is_tech %}
+        <li class="dropdown-entry" role="none">
+          <a href="{% url 'jobcard:checklist_templates' %}"
+            class="dropdown-link {% if request.resolver_match.url_name == 'checklist_templates' %}active-dropdown{% endif %}"
+            role="menuitem">
+            <i class="fas fa-clipboard-check" aria-hidden="true"></i>
+            <span class="link-label">Checklists</span>
+          </a>
+        </li>
+        {% endif %}
 
       </ul>
     </li>
@@ -467,7 +555,7 @@
     {% endif %}
 
     <div class="sidebar-copyright">
-      <p>&copy; <span id="copyrightYear"></span> Equiper National Hospital</p>
+      <p>&copy; <span id="copyrightYear"></span> {{ site_name }}</p>
     </div>
 
   </div>

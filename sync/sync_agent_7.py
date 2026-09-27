@@ -35,6 +35,9 @@ from .smart_delete import SmartDeleteMixin
 SSE_BASE_BACKOFF = 30.0
 SSE_MAX_BACKOFF = 600.0
 
+# Channel the approval view NOTIFYs on (CalSoft.cert_signal.CHANNEL).
+CERT_CHANNEL = "cirqen_certificates"
+
 # Idle download pacing (see download_loop).
 DOWNLOAD_IDLE_AFTER = 3
 DOWNLOAD_IDLE_MAX_INTERVAL = int(os.getenv("SYNC_DOWNLOAD_IDLE_MAX", "120"))
@@ -427,6 +430,10 @@ class DownloadCertHeartbeatMixin(SmartDeleteMixin):
                         LOG.info("👍 Certificate sync completed (no new certificates generated)")
 
                     self.process_certificate_response(result)
+                    if result.get("generated"):
+                        # Schedules and audit rows follow through the download
+                        # loop; bring it back to its fast interval for them.
+                        self._download_saw_changes = True
                 else:
                     LOG.warning("❌ Certificate sync failed: %d - %s", response.status_code, response.text)
 
@@ -623,27 +630,132 @@ class DownloadCertHeartbeatMixin(SmartDeleteMixin):
                 if conn:
                     self.pool.putconn(conn)
     def certificate_sync_loop(self):
-            """Periodically sync pending certificates with HQ"""
-            interval = int(self.sync_cfg.get("certificate_sync_interval", 30))
+            """Send pending certificates to HQ as soon as they are approved.
 
-            LOG.info("📜 Certificate sync loop started (checking every %d seconds) 🎓", interval)
+            The approval view issues NOTIFY on CERT_CHANNEL inside its
+            transaction (CalSoft.cert_signal), which wakes this loop at commit.
+            The interval is only the fallback for anything a wake-up missed
+            (agent restarting, notification connection dropped).
+            """
+            interval = int(self.sync_cfg.get("certificate_sync_interval", 10))
 
+            LOG.info("📜 Certificate sync loop started (instant on approval, fallback every %ds)", interval)
 
-            loop_count = 0
             while not self.stop_event.is_set():
+                woken = self.wait_for_certificate_signal(interval)
                 try:
-                    loop_count += 1
-                    LOG.debug("📋 Certificate check #%d...", loop_count)
+                    if woken:
+                        # HQ allocates from its copy of the session, so the row
+                        # must be uploaded first; the upload loop polls every
+                        # second, this waits for it rather than racing it.
+                        self.wait_until_sessions_uploaded()
                     self.sync_pending_certificates()
                 except Exception as e:
                     LOG.exception("💥 Exception in certificate_sync_loop: %s", e)
 
-                for i in range(interval):
-                    if self.stop_event.is_set():
-                        break
-                    time.sleep(1)
-
+            self._close_certificate_listener()
             LOG.info("📜 Certificate sync loop exiting")
+
+    def _close_certificate_listener(self):
+            conn = getattr(self, "_cert_listen_conn", None)
+            self._cert_listen_conn = None
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+    def wait_for_certificate_signal(self, timeout):
+            """Block until an approval's NOTIFY arrives (True) or timeout (False).
+
+            Holds one dedicated connection, outside the pool, for LISTEN. If it
+            cannot be opened the loop simply falls back to the interval.
+            """
+            import select
+
+            deadline = time.monotonic() + timeout
+            while not self.stop_event.is_set():
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return False
+                conn = getattr(self, "_cert_listen_conn", None)
+                if conn is None:
+                    try:
+                        conn = psycopg2.connect(**self.local_db_params())
+                        conn.autocommit = True
+                        with conn.cursor() as cur:
+                            cur.execute(f"LISTEN {CERT_CHANNEL}")
+                        self._cert_listen_conn = conn
+                    except Exception as e:
+                        LOG.debug("Certificate LISTEN unavailable (%s); polling every %ss", e, timeout)
+                        self._cert_listen_conn = None
+                        for _ in range(int(remaining)):
+                            if self.stop_event.is_set():
+                                break
+                            time.sleep(1)
+                        return False
+                try:
+                    # Wake at least once a second to notice stop_event.
+                    ready, _, _ = select.select([conn], [], [], min(1.0, remaining))
+                    if ready:
+                        conn.poll()
+                        if conn.notifies:
+                            conn.notifies.clear()
+                            return True
+                except Exception as e:
+                    LOG.debug("Certificate LISTEN connection lost: %s", e)
+                    self._close_certificate_listener()
+            return False
+
+    def local_db_params(self):
+            """Connection settings for the local database, from the pool's own."""
+            params = dict(getattr(self.pool, "_kwargs", {}) or {})
+            dsn = getattr(self.pool, "_args", ()) or ()
+            if dsn and isinstance(dsn[0], str):
+                params["dsn"] = dsn[0]
+            return params
+
+    def wait_until_sessions_uploaded(self, timeout=10.0):
+            """Wait until every pending session's row has been uploaded to HQ.
+
+            Compares the newest updated_at among sessions awaiting a number with
+            the per-table upload checkpoint. Returns True when uploaded, False
+            on timeout (the request is sent anyway; HQ's own cycle retries).
+            """
+            table = "public.CalSoft_calibrationsession"
+            conn = self.pool.getconn()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT max(cs.updated_at)
+                        FROM pending_certificates pc
+                        JOIN "CalSoft_calibrationsession" cs ON pc.session_id = cs.id
+                        WHERE pc.sync_status = 'pending' AND pc.pending_delete = false
+                    """)
+                    newest = cur.fetchone()[0]
+                conn.rollback()
+            finally:
+                self.pool.putconn(conn)
+            if newest is None:
+                return True
+            if newest.tzinfo is None:
+                newest = newest.replace(tzinfo=timezone.utc)
+
+            deadline = time.monotonic() + timeout
+            while time.monotonic() < deadline and not self.stop_event.is_set():
+                try:
+                    checkpoint = datetime.fromisoformat(
+                        str(self.get_last_upload_time(table)).replace("Z", "+00:00"))
+                    if checkpoint.tzinfo is None:
+                        checkpoint = checkpoint.replace(tzinfo=timezone.utc)
+                    if checkpoint >= newest:
+                        return True
+                except (TypeError, ValueError):
+                    pass
+                time.sleep(0.2)
+            LOG.info("Certificate request: session upload still pending after %.0fs; asking HQ anyway", timeout)
+            return False
+
     def send_heartbeat(self):
             """Send heartbeat to HQ server"""
             try:

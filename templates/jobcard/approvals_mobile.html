@@ -1,0 +1,141 @@
+{% extends 'base.html' %}
+{% block title %}Approvals — {{ site_name }}{% endblock %}
+{% block page_title %}Approvals{% endblock %}
+{% block extra_css %}
+<style>
+/* Phone first: one column, large touch targets, nothing wider than the screen. */
+.ap-wrap { max-width: 720px; margin: 0 auto; padding: 0 0 2rem; }
+.ap-empty { text-align: center; padding: 2rem 1rem; color: var(--text-muted, #6b7280); }
+.ap-card { border: 1px solid var(--border-color); border-radius: 10px; margin-bottom: .75rem; background: var(--bg-card, #fff); overflow: hidden; }
+.ap-card summary { list-style: none; cursor: pointer; padding: .9rem 1rem; display: grid; gap: .2rem; min-height: 44px; }
+.ap-card summary::-webkit-details-marker { display: none; }
+.ap-title { font-weight: 600; font-size: 1rem; }
+.ap-meta { font-size: .85rem; color: var(--text-muted, #6b7280); display: flex; flex-wrap: wrap; gap: .25rem .75rem; }
+.ap-body { padding: 0 1rem 1rem; display: grid; gap: .75rem; }
+.ap-row { display: grid; gap: .15rem; font-size: .92rem; }
+.ap-row strong { font-size: .8rem; text-transform: uppercase; letter-spacing: .03em; color: var(--text-muted, #6b7280); }
+.ap-total { font-weight: 700; font-size: 1.05rem; }
+.ap-field { display: grid; gap: .3rem; }
+.ap-field input[type=text], .ap-field textarea { width: 100%; padding: .7rem; font-size: 16px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--input-bg, #fff); color: inherit; }
+.ap-pad { width: 100%; height: 160px; border: 1px dashed var(--border-color); border-radius: 8px; background: #fff; touch-action: none; }
+.ap-actions { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
+.ap-actions button { min-height: 48px; font-size: 1rem; border-radius: 8px; }
+.ap-link { font-size: .85rem; }
+.ap-body ul { padding-left: 1.2rem; margin: .25rem 0 0; }
+.ap-check { display: flex; align-items: center; gap: .5rem; min-height: 44px; }
+.ap-check input { width: 22px; height: 22px; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="ap-wrap">
+  <div class="page-head">
+    <div>
+      <h1 class="page-title">Work orders to approve</h1>
+      <p class="page-subtitle">{{ cards|length }} waiting. Tap one to review, sign and decide.</p>
+    </div>
+  </div>
+
+  {% for message in messages %}
+    <div class="alert alert-{{ message.tags }}" role="alert">{{ message }}</div>
+  {% endfor %}
+
+  {% for card in cards %}
+    <details class="ap-card" {% if open_id == card.id|stringformat:"s" %}open{% endif %}>
+      <summary>
+        <span class="ap-title">{{ card.equipment.description }} · {{ card.action_taken }}</span>
+        <span class="ap-meta">
+          <span>S/N {{ card.equipment.serial_number }}</span>
+          <span>{{ card.priority_level }}</span>
+          <span>{{ card.date_issued|date:"j M Y" }}</span>
+          <span>by {{ card.performed_by.get_full_name|default:card.performed_by.username|default:"—" }}</span>
+        </span>
+      </summary>
+      <div class="ap-body">
+        <div class="ap-row"><strong>Work done</strong><span>{{ card.job_description }}</span></div>
+        {% if card.remarks %}<div class="ap-row"><strong>Remarks</strong><span>{{ card.remarks }}</span></div>{% endif %}
+        {% include 'jobcard/_checklist_detail.html' with checklist=card.checklist %}
+        <div class="ap-row"><strong>Cost</strong><span class="ap-total">KSh {{ card.get_total_cost|floatformat:2 }}</span></div>
+        <a class="ap-link" href="{% url 'jobcard:create_job_card' %}?jobcard_id={{ card.id }}">Open full work order</a>
+
+        <form method="post" action="{% url 'jobcard:create_job_card' %}" class="ap-form" data-card="{{ card.id }}">
+          {% csrf_token %}
+          <input type="hidden" name="jobcard_id" value="{{ card.id }}">
+          <input type="hidden" name="return_to" value="approvals">
+          <input type="hidden" name="nurse_signature_data" value="">
+          <div class="ap-field">
+            <label for="name-{{ card.id }}">Your name</label>
+            <input type="text" id="name-{{ card.id }}" name="nurse_name" value="{{ default_name }}" required>
+          </div>
+          {% if has_saved_signature %}
+            <label class="ap-check"><input type="checkbox" name="use_auto_signature" value="true" checked class="ap-auto"> Use my saved signature</label>
+          {% endif %}
+          <div class="ap-field ap-sign" {% if has_saved_signature %}hidden{% endif %}>
+            <label>Sign with your finger</label>
+            <canvas class="ap-pad" aria-label="Signature pad"></canvas>
+            <button type="button" class="btn btn-secondary btn-sm ap-clear">Clear</button>
+          </div>
+          <div class="ap-field">
+            <label for="reason-{{ card.id }}">Reason (only if declining)</label>
+            <textarea id="reason-{{ card.id }}" name="decline_reason" rows="2"></textarea>
+          </div>
+          <div class="ap-actions">
+            <button type="submit" name="approve" class="btn btn-success">Approve</button>
+            <button type="submit" name="decline" class="btn btn-danger">Decline</button>
+          </div>
+        </form>
+      </div>
+    </details>
+  {% empty %}
+    <div class="ap-empty"><i class="fas fa-check-circle fa-2x"></i><p>Nothing is waiting for your approval.</p></div>
+  {% endfor %}
+</div>
+
+<script>
+(function () {
+  document.querySelectorAll('.ap-form').forEach(function (form) {
+    var canvas = form.querySelector('.ap-pad');
+    var auto = form.querySelector('.ap-auto');
+    var signBox = form.querySelector('.ap-sign');
+    var drawn = false, ctx;
+
+    function size() {
+      var ratio = window.devicePixelRatio || 1, rect = canvas.getBoundingClientRect();
+      if (!rect.width) return;
+      canvas.width = rect.width * ratio; canvas.height = rect.height * ratio;
+      ctx = canvas.getContext('2d'); ctx.scale(ratio, ratio);
+      ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.strokeStyle = '#111';
+      drawn = false;
+    }
+    function point(e) { var r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+    var down = false;
+    canvas.addEventListener('pointerdown', function (e) {
+      if (!ctx) size();
+      down = true; canvas.setPointerCapture(e.pointerId);
+      var p = point(e); ctx.beginPath(); ctx.moveTo(p[0], p[1]);
+    });
+    canvas.addEventListener('pointermove', function (e) {
+      if (!down) return; var p = point(e); ctx.lineTo(p[0], p[1]); ctx.stroke(); drawn = true;
+    });
+    ['pointerup', 'pointercancel'].forEach(function (evt) { canvas.addEventListener(evt, function () { down = false; }); });
+    form.querySelector('.ap-clear').addEventListener('click', size);
+    if (auto) auto.addEventListener('change', function () {
+      signBox.hidden = auto.checked;
+      if (!auto.checked) setTimeout(size, 0);
+    });
+    form.closest('details').addEventListener('toggle', function () { if (!signBox.hidden) setTimeout(size, 0); });
+
+    form.addEventListener('submit', function (e) {
+      var usingSaved = auto && auto.checked;
+      var declining = e.submitter && e.submitter.name === 'decline';
+      if (!usingSaved) {
+        if (!drawn) { e.preventDefault(); alert('Please sign in the box first.'); return; }
+        form.querySelector('[name=nurse_signature_data]').value = canvas.toDataURL('image/png');
+      }
+      if (declining && !form.querySelector('[name=decline_reason]').value.trim()) {
+        e.preventDefault(); alert('Please give the reason for declining.');
+      }
+    });
+  });
+})();
+</script>
+{% endblock %}

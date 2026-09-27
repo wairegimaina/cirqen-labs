@@ -60,6 +60,7 @@ logger = logging.getLogger(__name__)
 # sibling modules in this package
 from core.branding import organisation_slug
 from .signatures import SignatureImageLoader
+from .verification import generate_verification_url
 from .watermark import _LogoWatermarkCanvas
 
 
@@ -192,6 +193,18 @@ class QrMixin:
                 box_size=8,
                 border=2,
             )
+
+            # An issued certificate carries a link to HQ's verification page
+            # instead: the data payload can be retyped by anyone, the link
+            # shows HQ's own record. Declined and awaiting-number documents
+            # have nothing at HQ to verify and keep the payload.
+            issued = (self.certificate_number and not self.is_declined
+                      and not getattr(self, 'is_pending_number', False))
+            verification_url = (
+                generate_verification_url(self.certificate_number, self.session) if issued else None
+            )
+            if verification_url:
+                verification_string = verification_url
 
             qr.add_data(verification_string)
             qr.make(fit=True)

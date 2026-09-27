@@ -601,6 +601,50 @@ function exportEquipmentList() {
   const params = new URLSearchParams();
   if (category) params.set('category', category);
   if (search) params.set('search', search);
-  const url = `/machineReports/export-equipment-category-detailed-pdf/?${params.toString()}`;
-  startDownload(url);
+  runReportJob('equipment_category', params);
 }
+
+// Large reports are built in the background (core.report_jobs): ask for the
+// report, poll until it is ready, then download it. A repeat request within
+// 15 minutes is ready at once.
+function runReportJob(name, params) {
+  const note = document.createElement('div');
+  note.className = 'report-job-note';
+  note.setAttribute('role', 'status');
+  note.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:2000;padding:.7rem 1rem;' +
+    'border-radius:8px;background:var(--bg-card,#fff);color:var(--text-primary,#111);' +
+    'box-shadow:0 4px 16px rgba(0,0,0,.18);font-size:.9rem;max-width:calc(100vw - 32px)';
+  note.textContent = 'Preparing the report…';
+  document.body.appendChild(note);
+  const finish = (text) => {
+    note.textContent = text;
+    setTimeout(() => note.remove(), 4000);
+  };
+  const poll = (key, tries) => {
+    fetch(`/settings/reports/job/${key}/`, { credentials: 'same-origin' })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.status === 'ready') {
+          startDownload(`/settings/reports/job/${key}/download/`);
+          finish('Report ready — downloading.');
+        } else if (data.status === 'running' && tries < 150) {
+          setTimeout(() => poll(key, tries + 1), 2000);
+        } else {
+          finish('The report could not be prepared. Please try again.');
+        }
+      })
+      .catch(() => finish('Lost contact with the server while preparing the report.'));
+  };
+  fetch(`/settings/reports/${name}/start/?${params.toString()}`, { credentials: 'same-origin' })
+    .then((r) => r.json())
+    .then((data) => {
+      if (data.status === 'ready') {
+        startDownload(`/settings/reports/job/${data.key}/download/`);
+        finish('Report ready — downloading.');
+      } else {
+        poll(data.key, 0);
+      }
+    })
+    .catch(() => finish('The report could not be requested. Please try again.'));
+}
+window.runReportJob = runReportJob;

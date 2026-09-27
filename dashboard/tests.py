@@ -30,6 +30,7 @@ class HodDashboardTestCase(TestCase):
         if profile is None:
             profile = UserProfile(user=cls.hod, role="HOD")
         profile.role = "HOD"
+        profile.must_change_password = False
         profile.save()
 
         cls.workshop = Workshop.objects.create(name="Biomed", category="maintenance")

@@ -308,7 +308,7 @@ class CalibrationParameter(models.Model):
     procedure = models.ForeignKey('CalibrationProcedure', on_delete=models.CASCADE, related_name='parameters')
     name = models.CharField(max_length=100)
     unit = models.CharField(max_length=20, blank=True)
-    num_readings = models.PositiveIntegerField(default=5, validators=[MinValueValidator(3), MaxValueValidator(20)])
+    num_readings = models.PositiveIntegerField(default=5, validators=[MinValueValidator(3), MaxValueValidator(10)])
     standard_reference = models.CharField(max_length=200, help_text="Reference standard identification")
     reference_uncertainty = models.DecimalField(max_digits=10, decimal_places=6, default=0.001, help_text="k=2")
     coverage_factor = models.DecimalField(max_digits=3, decimal_places=1, default=2.0)
@@ -900,104 +900,6 @@ class StandardParameter(models.Model):
         return f"{self.standard.name} - {self.parameter.name}"
 
 
-class CalibrationSchedule(models.Model):
-    """Schedule for equipment calibration"""
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    equipment = models.ForeignKey(Equipment, on_delete=models.CASCADE, related_name='calsoft_schedules')
-    workshop = models.ForeignKey(Workshop, on_delete=models.CASCADE, related_name='calsoft_schedules', help_text="Workshop managing this calibration schedule")
-    calibration_procedure = models.ForeignKey(CalibrationProcedure, on_delete=models.SET_NULL, null=True, blank=True, related_name='schedules')
-    calibration_session = models.ForeignKey(CalibrationSession, on_delete=models.SET_NULL, null=True, blank=True, related_name='schedules')
-    scheduled_month = models.DateField()
-    status = models.CharField(max_length=20, choices=[
-        ('pending', 'Pending'),
-        ('completed', 'Completed'),
-        ('pushed', 'Pushed'),
-        ('in_progress', 'In Progress'),
-    ], default='pending')
-    planning_logic = models.CharField(
-        max_length=50,
-        choices=[
-            ('description_based', 'Description Based'),
-            ('date_based', 'Date Based'),
-        ],
-        null=True,
-        blank=True,
-        help_text="Logic used to plan this schedule (e.g., description-based)"
-    )
-    calibration_period = models.PositiveIntegerField(
-        choices=[
-            (6, '6 Months'),
-            (12, '12 Months'),
-        ],
-        default=12,
-        help_text="Calibration interval in months"
-    )
-    estimated_duration = models.DurationField(null=True, blank=True, help_text="Estimated duration for the calibration procedure")
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    active_status = models.BooleanField(default=True)
-    # offline sync
-    pending_delete = models.BooleanField(default=False)
-
-    updated_at = models.DateTimeField(auto_now=True)
-    syncable = True  # <- important, so sync task knows to sync this model
-
-    class Meta:
-
-        unique_together = ['equipment', 'scheduled_month']
-        indexes = [
-            models.Index(fields=['workshop', 'scheduled_month']),
-            models.Index(fields=['equipment', 'status']),
-        ]
-
-    def save(self, *args, **kwargs):
-        if not self.workshop_id and self.equipment_id:
-            self.workshop = self.equipment.workshop
-        self.needs_sync = True  # mark for sync
-        super().save(*args, **kwargs)
-
-    @property
-    def manufacturer(self):
-        return self.equipment.manufacturer
-
-    @property
-    def model(self):
-        return self.equipment.model
-
-    @property
-    def serial_number(self):
-        return self.equipment.serial_number
-
-    @property
-    def due_date(self):
-        """The last day of the scheduled month — the official due date.
-
-        Matches ``calSchedules.CalibrationSchedule.due_date``. Both models are
-        in use (the machine reports read this one, calibration sessions the
-        other), and they previously disagreed: this one measured to the raw
-        ``scheduled_month``, so a device could show as overdue in the reports
-        while its certificate said it still had most of the month.
-        """
-        from calSchedules.grouping import month_end
-
-        return month_end(self.scheduled_month)
-
-    @property
-    def days_until_due(self):
-        from calSchedules.grouping import days_until_due as _days_until_due
-
-        return _days_until_due(self.due_date, localdate())
-
-    @property
-    def is_overdue(self):
-        from calSchedules.grouping import is_overdue as _is_overdue
-
-        return _is_overdue(self.due_date, localdate())
-
-    def __str__(self):
-        return f"Calibration Schedule for {self.equipment.description} on {self.scheduled_month}"
-
-
 class CalibrationAuditLog(models.Model):
     """Audit log for calibration-related actions"""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -1060,7 +962,7 @@ class EquipmentCalibrationProcedure(models.Model):
 class CalibrationWorkflow(models.Model):
     """Workflow steps for a calibration schedule"""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    schedule = models.ForeignKey(CalibrationSchedule, on_delete=models.CASCADE, related_name='workflow_steps')
+    schedule = models.ForeignKey('calSchedules.CalibrationSchedule', on_delete=models.CASCADE, related_name='workflow_steps')
     step_name = models.CharField(max_length=100)
     step_order = models.PositiveIntegerField()
     status = models.CharField(max_length=20, choices=[
@@ -1150,3 +1052,34 @@ class PendingCertificate(models.Model):
 
     def __str__(self):
         return f"Pending Cert for {self.session.id} - {self.sync_status}"
+
+
+class IssuedCertificate(models.Model):
+    """The PDF exactly as it was first issued, with its SHA-256 fingerprint.
+
+    Written the first time a certificate is produced after it has its number
+    (CalSoft.issued). Every later download serves this file, after checking it
+    still matches the fingerprint, so an issued certificate never silently
+    changes when templates, signatures or data change afterwards. A reissue
+    under a new number (cert_conflict_guard) gets its own row.
+
+    Kept on this machine only (not in sync_tables): it is a file, and the
+    fingerprint is what an auditor compares.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    session = models.ForeignKey('CalibrationSession', on_delete=models.PROTECT, related_name='issued_certificates')
+    certificate_number = models.CharField(max_length=100)
+    pdf = models.FileField(upload_to='issued_certificates/%Y/%m/')
+    sha256 = models.CharField(max_length=64)
+    size = models.PositiveIntegerField()
+    issued_at = models.DateTimeField(auto_now_add=True)
+    issued_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['session', 'certificate_number'], name='issued_certificate_once'),
+        ]
+        ordering = ['-issued_at']
+
+    def __str__(self):
+        return f"{self.certificate_number} ({self.sha256[:12]})"

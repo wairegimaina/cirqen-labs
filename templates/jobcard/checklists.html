@@ -1,0 +1,75 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Work Order Checklists{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'jobcards/jobcards.css' %}" />
+{% endblock %}
+{% block page_title %}Work Order Checklists{% endblock %}
+{% block content %}
+<div class="job-card-wrapper checklist-admin">
+    <section class="job-section">
+        <div class="section-header">
+            <h2><i class='fas fa-clipboard-check'></i> Checklists by equipment type</h2>
+        </div>
+        <p class="checklist-hint">
+            A work order on a machine of this type asks the technician to mark each item Pass, Fail or N/A.
+            {% if not can_edit %}Only the head of department or an engineer-in-charge can change them.{% endif %}
+        </p>
+
+        {% if editing %}
+        <div class="info-box">
+            <h5><i class='fas fa-edit'></i> {{ editing.name }}</h5>
+            {% if can_edit %}
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="description_id" value="{{ editing.pk }}">
+                <label for="items">One item per line (up to {{ max_items }}). Leave empty for no checklist.</label>
+                <textarea name="items" id="items" class="form-control" rows="10"
+                          placeholder="Check alarms and indicators&#10;Electrical safety test&#10;Clean and inspect filters">{{ editing_text }}</textarea>
+                <div class="checklist-actions">
+                    <button type="submit" class="btn btn-primary"><i class='fas fa-save'></i> Save checklist</button>
+                    <a href="{% url 'jobcard:checklist_templates' %}{% if query %}?q={{ query|urlencode }}{% endif %}" class="btn btn-outline-secondary">Close</a>
+                </div>
+            </form>
+            {% else %}
+            {% if editing.checklist_template %}
+            <ol>{% for item in editing.checklist_template %}<li>{{ item }}</li>{% endfor %}</ol>
+            {% else %}<p>No checklist for this equipment type.</p>{% endif %}
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <form method="get" class="checklist-search" role="search">
+            <label for="q" class="visually-hidden">Search equipment types</label>
+            <input type="search" name="q" id="q" class="form-control" value="{{ query }}" placeholder="Search equipment types">
+            <button type="submit" class="btn btn-outline-primary">Search</button>
+        </form>
+
+        <div class="table-responsive">
+            <table class="table checklist-table">
+                <thead><tr><th>Equipment type</th><th>Checklist items</th><th></th></tr></thead>
+                <tbody>
+                    {% for description in page %}
+                    <tr>
+                        <td>{{ description.name }}</td>
+                        <td>{% with n=description.checklist_template|length %}{% if n %}{{ n }}{% else %}<span class="checklist-empty">None</span>{% endif %}{% endwith %}</td>
+                        <td><a href="?edit={{ description.pk }}{% if query %}&q={{ query|urlencode }}{% endif %}{% if page.number > 1 %}&page={{ page.number }}{% endif %}">{% if can_edit %}Edit{% else %}View{% endif %}</a></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="3">No equipment types match.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if page.has_other_pages %}
+        <nav class="checklist-pages" aria-label="Pages">
+            {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}{% if query %}&q={{ query|urlencode }}{% endif %}">Previous</a>{% endif %}
+            <span>Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
+            {% if page.has_next %}<a href="?page={{ page.next_page_number }}{% if query %}&q={{ query|urlencode }}{% endif %}">Next</a>{% endif %}
+        </nav>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}
