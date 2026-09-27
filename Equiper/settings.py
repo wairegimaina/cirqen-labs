@@ -104,6 +104,7 @@ INSTALLED_APPS = [
     "machineReports",
     "django_celery_beat",
     "updates",
+    "assets",
 ]
 
 # Only load debug toolbar in debug mode
@@ -503,7 +504,8 @@ REPORT_CONTACT = {
     "email": config.get("client.email", ""),
     "phone": config.get("client.phone", ""),
 }
-SITE_URL = "http://127.0.0.1:8000"
+# Address people use to reach this site, for links in emails and QR labels.
+SITE_URL = (os.getenv("CIRQEN_SITE_URL") or "http://127.0.0.1:8000").rstrip("/")
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -568,12 +570,13 @@ PASSWORD_RESET_CODE_LENGTH = 6
 # 📧 EMAIL CONFIGURATION
 # ============================================================
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-EMAIL_HOST = "smtp.gmail.com"
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
+# Server mode sets these in cirqen.env; desktops use config.json.
+EMAIL_HOST = os.getenv("EMAIL_HOST") or config.get("email.host", "smtp.gmail.com")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT") or config.get("email.port", 587))
+EMAIL_USE_TLS = (os.getenv("EMAIL_USE_TLS") or str(config.get("email.use_tls", True))).lower() in ("1", "true", "yes")
 EMAIL_USE_SSL = False
-EMAIL_HOST_USER = config.get("email.host_user", "")
-EMAIL_HOST_PASSWORD = config.get("email.host_password", "")
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER") or config.get("email.host_user", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD") or config.get("email.host_password", "")
 # Guard: if host_user is blank, Django will try to send from "" and SMTP will reject it.
 # Fix the email.host_user value in config.json / CirqenConfig to resolve this.
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER or "no-reply@example.com"

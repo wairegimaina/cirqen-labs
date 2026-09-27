@@ -47,6 +47,13 @@
               <i class="fas fa-user-plus"></i> Create User
             </button>
           </li>
+          {% if user.userprofile.role == 'HOD' %}
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" type="button" data-bs-toggle="modal" data-bs-target="#uploadUsersModal">
+              <i class="fas fa-file-excel"></i> Bulk upload
+            </button>
+          </li>
+          {% endif %}
         </ul>
       </div>
 
@@ -424,4 +431,10 @@
 
 {% block extra_js %}
 <script src="{% static 'users_login/manage_users.js' %}"></script>
+{% if user.userprofile.role == 'HOD' %}
+{% url 'user_import_template' as users_template_url %}
+{% url 'upload_users_excel' as users_upload_url %}
+{% include 'includes/excel_import_modal.html' with modal_id='uploadUsersModal' title='Bulk Upload Users' noun='user' template_url=users_template_url upload_url=users_upload_url help_text='Required: First Name, Last Name, Email, Role. Tech also needs Workshop and Level; NIC needs Department. Each person is emailed a temporary password.' %}
+<script src="{% static 'js/excel_import.js' %}"></script>
+{% endif %}
 {% endblock %}

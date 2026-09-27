@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+{% block title %}{{ m.description }} {{ m.serial_number }} — {{ site_name }}{% endblock %}
+{% block page_title %}Machine{% endblock %}
+{% block extra_css %}{% include 'assets/_styles.html' %}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">{{ m.description }}</h1>
+    <p class="page-subtitle">S/N {{ m.serial_number }} · {{ m.model }}{% if m.manufacturer %} · {{ m.manufacturer }}{% endif %} · {{ m.department }}</p>
+  </div>
+  <div>
+    {% if is_tech %}<a class="btn btn-primary" href="{% url 'jobcard:create_job_card' %}?equipment={{ m.id }}"><i class="fas fa-plus-circle"></i> Start work order</a>{% endif %}
+  </div>
+</div>
+<div class="as-grid">
+  <div class="as-tiles">
+    <div class="as-tile"><div class="v">{{ m.status }}</div><div class="l">Status</div></div>
+    <div class="as-tile"><div class="v">{{ risk.score|default:0 }}</div><div class="l">Replacement risk (0–100)</div></div>
+    <div class="as-tile"><div class="v">{% if m.warranty_end %}{{ m.warranty_end|date:"j M Y" }}{% else %}—{% endif %}</div><div class="l">Warranty {% if m.warranty_end and m.warranty_end < today %}ended{% else %}ends{% endif %}</div></div>
+    <div class="as-tile"><div class="v">{% if m.purchase_date %}{{ m.purchase_date|date:"Y" }}{% else %}—{% endif %}</div><div class="l">Purchased{% if m.expected_life_years %}, {{ m.expected_life_years }}-year life{% endif %}</div></div>
+  </div>
+  {% if risk.reasons %}<p class="as-muted">Why: {{ risk.reasons|join:"; " }}.</p>{% endif %}
+
+  <div class="section-card">
+    <h2 class="section-card-title">Recent work orders</h2>
+    {% if work_orders %}<div class="as-scroll"><table class="as-table">
+      <thead><tr><th>Date</th><th>Action</th><th>Status</th><th>Work done</th></tr></thead>
+      <tbody>{% for w in work_orders %}<tr><td>{{ w.date_issued|date:"j M Y" }}</td><td>{{ w.action_taken }}</td><td>{{ w.status }}</td><td>{{ w.job_description|truncatechars:90 }}</td></tr>{% endfor %}</tbody>
+    </table></div>{% else %}<p class="as-muted">None yet.</p>{% endif %}
+  </div>
+
+  <div class="section-card">
+    <h2 class="section-card-title">Calibrations</h2>
+    {% if calibrations %}<div class="as-scroll"><table class="as-table">
+      <thead><tr><th>Date</th><th>Certificate</th><th>Result</th><th>Next due</th></tr></thead>
+      <tbody>{% for c in calibrations %}<tr><td>{{ c.timestamp|date:"j M Y" }}</td><td>{{ c.certificate_number|default:"—" }}</td><td>{% if c.overall_pass %}Pass{% else %}<span class="as-pill as-bad">Fail</span>{% endif %}</td><td>{{ c.next_calibration_due|date:"j M Y"|default:"—" }}</td></tr>{% endfor %}</tbody>
+    </table></div>{% else %}<p class="as-muted">None on record.</p>{% endif %}
+  </div>
+
+  <div class="section-card">
+    <h2 class="section-card-title">Service contracts</h2>
+    {% for c in contracts %}
+      <p>{{ c.get_cover_display }}{% if c.supplier %} with {{ c.supplier }}{% endif %}: {{ c.start_date|date:"j M Y" }} – {{ c.end_date|date:"j M Y" }}
+        {% if c.end_date < today %}<span class="as-pill">ended</span>{% elif c.is_current %}<span class="as-pill">current</span>{% endif %}</p>
+    {% empty %}<p class="as-muted">No service contract.</p>{% endfor %}
+    <a href="{% url 'assets:contracts' %}">All contracts and warranties</a>
+  </div>
+
+  {% if can_manage %}
+  <div class="section-card">
+    <h2 class="section-card-title">Asset details</h2>
+    <form method="post" class="as-form">
+      {% csrf_token %}
+      {% for field in form %}<label>{{ field.label }}{{ field }}{% if field.errors %}<span class="as-err">{{ field.errors|join:" " }}</span>{% endif %}</label>{% endfor %}
+      <div><button type="submit" class="btn btn-primary">Save</button></div>
+    </form>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

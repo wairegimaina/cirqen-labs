@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block title %}Suppliers — {{ site_name }}{% endblock %}
+{% block page_title %}Suppliers{% endblock %}
+{% block extra_css %}{% include 'assets/_styles.html' %}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1 class="page-title">Suppliers</h1>
+  <p class="page-subtitle">Used on service contracts and spare parts.</p></div></div>
+<div class="as-grid">
+  <div class="section-card as-scroll">
+    {% if suppliers %}<table class="as-table">
+      <thead><tr><th>Name</th><th>Contact</th><th>Phone</th><th>Email</th></tr></thead>
+      <tbody>{% for s in suppliers %}<tr><td>{{ s.name }}</td><td>{{ s.contact_person|default:"—" }}</td><td>{{ s.phone|default:"—" }}</td><td>{{ s.email|default:"—" }}</td></tr>{% endfor %}</tbody>
+    </table>{% else %}<p class="as-muted">No suppliers yet.</p>{% endif %}
+  </div>
+  {% if can_manage %}
+  <div class="section-card as-pad">
+    <h2 class="section-card-title">Add a supplier</h2>
+    <form method="post" class="as-form">
+      {% csrf_token %}
+      {% for field in form %}<label>{{ field.label }}{{ field }}{% if field.errors %}<span class="as-err">{{ field.errors|join:" " }}</span>{% endif %}</label>{% endfor %}
+      <div><button type="submit" class="btn btn-primary">Add supplier</button></div>
+    </form>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

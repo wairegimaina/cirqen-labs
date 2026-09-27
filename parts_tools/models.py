@@ -190,6 +190,10 @@ class Accessories(models.Model):
     )
     note = models.TextField(max_length=100, blank=True, null=True)
     stock_count = models.PositiveIntegerField(default=0)
+    # At or below this count a restock request is raised (0 = no alert).
+    reorder_level = models.PositiveIntegerField(default=0)
+    supplier = models.ForeignKey('assets.Supplier', on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name='accessories')
 
     # Unit cost for the accessory/spare part
     unit_cost = models.DecimalField(

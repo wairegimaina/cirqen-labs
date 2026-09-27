@@ -1,5 +1,6 @@
 # utils.py
 import random
+import secrets
 import string
 import uuid
 import logging
@@ -37,7 +38,8 @@ class UserManagementUtils:
     @staticmethod
     def generate_temp_password():
         """Generate a temporary password"""
-        return "".join(random.choices(string.ascii_letters + string.digits, k=12))
+        # secrets, not random: this is a password.
+        return "".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(12))
 
     @staticmethod
     def send_welcome_email(user, temp_password, created_by):

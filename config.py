@@ -138,6 +138,28 @@ def _del_path(cfg: dict, dotted: str) -> None:
         node.pop(leaf, None)
 
 
+# Tables a release stopped syncing (the model was removed).
+RETIRED_SYNC_TABLES = {"public.CalSoft_calibrationschedule"}
+
+
+def merge_sync_tables(stored):
+    """A config.json keeps the whole sync_tables list it was written with, so
+    tables a later release adds would never sync there. Keep the machine's
+    list (and order), add the shipped tables it lacks, drop retired ones."""
+    shipped = CirqenConfig.DEFAULT_CONFIG["sync_tables"]
+    if not isinstance(stored, list) or not stored:
+        return list(shipped)
+    merged = [t for t in stored if t not in RETIRED_SYNC_TABLES]
+    for table in shipped:
+        if table not in merged:
+            # Place it just after the shipped table that precedes it, so a
+            # parent still syncs before its children.
+            index = shipped.index(table)
+            before = next((shipped[i] for i in range(index - 1, -1, -1) if shipped[i] in merged), None)
+            merged.insert(merged.index(before) + 1 if before else 0, table)
+    return merged
+
+
 def coerce_endpoint(key: str, value):
     """Public: used by the settings page and the hq_endpoint command.
 
@@ -527,6 +549,7 @@ class CirqenConfig:
             "public.machineReports_machinerepairhistory",
             "public.machineReports_workshopequipmentreport",
             # ── Parts / tools (lookups before dependents) ────────────────────
+            "public.assets_supplier",
             "public.parts_tools_accessoriesname",
             "public.parts_tools_accessoriesmanufacturer",
             "public.parts_tools_accessories",
@@ -538,6 +561,8 @@ class CirqenConfig:
             "public.ppms_auditlog",
             "public.ppms_ppmschedule",
             "public.reporthub_report",
+            # ── Assets ───────────────────────────────────────────────────────
+            "public.assets_servicecontract",
         ],
         # ===== SYSTEM =====
         "system": {
@@ -792,6 +817,7 @@ class CirqenConfig:
                 # and rewrite the file below so the password leaves the disk.
                 scrub_hq_db = stored.pop("hq_db", None) is not None
                 self._deep_merge(cfg, stored)
+                cfg["sync_tables"] = merge_sync_tables(cfg.get("sync_tables"))
                 print(f"✓ Configuration loaded from {self.config_file}")
             except Exception as exc:
                 print(f"⚠️  Error loading config.json: {exc}")

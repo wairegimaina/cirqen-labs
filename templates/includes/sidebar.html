@@ -141,6 +141,36 @@
     {% endif %}
     {# ── END HOD BLOCK ── #}
 
+    <li class="menu-section-header" role="none">
+      <span class="section-label">Assets</span>
+    </li>
+    <li class="menu-entry" role="none">
+      <a href="{% url 'assets:kpis' %}" class="menu-link {% if request.resolver_match.url_name == 'kpis' %}active-link{% endif %}" role="menuitem">
+        <div class="link-icon" aria-hidden="true"><i class="fas fa-chart-line"></i></div>
+        <span class="link-label">Maintenance KPIs</span>
+      </a>
+    </li>
+    {% if nav.is_hod or nav.is_tech %}
+    <li class="menu-entry" role="none">
+      <a href="{% url 'assets:contracts' %}" class="menu-link {% if request.resolver_match.url_name == 'contracts' or request.resolver_match.url_name == 'suppliers' %}active-link{% endif %}" role="menuitem">
+        <div class="link-icon" aria-hidden="true"><i class="fas fa-file-contract"></i></div>
+        <span class="link-label">Contracts &amp; warranties</span>
+      </a>
+    </li>
+    <li class="menu-entry" role="none">
+      <a href="{% url 'assets:stock_alerts' %}" class="menu-link {% if request.resolver_match.url_name == 'stock_alerts' %}active-link{% endif %}" role="menuitem">
+        <div class="link-icon" aria-hidden="true"><i class="fas fa-boxes"></i></div>
+        <span class="link-label">Stock alerts</span>
+      </a>
+    </li>
+    <li class="menu-entry" role="none">
+      <a href="{% url 'assets:labels' %}" class="menu-link {% if request.resolver_match.url_name == 'labels' %}active-link{% endif %}" role="menuitem">
+        <div class="link-icon" aria-hidden="true"><i class="fas fa-qrcode"></i></div>
+        <span class="link-label">QR labels</span>
+      </a>
+    </li>
+    {% endif %}
+
     <li class="menu-entry" role="none">
       <a href="{% url 'two_factor_setup' %}"
         class="menu-link {% if request.resolver_match.url_name == 'two_factor_setup' %}active-link{% endif %}"

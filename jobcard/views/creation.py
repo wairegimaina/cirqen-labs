@@ -187,6 +187,20 @@ def create_job_card(request):
         elif is_technician:
             return handle_technician_job_card(request, workshop)
 
+    # Opened from a machine's QR label (assets:machine): start with that machine
+    # chosen, if it is in a department this technician works for.
+    if is_technician and request.method == 'GET' and request.GET.get('equipment'):
+        from django.core.exceptions import ValidationError
+
+        from Inventory.models import Equipment
+        try:
+            chosen = Equipment.objects.filter(pk=request.GET['equipment'], department__in=departments,
+                                              active_status=True).first()
+        except (ValueError, ValidationError):
+            chosen = None
+        if chosen:
+            form_data = {'department': str(chosen.department_id), 'equipment': str(chosen.id)}
+
     if 'jobcard_id' in request.GET and is_nurse:
         selected_job_card = jobcard.objects.filter(
             id=request.GET.get('jobcard_id'),

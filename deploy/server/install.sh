@@ -68,6 +68,7 @@ if [[ ! -f $ENV_FILE ]]; then
     sed -e "s|^DJANGO_SECRET_KEY=.*|DJANGO_SECRET_KEY=$(secret)|" \
         -e "s|^POSTGRES_LOCAL_PASSWORD=.*|POSTGRES_LOCAL_PASSWORD=$(secret)|" \
         -e "s|^DJANGO_ALLOWED_HOSTS=.*|DJANGO_ALLOWED_HOSTS=$SERVER_NAMES|" \
+        -e "s|^CIRQEN_SITE_URL=.*|CIRQEN_SITE_URL=https://${SERVER_NAMES%%,*}|" \
         "$APP_DIR/deploy/server/cirqen.env.example" > "$ENV_FILE"
     echo "   Wrote $ENV_FILE with new secrets."
 elif [[ -n "$SERVER_NAMES" ]]; then

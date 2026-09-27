@@ -174,6 +174,12 @@ class Equipment(models.Model):
         blank=True
     )
 
+    # Asset life (assets app: warranties, risk score, replacement ranking)
+    purchase_date = models.DateField(null=True, blank=True)
+    warranty_end = models.DateField(null=True, blank=True)
+    purchase_cost = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    expected_life_years = models.PositiveSmallIntegerField(null=True, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     # offline sync

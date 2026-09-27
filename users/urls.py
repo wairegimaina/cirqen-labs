@@ -1,5 +1,6 @@
 # urls.py - User Management URLs Configuration
 from django.urls import path
+from .imports import download_user_import_template, upload_users_excel
 from .views import (
     admin_reset_user_password,
     api_create_user,
@@ -37,6 +38,8 @@ urlpatterns = [
 
     path('', custom_login_view, name='custom_login'),
     path('activity/', activity_ping, name='activity_ping'),
+    path('import/template/', download_user_import_template, name='user_import_template'),
+    path('import/upload/', upload_users_excel, name='upload_users_excel'),
     path('two-factor/', two_factor_setup, name='two_factor_setup'),
     path('two-factor/verify/', two_factor_verify, name='two_factor_verify'),
     path('logout/', logout_view, name='logout'),
