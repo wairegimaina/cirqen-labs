@@ -41,6 +41,8 @@ class CalibrationReviewFlowTests(TestCase):
         self.performer = self._user("cal_tech", "Tech", workshop=self.cal_centre, level="Engineer")
 
         procedure = CalibrationProcedure.objects.create(name="Flow rate", created_by=self.reviewer)
+        # One open schedule per equipment: replace the one the new-equipment signal made.
+        CalibrationSchedule.objects.filter(equipment=self.equipment).delete()
         self.schedule = CalibrationSchedule.objects.create(
             equipment=self.equipment, workshop=maintenance,
             scheduled_month=datetime.date.today().replace(day=1),

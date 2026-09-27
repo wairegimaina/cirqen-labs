@@ -6,10 +6,11 @@ from django.core.management import call_command
 
 from ppms.models import PPMSchedule
 from scheduling import audit
+from scheduling.tests.legacy import LegacyDuplicatesAllowed
 from scheduling.tests.test_planner import PlanTestBase, d, imported
 
 
-class AuditTests(PlanTestBase):
+class AuditTests(LegacyDuplicatesAllowed, PlanTestBase):
     def setUp(self):
         super().setUp()
         self.dup = self.equipment()

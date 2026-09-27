@@ -140,6 +140,8 @@ class JobCardFlowTests(TestCase):
         self.assertEqual(card.status, "Waiting Approval")
 
     def test_approving_a_ppm_card_completes_its_schedule(self):
+        # One open schedule per equipment: replace the one the new-equipment signal made.
+        PPMSchedule.objects.filter(equipment=self.equipment).delete()
         schedule = PPMSchedule.objects.create(
             equipment=self.equipment, workshop=self.workshop,
             scheduled_month=datetime.date.today().replace(day=1),

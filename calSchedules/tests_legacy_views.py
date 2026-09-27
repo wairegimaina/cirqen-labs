@@ -44,7 +44,9 @@ class CalibrationViewsTest(TestCase):
             status="Working",
         )
 
-        # Calibration Schedule
+        # Calibration Schedule. One open schedule per equipment: replace the
+        # one the new-equipment signal made.
+        CalibrationSchedule.objects.filter(equipment=self.equipment).delete()
         self.schedule = CalibrationSchedule.objects.create(
             equipment=self.equipment,
             workshop=self.workshop,

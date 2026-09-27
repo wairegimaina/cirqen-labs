@@ -43,6 +43,7 @@ class ScopeLeakTest(TestCase):
         for dept, serial in ((renal, "SCOPE-RENAL"), (dialysis, "SCOPE-DIALYSIS"), (icu, "SCOPE-ICU")):
             eq = Equipment.objects.create(description=desc, manufacturer=mfr, model="M", serial_number=serial,
                                           department=dept, workshop=dept.workshop, status="Working")
+            PPMSchedule.objects.filter(equipment=eq).delete()  # one open schedule per equipment
             PPMSchedule.objects.create(equipment=eq, workshop=dept.workshop, scheduled_month=month)
             jobcard.objects.create(department=dept, equipment=eq, workshop=dept.workshop, priority_level="Low",
                                    action_taken="Repair", job_description=f"Job on {serial}",

@@ -158,6 +158,12 @@ def _handle_calibration_post(request):
 
     schedule_was_created = False
     if not schedule:
+        # An equipment has at most one open schedule (enforced in the
+        # database); calibrate against it rather than opening another.
+        schedule = (CalibrationSchedule.objects
+                    .filter(equipment=equipment, active_status=True, pending_delete=False)
+                    .exclude(status="completed").order_by("scheduled_month").first())
+    if not schedule:
         grouped_schedule = _find_grouped_schedule_for_equipment(equipment)
         scheduled_month = grouped_schedule.scheduled_month if grouped_schedule else timezone.localdate()
         schedule, created = CalibrationSchedule.objects.get_or_create(

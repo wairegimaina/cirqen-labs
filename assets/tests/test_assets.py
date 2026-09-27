@@ -69,6 +69,8 @@ class KpiTests(AssetsBase):
         self._repair(self.vent, TODAY - datetime.timedelta(days=60), "22:00", "02:00")
         self._repair(self.pump, TODAY - datetime.timedelta(days=10), status="Declined")  # not a failure
         month = TODAY.replace(day=1)
+        # One open schedule per equipment: replace the ones the new-equipment signal made.
+        PPMSchedule.objects.filter(equipment__in=[self.vent, self.pump]).delete()
         PPMSchedule.objects.bulk_create([
             PPMSchedule(equipment=self.vent, workshop=self.workshop, scheduled_month=month, status="completed"),
             PPMSchedule(equipment=self.pump, workshop=self.workshop, scheduled_month=month, status="pending"),

@@ -62,6 +62,8 @@ class QueryGrowthTest(TestCase):
                     manufacturer=self.manufacturer, model="M", serial_number=f"QB-{self.serial}",
                     department=dept, workshop=self.workshop, status="Working",
                 )
+                # One open schedule per equipment: replace the one the new-equipment signal made.
+                PPMSchedule.objects.filter(equipment=eq).delete()
                 PPMSchedule.objects.create(equipment=eq, workshop=self.workshop, scheduled_month=month)
                 jobcard.objects.create(
                     department=dept, equipment=eq, workshop=self.workshop, priority_level="Low",
