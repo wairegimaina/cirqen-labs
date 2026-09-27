@@ -51,3 +51,17 @@ class IdleTimeoutTests(TestCase):
                 self.assertEqual(self.client.post(reverse("activity_ping")).status_code, 204)
         with self.at(45):
             self.assertEqual(self.client.get(self.page).status_code, 200)
+
+
+class SessionExpiryTests(TestCase):
+    def test_an_expired_session_is_signed_out_with_a_message(self):
+        user = User.objects.create_user(username="exp_hod", password="pw12345!")
+        UserProfile.objects.update_or_create(user=user, defaults={
+            "role": "HOD", "must_change_password": False, "has_uploaded_signature": True})
+        self.client.force_login(user)
+        with mock.patch("django.contrib.sessions.backends.base.SessionBase.get_expiry_age", return_value=0):
+            page = self.client.get(reverse("dashboard:hod_dashboard"))
+            ajax = self.client.get(reverse("dashboard:hod_dashboard"), HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+        self.assertEqual(page.status_code, 302)
+        self.assertIn("/users/login/", page["Location"])
+        self.assertIn(ajax.status_code, (302, 401))

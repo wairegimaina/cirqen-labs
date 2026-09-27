@@ -1,0 +1,46 @@
+# Coverage for the code where a mistake costs money, a certificate or access
+# (plan Phase 4: 80% on money, certificate and permission code):
+#   money        jobcard models and approval handlers
+#   certificates CalSoft issued copies, verification links, calibration entry,
+#                certificate numbering (calSchedules.grouping)
+#   permissions  scoping, roles, first-login and idle-session middleware,
+#                two-factor and sign-in throttling
+#
+#   coverage run manage.py test --settings=Equiper.test_settings
+#   coverage report          # fails under 80%
+[run]
+include =
+    jobcard/models.py
+    jobcard/views/nurse_approval.py
+    jobcard/views/technician_approval.py
+    CalSoft/issued.py
+    CalSoft/pdf_generators/verification.py
+    CalSoft/view_modules/calibration.py
+    CalSoft/view_modules/calibration_helpers.py
+    calSchedules/grouping.py
+    core/scoping.py
+    users/control.py
+    users/middleware.py
+    users/session_middleware.py
+    users/two_factor.py
+    users/throttle.py
+
+[report]
+include =
+    jobcard/models.py
+    jobcard/views/nurse_approval.py
+    jobcard/views/technician_approval.py
+    CalSoft/issued.py
+    CalSoft/pdf_generators/verification.py
+    CalSoft/view_modules/calibration.py
+    CalSoft/view_modules/calibration_helpers.py
+    calSchedules/grouping.py
+    core/scoping.py
+    users/control.py
+    users/middleware.py
+    users/session_middleware.py
+    users/two_factor.py
+    users/throttle.py
+fail_under = 80
+show_missing = True
+ignore_errors = True
