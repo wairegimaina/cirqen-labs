@@ -50,13 +50,13 @@ Menu, **Manage Users**.
 - **Dashboard**: equipment status, open work orders, overdue PPM and
   calibration, across all workshops.
 - **Maintenance KPIs** (menu, Assets): uptime, mean time to repair, mean
-  time between failures, PPM compliance, and each machine's **risk score**
-  with the reasons (age, repeat faults, overdue service, no warranty or
-  contract). Use it to decide what to replace or put under contract.
-- **Contracts & warranties**: service contracts with suppliers, and
-  warranties about to expire. Cirqen warns daily from 60 days before a
-  contract or warranty ends, and 30 days before a reference standard's
-  calibration is due.
+  time between failures and PPM compliance, by workshop.
+- **Failure Risk** (Machine Reports): which machines are most likely to
+  need a repair soon, and why.
+- **Warranties** and **Suppliers** (Inventory tabs), and **Service
+  contracts** (menu, Assets). Cirqen warns daily from 60 days before a
+  service contract ends, and 30 days before a reference standard's
+  calibration is due; warranties expiring are in the daily digest.
 - **Stock alerts**: accessories and spares at or below their reorder level,
   with the supplier to order from.
 - **Audit Log**: who changed what and when, including sign-ins.
@@ -66,16 +66,18 @@ Menu, **Manage Users**.
 ## 5. Reports
 
 - **Monthly report**: emailed to you on the 1st of each month (PPM
-  compliance, calibration status, downtime, costs, top-risk machines).
+  compliance, calibration status, downtime, costs, machines most likely to
+  need repair).
 - **Report Hub** and **Settings, Reports**: category and department reports
   as PDF. Large reports are built in the background; Cirqen tells you when
   the file is ready to download.
 
 ## 6. Notifications
 
-Cirqen sends in-app notices and, where set up, email and SMS for: PPM and
-calibration coming due or overdue, warranties and contracts expiring, stock
-below reorder level, and work orders waiting for approval. Keep users'
+Cirqen emails a daily digest (PPM and calibration due, warranties expiring,
+high-risk devices, work orders waiting) and sends in-app notices, and SMS
+where set up, for service contracts ending, reference standards due and
+stock below reorder level. Keep users'
 email and phone numbers up to date for these to reach them.
 
 ## 7. System (IT or HOD with staff rights)

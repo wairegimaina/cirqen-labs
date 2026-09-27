@@ -12,7 +12,6 @@ from dateutil.relativedelta import relativedelta
 from workshop.models import Workshop
 from ..models import CalibrationSchedule
 from Inventory.models import Equipment, Department, EquipmentDescription
-from ..tasks import initialize_calibration_schedule_with_logic
 from openpyxl import Workbook
 from CalSoft.models import CalibrationSession
 from django.db import transaction
@@ -22,7 +21,6 @@ from django.db.models import Q, Case, When, IntegerField, Count
 logger = logging.getLogger(__name__)
 from django.utils import timezone
 from django.contrib.auth import get_user_model
-from ..tasks import initialize_calibration_schedule_with_logic, auto_advance_completed_calibrations, normalize_existing_schedules, smart_reorganize_on_logic_change
 import uuid
 User = get_user_model()
 from ..calibration_pdf_generator import create_calibration_pdf_response
@@ -81,14 +79,16 @@ def bulk_mark_calibration_completed(request):
                         if schedule.status == 'completed':
                             continue
 
-                        # ✅ NEW: CHECK FOR CERTIFICATE
-                        session_exists = CalibrationSession.objects.filter(
-                            equipment=schedule.equipment,
-                            certificate__isnull=False,
-                            is_approved=True
-                        ).exists()
+                        # Complete only with an approved, certificated session
+                        # for this schedule. (The old query named fields the
+                        # session model does not have, so it always failed.)
+                        session = CalibrationSession.objects.filter(
+                            schedule=schedule,
+                            certificate_number__isnull=False,
+                            status__in=("approved", "approved_pending_certificate"),
+                        ).exclude(certificate_number="").order_by("-timestamp").first()
 
-                        if not session_exists:
+                        if session is None:
                             no_certificate_count += 1
                             no_certificate_list.append(
                                 f"{schedule.equipment.description.name if schedule.equipment.description else 'N/A'} "
@@ -98,8 +98,8 @@ def bulk_mark_calibration_completed(request):
 
                         # Complete it
                         schedule.status = 'completed'
-                        schedule.completed_date = date.today()
-                        schedule.save(update_fields=['status', 'completed_date'])
+                        schedule.completed_date = timezone.localdate(session.timestamp)
+                        schedule.save(update_fields=['status', 'completed_date', 'updated_at', 'needs_sync'])
 
                         completed_count += 1
 
@@ -420,12 +420,6 @@ def bulk_schedule_unscheduled_calibration(request):
             )
             return redirect("schedule:calibration_dashboard")
 
-        planning_logic = request.POST.get("planning_logic", "department")
-        calibration_period = int(request.POST.get("calibration_period", 12))
-        base_month = int(request.POST.get("base_month", datetime.today().month))
-        base_year = int(request.POST.get("base_year", datetime.today().year))
-        max_departments = int(request.POST.get("max_departments", 100))
-        max_descriptions = int(request.POST.get("max_descriptions", 100))
 
         # Restrict if department-level and convert UUIDs to strings
         # ✅ ADDED active_status=True filter
@@ -455,31 +449,16 @@ def bulk_schedule_unscheduled_calibration(request):
             )
             return redirect("schedule:calibration_dashboard")
 
-        try:
-            task = initialize_calibration_schedule_with_logic.delay(
-                None,  # workshop not restricted anymore
-                planning_logic,
-                calibration_period,
-                base_month,
-                base_year,
-                max_departments,
-                max_descriptions,
-                [],
-                False,
-                equipment_ids,
-            )
-            messages.info(
-                request,
-                f"Bulk calibration scheduling started (Task ID: {task.id}). Please check back later.",
-                extra_tags="schedule bulk create task",
-            )
-        except Exception as e:
-            logger.error(f"Failed to trigger bulk_schedule_unscheduled_calibration for user {request.user.username}: {e}")
-            messages.error(
-                request,
-                f"Failed to schedule equipment for calibration: {str(e)}",
-                extra_tags="schedule bulk create error",
-            )
+        # The workshop's scheduling plan places them.
+        from scheduling.planner import schedule_by_hand
+        done, problems = schedule_by_hand(equipment_ids, "calibration")
+        if done:
+            messages.success(request, f"{len(done)} equipment scheduled.",
+                             extra_tags="schedule bulk create")
+        if problems:
+            messages.warning(request, f"{len(problems)} equipment could not be placed by the plan; "
+                                      "see Scheduling > Unscheduled for the reasons.",
+                             extra_tags="schedule bulk create")
     else:
         logger.warning(f"Invalid request method for bulk_schedule_unscheduled_calibration by user {request.user.username}")
         messages.error(

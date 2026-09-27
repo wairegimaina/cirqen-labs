@@ -1,12 +1,12 @@
 {% extends 'base.html' %}
-{% block title %}Contracts and warranties — {{ site_name }}{% endblock %}
-{% block page_title %}Contracts and warranties{% endblock %}
+{% block title %}Service contracts — {{ site_name }}{% endblock %}
+{% block page_title %}Service contracts{% endblock %}
 {% block extra_css %}{% include 'assets/_styles.html' %}{% endblock %}
 {% block content %}
 <div class="page-head"><div>
-  <h1 class="page-title">Contracts and warranties</h1>
-  <p class="page-subtitle">Current service contracts, and warranties ending in the next 60 days. Heads of department and in-charges are alerted 60 days before either ends.</p>
-</div><div><a href="{% url 'assets:suppliers' %}" class="btn btn-secondary">Suppliers</a></div></div>
+  <h1 class="page-title">Service contracts</h1>
+  <p class="page-subtitle">Current service contracts. Heads of department and in-charges are alerted 60 days before one ends. Warranties are kept in Inventory.</p>
+</div><div><a href="{% url 'warranty_list' %}" class="btn btn-secondary">Warranties</a> <a href="{% url 'supplier_list' %}" class="btn btn-secondary">Suppliers</a></div></div>
 <div class="as-grid">
   <div class="section-card">
     <h2 class="section-card-title">Service contracts</h2>
@@ -23,12 +23,6 @@
         {% if contracts.has_previous %}<a href="?page={{ contracts.previous_page_number }}">Previous</a>{% endif %}
         {% if contracts.has_next %}<a href="?page={{ contracts.next_page_number }}">Next</a>{% endif %}</p>{% endif %}
     {% else %}<p class="as-muted">No current contracts.</p>{% endif %}
-  </div>
-
-  <div class="section-card">
-    <h2 class="section-card-title">Warranties ending within 60 days</h2>
-    {% if warranties %}<ul>{% for m in warranties %}<li><a href="{% url 'assets:machine' m.id %}">{{ m.description }} (S/N {{ m.serial_number }})</a>, {{ m.department }}: {{ m.warranty_end|date:"j M Y" }}</li>{% endfor %}</ul>
-    {% else %}<p class="as-muted">None. Warranty dates are set on each machine's page.</p>{% endif %}
   </div>
 
   {% if can_manage %}

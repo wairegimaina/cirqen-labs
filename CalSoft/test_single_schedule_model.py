@@ -24,6 +24,9 @@ class SingleScheduleModelTests(TestCase):
             equipment = Equipment.objects.create(
                 description=EquipmentDescription.objects.create(name=f"Type {n}"), model="D", serial_number=f"DIA-{n}", department=department,
                 workshop=workshop, status="Working")
+            # The scheduling planner schedules new equipment itself; count only
+            # the schedules this test sets up.
+            CalibrationSchedule.objects.filter(equipment=equipment).delete()
             schedule = CalibrationSchedule.objects.create(
                 equipment=equipment, workshop=workshop, scheduled_month=today.replace(day=1), status="pending")
             # Saving rolls an overdue month forward; set the month directly.

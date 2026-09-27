@@ -12,7 +12,6 @@ from dateutil.relativedelta import relativedelta
 from workshop.models import Workshop
 from ..models import CalibrationSchedule
 from Inventory.models import Equipment, Department, EquipmentDescription
-from ..tasks import initialize_calibration_schedule_with_logic
 from openpyxl import Workbook
 from CalSoft.models import CalibrationSession
 from django.db import transaction
@@ -22,13 +21,12 @@ from django.db.models import Q, Case, When, IntegerField, Count
 logger = logging.getLogger(__name__)
 from django.utils import timezone
 from django.contrib.auth import get_user_model
-from ..tasks import initialize_calibration_schedule_with_logic, auto_advance_completed_calibrations, normalize_existing_schedules, smart_reorganize_on_logic_change
 import uuid
 User = get_user_model()
 from ..calibration_pdf_generator import create_calibration_pdf_response
 
 # sibling modules in this package
-from .helpers import get_user_access_context
+from .helpers import get_user_access_context, in_period, selected_period
 
 
 def _no_access_response():
@@ -40,10 +38,9 @@ def _no_access_response():
 
 
 def _apply_ajax_common_filters(qs, request, access_context):
+    """The schedules page's filters: department, search and the selected
+    month (the current one by default, every month with ?period=all)."""
     search = request.GET.get('search', '').strip()
-    month = request.GET.get('month', '').strip()
-    year = request.GET.get('year', '').strip()
-    show_all = request.GET.get('show_all') == 'true'
     department = request.GET.get('department', '').strip()
 
     if access_context['access_type'] == 'department':
@@ -59,21 +56,7 @@ def _apply_ajax_common_filters(qs, request, access_context):
             Q(equipment__department__name__icontains=search)
         )
 
-    if not show_all:
-        if month and year:
-            qs = qs.filter(scheduled_month__month=int(month), scheduled_month__year=int(year))
-        elif month:
-            qs = qs.filter(scheduled_month__month=int(month))
-        elif year:
-            qs = qs.filter(scheduled_month__year=int(year))
-        else:
-            today = datetime.today().replace(day=1)
-            qs = qs.filter(
-                scheduled_month__gte=today - timedelta(days=90),
-                scheduled_month__lte=today + timedelta(days=90),
-            )
-
-    return qs
+    return in_period(qs, selected_period(request))
 
 
 def _ajax_schedule_to_dict(schedule, is_overdue=False, is_warning=False, waiting_status=None):
@@ -109,9 +92,8 @@ def ajax_schedules(request):
     qs = CalibrationSchedule.objects.select_related(
         'equipment__department', 'equipment__description'
     ).filter(
-        status__in=['pending', 'pushed', 'in_progress'],
         equipment__active_status=True,
-    )
+    ).exclude(status='completed')
     qs = _apply_ajax_common_filters(qs, request, access_context)
     qs = qs.order_by('scheduled_month', 'equipment__department__name')
 
@@ -146,31 +128,15 @@ def ajax_completed_schedules(request):
     access_context = get_user_access_context(request)
     if access_context is None:
         return _no_access_response()
-    thirty_days_ago = datetime.today().date() - timedelta(days=30)
 
+    # The selected month's completed schedules, as the page's Completed tab.
     qs = CalibrationSchedule.objects.select_related(
         'equipment__department', 'equipment__description'
     ).filter(
         status='completed',
-        completed_date__gte=thirty_days_ago,
         equipment__active_status=True,
     )
-
-    if access_context['access_type'] == 'department':
-        qs = qs.filter(equipment__department_id=access_context['department_id'])
-    else:
-        dept = request.GET.get('department', '').strip()
-        if dept:
-            qs = qs.filter(equipment__department_id=dept)
-
-    search = request.GET.get('search', '').strip()
-    if search:
-        qs = qs.filter(
-            Q(equipment__description__name__icontains=search) |
-            Q(equipment__model__icontains=search) |
-            Q(equipment__serial_number__icontains=search) |
-            Q(equipment__department__name__icontains=search)
-        )
+    qs = _apply_ajax_common_filters(qs, request, access_context)
 
     qs = qs.order_by('-completed_date', 'equipment__department__name')
 

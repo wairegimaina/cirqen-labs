@@ -1,0 +1,128 @@
+{% extends 'scheduling/_layout.html' %}
+{% block sched_title %}Plan v{{ plan.version }}{% endblock %}
+{% block heading %}Plan v{{ plan.version }} · {{ plan.get_logic_display|lower }}{% endblock %}
+
+{% block body %}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+  <span class="status-badge status-{% if plan.state == 'active' %}active{% elif plan.state == 'draft' %}draft{% else %}cancelled{% endif %}">{{ plan.get_state_display }}</span>
+  {% if plan.activated_at %}<span class="sched-muted">Activated {{ plan.activated_at|date:"d M Y H:i" }}{% if plan.activated_by %} by {{ plan.activated_by.get_full_name|default:plan.activated_by.username }}{% endif %}</span>{% endif %}
+  {% if not editable and plan.state == 'draft' %}<span class="sched-muted">Read only: only an HOD or the Engineer in charge can edit.</span>{% endif %}
+  <a class="btn btn-sm btn-outline-secondary ms-auto" href="{% url 'scheduling:plans' %}?workshop={{ plan.workshop_id }}&program={{ plan.program }}">All versions</a>
+</div>
+
+<form method="post">
+  {% csrf_token %}
+  <section class="section-card">
+    <div class="section-card-head">
+      <div>
+        <h3 class="section-card-title"><i class="fas fa-calendar-alt" aria-hidden="true"></i> Months for each {% if plan.is_department %}department{% else %}description{% endif %}</h3>
+        <p class="section-card-sub">
+          Tick the months each group is worked in. A group with no months is not scheduled, and its equipment is listed as unscheduled.
+          {% if not plan.is_department %}Set the interval on the same row.{% endif %}
+        </p>
+      </div>
+    </div>
+    <div class="sched-table-wrap">
+      <table class="table table-sm sched-table sched-grid mb-0">
+        <thead>
+          <tr>
+            <th scope="col">{% if plan.is_department %}Department{% else %}Description{% endif %}</th>
+            <th scope="col" class="sched-num">Devices</th>
+            {% for n, name in month_names %}<th scope="col" class="m">{{ name }}</th>{% endfor %}
+            {% if not plan.is_department %}<th scope="col">Every (months)</th>{% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for g in group_rows %}
+          <tr class="{% if g.months %}has-months{% endif %}">
+            <th scope="row">
+              <input type="hidden" name="group" value="{{ g.id }}">
+              {{ g.name }}
+              {% for w in g.warnings %}<div class="warn"><i class="fas fa-exclamation-triangle" aria-hidden="true"></i> {{ w }}</div>{% endfor %}
+            </th>
+            <td class="sched-num">{{ g.devices }}</td>
+            {% for n, name in month_names %}
+            <td class="m">
+              <input type="checkbox" class="form-check-input" name="months_{{ g.id }}" value="{{ n }}"
+                     aria-label="{{ g.name }}: {{ name }}" {% if n in g.months %}checked{% endif %} {% if not editable %}disabled{% endif %}>
+            </td>
+            {% endfor %}
+            {% if not plan.is_department %}
+            <td>
+              <input type="hidden" name="interval_description" value="{{ g.id }}">
+              <input type="number" min="1" max="60" class="form-control form-control-sm interval" name="interval_{{ g.id }}"
+                     value="{{ g.interval }}" placeholder="{{ plan.default_interval_months|default:'' }}"
+                     aria-label="{{ g.name }}: interval in months" {% if not editable %}disabled{% endif %}>
+            </td>
+            {% endif %}
+          </tr>
+          {% empty %}
+          <tr><td colspan="16" class="sched-muted">No {% if plan.is_department %}departments{% else %}equipment descriptions{% endif %} in this workshop yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  {% if plan.is_department %}
+  <section class="section-card">
+    <div class="section-card-head">
+      <div>
+        <h3 class="section-card-title"><i class="fas fa-redo" aria-hidden="true"></i> How often each kind of equipment is due</h3>
+        <p class="section-card-sub">Leave empty to use the default. A department's months must fit every interval in it: a 3-month device needs four evenly spaced months, a 6-month device two.</p>
+      </div>
+    </div>
+    <div class="sched-table-wrap">
+      <table class="table table-sm sched-table sched-grid mb-0">
+        <thead><tr><th scope="col">Description</th><th scope="col" class="sched-num">Devices</th><th scope="col">Every (months)</th></tr></thead>
+        <tbody>
+          {% for d in interval_rows %}
+          <tr>
+            <th scope="row">{{ d.name }}</th>
+            <td class="sched-num">{{ d.devices }}</td>
+            <td>
+              <input type="hidden" name="interval_description" value="{{ d.id }}">
+              <input type="number" min="1" max="60" class="form-control form-control-sm interval" name="interval_{{ d.id }}"
+                     value="{{ d.interval }}" placeholder="{{ plan.default_interval_months|default:'' }}"
+                     aria-label="{{ d.name }}: interval in months" {% if not editable %}disabled{% endif %}>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="section-card">
+    <div class="section-card-body row g-3">
+      <div class="col-md-3">
+        <label class="form-label" for="default-interval">Default interval (months)</label>
+        <input type="number" min="1" max="60" class="form-control form-control-sm" id="default-interval" name="default_interval"
+               value="{{ plan.default_interval_months|default:'' }}" {% if not editable %}disabled{% endif %}>
+      </div>
+      <div class="col-md-9">
+        <label class="form-label" for="notes">Notes</label>
+        <textarea class="form-control form-control-sm" id="notes" name="notes" rows="2" {% if not editable %}disabled{% endif %}>{{ plan.notes }}</textarea>
+      </div>
+    </div>
+    {% if editable %}
+    <div class="section-card-foot">
+      <span>Saving a draft changes nothing yet. Preview shows exactly what activating would move.</span>
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-sm btn-outline-secondary">Save draft</button>
+        <button type="submit" name="then" value="preview" class="btn btn-sm btn-primary">Save and preview</button>
+      </div>
+    </div>
+    {% endif %}
+  </section>
+</form>
+
+{% if editable %}
+<form method="post" action="{% url 'scheduling:plan_delete' plan.id %}" class="text-end"
+      onsubmit="return confirm('Discard draft v{{ plan.version }}?');">
+  {% csrf_token %}
+  <button type="submit" class="btn btn-sm btn-link text-danger">Discard this draft</button>
+</form>
+{% endif %}
+{% endblock %}

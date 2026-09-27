@@ -11,9 +11,13 @@ DEFAULTS = [
 
 def seed_categories(apps, schema_editor):
     EquipmentCategory = apps.get_model("machineReports", "EquipmentCategory")
+    # The database being migrated, not the router's default: the desktop also
+    # runs `migrate --database=hq`, and a bare .objects query would read the
+    # local database instead.
+    db = schema_editor.connection.alias
 
     for name, is_critical, description in DEFAULTS:
-        category, created = EquipmentCategory.objects.get_or_create(
+        category, created = EquipmentCategory.objects.using(db).get_or_create(
             name=name,
             defaults={
                 "is_critical": is_critical,

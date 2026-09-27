@@ -15,9 +15,9 @@
 <div class="as-grid">
   <div class="as-tiles">
     <div class="as-tile"><div class="v">{{ m.status }}</div><div class="l">Status</div></div>
-    <div class="as-tile"><div class="v">{{ risk.score|default:0 }}</div><div class="l">Replacement risk (0–100)</div></div>
-    <div class="as-tile"><div class="v">{% if m.warranty_end %}{{ m.warranty_end|date:"j M Y" }}{% else %}—{% endif %}</div><div class="l">Warranty {% if m.warranty_end and m.warranty_end < today %}ended{% else %}ends{% endif %}</div></div>
-    <div class="as-tile"><div class="v">{% if m.purchase_date %}{{ m.purchase_date|date:"Y" }}{% else %}—{% endif %}</div><div class="l">Purchased{% if m.expected_life_years %}, {{ m.expected_life_years }}-year life{% endif %}</div></div>
+    <div class="as-tile"><div class="v">{% if risk %}{{ risk.risk_percent }}%{% else %}—{% endif %}</div><div class="l">Chance of a repair in 90 days{% if risk %} ({{ risk.risk_level }}){% endif %}</div></div>
+    <div class="as-tile"><div class="v">{% if warranty %}{{ warranty.expiry_date|date:"j M Y" }}{% else %}—{% endif %}</div><div class="l">Warranty {% if warranty and warranty.expiry_date < today %}ended{% else %}ends{% endif %}</div></div>
+    <div class="as-tile"><div class="v">{% if warranty %}{{ warranty.start_date|date:"Y" }}{% else %}—{% endif %}</div><div class="l">In service{% if m.expected_life_years %}, {{ m.expected_life_years }}-year life{% endif %}</div></div>
   </div>
   {% if risk.reasons %}<p class="as-muted">Why: {{ risk.reasons|join:"; " }}.</p>{% endif %}
 
@@ -43,7 +43,7 @@
       <p>{{ c.get_cover_display }}{% if c.supplier %} with {{ c.supplier }}{% endif %}: {{ c.start_date|date:"j M Y" }} – {{ c.end_date|date:"j M Y" }}
         {% if c.end_date < today %}<span class="as-pill">ended</span>{% elif c.is_current %}<span class="as-pill">current</span>{% endif %}</p>
     {% empty %}<p class="as-muted">No service contract.</p>{% endfor %}
-    <a href="{% url 'assets:contracts' %}">All contracts and warranties</a>
+    <a href="{% url 'assets:contracts' %}">All service contracts</a> · <a href="{% url 'equipment_warranty' m.id %}">Warranties</a>
   </div>
 
   {% if can_manage %}

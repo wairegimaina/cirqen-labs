@@ -13,23 +13,6 @@ from django.urls import reverse
 logger = logging.getLogger(__name__)
 
 
-@receiver(post_save, sender="jobcard.jobcard")
-def work_order_needs_approval(sender, instance, created, **kwargs):
-    if not created or instance.status != "Waiting Approval" or not instance.department_id:
-        return
-    from core.notify import notify, recipients
-
-    try:
-        notify(recipients("NIC", department=instance.department),
-               "approval_needed",
-               f"Work order to approve: {instance.equipment.description}",
-               f"{instance.get_action_taken_display()} on S/N {instance.equipment.serial_number} is waiting "
-               f"for your approval.",
-               url=reverse("jobcard:approvals") + f"?open={instance.id}")
-    except Exception:  # a notification must never block saving the work order
-        logger.exception("Could not notify in-charges about work order %s", instance.id)
-
-
 @receiver(post_save, sender="parts_tools.Accessories")
 def low_stock(sender, instance, **kwargs):
     """At or below the reorder level: one open restock request, and an alert."""

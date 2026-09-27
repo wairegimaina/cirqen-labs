@@ -1,0 +1,102 @@
+{% extends 'scheduling/_layout.html' %}
+{% block sched_title %}Preview v{{ plan.version }}{% endblock %}
+{% block heading %}Before activating v{{ plan.version }}{% endblock %}
+
+{% block body %}
+<div class="kpi-grid mb-3">
+  {% include 'includes/kpi_card.html' with value=report.to_move|length label="Open schedules that will move" icon="fa-arrows-alt-h" variant="warning" %}
+  {% include 'includes/kpi_card.html' with value=report.unchanged label="Open schedules that already fit" icon="fa-check" variant="success" %}
+  {% include 'includes/kpi_card.html' with value=report.stuck|length label="Will stay and need review" icon="fa-hand-paper" variant="overdue" %}
+  {% include 'includes/kpi_card.html' with value=new_placements|length label="Unscheduled devices it will place" icon="fa-calendar-plus" %}
+</div>
+
+<p class="sched-muted">
+  {% if report.previous %}Replaces v{{ report.previous.version }} ({{ report.previous.get_logic_display|lower }}).{% else %}This is the workshop's first plan.{% endif %}
+  Completed schedules are history and are never moved.
+</p>
+
+{% if unschedulable %}
+<section class="section-card">
+  <div class="section-card-head">
+    <div>
+      <h3 class="section-card-title"><i class="fas fa-ban" aria-hidden="true"></i> {{ unschedulable_total }} unscheduled device{{ unschedulable_total|pluralize }} this draft cannot place</h3>
+      <p class="section-card-sub">They will be listed under Unscheduled with the reason. You can fix the draft first.</p>
+    </div>
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'scheduling:plan' plan.id %}">Back to the draft</a>
+  </div>
+  <div class="section-card-body">
+    <ul class="sched-problems">{% for label, n in unschedulable %}<li><span>{{ label }}</span><span class="count">{{ n }}</span></li>{% endfor %}</ul>
+  </div>
+</section>
+{% endif %}
+
+<section class="section-card">
+  <div class="section-card-head">
+    <h3 class="section-card-title"><i class="fas fa-arrows-alt-h" aria-hidden="true"></i> Will move ({{ report.to_move|length }})</h3>
+  </div>
+  {% if report.to_move %}
+  <div class="sched-table-wrap">
+    <table class="table table-sm sched-table mb-0">
+      <thead><tr><th>Equipment</th><th>Serial</th><th>Now</th><th>New month</th><th>Why</th></tr></thead>
+      <tbody>
+        {% for sched, row, placement in report.to_move %}
+        <tr>
+          <td>{{ row.description__name }}<div class="sched-muted">{{ row.department__name }}</div></td>
+          <td><span class="mono-chip">{{ row.serial_number }}</span></td>
+          <td class="text-nowrap">{{ sched.scheduled_month|date:"M Y" }}</td>
+          <td class="text-nowrap"><strong>{{ placement.month|date:"M Y" }}</strong></td>
+          <td class="sched-reason">{{ placement.message }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="section-card-body sched-muted">Nothing moves: every open schedule already fits.</div>
+  {% endif %}
+</section>
+
+{% if report.stuck %}
+<section class="section-card">
+  <div class="section-card-head">
+    <div>
+      <h3 class="section-card-title"><i class="fas fa-hand-paper" aria-hidden="true"></i> Will stay where they are ({{ report.stuck|length }})</h3>
+      <p class="section-card-sub">They don't fit this draft, but can't be moved automatically. After activation they are listed for review.</p>
+    </div>
+  </div>
+  <div class="sched-table-wrap">
+    <table class="table table-sm sched-table mb-0">
+      <thead><tr><th>Equipment</th><th>Serial</th><th>Due</th><th>Reason</th></tr></thead>
+      <tbody>
+        {% for sched, row, reason in report.stuck %}
+        <tr>
+          <td>{{ row.description__name }}</td>
+          <td><span class="mono-chip">{{ row.serial_number }}</span></td>
+          <td class="text-nowrap">{{ sched.scheduled_month|date:"M Y" }}</td>
+          <td class="sched-reason">{{ reason }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{% if scope.can_manage %}
+<form method="post" action="{% url 'scheduling:plan_activate' plan.id %}" class="section-card">
+  {% csrf_token %}
+  <div class="section-card-body">
+    <div class="form-check">
+      <input class="form-check-input" type="checkbox" name="confirm" value="yes" id="confirm" required>
+      <label class="form-check-label" for="confirm">
+        Activate v{{ plan.version }}: move {{ report.to_move|length }} open schedule{{ report.to_move|length|pluralize }}{% if report.previous %} and retire v{{ report.previous.version }}{% endif %}.
+      </label>
+    </div>
+  </div>
+  <div class="section-card-foot">
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'scheduling:plan' plan.id %}">Keep editing</a>
+    <button type="submit" class="btn btn-sm btn-primary">Activate plan</button>
+  </div>
+</form>
+{% endif %}
+{% endblock %}

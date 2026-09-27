@@ -38,6 +38,22 @@ from .equipment import (
     edit_inventory,
     delete_equipment,
 )
+from .suppliers import (
+    supplier_list,
+    supplier_save,
+    supplier_toggle_active,
+    supplier_import_template,
+    supplier_import_upload,
+)
+from .warranties import (
+    warranty_list,
+    warranty_detail,
+    equipment_warranty,
+    warranty_save,
+    warranty_remove,
+    warranty_import_template,
+    warranty_import_upload,
+)
 from .transfers import (
     transfer_equipment,
     reactivate_equipment,
@@ -91,6 +107,20 @@ __all__ = [
     "get_equipment_dependency_info",
     "edit_inventory",
     "delete_equipment",
+    # suppliers
+    "supplier_list",
+    "supplier_save",
+    "supplier_toggle_active",
+    "supplier_import_template",
+    "supplier_import_upload",
+    # warranties
+    "warranty_list",
+    "warranty_detail",
+    "equipment_warranty",
+    "warranty_save",
+    "warranty_remove",
+    "warranty_import_template",
+    "warranty_import_upload",
     # departments
     "discover_department_dependencies",
     "get_department_dependencies_count",

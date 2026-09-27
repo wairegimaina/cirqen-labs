@@ -53,7 +53,7 @@
       <div class="ap-body">
         <div class="ap-row"><strong>Work done</strong><span>{{ card.job_description }}</span></div>
         {% if card.remarks %}<div class="ap-row"><strong>Remarks</strong><span>{{ card.remarks }}</span></div>{% endif %}
-        {% include 'jobcard/_checklist_detail.html' with checklist=card.checklist %}
+        {% with steps=card.checklist_entries.count %}{% if steps %}<div class="ap-row"><strong>Checklist</strong><span>{{ steps }} step{{ steps|pluralize }} answered · <a href="{% url 'jobcard:work_order_detail' card.id %}">view</a></span></div>{% endif %}{% endwith %}
         <div class="ap-row"><strong>Cost</strong><span class="ap-total">KSh {{ card.get_total_cost|floatformat:2 }}</span></div>
         <a class="ap-link" href="{% url 'jobcard:create_job_card' %}?jobcard_id={{ card.id }}">Open full work order</a>
 

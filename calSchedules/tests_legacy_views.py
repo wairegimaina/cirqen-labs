@@ -21,7 +21,8 @@ class CalibrationViewsTest(TestCase):
         self.admin_user = User.objects.create_superuser(username="admin", password="pass")
 
         # Workshop + Department
-        self.workshop = Workshop.objects.create(name="Main Workshop")
+        # Calibration is planned by the calibration center (scheduling.planner).
+        self.workshop = Workshop.objects.create(name="Main Workshop", category="calibration_center")
         self.department = Department.objects.create(name="Lab A", workshop=self.workshop)
 
         # calSchedules permissions come from the UserProfile, not is_superuser:

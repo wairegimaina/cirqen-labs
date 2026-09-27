@@ -61,7 +61,7 @@ class BrowserJourneys(StaticLiveServerTestCase):
         self.workshop = Workshop.objects.create(name="Biomed", category="maintenance")
         self.icu = Department.objects.create(name="ICU", workshop=self.workshop)
         self.vent = Equipment.objects.create(
-            description=EquipmentDescription.objects.create(name="Ventilator", checklist_template=["Check alarms"]),
+            description=EquipmentDescription.objects.create(name="Ventilator"),
             model="V60", serial_number="VENT-E2E", department=self.icu, workshop=self.workshop, status="Working")
         self.tech = self._user("e2e_tech", "Tech", "Tech", workshop=self.workshop, level="Engineer")
         self.nic = self._user("e2e_nic", "Nurse", "Incharge", role="NIC", department=self.icu)
@@ -113,7 +113,6 @@ class BrowserJourneys(StaticLiveServerTestCase):
               : (document.querySelector('#time_completed').value = '10:30');
         }""")
         page.fill("#job_description", "Replaced the flow sensor; alarm test passed.")
-        page.check("input[name=checklist_result_0][value=pass]")
         self._draw(page, "#signature-pad-tech")
         page.click("button[name=submit]")
         page.wait_for_load_state("networkidle")
@@ -121,7 +120,6 @@ class BrowserJourneys(StaticLiveServerTestCase):
         card = jobcard.objects.get(equipment=self.vent)
         self.assertEqual(card.status, "Waiting Approval")
         self.assertTrue(card.tech_signature)
-        self.assertEqual(card.checklist[0]["result"], "pass")
 
         phone = self._page(390, 844)
         self._sign_in(phone, "e2e_nic")

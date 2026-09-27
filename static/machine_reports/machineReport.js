@@ -1,6 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
   // 1. Initialize Tabs
-  const tabs = document.querySelectorAll('.nav-item');
+  // In-page sections only; the Failure Risk tab is a plain link.
+  const tabs = document.querySelectorAll('.spa-nav .nav-item[data-section]');
   const sections = document.querySelectorAll('.content-section');
 
   tabs.forEach(tab => {
@@ -247,7 +248,7 @@ function populateRepairModal(data) {
                   <tbody>
                     ${repair.spare_parts.map(sp => `
                       <tr>
-                        <td class="small">${sp.name}</td>
+                        <td class="small">${escapeHTML(sp.name)}</td>
                         <td class="small text-center">${sp.quantity}</td>
                         <td class="small text-end">KSh ${parseFloat(sp.total_cost).toFixed(2)}</td>
                       </tr>
@@ -257,6 +258,7 @@ function populateRepairModal(data) {
               </div>
             </div>
           ` : ''}
+          ${checklistTable(repair.checklist)}
         </div>
       </div>
     `).join('');
@@ -291,7 +293,7 @@ function populateRepairModal(data) {
           <p class="mb-2 small"><strong>Performed by:</strong> ${escapeHTML(cert.performed_by)}</p>
           <p class="mb-2 small"><strong>Next Due:</strong> ${escapeHTML(formatDate(cert.next_due))}</p>
 
-          ${cert.notes ? `<p class="mb-2 small text-muted"><em>${cert.notes}</em></p>` : ''}
+          ${cert.notes ? `<p class="mb-2 small text-muted"><em>${escapeHTML(cert.notes)}</em></p>` : ''}
 
           <a href="/calibration/sessions/${escapeHTML(cert.id)}/certificate/comprehensive/" target="_blank" class="btn btn-sm btn-outline-success w-100">
             <i class="fas fa-download me-1"></i>View Certificate
@@ -308,8 +310,84 @@ function populateRepairModal(data) {
     `;
   }
 
+  renderChecklistHistory(data);
+
   // Setup download buttons
   setupDownloadButtons(equipment.id, data);
+}
+
+// --- CHECKLIST AND PPM HISTORY ---
+function resultBadge(row) {
+  const cls = row.problem ? 'bg-danger' : (row.result_code === 'na' ? 'bg-secondary' : 'bg-success');
+  return `<span class="badge ${cls}">${escapeHTML(row.result || '-')}</span>`;
+}
+
+function checklistTable(rows) {
+  if (!rows || !rows.length) return '';
+  return `
+    <div class="mt-2">
+      <small class="text-primary fw-bold d-block mb-1"><i class="fas fa-clipboard-check me-1"></i>Checklist:</small>
+      <div class="table-responsive">
+        <table class="table table-sm table-bordered mb-0">
+          <thead class="table-light"><tr><th class="small">Task</th><th class="small">Result</th><th class="small">Reading</th><th class="small">Note</th></tr></thead>
+          <tbody>
+            ${rows.map(r => `
+              <tr class="${r.problem ? 'table-danger' : ''}">
+                <td class="small">${escapeHTML(r.task)}</td>
+                <td class="small">${resultBadge(r)}</td>
+                <td class="small">${escapeHTML(r.value || '')}</td>
+                <td class="small">${escapeHTML(r.note || '')}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+function renderChecklistHistory(data) {
+  const tasks = data.task_last_done || [];
+  const taskList = document.querySelector('.task-last-done-list');
+  if (taskList) {
+    taskList.innerHTML = tasks.length ? `
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+          <thead class="table-light"><tr><th class="small">Task</th><th class="small">Checklist</th><th class="small">Last Done</th><th class="small">Result</th><th class="small">Reading / Note</th><th class="small">Work Order</th></tr></thead>
+          <tbody>
+            ${tasks.map(t => `
+              <tr>
+                <td class="small fw-semibold">${escapeHTML(t.task)}</td>
+                <td class="small text-muted">${escapeHTML(t.checklist)}</td>
+                <td class="small">${escapeHTML(formatDate(t.date))} <span class="text-muted">(${escapeHTML(t.action)})</span></td>
+                <td class="small">${resultBadge(t)}</td>
+                <td class="small">${escapeHTML([t.value, t.note].filter(Boolean).join(' — '))}</td>
+                <td class="small font-monospace">${escapeHTML(t.work_order)}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>` : '<div class="text-center text-muted py-4"><p>No checklist tasks recorded for this equipment.</p></div>';
+  }
+
+  const work = data.work_history || [];
+  const workList = document.querySelector('.work-history-list');
+  if (workList) {
+    workList.innerHTML = work.length ? work.map(w => `
+      <div class="card mb-3 border-start border-info border-3">
+        <div class="card-body p-3">
+          <div class="d-flex justify-content-between align-items-start mb-2 flex-wrap gap-2">
+            <div>
+              <h6 class="mb-1 fw-bold text-info">${escapeHTML(w.action)} — Work Order #${escapeHTML(w.ref)}</h6>
+              <small class="text-muted"><i class="fas fa-calendar me-1"></i>${escapeHTML(formatDate(w.date))}
+                <span class="mx-1">•</span><i class="fas fa-user me-1"></i>${escapeHTML(w.performed_by)}</small>
+            </div>
+            ${w.problems ? `<span class="badge bg-danger">${w.problems} checklist issue${w.problems > 1 ? 's' : ''}</span>` : ''}
+          </div>
+          <p class="mb-2"><strong>Description:</strong> ${escapeHTML(w.description || '')}</p>
+          ${w.remarks ? `<p class="mb-2 small text-muted"><strong>Remarks:</strong> ${escapeHTML(w.remarks)}</p>` : ''}
+          ${w.spare_parts.length ? `<p class="mb-2 small"><strong>Parts:</strong> ${w.spare_parts.map(p => `${escapeHTML(p.name)} × ${escapeHTML(p.quantity)}`).join(', ')}</p>` : ''}
+          ${checklistTable(w.checklist)}
+        </div>
+      </div>`).join('') : '<div class="text-center text-muted py-4"><p>No approved PPM, calibration or other work orders.</p></div>';
+  }
 }
 
 // --- START A FILE DOWNLOAD ---

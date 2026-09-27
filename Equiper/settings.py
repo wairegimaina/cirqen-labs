@@ -99,8 +99,10 @@ INSTALLED_APPS = [
     "audit_log",
     "reporthub",
     "calSchedules",
+    "scheduling",
     "CalSoft",
     "machineReports",
+    "notifications",
     "django_celery_beat",
     "updates",
     "assets",
@@ -110,7 +112,7 @@ INSTALLED_APPS = [
 if DEBUG:
     INSTALLED_APPS += ["debug_toolbar"]
 
-APP_VERSION = "1.5.5"
+APP_VERSION = "1.6.0"
 
 UPDATE_SYSTEM = {
     "enabled": True,
@@ -169,6 +171,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "Equiper.context_processors.nav_context",
+                "Equiper.context_processors.module_tabs",
             ],
         },
     },
@@ -515,6 +518,9 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # 🔐 AUTHENTICATION & SESSIONS
 # ============================================================
 AUTHENTICATION_BACKENDS = [
+    # Username or email; see the class for how shared emails are handled.
+    "users.backends.EmailOrUsernameBackend",
+    # Kept so sessions signed in before this change stay valid.
     "django.contrib.auth.backends.ModelBackend",
 ]
 
@@ -585,6 +591,18 @@ DEFAULT_FROM_EMAIL = EMAIL_HOST_USER or "no-reply@example.com"
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
 EMAIL_TIMEOUT = 30
 EMAIL_MAX_RETRIES = 3
+
+# Notifications (notifications app). Event mail (work order submitted /
+# decided) is sent by the desktop where the event happened. The daily digest
+# must be sent by ONE machine per site: set notifications.digest_sender to
+# true on that machine only, or every user gets one copy per desktop.
+NOTIFICATIONS_EMAIL_ENABLED = bool(config.get("notifications.email_enabled", True))
+NOTIFICATIONS_DIGEST_SENDER = bool(config.get("notifications.digest_sender", False))
+NOTIFICATIONS_DIGEST_HOUR = int(config.get("notifications.digest_hour", 7))  # EAT
+NOTIFICATIONS_APP_NAME = "Cirqen"
+
+# Warranties within this many days of expiry show as "Expiring Soon".
+WARRANTY_EXPIRING_SOON_DAYS = int(config.get("warranty.expiring_soon_days", 60))
 
 # ============================================================
 # 🔄 CELERY & BACKGROUND TASKS

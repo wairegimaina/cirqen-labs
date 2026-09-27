@@ -44,6 +44,7 @@ urlpatterns = [
     path("workshop/", include("workshop.urls")),
     path("calibration/", include("CalSoft.urls")),
     path("calSchedules/", include("calSchedules.urls")),
+    path("scheduling/", include("scheduling.urls")),
     path('updates/', include('updates.urls')),
     path("machineReports/", include("machineReports.urls")),
     # Each app is mounted once (a second include made reverse() ambiguous,

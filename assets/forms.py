@@ -1,8 +1,8 @@
 from django import forms
 
-from Inventory.models import Equipment
+from Inventory.models import Equipment, Supplier
 
-from .models import ServiceContract, Supplier
+from .models import ServiceContract
 
 
 class DateInput(forms.DateInput):
@@ -12,16 +12,8 @@ class DateInput(forms.DateInput):
 class AssetDetailsForm(forms.ModelForm):
     class Meta:
         model = Equipment
-        fields = ["purchase_date", "warranty_end", "purchase_cost", "expected_life_years"]
-        widgets = {"purchase_date": DateInput(), "warranty_end": DateInput()}
+        fields = ["purchase_cost", "expected_life_years"]
         labels = {"purchase_cost": "Purchase cost (KSh)", "expected_life_years": "Expected life (years)"}
-
-
-class SupplierForm(forms.ModelForm):
-    class Meta:
-        model = Supplier
-        fields = ["name", "contact_person", "phone", "email", "address", "notes"]
-        widgets = {"address": forms.Textarea(attrs={"rows": 2}), "notes": forms.Textarea(attrs={"rows": 2})}
 
 
 class ContractForm(forms.ModelForm):

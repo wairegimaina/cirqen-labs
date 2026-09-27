@@ -566,6 +566,54 @@ class ModernJobCardPDFGenerator:
 
         return elements
 
+    def create_checklist_section(self):
+        """Checklist steps the technician answered (nothing when the device has none)."""
+        entries = list(self.job_card.checklist_entries.filter(active_status=True))
+        if not entries:
+            return []
+        elements = []
+        header_table = Table([['CHECKLIST']], colWidths=[7*inch])
+        header_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), self.COLOR_PALETTE['light_bg']),
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('GRID', (0, 0), (-1, -1), 0.5, self.COLOR_PALETTE['border']),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        elements.append(header_table)
+
+        rows = [['#', 'Step', 'Expected', 'Result', 'Reading', 'Note']]
+        problem_rows = []
+        for i, entry in enumerate(entries, start=1):
+            if entry.is_problem:
+                problem_rows.append(i)
+            rows.append([
+                str(i),
+                Paragraph(escape(entry.task), self.styles['NormalText']),
+                Paragraph(escape(entry.expected_result or ''), self.styles['NormalText']),
+                entry.get_result_display() or '-',
+                entry.value or '',
+                Paragraph(escape(entry.note or ''), self.styles['NormalText']),
+            ])
+        table = Table(rows, colWidths=[0.3*inch, 2.3*inch, 1.3*inch, 0.8*inch, 0.8*inch, 1.5*inch], repeatRows=1)
+        style = [
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('GRID', (0, 0), (-1, -1), 0.5, self.COLOR_PALETTE['border']),
+            ('LEFTPADDING', (0, 0), (-1, -1), 4),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+        ]
+        for r in problem_rows:
+            style.append(('TEXTCOLOR', (3, r), (3, r), colors.HexColor('#b42318')))
+            style.append(('FONTNAME', (3, r), (3, r), 'Helvetica-Bold'))
+        table.setStyle(TableStyle(style))
+        elements.append(table)
+        elements.append(Spacer(1, 12))
+        return elements
+
     def create_cost_section(self):
         """Cost breakdown section - Ultra compact"""
         elements = []
@@ -667,48 +715,7 @@ class ModernJobCardPDFGenerator:
             elements.append(remarks_table)
             elements.append(Spacer(1, 12))
 
-        elements.extend(self._create_checklist_block())
         return elements
-
-    def _create_checklist_block(self):
-        """The equipment type's checklist as completed on this work order."""
-        from .checklists import RESULTS, summary
-
-        checklist = self.job_card.checklist or []
-        if not checklist:
-            return []
-        counts = summary(checklist)
-        colours = {'pass': colors.HexColor('#15803d'), 'fail': colors.HexColor('#b91c1c'),
-                   'na': colors.HexColor('#4b5563')}
-        heading = (f"<b>Checklist</b>  ({counts['pass']} pass, {counts['fail']} fail, "
-                   f"{counts['na']} N/A)")
-        rows = [['#', 'Item', 'Result', 'Note']]
-        style = [
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, -1), 9),
-            ('BACKGROUND', (0, 0), (-1, 0), self.COLOR_PALETTE['light_bg']),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('ALIGN', (0, 0), (0, -1), 'CENTER'),
-            ('GRID', (0, 0), (-1, -1), 0.5, self.COLOR_PALETTE['border']),
-            ('LEFTPADDING', (0, 0), (-1, -1), 6),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
-            ('TOPPADDING', (0, 0), (-1, -1), 4),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-        ]
-        for n, entry in enumerate(checklist, 1):
-            result = entry.get('result', '')
-            rows.append([
-                str(n),
-                Paragraph(escape(str(entry.get('item', ''))), self.styles['NormalText']),
-                RESULTS.get(result, '-'),
-                Paragraph(escape(str(entry.get('note') or '')), self.styles['NormalText']),
-            ])
-            if result in colours:
-                style += [('TEXTCOLOR', (2, n), (2, n), colours[result]),
-                          ('FONTNAME', (2, n), (2, n), 'Helvetica-Bold')]
-        table = Table(rows, colWidths=[0.4*inch, 3.6*inch, 0.8*inch, 2.2*inch], repeatRows=1)
-        table.setStyle(TableStyle(style))
-        return [Paragraph(heading, self.styles['BoldText']), Spacer(1, 5), table, Spacer(1, 12)]
 
     def create_decline_section(self):
         """Decline reason if applicable"""
@@ -829,6 +836,7 @@ class ModernJobCardPDFGenerator:
         story.extend(self.create_title_section())
         story.extend(self.create_main_info_section())
         story.extend(self.create_job_details_section())
+        story.extend(self.create_checklist_section())
         story.extend(self.create_parts_section())
         story.extend(self.create_cost_section())
         story.extend(self.create_job_description_text())

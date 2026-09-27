@@ -31,20 +31,8 @@
   </div>
 
   <div class="section-card">
-    <h2 class="section-card-title">Machines to review for replacement</h2>
-    <p class="as-muted">Score out of 100: repairs in 12 months (35), age against expected life (25), status (20), last calibration (15), no warranty or contract (5). A ranking to review, not a decision.</p>
-    {% if risk %}
-    <div class="as-scroll"><table class="as-table">
-      <thead><tr><th>Score</th><th>Machine</th><th>Department</th><th>Why</th></tr></thead>
-      <tbody>{% for r in risk %}
-        <tr>
-          <td><span class="as-score">{{ r.score }}</span></td>
-          <td><a href="{% url 'assets:machine' r.equipment.id %}">{{ r.equipment.description }}</a><br><span class="as-muted">S/N {{ r.equipment.serial_number }}</span></td>
-          <td>{{ r.equipment.department }}</td>
-          <td>{{ r.reasons|join:"; " }}</td>
-        </tr>{% endfor %}
-      </tbody></table></div>
-    {% else %}<p class="as-muted">No machine scored above zero.</p>{% endif %}
+    <h2 class="section-card-title">Machines likely to need repair</h2>
+    <p class="as-muted">Failure risk is worked out from each machine's repair history on the <a href="{% url 'failure_risk' %}">Failure Risk</a> page in Machine Reports.</p>
   </div>
 
   {% if k.by_type %}

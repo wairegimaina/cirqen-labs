@@ -1,0 +1,79 @@
+/* Scheduling screens. Colours come from theme.css tokens, so light and dark
+   mode follow the rest of the app. */
+
+.sched-scope .form-select { min-width: 12rem; }
+.sched-tabs .nav-link i { margin-right: .35rem; color: var(--text-muted); }
+.sched-tabs .nav-link.active i { color: var(--primary-color); }
+
+.sched-muted { color: var(--text-muted); font-size: var(--fs-sm); }
+.sched-reason { color: var(--text-secondary); font-size: var(--fs-sm); max-width: 38rem; }
+.sched-num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.sched-table td, .sched-table th { vertical-align: middle; }
+.sched-table th { font-size: var(--fs-sm); color: var(--text-muted); font-weight: 600; }
+
+/* Plan status strip */
+.sched-plan {
+  display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; align-items: center;
+}
+.sched-plan dt { font-size: var(--fs-sm); color: var(--text-muted); font-weight: 500; }
+.sched-plan dd { margin: 0; color: var(--text-primary); }
+
+/* Problem list */
+.sched-problems { list-style: none; padding: 0; margin: 0; display: grid; gap: .5rem; }
+.sched-problems li { display: flex; justify-content: space-between; gap: 1rem; }
+.sched-problems .count { font-variant-numeric: tabular-nums; font-weight: 600; }
+
+/* Month distribution: one series, one hue (info), values in text ink. */
+.sched-bars {
+  display: grid; grid-template-columns: repeat(13, minmax(0, 1fr)); gap: 2px;
+  align-items: end; height: 180px; padding-top: 1.25rem;
+}
+.sched-bar {
+  position: relative; display: flex; flex-direction: column; justify-content: flex-end;
+  height: 100%; text-decoration: none; color: inherit; outline-offset: 2px;
+}
+.sched-bar .fill {
+  display: block; min-height: 2px; border-radius: 4px 4px 0 0;
+  background: var(--info-color);
+}
+.sched-bar.overdue .fill { background: var(--danger-color); }
+.sched-bar:hover .fill, .sched-bar:focus-visible .fill { filter: brightness(1.15); }
+.sched-bar .tip {
+  position: absolute; bottom: calc(100% + 4px); left: 50%; transform: translateX(-50%);
+  white-space: nowrap; font-size: .75rem; padding: .2rem .45rem; border-radius: 6px;
+  background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-mid);
+  pointer-events: none; opacity: 0; transition: opacity .12s;
+}
+.sched-bar:hover .tip, .sched-bar:focus-visible .tip { opacity: 1; }
+.sched-bar-labels {
+  display: grid; grid-template-columns: repeat(13, minmax(0, 1fr)); gap: 2px;
+  font-size: .72rem; color: var(--text-muted); text-align: center; margin-top: .35rem;
+}
+.sched-bar-labels .now { color: var(--text-primary); font-weight: 600; }
+
+/* Year grid */
+.sched-year { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: .75rem; }
+.sched-month {
+  display: block; padding: .9rem 1rem; border-radius: var(--radius-lg);
+  background: var(--bg-card); border: 1px solid var(--border-color);
+  color: var(--text-primary); text-decoration: none;
+}
+.sched-month:hover { border-color: var(--border-strong); color: var(--text-primary); }
+.sched-month.now { border-color: var(--primary-color); }
+.sched-month .name { font-weight: 600; }
+.sched-month .total { font-size: 1.6rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.sched-month .split { font-size: var(--fs-sm); color: var(--text-muted); }
+.sched-month .late { color: var(--danger-color); }
+
+/* Plan editor month grid */
+.sched-grid th.m, .sched-grid td.m { width: 2.4rem; text-align: center; padding-left: .15rem; padding-right: .15rem; }
+.sched-grid td.m input { width: 1.05rem; height: 1.05rem; }
+.sched-grid .interval { width: 5.5rem; }
+.sched-grid .warn { color: var(--warning-color); font-size: .8rem; }
+.sched-grid tr.has-months td:first-child { box-shadow: inset 3px 0 0 var(--info-color); }
+
+@media (max-width: 768px) {
+  .sched-bars, .sched-bar-labels { grid-template-columns: repeat(13, minmax(0, 1fr)); }
+  .sched-bar-labels span:nth-child(even) { visibility: hidden; }
+  .sched-table-wrap { overflow-x: auto; }
+}

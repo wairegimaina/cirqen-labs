@@ -1,8 +1,10 @@
 import uuid
+from datetime import datetime
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.conf import settings
 from Inventory.models import Equipment
-from django.utils.timezone import now
+from django.utils.timezone import localdate, now
 from workshop.models import Workshop
 from core.eat import now_eat
 
@@ -33,6 +35,7 @@ GENERATION_SOURCE_CHOICES = [
     ('group_fix', 'Fixed Group Alignment'),
     ('locker', 'Created by Locker'),
     ('job_card', 'Triggered by Job Card Completion'),
+    ('plan', 'Scheduling Plan'),
 ]
 
 
@@ -142,6 +145,30 @@ class PPMSchedule(models.Model):
         help_text='The planning logic that was in use before the last logic change (for smart reorganizer)'
     )
 
+    completed_date = models.DateField(
+        null=True, blank=True,
+        help_text='The day the maintenance was actually done (scheduled_month is when it was due)'
+    )
+
+    # ============================================
+    # SCHEDULING PLAN (scheduling app)
+    # ============================================
+
+    due_month = models.DateField(
+        null=True, blank=True,
+        help_text="The month this schedule is due in its cycle. A manual push moves "
+                  "scheduled_month but not this, so the cycle continues from the slot.",
+    )
+    plan = models.ForeignKey(
+        "scheduling.SchedulingPlan", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="%(app_label)s_schedules",
+        help_text="The plan version that placed this schedule (blank: legacy scheduler)",
+    )
+    schedule_reason = models.JSONField(
+        null=True, blank=True,
+        help_text="Why this month: group, months, interval, previous schedule, rule applied",
+    )
+
     # ============================================
     # META
     # ============================================
@@ -162,7 +189,6 @@ class PPMSchedule(models.Model):
         Enhanced save method that:
         1. Sets needs_sync flag
         2. Auto-assigns workshop from equipment
-        3. Detects planning_logic changes and sets a warning
         4. Auto-locks completed schedules (historical records)
         5. Sets expected_maintenance_date for signal-created schedules
         """
@@ -172,30 +198,40 @@ class PPMSchedule(models.Model):
         if self.equipment_id and self.equipment.department:
             self.workshop = self.equipment.department.workshop
 
-        # Detect planning_logic change on existing schedules
+        # Completed schedules are historical records: their month and status
+        # never change. Sync writes completions with raw SQL, so this only
+        # guards the ORM paths (edit view, bulk actions, tasks).
+        before = None
         if self.pk:
-            try:
-                original = PPMSchedule.objects.get(pk=self.pk)
-                if (
-                    original.planning_logic and
-                    self.planning_logic and
-                    original.planning_logic != self.planning_logic
-                ):
-                    self.previous_planning_logic = original.planning_logic
-                    self.logic_change_warning = (
-                        f"Logic change detected: planning logic changed from "
-                        f"'{original.planning_logic}' to '{self.planning_logic}' "
-                        f"on {now_eat().strftime('%Y-%m-%d %H:%M')}. "
-                        f"Run smart_reorganize_ppm_schedules to realign all schedules "
-                        f"to the new logic. Scheduled month has NOT been changed — "
-                        f"realignment is required."
+            before = PPMSchedule.objects.filter(pk=self.pk).values(
+                'status', 'scheduled_month'
+            ).first()
+            if before and before['status'] == 'completed':
+                if self.status != 'completed':
+                    raise ValidationError(
+                        f"Cannot change status from 'Completed' to '{self.status}'. "
+                        "Completed schedules are locked historical records."
                     )
-            except PPMSchedule.DoesNotExist:
-                pass
+                month = self.scheduled_month
+                if isinstance(month, datetime):
+                    month = month.date()
+                if month != before['scheduled_month']:
+                    raise ValidationError(
+                        "Cannot move a completed schedule to another month. "
+                        "Completed schedules are locked historical records."
+                    )
 
         # Auto-lock completed schedules (they become historical records)
         if self.status == 'completed' and not self.is_locked:
             self.is_locked = True
+
+        # Record the day it was done, only at the moment it becomes completed:
+        # re-saving an old completed row must not stamp today on it.
+        newly_completed = not before or before['status'] != 'completed'
+        if self.status == 'completed' and newly_completed and not self.completed_date:
+            self.completed_date = localdate()
+            if kwargs.get('update_fields') is not None:
+                kwargs['update_fields'] = set(kwargs['update_fields']) | {'completed_date'}
 
         # Calculate expected_maintenance_date for signal-created schedules
         if self.generation_source == 'signal' and self.parent_schedule and not self.expected_maintenance_date:
@@ -236,142 +272,18 @@ class PPMSchedule(models.Model):
             return False
         return timezone.localdate() > self.due_date
 
-    @property
-    def protection_status(self):
-        """
-        Get human-readable protection status for this schedule.
-        """
-        if self.status == 'completed':
-            return "PROTECTED: Completed (Historical Record)"
-        elif self.is_locked:
-            return "PROTECTED: Manually Locked"
-        elif self.generation_source == 'signal':
-            return "PROTECTED: Signal-Created (Maintains Maintenance Interval)"
-        elif self.is_normalizable():
-            return "NORMALIZABLE: Can be rescheduled"
-        else:
-            return "Unknown protection status"
-
-    # ============================================
-    # INSTANCE METHODS
-    # ============================================
-
-    def is_normalizable(self):
-        """
-        Check if this schedule can be modified by normalization.
-        """
-        return (
-            self.status in ['pending', 'pushed'] and
-            not self.is_locked and
-            self.generation_source in ['manual', 'normalization', 'initialization', 'bulk_import']
-        )
-
-    def clear_logic_warning(self):
-        """
-        Clear the logic change warning after smart reorganization is complete.
-        Call this after successfully running smart_reorganize_ppm_schedules.
-        """
-        self.logic_change_warning = ''
-        self.previous_planning_logic = ''
-        self.save(update_fields=['logic_change_warning', 'previous_planning_logic', 'needs_sync'])
-
-    def mark_as_signal_created(self, parent):
-        """
-        Mark this schedule as signal-created and link to parent.
-        """
-        self.generation_source = 'signal'
-        self.parent_schedule = parent
-        self.expected_maintenance_date = self.scheduled_month
-        self.generation_timestamp = now()
-        self.save(update_fields=[
-            'generation_source',
-            'parent_schedule',
-            'expected_maintenance_date',
-            'generation_timestamp',
-            'needs_sync'
-        ])
-
-    def lock_schedule(self, reason=""):
-        """
-        Lock this schedule to prevent modifications.
-        """
-        self.is_locked = True
-        self.save(update_fields=['is_locked', 'needs_sync'])
-
-    def unlock_schedule(self):
-        """
-        Unlock this schedule to allow modifications.
-        Only use if you're sure the schedule should be modifiable.
-
-        Raises:
-            ValueError: If trying to unlock a completed schedule
-        """
-        if self.status == 'completed':
-            raise ValueError("Cannot unlock completed schedules - they are historical records")
-        self.is_locked = False
-        self.save(update_fields=['is_locked', 'needs_sync'])
-
-    def get_maintenance_chain(self):
-        """
-        Get the full chain of maintenance schedules for this equipment.
-        """
-        return PPMSchedule.objects.filter(
-            equipment=self.equipment
-        ).order_by('scheduled_month')
-
     # ============================================
     # CLASS METHODS (QUERIES)
     # ============================================
 
     @classmethod
-    def get_normalizable_schedules(cls, start_date=None, end_date=None):
-        """
-        Get all schedules that can be normalized.
-        """
-        query = cls.objects.filter(
-            active_status=True,
-            status__in=['pending', 'pushed'],
-            is_locked=False,
-            generation_source__in=['manual', 'normalization', 'initialization', 'bulk_import']
-        )
+    def open_schedules(cls):
+        """Schedules still to be done: live rows that are not completed.
 
-        if start_date:
-            query = query.filter(scheduled_month__gte=start_date)
-        if end_date:
-            query = query.filter(scheduled_month__lte=end_date)
-
-        return query
-
-    @classmethod
-    def get_signal_created_schedules(cls):
+        An equipment is scheduled when it has one of these. Having only
+        completed history means its chain broke and it needs a next schedule.
         """
-        Get all signal-created schedules (protected from normalization).
-        """
-        return cls.objects.filter(
-            generation_source='signal',
-            status__in=['pending', 'pushed']
-        )
-
-    @classmethod
-    def get_protection_summary(cls):
-        """
-        Get summary of schedule protection status across all schedules.
-        """
-        from django.db.models import Count, Q
-
-        return {
-            'total': cls.objects.count(),
-            'completed': cls.objects.filter(status='completed').count(),
-            'locked_pending': cls.objects.filter(
-                is_locked=True,
-                status__in=['pending', 'pushed']
-            ).count(),
-            'signal_created': cls.objects.filter(
-                generation_source='signal',
-                status__in=['pending', 'pushed']
-            ).count(),
-            'normalizable': cls.get_normalizable_schedules().count(),
-        }
+        return cls.objects.filter(active_status=True, pending_delete=False).exclude(status='completed')
 
     def __str__(self):
         return f"Schedule for {self.equipment.description} on {self.scheduled_month} ({self.generation_source})"

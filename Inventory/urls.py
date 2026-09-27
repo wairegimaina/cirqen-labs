@@ -20,6 +20,24 @@ urlpatterns = [
     path("edit_inventory/<uuid:equipment_id>/", views.edit_inventory, name="edit_inventory"),
     path('delete_equipment/<uuid:pk>/', views.delete_equipment, name='delete_equipment'),
 
+    # Suppliers
+    path('suppliers/', views.supplier_list, name='supplier_list'),
+    path('suppliers/save/', views.supplier_save, name='supplier_create'),
+    path('suppliers/save/<uuid:supplier_id>/', views.supplier_save, name='supplier_update'),
+    path('suppliers/<uuid:supplier_id>/toggle/', views.supplier_toggle_active, name='supplier_toggle_active'),
+    path('suppliers/import/template/', views.supplier_import_template, name='supplier_import_template'),
+    path('suppliers/import/', views.supplier_import_upload, name='supplier_import_upload'),
+
+    # Warranties (Equipment -> Warranty -> Supplier)
+    path('warranties/', views.warranty_list, name='warranty_list'),
+    path('warranties/save/', views.warranty_save, name='warranty_create'),
+    path('warranties/<uuid:warranty_id>/', views.warranty_detail, name='warranty_detail'),
+    path('warranties/<uuid:warranty_id>/save/', views.warranty_save, name='warranty_update'),
+    path('warranties/<uuid:warranty_id>/remove/', views.warranty_remove, name='warranty_remove'),
+    path('warranties/equipment/<uuid:equipment_id>/', views.equipment_warranty, name='equipment_warranty'),
+    path('warranties/import/template/', views.warranty_import_template, name='warranty_import_template'),
+    path('warranties/import/', views.warranty_import_upload, name='warranty_import_upload'),
+
     # Equipment description and manufacturer
     path('create_equipment_description/', views.create_equipment_description, name='create_equipment_description'),
     path('create-manufacturer/', views.create_manufacturer, name='create_manufacturer'),

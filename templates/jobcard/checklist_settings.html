@@ -1,0 +1,153 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Checklists{% endblock %}
+{% block page_title %}Checklists{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    {% for message in messages %}
+    <div class="alert {% if 'success' in message.tags %}alert-success{% else %}alert-danger{% endif %} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endfor %}
+
+    <div class="alert alert-info">
+        <i class="fas fa-info-circle me-2"></i>
+        Reusable checklists. On a work order the technician selects one under <strong>Checklist</strong>
+        (the ones written for that equipment and task are suggested first), can add steps for that job,
+        and ticks each step off there. Every answer is kept with the work order.
+    </div>
+
+    {% if can_edit %}
+    <div class="card mb-3">
+        <div class="card-body">
+            <form method="post" action="{% url 'jobcard:checklist_from_starter' %}" class="row g-2 align-items-end">
+                {% csrf_token %}
+                <div class="col-md-4">
+                    <label class="form-label small mb-0" for="starter">Start from a ready-made checklist</label>
+                    <select name="starter" id="starter" class="form-select form-select-sm" required>
+                        <option value="">Choose…</option>
+                        {% for key, label in starters %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label small mb-0" for="starter_description">for equipment</label>
+                    <select name="equipment_description" id="starter_description" class="form-select form-select-sm" required>
+                        <option value="">Choose…</option>
+                        {% for d in descriptions %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <button type="submit" class="btn btn-outline-primary btn-sm w-100"><i class="fas fa-copy me-1"></i>Copy and edit</button>
+                </div>
+                <div class="col-12 small text-muted">Starters follow common PPM practice (e.g. patient monitor: inspect and replace the NIBP cuff, NIBP accuracy, ECG/SpO2 checks, alarms, battery, electrical safety). Check each step against the device's service manual before use.</div>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h5 class="mb-0"><i class="fas fa-clipboard-check me-2 text-muted"></i>Checklists</h5>
+            {% if can_edit %}
+            <div class="d-flex gap-2 flex-wrap">
+                <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#uploadChecklistsModal">
+                    <i class="fas fa-file-excel me-1"></i>Upload Excel
+                </button>
+                <a href="{% url 'jobcard:checklist_create' %}" class="btn btn-success btn-sm"><i class="fas fa-plus me-1"></i>New Checklist</a>
+            </div>
+            {% endif %}
+        </div>
+        <div class="card-body border-bottom">
+            <form method="get" class="row g-2 align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label small mb-0" for="description_filter">Equipment</label>
+                    <select name="description" id="description_filter" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="">All</option>
+                        <option value="all" {% if description_filter == 'all' %}selected{% endif %}>Written for all equipment</option>
+                        {% for d in descriptions %}
+                        <option value="{{ d.id }}" {% if description_filter == d.id|stringformat:"s" %}selected{% endif %}>{{ d.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small mb-0" for="status_filter">Status</label>
+                    <select name="status" id="status_filter" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="">All</option>
+                        <option value="active" {% if status_filter == 'active' %}selected{% endif %}>Active</option>
+                        <option value="inactive" {% if status_filter == 'inactive' %}selected{% endif %}>Disabled</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small mb-0" for="checklist_search">Search</label>
+                    <input type="search" name="q" id="checklist_search" value="{{ q }}" class="form-control form-control-sm" placeholder="Checklist name, equipment, description…">
+                </div>
+                <div class="col-md-2 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary btn-sm flex-fill"><i class="fas fa-search me-1"></i>Search</button>
+                    {% if q or status_filter or description_filter %}<a href="{% url 'jobcard:checklist_settings' %}" class="btn btn-outline-secondary btn-sm" title="Clear filters" aria-label="Clear filters"><i class="fas fa-times"></i></a>{% endif %}
+                </div>
+            </form>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Checklist Name</th>
+                            <th>Equipment</th>
+                            <th>Task</th>
+                            <th>Items</th>
+                            <th>Status</th>
+                            <th>Created By</th>
+                            <th>Date Created</th>
+                            <th>Used</th>
+                            {% if can_edit %}<th class="text-end">Actions</th>{% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for t in templates %}
+                        <tr class="{% if not t.active_status %}text-muted{% endif %}">
+                            <td><a href="{% url 'jobcard:checklist_detail' t.id %}" class="fw-bold text-decoration-none">{{ t.title }}</a></td>
+                            <td>{{ t.applies_to }}</td>
+                            <td>{{ t.get_task_type_display }}</td>
+                            <td>{{ t.item_count }}</td>
+                            <td><span class="badge {% if t.active_status %}badge-success{% else %}badge-secondary{% endif %}">{% if t.active_status %}Active{% else %}Disabled{% endif %}</span></td>
+                            <td>{% include "includes/_user_name.html" with u=t.created_by %}</td>
+                            <td class="text-nowrap">{{ t.created_at|date:"d M Y" }}</td>
+                            <td>{{ t.use_count }} work order{{ t.use_count|pluralize }}</td>
+                            {% if can_edit %}
+                            <td class="text-end">
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{% url 'jobcard:checklist_edit' t.id %}" class="btn btn-outline-primary" title="Edit" aria-label="Edit"><i class="fas fa-pen"></i></a>
+                                    <form method="post" action="{% url 'jobcard:checklist_toggle_active' t.id %}" class="d-inline">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-outline-{% if t.active_status %}danger{% else %}success{% endif %}"
+                                            title="{% if t.active_status %}Disable{% else %}Enable{% endif %}"
+                                            aria-label="{% if t.active_status %}Disable{% else %}Enable{% endif %}">
+                                            <i class="fas {% if t.active_status %}fa-ban{% else %}fa-undo{% endif %}"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                            {% endif %}
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="9" class="text-center text-muted py-5">{% if q or status_filter or description_filter %}No checklists match these filters.{% else %}No checklists yet.{% endif %}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if can_edit %}
+{% include 'includes/excel_import_modal.html' with modal_id='uploadChecklistsModal' title='Bulk Upload Checklists' noun='checklist step' template_url=checklist_template_url upload_url=checklist_upload_url help_text='One row per step. Required columns: Checklist Name, Step. Applies To (equipment), Task Type, Description, Step No., Instructions, Expected Result, Response Type and Required are optional.' create_missing_label="Create equipment descriptions that don't exist yet" %}
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if can_edit %}<script src="{% static 'js/excel_import.js' %}"></script>{% endif %}
+{% endblock %}

@@ -1,12 +1,6 @@
 from django.contrib import admin
 
-from .models import ServiceContract, Supplier
-
-
-@admin.register(Supplier)
-class SupplierAdmin(admin.ModelAdmin):
-    list_display = ("name", "contact_person", "phone", "email")
-    search_fields = ("name",)
+from .models import ServiceContract
 
 
 @admin.register(ServiceContract)

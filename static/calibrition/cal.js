@@ -140,9 +140,12 @@ function setupMonthYearNavigation() {
   if (!monthSel || !yearSel) return;
 
   function navigate() {
+    // "All months" drops the month filter; any month brings it back.
+    var all = monthSel.value === "all";
     var url = buildUrl({
-      month: monthSel.value,
-      year: yearSel.value,
+      month: all ? null : monthSel.value,
+      year: all ? null : yearSel.value,
+      period: all ? "all" : null,
       page: null,
       unscheduled_page: null,
     });
@@ -162,6 +165,7 @@ window.goToCurrentMonth = function () {
   var url = buildUrl({
     month: cfg.currentMonth || new Date().getMonth() + 1,
     year: cfg.currentYear || new Date().getFullYear(),
+    period: null,
     page: null,
     unscheduled_page: null,
   });
@@ -179,6 +183,7 @@ function setupShowAllBtn() {
     var url = buildUrl({
       month: null,
       year: null,
+      period: "all",
       page: null,
       unscheduled_page: null,
     });

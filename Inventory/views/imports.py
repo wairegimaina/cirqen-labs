@@ -39,7 +39,9 @@ logger = logging.getLogger(__name__)
 
 # Column order matches export_equipment_to_excel so an exported file can be
 # edited and uploaded straight back.
-COLUMNS = ["description", "manufacturer", "model", "serial_number", "department", "status"]
+COLUMNS = ["description", "manufacturer", "model", "serial_number", "department", "status",
+           # Optional, after the required six so older files still line up.
+           "asset_tag"]
 
 COLUMN_LABELS = {
     "description": "Description",
@@ -48,6 +50,7 @@ COLUMN_LABELS = {
     "serial_number": "Serial Number",
     "department": "Department",
     "status": "Status",
+    "asset_tag": "Hospital Asset No.",
 }
 
 # Accepted header spellings, keyed by normalized text (lowercase, alphanumeric).
@@ -73,6 +76,12 @@ HEADER_ALIASES = {
     "location": "department",
     "status": "status",
     "condition": "status",
+    "hospitalassetno": "asset_tag",
+    "assetno": "asset_tag",
+    "assetnumber": "asset_tag",
+    "assettag": "asset_tag",
+    "tagno": "asset_tag",
+    "barcode": "asset_tag",
 }
 
 STATUS_CHOICES = ["Working", "Not working", "Under repair"]
@@ -100,6 +109,7 @@ MAX_LENGTHS = {
     "manufacturer": 150,
     "model": 100,
     "serial_number": 100,
+    "asset_tag": 100,
 }
 
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
@@ -426,6 +436,8 @@ def _process_rows(ws, header_row, mapping, workshop, create_missing, user):
                     if manu_error:
                         raise ValueError(manu_error)
 
+                procurement = {"asset_tag": values.get("asset_tag", "")}
+
                 if existing:
                     # Deactivated / pending-delete serial: reactivate in place,
                     # exactly as add_inventory does for the single-item form.
@@ -435,6 +447,9 @@ def _process_rows(ws, header_row, mapping, workshop, create_missing, user):
                     existing.serial_number = serial
                     existing.department = department
                     existing.status = status
+                    for field, value in procurement.items():
+                        if value:
+                            setattr(existing, field, value)
                     existing.active_status = True
                     existing.pending_delete = False
                     existing.updated_at = timezone.now()
@@ -452,6 +467,7 @@ def _process_rows(ws, header_row, mapping, workshop, create_missing, user):
                         status=status,
                         active_status=True,
                         pending_delete=False,
+                        **procurement,
                     )
                     equipment.save()
                     action = "create"

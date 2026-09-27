@@ -1,0 +1,234 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Warranty · {{ equipment.description.name }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'Inventory/theme.css' %}" />
+<style>
+    .detail-list { display: grid; grid-template-columns: minmax(130px, 38%) 1fr; gap: .45rem 1rem; margin: 0; }
+    .detail-list dt { font-weight: 500; color: var(--text-secondary, #6c757d); }
+    .detail-list dd { margin: 0; }
+    .coverage-list li { padding: .15rem 0; }
+</style>
+{% endblock %}
+
+{% block page_title %}Warranty Details{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    {% for message in messages %}
+    <div class="alert {% if 'success' in message.tags %}alert-success{% elif 'warning' in message.tags %}alert-warning{% else %}alert-danger{% endif %} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endfor %}
+
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+        <div>
+            <h4 class="mb-0">{{ equipment.description.name }}</h4>
+            <div class="text-muted small font-monospace">{{ equipment.serial_number }}{% if equipment.asset_tag %} · {{ equipment.asset_tag }}{% endif %}</div>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="{% url 'warranty_list' %}" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left me-1"></i>Warranties</a>
+            {% if can_edit %}
+            {% if warranty %}
+            <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#editWarrantyModal">
+                <i class="fas fa-pen me-1"></i>Edit Warranty
+            </button>
+            {% endif %}
+            <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#newWarrantyModal">
+                <i class="fas fa-plus me-1"></i>{% if warranty %}Add Another Warranty{% else %}Add Warranty{% endif %}
+            </button>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <!-- Equipment -->
+        <div class="col-lg-4">
+            <div class="card h-100">
+                <div class="card-header"><h6 class="mb-0"><i class="fas fa-microchip me-2 text-muted"></i>Equipment</h6></div>
+                <div class="card-body">
+                    <dl class="detail-list">
+                        <dt>Equipment</dt><dd>{{ equipment.description.name }}</dd>
+                        <dt>Asset / Equipment ID</dt><dd class="font-monospace">{{ equipment.asset_tag|default:"-" }}</dd>
+                        <dt>Manufacturer</dt><dd>{{ equipment.manufacturer.name|default:"-" }}</dd>
+                        <dt>Model</dt><dd>{{ equipment.model|default:"-" }}</dd>
+                        <dt>Serial Number</dt><dd class="font-monospace">{{ equipment.serial_number }}</dd>
+                        <dt>Department</dt><dd>{{ equipment.department.name }}{% if equipment.department.workshop %}<div class="small text-muted">{{ equipment.department.workshop.name }}</div>{% endif %}</dd>
+                        <dt>Status</dt><dd>{{ equipment.status }}</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+
+        <!-- Warranty -->
+        <div class="col-lg-4">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0"><i class="fas fa-shield-alt me-2 text-muted"></i>Warranty</h6>
+                    {% if warranty %}
+                    {% include "Inventory/_warranty_status_badge.html" with code=warranty.status_code label=warranty.status_label %}
+                    {% else %}
+                    <span class="badge badge-secondary">No Warranty</span>
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    {% if warranty %}
+                    <dl class="detail-list">
+                        <dt>Warranty Period</dt><dd>{{ warranty.period_display }}</dd>
+                        <dt>Start Date</dt><dd>{{ warranty.start_date|date:"d M Y" }}</dd>
+                        <dt>Expiry Date</dt><dd>{{ warranty.expiry_date|date:"d M Y" }}
+                            <div class="small text-muted">
+                                {% if warranty.days_left < 0 %}Expired {{ warranty.days_since_expiry }} day{{ warranty.days_since_expiry|pluralize }} ago
+                                {% elif warranty.days_left == 0 %}Expires today
+                                {% else %}{{ warranty.days_left }} day{{ warranty.days_left|pluralize }} left{% endif %}
+                            </div>
+                        </dd>
+                        <dt>Current Status</dt><dd>{{ warranty.status_label }}</dd>
+                        {% if warranty.reference %}<dt>Reference</dt><dd class="font-monospace">{{ warranty.reference }}</dd>{% endif %}
+                    </dl>
+
+                    <h6 class="mt-3 mb-1">Warranty Covers</h6>
+                    {% if warranty.coverage_labels %}
+                    <ul class="list-unstyled coverage-list mb-0">
+                        {% for label in warranty.coverage_labels %}
+                        <li><i class="fas fa-check-circle text-success me-2"></i>{{ label }}</li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p class="text-muted small mb-0">Coverage was not specified.</p>
+                    {% endif %}
+
+                    <h6 class="mt-3 mb-1">Terms / Notes</h6>
+                    <p class="small mb-0" style="white-space: pre-line;">{{ warranty.terms|default:"—" }}</p>
+
+                    <p class="small text-muted mt-3 mb-0">
+                        Recorded {{ warranty.created_at|date:"d M Y" }}{% if warranty.created_by %} by {{ warranty.created_by.get_full_name|default:warranty.created_by.username }}{% endif %}
+                    </p>
+                    {% else %}
+                    <p class="text-muted mb-0">No warranty is recorded for this equipment.{% if can_edit %} Use <strong>Add Warranty</strong> to record one.{% endif %}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Supplier (read live from the Supplier record) -->
+        <div class="col-lg-4">
+            <div class="card h-100">
+                <div class="card-header"><h6 class="mb-0"><i class="fas fa-truck me-2 text-muted"></i>Supplier</h6></div>
+                <div class="card-body">
+                    {% if warranty and warranty.supplier %}
+                    {% with s=warranty.supplier %}
+                    <dl class="detail-list">
+                        <dt>Supplier Name</dt><dd>{{ s.name }}{% if not s.active_status %} <span class="badge badge-secondary">Inactive</span>{% endif %}</dd>
+                        <dt>Supplier Phone</dt><dd>{% if s.phone %}<a href="tel:{{ s.phone }}">{{ s.phone }}</a>{% else %}-{% endif %}</dd>
+                        <dt>Supplier Email</dt><dd>{% if s.email %}<a href="mailto:{{ s.email }}">{{ s.email }}</a>{% else %}-{% endif %}</dd>
+                        <dt>Contact Person</dt><dd>{{ s.contact_person|default:"-" }}</dd>
+                        <dt>Address</dt><dd style="white-space: pre-line;">{{ s.address|default:"-" }}</dd>
+                        {% if s.default_warranty_months %}<dt>Standard Warranty</dt><dd>{{ s.default_warranty_months }} months</dd>{% endif %}
+                    </dl>
+                    {% if s.warranty_terms %}
+                    <h6 class="mt-3 mb-1">Supplier's standard terms</h6>
+                    <p class="small mb-0" style="white-space: pre-line;">{{ s.warranty_terms }}</p>
+                    {% endif %}
+                    {% endwith %}
+                    {% elif warranty %}
+                    <p class="text-muted mb-0">No supplier linked to this warranty.</p>
+                    {% else %}
+                    <p class="text-muted mb-0">—</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if history|length > 1 or history and not warranty %}
+    <div class="card mt-3">
+        <div class="card-header"><h6 class="mb-0"><i class="fas fa-history me-2 text-muted"></i>All warranties for this equipment</h6></div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0">
+                    <thead><tr><th>Period</th><th>Start</th><th>Expiry</th><th>Supplier</th><th>Covers</th><th>Status</th></tr></thead>
+                    <tbody>
+                        {% for h in history %}
+                        <tr class="{% if warranty and h.id == warranty.id %}table-active{% endif %}">
+                            <td><a href="{% url 'warranty_detail' h.id %}">{{ h.period_display }}</a></td>
+                            <td>{{ h.start_date|date:"d M Y" }}</td>
+                            <td>{{ h.expiry_date|date:"d M Y" }}</td>
+                            <td>{{ h.supplier.name|default:"-" }}</td>
+                            <td class="small">{{ h.coverage_summary }}</td>
+                            <td>{% include "Inventory/_warranty_status_badge.html" with code=h.status_code label=h.status_label %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+{% if can_edit %}
+{% if warranty %}
+<div class="modal fade" id="editWarrantyModal" tabindex="-1" aria-labelledby="editWarrantyTitle" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <form method="post" action="{% url 'warranty_update' warranty.id %}">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.path }}">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="editWarrantyTitle">Edit Warranty</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    {% include "Inventory/_warranty_fields.html" with prefix="edit_warranty" w=warranty required="1" %}
+                </div>
+                <div class="modal-footer justify-content-between">
+                    <button type="submit" form="removeWarrantyForm" class="btn btn-outline-danger">
+                        <i class="fas fa-trash me-1"></i>Remove
+                    </button>
+                    <div>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save Changes</button>
+                    </div>
+                </div>
+            </form>
+            <form method="post" action="{% url 'warranty_remove' warranty.id %}" id="removeWarrantyForm"
+                  onsubmit="return window.confirm('Remove this warranty? Use this only for a warranty entered in error.');">
+                {% csrf_token %}
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="modal fade" id="newWarrantyModal" tabindex="-1" aria-labelledby="newWarrantyTitle" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <form method="post" action="{% url 'warranty_create' %}">
+                {% csrf_token %}
+                <input type="hidden" name="equipment" value="{{ equipment.id }}">
+                <input type="hidden" name="next" value="{{ request.path }}">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="newWarrantyTitle">Add Warranty · {{ equipment.description.name }} ({{ equipment.serial_number }})</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    {% include "Inventory/_warranty_fields.html" with prefix="new_warranty" required="1" %}
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Warranty</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if can_edit %}<script src="{% static 'Inventory/warranty-form.js' %}"></script>{% endif %}
+{% endblock %}

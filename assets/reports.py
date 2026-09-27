@@ -10,7 +10,6 @@ from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Tabl
 from core.branding import contact_line, logo_path, organisation_name
 
 from .kpis import compute
-from .risk import score_machines
 
 
 def _fmt(value, suffix=""):
@@ -66,14 +65,17 @@ def monthly_report_pdf(equipment_qs, month_end):
             [Paragraph(r["type"] or "—", small), r["machines"], r["failures"], _fmt(r["mtbf_days"])]
             for r in k.by_type], [88 * mm, 28 * mm, 28 * mm, 34 * mm]))
 
-    risky = score_machines(equipment_qs, limit=15, today=month_end)
-    story += [Spacer(0, 5 * mm), Paragraph("Machines to review for replacement", styles["Heading2"])]
+    from machineReports.prediction import predict
+
+    risky = [p for p in predict(equipment_qs.filter(status="Working"), horizon_days=90, today=month_end)
+             if p.risk_level != "Low"][:15]
+    story += [Spacer(0, 5 * mm), Paragraph("Machines most likely to need repair (next 90 days)", styles["Heading2"])]
     if risky:
-        story.append(_table([["Score", "Machine", "Department", "Why"]] + [
-            [r["score"], Paragraph(f"{r['equipment'].description} · S/N {r['equipment'].serial_number}", small),
-             Paragraph(str(r["equipment"].department), small), Paragraph("; ".join(r["reasons"]), small)]
-            for r in risky], [16 * mm, 62 * mm, 40 * mm, 60 * mm]))
+        story.append(_table([["Risk", "Machine", "Department", "Why"]] + [
+            [f"{p.risk_percent}%", Paragraph(f"{p.equipment.description} · S/N {p.equipment.serial_number}", small),
+             Paragraph(str(p.equipment.department), small), Paragraph("; ".join(p.reasons) or "—", small)]
+            for p in risky], [16 * mm, 62 * mm, 40 * mm, 60 * mm]))
     else:
-        story.append(Paragraph("No machine scored above zero.", small))
+        story.append(Paragraph("No machine at medium or high risk.", small))
     doc.build(story)
     return buffer.getvalue()

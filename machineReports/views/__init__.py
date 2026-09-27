@@ -19,6 +19,9 @@ from .exports import (
     export_manufacturer_performance_pdf,
     EquipmentListDocTemplate,
 )
+from .risk import (
+    failure_risk,
+)
 from .apis import (
     equipment_count_preview_api,
 )
@@ -36,4 +39,5 @@ __all__ = [
     "export_manufacturer_performance_pdf",
     "EquipmentListDocTemplate",
     "equipment_count_preview_api",
+    "failure_risk",
 ]

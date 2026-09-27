@@ -29,6 +29,11 @@
         <a href="#" class="spa-nav-item" data-view="reports">
             <i class="fas fa-file-alt"></i> Reports
         </a>
+        {% if nav.is_tech %}
+        <a href="{% url 'scheduling:overview' %}?program=ppm" class="spa-nav-item">
+            <i class="fas fa-calendar-alt"></i> Scheduling Plan
+        </a>
+        {% endif %}
     </nav>
 
     <!-- Content Views -->
@@ -36,6 +41,8 @@
 
         <!-- SCHEDULES VIEW -->
         <div id="schedulesView" class="view-section active">
+
+            {% include 'includes/scheduling_panel.html' with panels=scheduling_panels can_manage=scheduling_can_manage %}
 
             <!-- Filters Card -->
             <div class="theme-card p-3 mb-4">
@@ -142,17 +149,12 @@
                             </span>
                         </div>
                     </div>
+                    {% if access_context.can_edit %}
                     <div class="d-flex flex-wrap gap-2">
-                        <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#planningModal">
-                            <i class="fas fa-magic me-1"></i> Auto-Schedule
-                        </button>
                         {% if access_context.can_schedule %}
-                        <button type="button" class="btn btn-sm btn-secondary" data-bs-toggle="modal" data-bs-target="#smartReorganizePpmModal" title="Smart Reorganize" aria-label="Smart Reorganize">
-                            <i class="fas fa-random"></i>
-                        </button>
-                        <button type="button" class="btn btn-sm btn-secondary" data-bs-toggle="modal" data-bs-target="#normalizePpmModal" title="Normalize Schedules" aria-label="Normalize Schedules">
-                            <i class="fas fa-layer-group"></i>
-                        </button>
+                        <a class="btn btn-sm btn-primary" href="{% url 'scheduling:plans' %}?program=ppm">
+                            <i class="fas fa-calendar-alt me-1"></i> Scheduling
+                        </a>
                         {% endif %}
                         <button type="button" class="btn btn-sm btn-secondary" id="bulkMarkCompleted" disabled>
                             <i class="fas fa-check me-1"></i>Mark Completed
@@ -161,6 +163,7 @@
                             <i class="fas fa-arrow-right me-1"></i>Push
                         </button>
                     </div>
+                    {% endif %}
                 </div>
             </div>
 
@@ -180,9 +183,11 @@
                         <table class="table theme-table mb-0" id="schedulesTable">
                             <thead>
                                 <tr>
+                                    {% if access_context.can_edit %}
                                     <th width="40" class="text-center">
                                         <input type="checkbox" id="selectAll" class="form-check-input">
                                     </th>
+                                    {% endif %}
                                     <th>Department</th>
                                     <th>Equipment Details</th>
                                     <th>Serial Number</th>
@@ -195,9 +200,11 @@
                             <tbody>
                                 {% for schedule in schedules %}
                                 <tr class="equipment-row" data-search="{{ schedule.equipment.description.name }} {{ schedule.equipment.serial_number }} {{ schedule.equipment.model }} {{ schedule.equipment.department.name }}">
+                                    {% if access_context.can_edit %}
                                     <td class="text-center">
                                         <input type="checkbox" name="schedule_ids" value="{{ schedule.id }}" class="form-check-input schedule-checkbox">
                                     </td>
+                                    {% endif %}
                                     <td><span class="badge bg-secondary">{{ schedule.equipment.department.name|default:"No Dept" }}</span></td>
                                     <td><strong>{{ schedule.equipment.description.name|default:"No Description" }}</strong></td>
                                     <td><code class="small">{{ schedule.equipment.serial_number|default:"N/A" }}</code></td>
@@ -227,9 +234,11 @@
                         {% if selected_department %}No equipment scheduled in {{ selected_department.name|default:"Unknown" }} for this period.
                         {% else %}No equipment currently scheduled for maintenance for this period.{% endif %}
                     </p>
-                    <button class="btn btn-primary me-2" data-bs-toggle="modal" data-bs-target="#planningModal">
-                        <i class="fas fa-plus me-1"></i>Initialize Schedule
-                    </button>
+                    {% if access_context.can_schedule %}
+                    <a class="btn btn-primary me-2" href="{% url 'scheduling:unscheduled' %}?program=ppm">
+                        <i class="fas fa-search me-1"></i>See what is unscheduled
+                    </a>
+                    {% endif %}
                     <button class="btn btn-outline-secondary" onclick="goToCurrentMonth()">
                         <i class="fas fa-calendar-day me-1"></i>Go to Current Month
                     </button>
@@ -245,9 +254,11 @@
                         <i class="fas fa-exclamation-circle text-danger me-2"></i>Unscheduled equipment
                         <span class="badge bg-danger ms-2">{{ unscheduled_equipment|length }}</span>
                     </h5>
+                    {% if access_context.can_schedule %}
                     <button type="button" class="btn btn-secondary btn-sm" id="scheduleSelectedBtn" disabled>
                         <i class="fas fa-calendar-plus me-1"></i>Schedule Selected
                     </button>
+                    {% endif %}
                 </div>
 
                 <form id="unscheduledForm" method="post" action="{% url 'bulk_schedule_unscheduled' %}">
@@ -256,31 +267,37 @@
                         <table class="table theme-table mb-0" id="unscheduledTable">
                             <thead>
                                 <tr>
+                                    {% if access_context.can_schedule %}
                                     <th width="40" class="text-center">
                                         <input type="checkbox" id="selectAllUnscheduled" class="form-check-input">
                                     </th>
+                                    {% endif %}
                                     <th>Department</th>
                                     <th>Equipment</th>
                                     <th>Serial Number</th>
                                     <th>Model</th>
-                                    <th class="text-end">Action</th>
+                                    {% if access_context.can_schedule %}<th class="text-end">Action</th>{% endif %}
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for equipment in unscheduled_equipment %}
                                 <tr class="equipment-row">
+                                    {% if access_context.can_schedule %}
                                     <td class="text-center">
                                         <input type="checkbox" name="equipment_ids" value="{{ equipment.id }}" class="form-check-input unscheduled-checkbox">
                                     </td>
+                                    {% endif %}
                                     <td><span class="badge bg-secondary">{{ equipment.department.name|default:"No Dept" }}</span></td>
                                     <td><strong>{{ equipment.description.name|default:"No Description" }}</strong></td>
                                     <td><code class="small">{{ equipment.serial_number|default:"N/A" }}</code></td>
                                     <td>{{ equipment.model|default:"N/A" }}</td>
+                                    {% if access_context.can_schedule %}
                                     <td class="text-end">
                                         <button type="button" class="btn btn-sm btn-primary schedule-single-btn" data-equipment-id="{{ equipment.id }}">
                                             <i class="fas fa-calendar-plus me-1"></i>Schedule
                                         </button>
                                     </td>
+                                    {% endif %}
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -295,7 +312,9 @@
         <!-- SUMMARY VIEW -->
         <div id="summaryView" class="view-section">
             <h2 class="h4 fw-bold mb-1"><i class="fas fa-chart-pie me-2"></i>PPM Summary Dashboard</h2>
-            <p class="text-muted mb-4">Overview of maintenance schedules and equipment status</p>
+            <p class="text-muted mb-4">
+                Schedules for {{ selected_month_name }} {{ selected_year }}{% if selected_week %}, week {{ selected_week }}{% endif %}{% if selected_department %} in {{ selected_department.name }}{% endif %}
+            </p>
 
             <!-- Stats Grid -->
             <div class="row g-4 mb-4">
@@ -303,7 +322,7 @@
                     <div class="theme-card p-4 text-center">
                         <i class="fas fa-calendar-check fa-2x text-primary mb-2"></i>
                         <div class="display-6 fw-bold text-primary">{{ statistics.total_scheduled|default:"0" }}</div>
-                        <div class="text-muted small mt-2">Total Schedules</div>
+                        <div class="text-muted small mt-2">Schedules</div>
                     </div>
                 </div>
                 <div class="col-md-3">
@@ -395,16 +414,16 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% for dept in departments %}
+                            {% for dept in department_breakdown %}
                             <tr>
                                 <td><strong>{{ dept.name }}</strong></td>
-                                <td><span class="badge bg-secondary">0</span></td>
-                                <td><span class="badge bg-primary">0</span></td>
-                                <td><span class="badge bg-warning text-dark">0</span></td>
-                                <td><span class="badge bg-success">0</span></td>
+                                <td><span class="badge bg-secondary">{{ dept.equipment }}</span></td>
+                                <td><span class="badge bg-primary">{{ dept.scheduled }}</span></td>
+                                <td><span class="badge bg-warning text-dark">{{ dept.pending }}</span></td>
+                                <td><span class="badge bg-success">{{ dept.completed }}</span></td>
                                 <td>
                                     <div class="progress" style="height: 20px;">
-                                        <div class="progress-bar bg-success" style="width: 0%">0%</div>
+                                        <div class="progress-bar bg-success" style="width: {{ dept.completion_rate }}%">{{ dept.completion_rate }}%</div>
                                     </div>
                                 </td>
                             </tr>
@@ -555,110 +574,6 @@
 
 <!-- MODALS -->
 
-<!-- Planning Modal -->
-<div class="modal fade" id="planningModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title"><i class="fas fa-magic me-2"></i>Configure PPM Planning</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <form method="post" action="{% url 'trigger_initialization' %}" id="initializationForm">
-                {% csrf_token %}
-                <div class="modal-body">
-                    <!-- Planning Logic -->
-                    <h6 class="fw-bold mb-3"><i class="fas fa-tools me-2"></i>Planning Logic</h6>
-                    <div class="row g-3 mb-4">
-                        <div class="col-md-6">
-                            <label class="planning-option-card selected" data-logic="department">
-                                <i class="fas fa-building display-4 text-primary d-block mb-3"></i>
-                                <h6 class="fw-bold">Department-Based</h6>
-                                <p class="text-muted small mb-0">Schedule by department, balanced across months</p>
-                                <span class="check-circle"><i class="fas fa-check"></i></span>
-                            </label>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="planning-option-card" data-logic="description">
-                                <i class="fas fa-tools display-4 text-primary d-block mb-3"></i>
-                                <h6 class="fw-bold">Description-Based</h6>
-                                <p class="text-muted small mb-0">Schedule by equipment type grouping</p>
-                                <span class="check-circle"><i class="fas fa-check"></i></span>
-                            </label>
-                        </div>
-                    </div>
-                    <input type="hidden" name="planning_logic" id="planningLogic" value="department">
-
-                    <!-- Maintenance Period -->
-                    <h6 class="fw-bold mb-3"><i class="fas fa-calendar me-2"></i>Maintenance Period</h6>
-                    <div class="btn-group w-100 mb-4">
-                        <button type="button" class="period-btn" data-period="3">3 Months</button>
-                        <button type="button" class="period-btn active" data-period="6">6 Months</button>
-                        <button type="button" class="period-btn" data-period="9">9 Months</button>
-                        <button type="button" class="period-btn" data-period="12">12 Months</button>
-                    </div>
-                    <input type="hidden" name="maintenance_period" id="maintenancePeriod" value="6">
-
-                    <!-- Base Date -->
-                    <h6 class="fw-bold mb-3"><i class="fas fa-calendar-alt me-2"></i>Base Month and Year</h6>
-                    <div class="row g-3 mb-4">
-                        <div class="col-md-6">
-                            <label class="form-label">Start Month</label>
-                            <select class="form-select" name="base_month" required>
-                                <option value="1" {% if current_month == 1 %}selected{% endif %}>January</option>
-                                <option value="2" {% if current_month == 2 %}selected{% endif %}>February</option>
-                                <option value="3" {% if current_month == 3 %}selected{% endif %}>March</option>
-                                <option value="4" {% if current_month == 4 %}selected{% endif %}>April</option>
-                                <option value="5" {% if current_month == 5 %}selected{% endif %}>May</option>
-                                <option value="6" {% if current_month == 6 %}selected{% endif %}>June</option>
-                                <option value="7" {% if current_month == 7 %}selected{% endif %}>July</option>
-                                <option value="8" {% if current_month == 8 %}selected{% endif %}>August</option>
-                                <option value="9" {% if current_month == 9 %}selected{% endif %}>September</option>
-                                <option value="10" {% if current_month == 10 %}selected{% endif %}>October</option>
-                                <option value="11" {% if current_month == 11 %}selected{% endif %}>November</option>
-                                <option value="12" {% if current_month == 12 %}selected{% endif %}>December</option>
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Start Year</label>
-                            <input type="number" class="form-control" name="base_year" value="{{ current_year }}" min="2025" max="2080" required>
-                        </div>
-                    </div>
-
-                    <!-- Max Groups -->
-                    <h6 class="fw-bold mb-3"><i class="fas fa-sliders-h me-2"></i>Max Consecutive Groups per Month</h6>
-                    <div class="row g-3 mb-4">
-                        <div class="col-md-6">
-                            <label class="form-label">Max Departments</label>
-                            <input type="number" class="form-control" name="max_departments" value="20" min="1" max="100" required>
-                            <small class="text-muted">Range: 1-100</small>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Max Descriptions</label>
-                            <input type="number" class="form-control" name="max_descriptions" value="20" min="1" max="100" required>
-                            <small class="text-muted">Range: 1-100</small>
-                        </div>
-                    </div>
-
-                    <!-- Preserve Checkbox -->
-                    <div class="form-check form-switch">
-                        <input class="form-check-input" type="checkbox" name="preserve_existing" value="true" checked>
-                        <label class="form-check-label">
-                            <strong>Preserve Existing Schedules</strong><br>
-                            <small class="text-muted">Keep existing schedules, only schedule new equipment</small>
-                        </label>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-play-circle me-1"></i>Initialize Schedule
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
 <!-- Custom Report Modal -->
 <div class="modal fade" id="customReportModal" tabindex="-1">
     <div class="modal-dialog">
@@ -731,168 +646,6 @@
         </div>
     </div>
 </div>
-
-<!-- ══════════════════════════════════════════════════════════
-     PPM SMART REORGANIZE MODAL
-══════════════════════════════════════════════════════════ -->
-{% if access_context.can_schedule %}
-<div class="modal fade" id="smartReorganizePpmModal" tabindex="-1" aria-labelledby="smartReorganizePpmModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header bg-warning text-dark">
-                <h5 class="modal-title" id="smartReorganizePpmModalLabel">
-                    <i class="fas fa-random me-2"></i>Smart Reorganize PPM Schedules
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <form method="post" action="{% url 'trigger_smart_reorganize_ppm' %}">
-                {% csrf_token %}
-                <div class="modal-body">
-                    <div class="alert alert-info small mb-3">
-                        <i class="fas fa-info-circle me-1"></i>
-                        The Smart Reorganizer detects schedules using a <strong>different planning logic</strong>
-                        and safely moves them to align with the new grouping.
-                        Only <em>pending / pushed</em> schedules in the active year are affected.
-                        <strong>Completed schedules are never touched.</strong>
-                    </div>
-
-                    <!-- New Planning Logic -->
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Target Planning Logic</label>
-                        <select name="new_planning_logic" class="form-select" id="smartReorgPpmLogic">
-                            <option value="department">Department — group all equipment per department</option>
-                            <option value="description">Description — group all equipment of the same type</option>
-                        </select>
-                        <div class="form-text">
-                            All normalizable schedules will be reorganized under this logic.
-                        </div>
-                    </div>
-
-                    <!-- Base Month -->
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Starting Month</label>
-                        <select name="base_month" class="form-select">
-                            {% for m in months_list %}
-                            <option value="{{ m.number }}" {% if m.number == current_month %}selected{% endif %}>{{ m.name }}</option>
-                            {% endfor %}
-                        </select>
-                        <div class="form-text">First month groups will be reallocated to.</div>
-                    </div>
-
-                    <!-- Max groups per month -->
-                    <div class="row g-2">
-                        <div class="col-6">
-                            <label class="form-label fw-semibold">Max Depts / Month</label>
-                            <input type="number" name="max_departments" class="form-control" value="100" min="1" max="200">
-                        </div>
-                        <div class="col-6">
-                            <label class="form-label fw-semibold">Max Descriptions / Month</label>
-                            <input type="number" name="max_descriptions" class="form-control" value="100" min="1" max="200">
-                        </div>
-                    </div>
-
-                    <!-- Dry Run -->
-                    <div class="form-check mt-3">
-                        <input class="form-check-input" type="checkbox" name="dry_run" value="true" id="smartReorgDryRun">
-                        <label class="form-check-label fw-semibold" for="smartReorgDryRun">
-                            Dry Run Only
-                        </label>
-                        <div class="form-text ms-4">
-                            Preview what would change without modifying any schedules.
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-warning">
-                        <i class="fas fa-random me-1"></i>Run Smart Reorganizer
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-{% endif %}
-
-<!-- ══════════════════════════════════════════════════════════
-     PPM NORMALIZE MODAL
-══════════════════════════════════════════════════════════ -->
-{% if access_context.can_schedule %}
-<div class="modal fade" id="normalizePpmModal" tabindex="-1" aria-labelledby="normalizePpmModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title" id="normalizePpmModalLabel">
-                    <i class="fas fa-layer-group me-2"></i>Normalize PPM Schedules
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <form method="post" action="{% url 'trigger_normalize_ppm' %}">
-                {% csrf_token %}
-                <div class="modal-body">
-                    <div class="alert alert-info small mb-3">
-                        <i class="fas fa-info-circle me-1"></i>
-                        Normalization ensures every <strong>group</strong>
-                        (all equipment in the same department <em>or</em> the same type)
-                        lands in the <strong>same month</strong>.
-                        Only <em>pending / pushed</em> schedules in the active planning year
-                        are affected — completed schedules are never touched.
-                    </div>
-
-                    <!-- Planning Logic -->
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Group By</label>
-                        <select name="planning_logic" class="form-select" id="normPpmLogic">
-                            <option value="department">Department — all equipment per department → one month</option>
-                            <option value="description">Description — all equipment of the same type → one month</option>
-                        </select>
-                    </div>
-
-                    <!-- Maintenance Period -->
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Maintenance Period</label>
-                        <select name="maintenance_period" class="form-select">
-                            <option value="3">3 Months (Quarterly)</option>
-                            <option value="6" selected>6 Months (Semi-annual)</option>
-                            <option value="9">9 Months</option>
-                            <option value="12">12 Months (Annual)</option>
-                        </select>
-                    </div>
-
-                    <!-- Base Month -->
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Starting Month</label>
-                        <select name="base_month" class="form-select">
-                            {% for m in months_list %}
-                            <option value="{{ m.number }}" {% if m.number == current_month %}selected{% endif %}>{{ m.name }}</option>
-                            {% endfor %}
-                        </select>
-                        <div class="form-text">First month groups will be allocated to.</div>
-                    </div>
-
-                    <!-- Max groups per month -->
-                    <div class="row g-2">
-                        <div class="col-6">
-                            <label class="form-label fw-semibold" id="normLabelDept">Max Departments / Month</label>
-                            <input type="number" name="max_departments" class="form-select" value="100" min="1" max="200">
-                        </div>
-                        <div class="col-6">
-                            <label class="form-label fw-semibold" id="normLabelDesc">Max Descriptions / Month</label>
-                            <input type="number" name="max_descriptions" class="form-select" value="100" min="1" max="200">
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-layer-group me-1"></i>Run Normalization
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-{% endif %}
 
 <!-- Loading Overlay -->
 <div id="loadingOverlay" class="position-fixed top-0 start-0 w-100 h-100 d-none" style="background: rgba(0,0,0,0.7); z-index: 9999;">

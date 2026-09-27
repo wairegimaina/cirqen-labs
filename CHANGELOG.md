@@ -5,7 +5,7 @@ Changes that hospitals will notice, newest first. Releases marked
 `docs/validation/ISO17025_VALIDATION.md`: repeat the worked example before
 using the new version for certificates.
 
-## Unreleased (planned 1.6.0): re-validation required
+## Unreleased: re-validation required
 
 ### Calibration
 - A calibration cannot be saved with fewer readings than the procedure asks
@@ -26,15 +26,15 @@ using the new version for certificates.
 - Bulk certificate download no longer uses a GPL-licensed library.
 
 ### Work orders and maintenance
-- In-charges can approve work orders from a phone, signing with a finger.
-- Checklists per equipment type appear on work orders.
+- In-charges can approve work orders from a phone, signing with a finger
+  (Work Orders, Phone approval).
 - New Assets menu: maintenance KPIs (uptime, MTTR, MTBF, PPM compliance),
-  a replacement-risk score for each machine, contracts and warranties,
-  stock alerts with reorder levels and suppliers, and printable QR labels
-  that open each machine's page.
-- Daily reminders (in-app, email, SMS where set up) for PPM and calibration
-  due, standards and contracts expiring, low stock and work orders waiting
-  for approval; a monthly PDF report emailed to each HOD.
+  service contracts (with the Inventory suppliers), stock alerts with
+  reorder levels, and printable QR labels that open each machine's page
+  (status, warranty, failure risk, history).
+- Alerts (in-app, email, SMS where set up) for reference standards due,
+  service contracts ending and low stock; a monthly PDF report emailed to
+  each HOD. PPM, calibration and warranties are in the 1.6.0 daily digest.
 - Large reports are built in the background.
 
 ### Security
@@ -58,9 +58,21 @@ using the new version for certificates.
   (`CIRQEN_SECURITY_LOG_DAYS`; 0 keeps them).
 
 ### Upgrade notes
-- HQ must be updated first and `public.assets_supplier` and
-  `public.assets_servicecontract` added to its `TABLES`
-  (`public.CalSoft_calibrationschedule` removed).
+- HQ must be updated first: it now creates the tables and columns sites
+  used to create with `migrate --database=hq`
+  (`migrations/2026_add_scheduling_warranty_checklists.sql`). Add
+  `public.assets_servicecontract` to its `TABLES`, remove
+  `public.CalSoft_calibrationschedule`.
+
+## 1.6.0 (2026-09-25)
+- Scheduling plans: each workshop plans its own PPM programme and the
+  calibration centre plans calibration hospital-wide; schedule history is
+  kept and no equipment is left unscheduled.
+- Warranties and suppliers in Inventory; work-order checklists; daily
+  email digests; failure-risk prediction in Machine Reports.
+- One sidebar entry per module, with its pages as tabs; HODs see PPM and
+  calibration schedules read-only.
+- Sign in with username or email.
 
 ## 1.5.5 (2026-09-24)
 - "Job cards" are now called "Work Orders"; work orders have Remarks.

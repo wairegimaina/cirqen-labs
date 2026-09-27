@@ -27,6 +27,9 @@ class HelperTests(TestCase):
         self.a, self.b = (Equipment.objects.create(description=monitor, model="M", serial_number=f"MON-{n}",
                                                    department=ward, workshop=workshop, status="Working")
                           for n in (1, 2))
+        # The scheduling planner schedules new equipment itself; these tests
+        # set up their own schedules.
+        CalibrationSchedule.objects.all().delete()
         self.user = get_user_model().objects.create_user(username="helper", password="x")
         self.procedure = CalibrationProcedure.objects.create(name="NIBP", created_by=self.user)
         self.month = timezone.localdate().replace(day=1)

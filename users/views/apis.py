@@ -84,16 +84,21 @@ def api_update_user(request, user_id):
 
             user.save()
 
-            # Update profile
+            # Update profile. Read the old role before overwriting it, or a role
+            # change never clears the old role's department/workshop/level.
+            old_role = profile.role
             if data.get("role"):
                 profile.role = data["role"]
 
             if data.get("phone"):
                 profile.phone_number = data["phone"]
 
+            # Only an HOD designates the deputy (copied on the HOD's email).
+            if current_profile.role == "HOD" and "isDeputyHod" in data:
+                profile.is_deputy_hod = str(data["isDeputyHod"]).lower() in ("true", "1", "on")
+
             # Reset role-specific fields when role changes
-            old_role = profile.role
-            new_role = data.get("role", old_role)
+            new_role = profile.role
 
             if old_role != new_role:
                 profile.department = None
@@ -364,7 +369,8 @@ def api_get_users(request):
                 'createdAt': user_profile.created_at.isoformat(),
                 'createdBy': user_profile.created_by.username if user_profile.created_by else None,
                 'needsSetup': user_profile.needs_first_login_setup(),
-                'hasSignature': user_profile.has_uploaded_signature
+                'hasSignature': user_profile.has_uploaded_signature,
+                'isDeputyHod': user_profile.is_deputy_hod,
             }
             users_data.append(user_data)
 

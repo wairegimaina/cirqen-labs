@@ -12,13 +12,9 @@ urlpatterns = [
 
     # API endpoints
     path('api/overdue-status/', views.get_overdue_status, name='api_overdue_status'),
-    path('api/waiting-groups/', views.get_waiting_groups, name='api_waiting_groups'),
-    path('api/group-status/<uuid:schedule_id>/', views.get_group_status, name='api_group_status'),
-    path('api/task-status/<str:task_id>/', views.get_calibration_task_status, name='api_task_status'),
 
     # Main views
     path('', views.calibration_dashboard, name='calibration_dashboard'),
-    path('initialize/', views.trigger_calibration_initialization, name='trigger_calibration_initialization'),
     path('push/<uuid:schedule_id>/', views.push_calibration_schedule, name='push_calibration_schedule'),
     path('complete/<uuid:schedule_id>/', views.mark_calibration_completed, name='mark_calibration_completed'),
     path('edit/<uuid:schedule_id>/', views.edit_calibration_schedule, name='edit_calibration_schedule'),
@@ -33,12 +29,7 @@ urlpatterns = [
     path('department/<uuid:dept_id>/', views.calibration_by_department, name='calibration_by_department'),
     path('calibration/export-pdf/', views.export_calibration_pdf, name='export_calibration_pdf'),
     path('calibration/department/<uuid:dept_id>/export-pdf/', views.export_department_calibration_pdf, name='export_department_calibration_pdf'),
-    path('calibration/auto-advance/', views.trigger_auto_advance_calibrations, name='trigger_auto_advance_calibrations'),
-    path('calibration/normalize/', views.trigger_normalize_schedules, name='trigger_normalize_schedules'),
     path('pending/', views.pending_calibrations, name='pending_calibrations'),
 
     # Group view: the estate as the scheduler sees it, plus targeted regrouping.
-    path('groups/', views.schedule_groups, name='schedule_groups'),
-    path('groups/regroup/', views.regroup_schedules, name='regroup_schedules'),
-    path('trigger-smart-reorganize/', views.trigger_smart_reorganize, name='trigger_smart_reorganize'),
 ]

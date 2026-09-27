@@ -1,0 +1,17 @@
+{% autoescape off %}A work order is waiting for your approval.
+
+Reference:   {{ ref }}
+Equipment:   {{ equipment.description.name }} (SN {{ equipment.serial_number }})
+Department:  {{ wo.department.name }}
+Workshop:    {{ wo.workshop.name }}
+Action:      {{ wo.action_taken }} ({{ wo.priority_level }} priority)
+Technician:  {{ technician }}
+
+Work done:
+{{ wo.job_description }}
+{% if checklist_total %}
+Checklist: {{ checklist_total }} step{{ checklist_total|pluralize }} recorded{% if checklist_problems %}, {{ checklist_problems|length }} failed or not done:{% for e in checklist_problems %}
+  - {{ e.task }}: {{ e.get_result_display }}{% if e.note %} ({{ e.note }}){% endif %}{% endfor %}{% else %}, all passed.{% endif %}
+{% endif %}
+Open {{ app_name }} > Work Orders > Waiting Work Orders to approve or decline it.
+{% endautoescape %}

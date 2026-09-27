@@ -18,24 +18,21 @@ def _month_end(day):
 
 @shared_task
 def daily_alerts(today=None):
-    """PPM and calibration due/overdue, standards and contracts expiring, low stock.
+    """Reference standards due, service contracts ending, low stock.
 
-    One summary notification per person per subject, repeated each day while
+    PPM and calibration due dates, warranties and high-risk devices are in the
+    daily digest (notifications.digest); this covers what it does not. One summary notification per person per subject, repeated each day while
     the condition lasts (core.notify skips an unread copy from the same day).
     Returns {subject: notifications created}.
     """
-    from calSchedules.models import CalibrationSchedule
     from CalSoft.models import Standard
     from core.notify import notify, recipients, workshop_leads
-    from Inventory.models import Equipment
     from parts_tools.models import Accessories
-    from ppms.models import PPMSchedule
     from workshop.models import Workshop
 
     from .models import ServiceContract
 
     today = today or timezone.localdate()
-    this_month = today.replace(day=1)
     created = {}
 
     def safe(subject, fn):
@@ -44,38 +41,6 @@ def daily_alerts(today=None):
         except Exception:
             logger.exception("Daily alert '%s' failed", subject)
             created[subject] = 0
-
-    def ppm():
-        total = 0
-        for workshop in Workshop.objects.all():
-            due = PPMSchedule.objects.filter(workshop=workshop, active_status=True,
-                                             status__in=["pending", "pushed"], scheduled_month__lte=this_month)
-            overdue = due.filter(scheduled_month__lt=this_month).count()
-            this = due.filter(scheduled_month=this_month).count()
-            if not (overdue or this):
-                continue
-            total += notify(workshop_leads(workshop), "ppm_overdue" if overdue else "ppm_due",
-                            f"PPM: {overdue} overdue, {this} due this month" if overdue
-                            else f"PPM: {this} due this month",
-                            f"{workshop.name}: preventive maintenance waiting to be done.",
-                            url=reverse("ppm_dashboard"))
-        return total
-
-    def calibration():
-        total = 0
-        for workshop in Workshop.objects.filter(category="calibration_center"):
-            due = CalibrationSchedule.objects.filter(status__in=["pending", "pushed"], active_status=True,
-                                                     scheduled_month__lte=this_month)
-            overdue = due.filter(scheduled_month__lt=this_month).count()
-            this = due.filter(scheduled_month=this_month).count()
-            if not (overdue or this):
-                continue
-            total += notify(workshop_leads(workshop), "calibration_overdue" if overdue else "calibration_due",
-                            f"Calibration: {overdue} overdue, {this} due this month" if overdue
-                            else f"Calibration: {this} due this month",
-                            "Calibrations waiting to be done.",
-                            url=reverse("schedule:pending_calibrations"))
-        return total
 
     def standards():
         soon = Standard.objects.filter(active_status=True,
@@ -92,17 +57,15 @@ def daily_alerts(today=None):
     def contracts():
         horizon = today + timedelta(days=CONTRACT_WARNING_DAYS)
         ending = ServiceContract.objects.filter(active_status=True, end_date__gte=today, end_date__lte=horizon)
-        warranties = Equipment.objects.filter(active_status=True, warranty_end__gte=today, warranty_end__lte=horizon)
-        count = ending.count() + warranties.count()
+        count = ending.count()
         if not count:
             return 0
         people = recipients("HOD")
-        workshops = set(ending.values_list("equipment__workshop", flat=True)) | set(
-            warranties.values_list("workshop", flat=True))
+        workshops = set(ending.values_list("equipment__workshop", flat=True))
         for workshop in Workshop.objects.filter(pk__in=[w for w in workshops if w]):
             people += workshop_leads(workshop)
         return notify(people, "contract_expiring",
-                      f"{count} warranty/service contract(s) end within {CONTRACT_WARNING_DAYS} days",
+                      f"{count} service contract(s) end within {CONTRACT_WARNING_DAYS} days",
                       "Renew or plan cover before they lapse.", url=reverse("assets:contracts"))
 
     def stock():
@@ -122,8 +85,7 @@ def daily_alerts(today=None):
                             url=reverse("assets:stock_alerts"))
         return total
 
-    for subject, fn in (("ppm", ppm), ("calibration", calibration), ("standards", standards),
-                        ("contracts", contracts), ("stock", stock)):
+    for subject, fn in (("standards", standards), ("contracts", contracts), ("stock", stock)):
         safe(subject, fn)
     logger.info("Daily alerts: %s", created)
     return created
@@ -131,7 +93,7 @@ def daily_alerts(today=None):
 
 @shared_task
 def monthly_hod_report(today=None):
-    """On the 1st: last month's KPIs, risk list and backlog, emailed to each HOD
+    """On the 1st: last month's KPIs, failure-risk list and backlog, emailed to each HOD
     with an email address, as a PDF attachment. Returns how many were sent."""
     from django.conf import settings
     from django.core.mail import EmailMessage

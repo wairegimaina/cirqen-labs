@@ -1,0 +1,182 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{% if template %}Edit{% else %}New{% endif %} Checklist{% endblock %}
+{% block page_title %}{% if template %}Edit{% else %}New{% endif %} Checklist{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    {% for message in messages %}
+    <div class="alert {% if 'success' in message.tags %}alert-success{% else %}alert-danger{% endif %} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endfor %}
+
+    <form method="post" id="checklistForm">
+        {% csrf_token %}
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-clipboard-check me-2 text-muted"></i>Checklist</h5>
+                <a href="{% url 'jobcard:checklist_settings' %}" class="btn btn-outline-secondary btn-sm"><i class="fas fa-arrow-left me-1"></i>All checklists</a>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-5">
+                        <label class="form-label" for="title">Checklist Name <span class="text-danger">*</span></label>
+                        <input type="text" name="title" id="title" class="form-control" maxlength="200" required
+                               value="{% if posted %}{{ posted.title }}{% else %}{{ template.title|default:'' }}{% endif %}"
+                               placeholder="e.g. Infusion pump quarterly PPM">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label" for="equipment_description">Equipment</label>
+                        <select name="equipment_description" id="equipment_description" class="form-select">
+                            <option value="">All equipment</option>
+                            {% for d in descriptions %}
+                            <option value="{{ d.id }}" {% if selected_description == d.id|stringformat:"s" %}selected{% endif %}>{{ d.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label" for="task_type">Task</label>
+                        <select name="task_type" id="task_type" class="form-select">
+                            {% for value, label in task_choices %}
+                            <option value="{{ value }}" {% if selected_task == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label" for="instructions">Description</label>
+                        <textarea name="instructions" id="instructions" class="form-control" rows="3"
+                                  placeholder="Purpose, safety precautions, tools and test equipment needed, how to prepare the device">{% if posted %}{{ posted.instructions }}{% else %}{{ template.instructions|default:'' }}{% endif %}</textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-list-ol me-2 text-muted"></i>Steps</h5>
+                <button type="button" class="btn btn-primary btn-sm" id="addStep"><i class="fas fa-plus me-1"></i>Add Step</button>
+            </div>
+            <div class="card-body" id="steps">
+                {% for step in steps %}
+                <div class="step-row border rounded p-3 mb-3">
+                    <input type="hidden" name="item_id" value="{{ step.id|default:'' }}">
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <label class="form-label small">Step <span class="step-number"></span> <span class="text-danger">*</span></label>
+                            <input type="text" name="item_task" class="form-control" maxlength="255" value="{{ step.task }}" placeholder="What to do, e.g. Inspect power cord and plug">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small">Answer Type</label>
+                            <select name="item_response_type" class="form-select">
+                                {% for value, label in response_choices %}
+                                <option value="{{ value }}" {% if step.response_type == value %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small">Required?</label>
+                            <select name="item_required" class="form-select">
+                                <option value="1" {% if step.is_required %}selected{% endif %}>Required</option>
+                                <option value="0" {% if not step.is_required %}selected{% endif %}>Optional</option>
+                            </select>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label small">How to do it</label>
+                            <textarea name="item_guidance" class="form-control" rows="2" placeholder="Method, settings, where to measure">{{ step.guidance }}</textarea>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small">Expected Result</label>
+                            <input type="text" name="item_expected" class="form-control" maxlength="255" value="{{ step.expected_result }}" placeholder="e.g. No cracks; 230 V ± 10%">
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-end gap-1 mt-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm move-up" title="Move up" aria-label="Move up"><i class="fas fa-arrow-up"></i></button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm move-down" title="Move down" aria-label="Move down"><i class="fas fa-arrow-down"></i></button>
+                        <button type="button" class="btn btn-outline-danger btn-sm remove-step" title="Remove" aria-label="Remove"><i class="fas fa-trash"></i></button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-end gap-2">
+            <a href="{% url 'jobcard:checklist_settings' %}" class="btn btn-secondary">Cancel</a>
+            <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i>Save Checklist</button>
+        </div>
+    </form>
+</div>
+
+<template id="stepTemplate">
+    <div class="step-row border rounded p-3 mb-3">
+        <input type="hidden" name="item_id" value="">
+        <div class="row g-2">
+            <div class="col-md-6">
+                <label class="form-label small">Step <span class="step-number"></span> <span class="text-danger">*</span></label>
+                <input type="text" name="item_task" class="form-control" maxlength="255" placeholder="What to do, e.g. Inspect power cord and plug">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small">Answer Type</label>
+                <select name="item_response_type" class="form-select">
+                    {% for value, label in response_choices %}
+                    <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small">Required?</label>
+                <select name="item_required" class="form-select">
+                    <option value="1" selected>Required</option>
+                    <option value="0">Optional</option>
+                </select>
+            </div>
+            <div class="col-md-8">
+                <label class="form-label small">How to do it</label>
+                <textarea name="item_guidance" class="form-control" rows="2" placeholder="Method, settings, where to measure"></textarea>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small">Expected Result</label>
+                <input type="text" name="item_expected" class="form-control" maxlength="255" placeholder="e.g. No cracks; 230 V ± 10%">
+            </div>
+        </div>
+        <div class="d-flex justify-content-end gap-1 mt-2">
+            <button type="button" class="btn btn-outline-secondary btn-sm move-up" title="Move up" aria-label="Move up"><i class="fas fa-arrow-up"></i></button>
+            <button type="button" class="btn btn-outline-secondary btn-sm move-down" title="Move down" aria-label="Move down"><i class="fas fa-arrow-down"></i></button>
+            <button type="button" class="btn btn-outline-danger btn-sm remove-step" title="Remove" aria-label="Remove"><i class="fas fa-trash"></i></button>
+        </div>
+    </div>
+</template>
+
+<script>
+(function () {
+  const steps = document.getElementById('steps');
+  const tpl = document.getElementById('stepTemplate');
+
+  function renumber() {
+    steps.querySelectorAll('.step-row').forEach((row, i) => {
+      row.querySelector('.step-number').textContent = i + 1;
+    });
+  }
+  function addStep() {
+    steps.appendChild(tpl.content.cloneNode(true));
+    renumber();
+    steps.lastElementChild.querySelector('input[name="item_task"]').focus();
+  }
+
+  document.getElementById('addStep').addEventListener('click', addStep);
+  steps.addEventListener('click', (e) => {
+    const row = e.target.closest('.step-row');
+    if (!row) return;
+    if (e.target.closest('.remove-step')) row.remove();
+    else if (e.target.closest('.move-up') && row.previousElementSibling) steps.insertBefore(row, row.previousElementSibling);
+    else if (e.target.closest('.move-down') && row.nextElementSibling) steps.insertBefore(row.nextElementSibling, row);
+    renumber();
+  });
+
+  if (!steps.querySelector('.step-row')) addStep();
+  renumber();
+})();
+</script>
+{% endblock %}

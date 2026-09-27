@@ -1,0 +1,102 @@
+{% extends 'scheduling/_layout.html' %}
+{% block sched_title %}Overview{% endblock %}
+{% block heading %}Scheduling overview{% endblock %}
+
+{% block body %}
+<section class="section-card">
+  <div class="section-card-head">
+    <div>
+      <h3 class="section-card-title"><i class="fas fa-sliders-h" aria-hidden="true"></i> Scheduling plan</h3>
+      {% if not plan %}<p class="section-card-sub">No plan yet: one is created on the next scheduling run (grouped by description, months spread evenly), or set it up now.</p>{% endif %}
+    </div>
+    <div class="page-actions">
+      {% if draft %}<a class="btn btn-sm btn-outline-secondary" href="{% url 'scheduling:plan' draft.id %}">Continue draft v{{ draft.version }}</a>{% endif %}
+      <a class="btn btn-sm btn-primary" href="{% url 'scheduling:plans' %}{{ scope.query }}">{% if plan %}View plan{% else %}Set up a plan{% endif %}</a>
+    </div>
+  </div>
+  {% if plan %}
+  <div class="section-card-body">
+    <dl class="sched-plan mb-0">
+      <div><dt>Version</dt><dd>v{{ plan.version }}</dd></div>
+      <div><dt>Groups by</dt><dd>{{ plan.get_logic_display }}</dd></div>
+      <div><dt>Default interval</dt><dd>{% if plan.default_interval_months %}{{ plan.default_interval_months }} months{% else %}none{% endif %}</dd></div>
+      <div><dt>Active since</dt><dd>{{ plan.activated_at|date:"d M Y"|default:"—" }}</dd></div>
+    </dl>
+  </div>
+  {% endif %}
+</section>
+
+<div class="kpi-grid mb-3">
+  {% include 'includes/kpi_card.html' with value=figures.total label="Equipment" icon="fa-microchip" %}
+  {% include 'includes/kpi_card.html' with value=figures.scheduled label="Scheduled" icon="fa-calendar-check" variant="success" %}
+  {% include 'includes/kpi_card.html' with value=figures.unscheduled label="Unscheduled" icon="fa-calendar-times" variant="warning" %}
+  {% include 'includes/kpi_card.html' with value=figures.overdue label="Overdue" icon="fa-clock" variant="overdue" %}
+</div>
+<div class="kpi-grid mb-3">
+  {% include 'includes/kpi_card.html' with value=figures.due_this_month label="Due this month" icon="fa-calendar-day" %}
+  {% include 'includes/kpi_card.html' with value=figures.due_next_month label="Due next month" icon="fa-calendar-plus" %}
+  {% include 'includes/kpi_card.html' with value=figures.completed label="Completed (all time)" icon="fa-check" %}
+  {% include 'includes/kpi_card.html' with value=figures.conflicts label="More than one open schedule" icon="fa-clone" sub="should be 0" %}
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-8">
+    <section class="section-card h-100">
+      <div class="section-card-head">
+        <div>
+          <h3 class="section-card-title"><i class="fas fa-chart-bar" aria-hidden="true"></i> Open schedules by month</h3>
+          <p class="section-card-sub">An uneven profile means the plan's months need spreading. Select a month to see its equipment.</p>
+        </div>
+        <a class="btn btn-sm btn-outline-secondary" href="{% url 'scheduling:months' %}{{ scope.query }}">Month view</a>
+      </div>
+      <div class="section-card-body">
+        {% with d=distribution %}
+        <div class="sched-bars" role="list" aria-label="Open schedules per month">
+          <a class="sched-bar overdue" role="listitem" href="{% url 'scheduling:unscheduled' %}{{ scope.query }}"
+             aria-label="Overdue: {{ d.overdue }}">
+            <span class="tip">Overdue: {{ d.overdue }}</span>
+            <span class="fill" style="height: {{ d.overdue_pct }}%"></span>
+          </a>
+          {% for b in d.bars %}
+          <a class="sched-bar" role="listitem" href="{% url 'scheduling:month' b.month.year b.month.month %}{{ scope.query }}"
+             aria-label="{{ b.month|date:'F Y' }}: {{ b.count }} due">
+            <span class="tip">{{ b.month|date:"M Y" }}: {{ b.count }} due</span>
+            <span class="fill" style="height: {{ b.pct }}%"></span>
+          </a>
+          {% endfor %}
+        </div>
+        <div class="sched-bar-labels" aria-hidden="true">
+          <span>Late</span>
+          {% for b in d.bars %}<span class="{% if forloop.first %}now{% endif %}">{{ b.month|date:"M" }}{% if b.month.month == 1 %} '{{ b.month|date:"y" }}{% endif %}</span>{% endfor %}
+        </div>
+        {% endwith %}
+      </div>
+    </section>
+  </div>
+
+  <div class="col-lg-4">
+    <section class="section-card h-100">
+      <div class="section-card-head">
+        <h3 class="section-card-title"><i class="fas fa-stethoscope" aria-hidden="true"></i> Plan health</h3>
+      </div>
+      <div class="section-card-body">
+        {% if plan %}
+        <ul class="sched-problems">
+          <li><span>Equipment whose group has no months</span><span class="count">{{ figures.no_months }}</span></li>
+          <li><span>Equipment without an interval</span><span class="count">{{ figures.no_interval }}</span></li>
+          <li><span>Interval doesn't fit the group's months</span><span class="count">{{ figures.does_not_fit }}</span></li>
+          <li><span>Open schedules outside the plan</span><span class="count">{{ figures.off_plan }}</span></li>
+        </ul>
+        {% if figures.no_months or figures.no_interval or figures.does_not_fit or figures.off_plan %}
+        <a class="btn btn-sm btn-outline-secondary mt-3" href="{% url 'scheduling:unscheduled' %}{{ scope.query }}">Review</a>
+        {% else %}
+        <p class="sched-muted mt-3 mb-0"><i class="fas fa-check" aria-hidden="true"></i> Every device fits the plan.</p>
+        {% endif %}
+        {% else %}
+        <p class="sched-muted mb-0">Health checks apply once a plan is active.</p>
+        {% endif %}
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}

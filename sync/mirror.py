@@ -39,8 +39,10 @@ from enum import Enum
 from psycopg2.extras import RealDictCursor, Json
 try:
     from .sql_ident import qualified
+    from .open_schedule_rule import is_one_open_violation
 except ImportError:  # loaded as a top-level module with sync/ on sys.path
     from sql_ident import qualified
+    from open_schedule_rule import is_one_open_violation
 
 # Setup logging
 LOG = logging.getLogger("mirror_sync")
@@ -1248,6 +1250,16 @@ class DatabaseMirror:
                 self.hq_conn.rollback()
             except Exception:
                 pass
+
+            # One open schedule per equipment: the key is only equipment_id,
+            # so the generic resolver below would pick any row of that
+            # equipment (possibly a completed one) and delete the local row.
+            # Leave it to the regular upload, where HQ decides which open
+            # schedule stays and retires the other.
+            if is_one_open_violation(uv_error):
+                LOG.info(f"   ↳ {table}[{row_id}]: second open schedule for its equipment; "
+                         f"left to the regular upload to resolve")
+                return False
 
             error_msg = str(uv_error)
             try:

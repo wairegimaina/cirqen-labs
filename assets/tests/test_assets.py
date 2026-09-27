@@ -1,4 +1,4 @@
-"""Phase 3: notifications, KPIs, risk, QR labels, contracts and stock alerts."""
+"""Assets: KPIs, machine page, QR labels, service contracts, stock alerts, alerts and the monthly report."""
 import datetime
 from unittest import mock
 
@@ -9,8 +9,8 @@ from django.urls import reverse
 from django.utils import timezone
 
 from assets.kpis import compute, repair_hours
-from assets.models import ServiceContract, Supplier
-from assets.risk import score_machines
+from assets.models import ServiceContract
+from Inventory.models import Supplier, Warranty
 from CalSoft.models import CalibrationNotification, CalibrationProcedure, CalibrationSession
 from Inventory.models import Department, Equipment, EquipmentDescription
 from jobcard.models import jobcard
@@ -88,49 +88,7 @@ class KpiTests(AssetsBase):
         self.assertEqual(page.context["k"].machines, 1)  # ICU only
 
 
-class RiskTests(AssetsBase):
-    def test_score_ranks_and_explains(self):
-        today = timezone.localdate()
-        for day in (5, 40, 80, 120):
-            self._repair(self.vent, today - datetime.timedelta(days=day))
-        self.vent.purchase_date = today - datetime.timedelta(days=365 * 9)
-        self.vent.expected_life_years = 10
-        self.vent.status = "Not working"
-        self.vent.save()
-        procedure = CalibrationProcedure.objects.create(name="Flow", created_by=self.hod)
-        CalibrationSession.objects.create(procedure=procedure, performed_by=self.hod, device_serial="VENT-1",
-                                          status="approved", overall_pass=False)
-        rows = score_machines(Equipment.objects.all())
-        self.assertEqual(rows[0]["equipment"], self.vent)
-        self.assertGreaterEqual(rows[0]["score"], 90)
-        reasons = " ".join(rows[0]["reasons"])
-        for text in ("4 repairs", "Not working", "failed its last calibration", "expected life"):
-            self.assertIn(text, reasons)
-        self.assertNotIn(self.pump, [r["equipment"] for r in rows])
-
-    def test_a_current_contract_removes_the_cover_part(self):
-        today = timezone.localdate()
-        self.pump.warranty_end = today - datetime.timedelta(days=1)
-        self.pump.save()
-        self.assertEqual(score_machines(Equipment.objects.filter(pk=self.pump.pk))[0]["score"], 5)
-        ServiceContract.objects.create(equipment=self.pump, start_date=today - datetime.timedelta(days=10),
-                                       end_date=today + datetime.timedelta(days=300))
-        self.assertEqual(score_machines(Equipment.objects.filter(pk=self.pump.pk)), [])
-
-
 class NotificationTests(AssetsBase):
-    @override_settings(EMAIL_HOST_USER="cirqen@hospital.example")
-    def test_a_new_work_order_notifies_the_departments_in_charge_once(self):
-        card = jobcard.objects.create(department=self.icu, equipment=self.vent, workshop=self.workshop,
-                                      priority_level="High", action_taken="Repair", job_description="x",
-                                      status="Waiting Approval")
-        notes = CalibrationNotification.objects.filter(recipient=self.nic, notification_type="approval_needed")
-        self.assertEqual(notes.count(), 1)
-        self.assertIn(str(card.id), notes.get().action_url)
-        self.assertEqual([m.to for m in mail.outbox], [["nic@hospital.example"]])
-        card.save()  # an update is not a new work order
-        self.assertEqual(notes.count(), 1)
-
     def test_sms_goes_through_africas_talking_when_configured(self):
         from core.notify import notify
 
@@ -157,19 +115,16 @@ class NotificationTests(AssetsBase):
         self.assertTrue(CalibrationNotification.objects.filter(recipient=self.lead,
                                                                notification_type="stock_low").exists())
 
-    def test_daily_alerts_cover_ppm_contracts_and_stock(self):
+    def test_daily_alerts_cover_contracts_and_stock_not_the_digest(self):
         from assets.tasks import daily_alerts
 
         today = timezone.localdate()
-        PPMSchedule.objects.bulk_create([PPMSchedule(
-            equipment=self.vent, workshop=self.workshop, status="pending",
-            scheduled_month=(today.replace(day=1) - datetime.timedelta(days=40)).replace(day=1))])
         ServiceContract.objects.create(equipment=self.pump, start_date=today - datetime.timedelta(days=300),
                                        end_date=today + datetime.timedelta(days=20))
         created = daily_alerts()
-        self.assertEqual(created["ppm"], 1)
+        self.assertEqual(set(created), {"standards", "contracts", "stock"})  # PPM etc. are in the digest
         self.assertGreaterEqual(created["contracts"], 2)  # HOD and the in-charge
-        self.assertEqual(daily_alerts()["ppm"], 0)  # not repeated while unread
+        self.assertEqual(daily_alerts()["contracts"], 0)  # not repeated while unread
 
 
 class PageTests(AssetsBase):
@@ -193,9 +148,18 @@ class PageTests(AssetsBase):
         self.assertEqual(denied.status_code, 403)
         self.client.force_login(self.lead)
         self.client.post(reverse("assets:machine", args=[self.vent.pk]),
-                         {"expected_life_years": 8, "warranty_end": "2027-01-31"})
+                         {"expected_life_years": 8, "purchase_cost": "1250000"})
         self.vent.refresh_from_db()
-        self.assertEqual((self.vent.expected_life_years, str(self.vent.warranty_end)), (8, "2027-01-31"))
+        self.assertEqual((self.vent.expected_life_years, str(self.vent.purchase_cost)), (8, "1250000.00"))
+
+    def test_machine_page_shows_the_warranty_and_failure_risk(self):
+        today = timezone.localdate()
+        Warranty.objects.create(equipment=self.vent, start_date=today.replace(year=today.year - 1),
+                                expiry_date=today.replace(year=today.year + 1))
+        self.client.force_login(self.lead)
+        page = self.client.get(reverse("assets:machine", args=[self.vent.pk]))
+        self.assertEqual(page.context["warranty"].equipment, self.vent)
+        self.assertContains(page, "Chance of a repair in 90 days")
 
     def test_qr_labels_encode_the_machine_page(self):
         self.client.force_login(self.lead)
@@ -251,14 +215,12 @@ class MonthlyReportTests(AssetsBase):
         self.assertTrue(content.startswith(b"%PDF"))
 
 
-class SyncTableMergeTests(SimpleTestCase):
-    def test_new_tables_reach_old_config_files_in_dependency_order(self):
-        from config import merge_sync_tables
+class SyncTableTests(SimpleTestCase):
+    def test_service_contracts_sync_after_suppliers_and_equipment(self):
+        from config import CirqenConfig
 
-        old = ["public.workshop_workshop", "public.Inventory_equipment", "public.CalSoft_calibrationschedule",
-               "public.parts_tools_accessories"]
-        merged = merge_sync_tables(old)
-        self.assertNotIn("public.CalSoft_calibrationschedule", merged)
-        self.assertIn("public.assets_servicecontract", merged)
-        self.assertLess(merged.index("public.assets_supplier"), merged.index("public.parts_tools_accessories"))
-        self.assertLess(merged.index("public.Inventory_equipment"), merged.index("public.assets_servicecontract"))
+        tables = CirqenConfig.DEFAULT_CONFIG["sync_tables"]
+        self.assertLess(tables.index("public.Inventory_supplier"), tables.index("public.assets_servicecontract"))
+        self.assertLess(tables.index("public.Inventory_equipment"), tables.index("public.assets_servicecontract"))
+        self.assertLess(tables.index("public.Inventory_supplier"), tables.index("public.parts_tools_accessories"))
+        self.assertNotIn("public.assets_supplier", tables)

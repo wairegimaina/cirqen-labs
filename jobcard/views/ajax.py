@@ -24,7 +24,6 @@ from django.db import transaction, IntegrityError
 from users.models import UserProfile, UserSignature
 from workshop.models import Workshop
 from ..models import jobcard, SparePartUsed
-from ..checklists import template_for
 from Inventory.models import Equipment, Department
 from parts_tools.models import Accessories
 from PIL import Image
@@ -280,7 +279,6 @@ def load_equipment(request):
                 'model': str(eq.model) if eq.model is not None else '',
                 'manufacturer': str(eq.manufacturer) if eq.manufacturer is not None else '',
                 'status': str(eq.status) if eq.status is not None else '',
-                'checklist': template_for(eq),
             }
             for eq in equipment_qs
         ]

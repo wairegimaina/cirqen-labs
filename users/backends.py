@@ -57,3 +57,41 @@ class HybridAuthBackend(ModelBackend):
         except Exception as e:
             logger.error(f"Error retrieving user {user_id}: {e}")
             return None
+
+
+class EmailOrUsernameBackend(ModelBackend):
+    """
+    Sign in with either a username or an email address, case-insensitively.
+
+    Emails are not unique here (one person can hold several accounts), so an
+    email may name more than one user. The password then decides: sign in
+    only if it matches exactly one of them. If it matches several, refuse and
+    flag the request so the form can ask for the username instead.
+    """
+
+    def authenticate(self, request, username=None, password=None, **kwargs):
+        if username is None:
+            username = kwargs.get(User.USERNAME_FIELD)
+        if not username or password is None:
+            return None
+
+        ident = username.strip()
+        lookup = "email__iexact" if "@" in ident else "username__iexact"
+        candidates = [
+            u for u in User._default_manager.filter(**{lookup: ident})
+            if self.user_can_authenticate(u)
+        ]
+        if not candidates:
+            # Same hashing cost as a real check, so response time does not
+            # reveal whether the account exists.
+            User().set_password(password)
+            return None
+
+        matches = [u for u in candidates if u.check_password(password)]
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            logger.warning("Sign-in refused: %r matches %d accounts with that password", ident, len(matches))
+            if request is not None:
+                request.login_ambiguous = True
+        return None

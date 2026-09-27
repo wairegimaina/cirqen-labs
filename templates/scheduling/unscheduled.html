@@ -1,0 +1,102 @@
+{% extends 'scheduling/_layout.html' %}
+{% block sched_title %}Unscheduled{% endblock %}
+{% block heading %}Unscheduled equipment &amp; schedules to review{% endblock %}
+
+{% block body %}
+<section class="section-card">
+  <div class="section-card-head">
+    <div>
+      <h3 class="section-card-title"><i class="fas fa-ban" aria-hidden="true"></i> Cannot be scheduled ({{ blocked|length }})</h3>
+      <p class="section-card-sub">
+        {% if plan %}These devices have no open schedule and plan v{{ plan.version }} cannot place them. Fix the reason in the plan and they are scheduled on the next run.
+        {% else %}This workshop has no plan yet: one is created on the next scheduling run, or set it up now under Plan.{% endif %}
+      </p>
+    </div>
+    {% if plan and scope.can_manage %}<a class="btn btn-sm btn-primary" href="{% url 'scheduling:plans' %}{{ scope.query }}">Edit the plan</a>{% endif %}
+  </div>
+  {% if reasons %}
+  <div class="section-card-body pb-0">
+    <ul class="sched-problems mb-3">
+      {% for label, n in reasons %}<li><span>{{ label }}</span><span class="count">{{ n }}</span></li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+  {% if blocked %}
+  <div class="sched-table-wrap">
+    <table class="table table-sm sched-table mb-0">
+      <thead><tr><th>Equipment</th><th>Serial</th><th>Department</th><th>Problem</th><th></th></tr></thead>
+      <tbody>
+        {% for row, label, message in blocked %}
+        <tr>
+          <td>{{ row.description__name }}</td>
+          <td><span class="mono-chip">{{ row.serial_number }}</span></td>
+          <td>{{ row.department__name }}</td>
+          <td><strong>{{ label }}</strong><div class="sched-reason">{{ message }}</div></td>
+          <td class="text-end"><a class="btn btn-sm btn-link" href="{% url 'scheduling:equipment' row.id %}{{ scope.query }}">History</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="section-card-body">{% include 'includes/empty_state.html' with icon="fa-check" title="Nothing blocked" message="Every device without a schedule can be placed." %}</div>
+  {% endif %}
+</section>
+
+{% if plan %}
+<section class="section-card">
+  <div class="section-card-head">
+    <div>
+      <h3 class="section-card-title"><i class="fas fa-hourglass-half" aria-hidden="true"></i> Waiting for the next run ({{ waiting|length }})</h3>
+      <p class="section-card-sub">No open schedule yet, but the plan can place them; the nightly run (or the next completion) will.</p>
+    </div>
+  </div>
+  {% if waiting %}
+  <div class="sched-table-wrap">
+    <table class="table table-sm sched-table mb-0">
+      <thead><tr><th>Equipment</th><th>Serial</th><th>Department</th><th>Will be due</th><th>Why</th></tr></thead>
+      <tbody>
+        {% for row, month, message in waiting %}
+        <tr>
+          <td>{{ row.description__name }}</td>
+          <td><span class="mono-chip">{{ row.serial_number }}</span></td>
+          <td>{{ row.department__name }}</td>
+          <td class="text-nowrap">{{ month|date:"M Y" }}</td>
+          <td class="sched-reason">{{ message }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</section>
+
+<section class="section-card">
+  <div class="section-card-head">
+    <div>
+      <h3 class="section-card-title"><i class="fas fa-random" aria-hidden="true"></i> Open schedules outside the plan ({{ off_plan|length }})</h3>
+      <p class="section-card-sub">Due in a month the plan would not have chosen: work that was already under way when the plan changed, or schedules made by hand. Completed schedules are never listed or moved.</p>
+    </div>
+  </div>
+  {% if off_plan %}
+  <div class="sched-table-wrap">
+    <table class="table table-sm sched-table mb-0">
+      <thead><tr><th>Equipment</th><th>Serial</th><th>Due</th><th>Status</th><th>Why it doesn't fit</th><th></th></tr></thead>
+      <tbody>
+        {% for sched, row, message in off_plan %}
+        <tr>
+          <td>{{ row.description__name }}</td>
+          <td><span class="mono-chip">{{ row.serial_number }}</span></td>
+          <td class="text-nowrap">{{ sched.scheduled_month|date:"M Y" }}</td>
+          <td><span class="status-badge status-{{ sched.status }}">{{ sched.get_status_display }}</span></td>
+          <td class="sched-reason">{{ message }}</td>
+          <td class="text-end"><a class="btn btn-sm btn-link" href="{% url 'scheduling:equipment' row.id %}{{ scope.query }}">History</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

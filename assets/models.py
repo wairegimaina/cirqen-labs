@@ -1,34 +1,13 @@
-"""Suppliers and service contracts for medical equipment.
+"""Service contracts for medical equipment.
 
-Warranty and purchase details live on Inventory.Equipment (purchase_date,
-warranty_end, purchase_cost, expected_life_years); a machine can also be
-under one or more service contracts with a supplier. Both sync to HQ.
+Suppliers and warranties are the Inventory module's (Inventory.Supplier,
+Inventory.Warranty); a machine can also be under one or more service
+contracts with a supplier. Synced to HQ.
 """
 import uuid
 
 from django.db import models
 from django.utils import timezone
-
-
-class Supplier(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    name = models.CharField(max_length=150, unique=True)
-    contact_person = models.CharField(max_length=120, blank=True)
-    phone = models.CharField(max_length=40, blank=True)
-    email = models.EmailField(blank=True)
-    address = models.TextField(blank=True)
-    notes = models.TextField(blank=True)
-    active_status = models.BooleanField(default=True)
-    pending_delete = models.BooleanField(default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    syncable = True
-
-    class Meta:
-        ordering = ["name"]
-
-    def __str__(self):
-        return self.name
 
 
 class ServiceContract(models.Model):
@@ -42,8 +21,8 @@ class ServiceContract(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     equipment = models.ForeignKey("Inventory.Equipment", on_delete=models.CASCADE, related_name="service_contracts")
-    supplier = models.ForeignKey(Supplier, on_delete=models.SET_NULL, null=True, blank=True,
-                                 related_name="contracts")
+    supplier = models.ForeignKey("Inventory.Supplier", on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name="service_contracts")
     contract_number = models.CharField(max_length=80, blank=True)
     cover = models.CharField(max_length=20, choices=COVER_CHOICES, default="full")
     start_date = models.DateField()

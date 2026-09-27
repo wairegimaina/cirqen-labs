@@ -18,6 +18,7 @@ from django.shortcuts import render, get_object_or_404, redirect
 from Inventory.models import Department, Equipment, EquipmentDescription, Manufacturer
 from workshop.models import Workshop
 
+from .warranties import form_context as warranty_form_context
 from .helpers import (
     parse_page_number,
     normalize_per_page,
@@ -149,6 +150,7 @@ def inventory(request):
             Q(manufacturer__name__icontains=search_query) |
             Q(model__icontains=search_query) |
             Q(serial_number__icontains=search_query) |
+            Q(asset_tag__icontains=search_query) |
             Q(department__name__icontains=search_query)
         )
 
@@ -303,6 +305,7 @@ def inventory(request):
         'departments': departments,
         'equipment_descriptions': equipment_descriptions,
         'manufacturers': manufacturers,
+        **warranty_form_context(),
         'all_workshops': all_workshops_context,
         'selected_workshop': selected_workshop,
         'selected_department': selected_department,  # For in-charge users
@@ -383,6 +386,7 @@ def inventory_for_hod(request, workshop_id):
             Q(manufacturer__name__icontains=search_query) |
             Q(model__icontains=search_query) |
             Q(serial_number__icontains=search_query) |
+            Q(asset_tag__icontains=search_query) |
             Q(department__name__icontains=search_query)
         )
 

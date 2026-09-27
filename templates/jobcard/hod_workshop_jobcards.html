@@ -91,10 +91,10 @@
                     <tbody id="jobcardsTable">
                         {% for job_card in job_cards %}
                         <tr class="job-card-row"
-                            data-search="{{ job_card.id }} {{ job_card.equipment.description|lower }} {{ job_card.equipment.serial_number|lower }} {{ job_card.performed_by.username|lower }} {{ job_card.department.name|lower }}">
+                            data-search="{{ job_card.id }} {{ job_card.work_order_number|lower }} {{ job_card.equipment.description|lower }} {{ job_card.equipment.serial_number|lower }} {{ job_card.performed_by.username|lower }} {{ job_card.department.name|lower }}">
 
                             <td class="ps-3 fw-bold" style="color: var(--primary-color);">
-                                #{{ job_card.id }}
+                                #{{ job_card.work_order_number }}
                             </td>
 
                             <td>
@@ -132,10 +132,10 @@
 
                             <td class="text-end pe-3">
                                 <div class="btn-group">
-                                    <button type="button" class="btn btn-sm btn-outline-primary"
-                                            onclick="viewJobCardDetails({{ job_card.id }})" aria-label="View work order details">
+                                    <a href="{% url 'jobcard:work_order_detail' job_card.id %}" class="btn btn-sm btn-outline-primary"
+                                       aria-label="View work order details">
                                         <i class="fas fa-eye"></i>
-                                    </button>
+                                    </a>
                                     <a href="{% url 'jobcard:download_jobcard_pdf' job_card.id %}"
                                        class="btn btn-sm btn-outline-success" aria-label="Download work order">
                                         <i class="fas fa-download"></i>

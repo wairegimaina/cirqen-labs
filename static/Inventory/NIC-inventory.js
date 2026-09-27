@@ -324,7 +324,7 @@ const UI = {
 // ==========================================
 function initializeEventListeners() {
     // SPA Navigation — matches .spa-nav-item in HTML and CSS
-    document.querySelectorAll('.spa-nav-item').forEach(btn => {
+    document.querySelectorAll('.spa-nav-item[data-section]').forEach(btn => {
         btn.addEventListener('click', () => {
             const section = btn.dataset.section;
 

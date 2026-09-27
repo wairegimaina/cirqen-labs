@@ -1,0 +1,77 @@
+{% comment %}
+Warranty form fields, posted as warranty_* (Inventory.views.warranties.fill_warranty).
+Used by the Warranties module and the Add Equipment modal. Needs
+static/Inventory/warranty-form.js on the page.
+
+  prefix     id prefix, unique on the page
+  w          existing Warranty to edit (optional)
+  required   "1" when supplier and start date must be filled
+{% endcomment %}
+<div class="warranty-fields" data-warranty-fields>
+    <div class="mb-3">
+        <label class="form-label" for="{{ prefix }}_supplier">Supplier{% if required %} <span class="text-danger">*</span>{% endif %}</label>
+        <select name="warranty_supplier" id="{{ prefix }}_supplier" class="form-select" data-role="supplier" {% if required %}required{% endif %}>
+            <option value="">— Select supplier —</option>
+            {% for s in warranty_suppliers %}
+            <option value="{{ s.id }}" data-phone="{{ s.phone }}" data-email="{{ s.email }}"
+                    data-contact="{{ s.contact_person }}" data-months="{{ s.default_warranty_months|default_if_none:'' }}"
+                    data-terms="{{ s.warranty_terms }}"
+                    {% if w and w.supplier_id == s.id %}selected{% endif %}>{{ s.name }}</option>
+            {% endfor %}
+            {% if w and w.supplier and not w.supplier.active_status %}
+            <option value="{{ w.supplier_id }}" selected>{{ w.supplier.name }} (inactive)</option>
+            {% endif %}
+        </select>
+        <div class="form-text" data-role="supplier-contact">
+            Suppliers come from the <a href="{% url 'supplier_list' %}">Suppliers</a> list; their phone and email are shown from there.
+        </div>
+    </div>
+
+    <div class="row g-2 mb-3">
+        <div class="col-sm-4">
+            <label class="form-label" for="{{ prefix }}_start_date">Start Date{% if required %} <span class="text-danger">*</span>{% endif %}</label>
+            <input type="date" name="warranty_start_date" id="{{ prefix }}_start_date" class="form-control" data-role="start"
+                   value="{{ w.start_date|date:'Y-m-d' }}" {% if required %}required{% endif %}>
+        </div>
+        <div class="col-sm-4">
+            <label class="form-label" for="{{ prefix }}_period_months">Period (months)</label>
+            <input type="number" min="1" name="warranty_period_months" id="{{ prefix }}_period_months" class="form-control"
+                   data-role="months" value="{{ w.period_months|default_if_none:'' }}" placeholder="e.g. 24">
+        </div>
+        <div class="col-sm-4">
+            <label class="form-label" for="{{ prefix }}_expiry_date">Expiry Date</label>
+            <input type="date" name="warranty_expiry_date" id="{{ prefix }}_expiry_date" class="form-control" data-role="expiry"
+                   value="{{ w.expiry_date|date:'Y-m-d' }}">
+        </div>
+        <div class="col-12 form-text" data-role="expiry-hint">Give the period, or the expiry date. Blank expiry = start date + period.</div>
+    </div>
+
+    <fieldset class="mb-3">
+        <legend class="form-label fs-6 mb-1">Warranty covers</legend>
+        <div class="row row-cols-1 row-cols-sm-2 g-1">
+            {% for code, label in coverage_choices %}
+            <div class="col">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="warranty_coverage" value="{{ code }}"
+                           id="{{ prefix }}_cov_{{ code }}" {% if w and code in w.coverage %}checked{% endif %}>
+                    <label class="form-check-label" for="{{ prefix }}_cov_{{ code }}">{{ label }}</label>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        <input type="text" name="warranty_coverage_other" class="form-control form-control-sm mt-2" maxlength="255"
+               value="{{ w.coverage_other|default:'' }}" placeholder="Anything else covered" aria-label="Other coverage">
+    </fieldset>
+
+    <div class="mb-3">
+        <label class="form-label" for="{{ prefix }}_reference">Warranty Reference</label>
+        <input type="text" name="warranty_reference" id="{{ prefix }}_reference" class="form-control" maxlength="100"
+               value="{{ w.reference|default:'' }}" placeholder="Certificate or contract number (optional)">
+    </div>
+
+    <div class="mb-1">
+        <label class="form-label" for="{{ prefix }}_terms">Terms / Notes</label>
+        <textarea name="warranty_terms" id="{{ prefix }}_terms" class="form-control" rows="3" data-role="terms"
+                  placeholder="Exclusions, conditions, how to make a claim">{{ w.terms|default:'' }}</textarea>
+    </div>
+</div>

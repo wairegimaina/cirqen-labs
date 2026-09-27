@@ -42,11 +42,12 @@ class PPMFlowTests(TestCase):
         return self.client.post(reverse(name, args=[obj_id]))
 
     def test_schedule_push_complete(self):
-        self._post(self.tech, "schedule_equipment", self.equipment.id)
-        schedule = PPMSchedule.objects.get(equipment=self.equipment)
-        first_month = datetime.date.today().replace(day=1) + relativedelta(months=1)
-        self.assertEqual(schedule.scheduled_month, first_month)
+        # New equipment is scheduled by its workshop's plan straight away.
+        schedule = PPMSchedule.open_schedules().get(equipment=self.equipment)
+        first_month = schedule.scheduled_month
+        self.assertGreater(first_month, datetime.date.today().replace(day=1))
         self.assertEqual(schedule.status, "pending")
+        self.assertEqual(schedule.generation_source, "plan")
 
         self._post(self.tech, "push_schedule", schedule.id)
         schedule.refresh_from_db()
@@ -56,6 +57,8 @@ class PPMFlowTests(TestCase):
         self._post(self.tech, "mark_completed", schedule.id)
         schedule.refresh_from_db()
         self.assertEqual(schedule.status, "completed")
+        # ...and the next visit follows from the plan.
+        self.assertEqual(PPMSchedule.open_schedules().filter(equipment=self.equipment).count(), 1)
 
     def test_device_is_not_scheduled_twice(self):
         self._post(self.tech, "schedule_equipment", self.equipment.id)

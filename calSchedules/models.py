@@ -1,5 +1,6 @@
 import uuid
 import logging
+from datetime import datetime
 from django.db import models
 from django.core.exceptions import ValidationError
 
@@ -47,6 +48,7 @@ GENERATION_SOURCE_CHOICES = [
     ("group_fix", "Fixed Group Alignment"),
     ("locker", "Created by Locker"),
     ("job_card", "Triggered by Job Card Completion"),
+    ("plan", "Scheduling Plan"),
 ]
 
 
@@ -199,6 +201,25 @@ class CalibrationSchedule(models.Model):
     )
 
     # ============================================
+    # SCHEDULING PLAN (scheduling app)
+    # ============================================
+
+    due_month = models.DateField(
+        null=True, blank=True,
+        help_text="The month this schedule is due in its cycle. A manual push moves "
+                  "scheduled_month but not this, so the cycle continues from the slot.",
+    )
+    plan = models.ForeignKey(
+        "scheduling.SchedulingPlan", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="%(app_label)s_schedules",
+        help_text="The plan version that placed this schedule (blank: legacy scheduler)",
+    )
+    schedule_reason = models.JSONField(
+        null=True, blank=True,
+        help_text="Why this month: group, months, interval, previous schedule, rule applied",
+    )
+
+    # ============================================
     # META AND CONSTRAINTS
     # ============================================
 
@@ -237,33 +258,24 @@ class CalibrationSchedule(models.Model):
         if self.equipment_id and self.equipment.department:
             self.workshop = self.equipment.department.workshop
 
-        # Detect planning_logic change on existing schedules
-        if self.pk:
-            try:
-                original = CalibrationSchedule.objects.get(pk=self.pk)
-                if (
-                    original.planning_logic
-                    and self.planning_logic
-                    and original.planning_logic != self.planning_logic
-                ):
-                    self.previous_planning_logic = original.planning_logic
-                    self.logic_change_warning = (
-                        f"⚠️ LOGIC CHANGE DETECTED: Planning logic changed from "
-                        f"'{original.planning_logic}' → '{self.planning_logic}' "
-                        f"on {now_eat().strftime('%Y-%m-%d %H:%M')}. "
-                        f"Run smart_reorganize_on_logic_change to realign all schedules "
-                        f"to the new logic. Scheduled month has NOT been changed — "
-                        f"realignment is required."
-                    )
-            except CalibrationSchedule.DoesNotExist:
-                pass
-
         # Validate state transitions
+        was_completed = False
         if self.pk:
             try:
                 original = CalibrationSchedule.objects.get(pk=self.pk)
+                was_completed = original.status == "completed"
                 old_status = original.status
                 new_status = self.status
+
+                # A completed schedule keeps the month it was planned for.
+                month = self.scheduled_month
+                if isinstance(month, datetime):
+                    month = month.date()
+                if old_status == "completed" and month != original.scheduled_month:
+                    raise ValidationError(
+                        "Cannot move a completed schedule to another month. "
+                        "Completed schedules are locked historical records."
+                    )
 
                 if old_status != new_status:
                     # Completed is terminal - no regress allowed
@@ -314,6 +326,13 @@ class CalibrationSchedule(models.Model):
         # Auto-lock completed schedules (they become historical records)
         if self.status == "completed" and not self.is_locked:
             self.is_locked = True
+
+        # Record the day it was done, only at the moment it becomes completed:
+        # re-saving an old completed row must not stamp today on it.
+        if self.status == "completed" and not was_completed and not self.completed_date:
+            self.completed_date = timezone.localdate()
+            if kwargs.get("update_fields") is not None:
+                kwargs["update_fields"] = set(kwargs["update_fields"]) | {"completed_date"}
 
         # ✅ Calculate expected_calibration_date for signal-created schedules
         if (
@@ -385,188 +404,18 @@ class CalibrationSchedule(models.Model):
 
         return (self.due_date - timezone.localdate()).days
 
-    @property
-    def protection_status(self):
-        """
-        Get human-readable protection status for this schedule.
-
-        Returns:
-            str: Description of protection level
-        """
-        if self.status == "completed":
-            return "🔒 PROTECTED: Completed (Historical Record)"
-        elif self.is_locked:
-            return "🔒 PROTECTED: Manually Locked"
-        elif self.generation_source == "signal":
-            return "🔒 PROTECTED: Signal-Created (Maintains Calibration Interval)"
-        elif self.is_normalizable():
-            return "✏️ NORMALIZABLE: Can be rescheduled"
-        else:
-            return "❓ Unknown protection status"
-
-    # ============================================
-    # INSTANCE METHODS
-    # ============================================
-
-    def is_normalizable(self):
-        """
-        Check if this schedule can be modified by normalization.
-
-        Uses a denylist rather than an allowlist so that any new
-        generation_source added in the future is automatically
-        normalizable unless explicitly protected here.
-
-        Protected sources (never moved):
-          - signal    : auto-created after completion; maintains calibration interval
-          - locker    : created by the locker module; should stay put
-          - job_card  : triggered by actual job-card completion; interval matters
-
-        Returns:
-            bool: True if can be normalized, False otherwise
-        """
-        PROTECTED_SOURCES = {"signal", "locker", "job_card"}
-        return (
-            self.status in ["pending", "pushed"]
-            and not self.is_locked
-            and self.generation_source not in PROTECTED_SOURCES
-        )
-
-    def clear_logic_warning(self):
-        """
-        Clear the logic change warning after smart reorganization is complete.
-        Call this after successfully running smart_reorganize_on_logic_change.
-        """
-        self.logic_change_warning = ""
-        self.previous_planning_logic = ""
-        self.save(update_fields=["logic_change_warning", "previous_planning_logic", "needs_sync"])
-
-    def mark_as_signal_created(self, parent):
-        """
-        Mark this schedule as signal-created and link to parent.
-
-        Args:
-            parent (CalibrationSchedule): The completed schedule that triggered creation
-        """
-        self.generation_source = "signal"
-        self.parent_schedule = parent
-        self.expected_calibration_date = self.scheduled_month
-        self.generation_timestamp = timezone.now()
-        self.save(
-            update_fields=[
-                "generation_source",
-                "parent_schedule",
-                "expected_calibration_date",
-                "generation_timestamp",
-                "needs_sync",
-            ]
-        )
-
-    def lock_schedule(self, reason=""):
-        """
-        Lock this schedule to prevent modifications.
-
-        Args:
-            reason (str): Optional reason for locking (for logging)
-        """
-        self.is_locked = True
-        self.save(update_fields=["is_locked", "needs_sync"])
-
-    def unlock_schedule(self):
-        """
-        Unlock this schedule to allow modifications.
-        Only use if you're sure the schedule should be modifiable.
-
-        Raises:
-            ValueError: If trying to unlock a completed schedule
-        """
-        if self.status == "completed":
-            raise ValueError("Cannot unlock completed schedules - they are historical records")
-        self.is_locked = False
-        self.save(update_fields=["is_locked", "needs_sync"])
-
-    def get_calibration_chain(self):
-        """
-        Get the full chain of calibrations for this equipment.
-        Useful for tracking calibration history.
-
-        Returns:
-            QuerySet of CalibrationSchedule objects for this equipment, ordered by date
-        """
-        return CalibrationSchedule.objects.filter(equipment=self.equipment).order_by(
-            "scheduled_month"
-        )
-
     # ============================================
     # CLASS METHODS (QUERIES)
     # ============================================
 
     @classmethod
-    def get_normalizable_schedules(cls, start_date=None, end_date=None):
+    def open_schedules(cls):
+        """Schedules still to be done: live rows that are not completed.
+
+        An equipment is scheduled when it has one of these. Having only
+        completed history means its chain broke and it needs a next schedule.
         """
-        Get all schedules that can be normalized.
-
-        Uses a denylist rather than an allowlist so that any new
-        generation_source added in the future is automatically
-        normalizable unless explicitly protected here.
-
-        Protected sources (never moved):
-          - signal    : auto-created after completion; maintains calibration interval
-          - locker    : created by the locker module; should stay put
-          - job_card  : triggered by actual job-card completion; interval matters
-
-        Args:
-            start_date (date): Optional start date filter
-            end_date (date): Optional end date filter
-
-        Returns:
-            QuerySet: Schedules that can be normalized
-        """
-        PROTECTED_SOURCES = ["signal", "locker", "job_card"]
-
-        query = cls.objects.filter(
-            active_status=True,
-            status__in=["pending", "pushed"],
-            is_locked=False,
-        ).exclude(generation_source__in=PROTECTED_SOURCES)
-
-        if start_date:
-            query = query.filter(scheduled_month__gte=start_date)
-        if end_date:
-            query = query.filter(scheduled_month__lte=end_date)
-
-        return query
-
-    @classmethod
-    def get_signal_created_schedules(cls):
-        """
-        Get all signal-created schedules (protected from normalization).
-
-        Returns:
-            QuerySet: Signal-created schedules
-        """
-        return cls.objects.filter(generation_source="signal", status__in=["pending", "pushed"])
-
-    @classmethod
-    def get_protection_summary(cls):
-        """
-        Get summary of schedule protection status across all schedules.
-
-        Returns:
-            dict: Counts by protection category
-        """
-        from django.db.models import Count, Q
-
-        return {
-            "total": cls.objects.count(),
-            "completed": cls.objects.filter(status="completed").count(),
-            "locked_pending": cls.objects.filter(
-                is_locked=True, status__in=["pending", "pushed"]
-            ).count(),
-            "signal_created": cls.objects.filter(
-                generation_source="signal", status__in=["pending", "pushed"]
-            ).count(),
-            "normalizable": cls.get_normalizable_schedules().count(),
-        }
+        return cls.objects.filter(active_status=True, pending_delete=False).exclude(status="completed")
 
     # ============================================
     # STRING REPRESENTATION

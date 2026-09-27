@@ -1,5 +1,7 @@
-"""Asset pages: KPIs and replacement risk, machine page, QR labels,
-contracts and warranties, suppliers, and low stock."""
+"""Asset pages: KPIs, machine page, QR labels, service contracts and low stock.
+
+Suppliers, warranties and failure risk belong to the Inventory and Machine
+Reports modules; these pages link to them and read their records."""
 from datetime import timedelta
 
 from django.contrib import messages
@@ -13,16 +15,15 @@ from django.urls import reverse
 from django.utils import timezone
 
 from core.scoping import for_user
-from Inventory.models import Department, Equipment
+from Inventory.models import Department, Equipment, Supplier, Warranty
 from jobcard.models import jobcard
 from parts_tools.models import Accessories
 from users.control import get_user_role
 from workshop.models import Workshop
 
 from . import kpis as kpi_module
-from .forms import AssetDetailsForm, ContractForm, SupplierForm
-from .models import ServiceContract, Supplier
-from .risk import score_machines
+from .forms import AssetDetailsForm, ContractForm
+from .models import ServiceContract
 
 PERIODS = (3, 6, 12)
 
@@ -56,7 +57,6 @@ def kpis(request):
     months = months if months in PERIODS else 12
     return render(request, "assets/kpis.html", {
         "k": kpi_module.compute(machines, months=months),
-        "risk": score_machines(machines, limit=25),
         "months": months, "periods": PERIODS,
         "workshops": workshops, "selected_workshop": selected_workshop,
     })
@@ -88,10 +88,14 @@ def machine(request, pk):
             form.save()
             messages.success(request, "Asset details saved.")
             return redirect("assets:machine", pk=item.pk)
-    risk = next(iter(score_machines(Equipment.objects.filter(pk=item.pk))), None)
+    from machineReports.prediction import predict
+
+    risk = next(iter(predict(Equipment.objects.filter(pk=item.pk))), None)
     today = timezone.localdate()
+    warranty = (Warranty.objects.filter(equipment=item, active_status=True)
+                .select_related("supplier").order_by("-expiry_date").first())
     return render(request, "assets/machine.html", {
-        "m": item, "form": form, "can_manage": manager, "risk": risk, "today": today,
+        "m": item, "form": form, "can_manage": manager, "risk": risk, "today": today, "warranty": warranty,
         "contracts": item.service_contracts.filter(active_status=True).select_related("supplier"),
         "work_orders": jobcard.objects.filter(equipment=item).order_by("-date_issued", "-created_at")[:10],
         "calibrations": CalibrationSession.objects.filter(device_serial=item.serial_number, active_status=True)
@@ -147,26 +151,6 @@ def contracts(request):
     return render(request, "assets/contracts.html", {
         "form": form, "can_manage": manager, "today": today, "horizon": horizon,
         "contracts": Paginator(rows, 50).get_page(request.GET.get("page")),
-        "warranties": machines.filter(warranty_end__gte=today, warranty_end__lte=horizon)
-        .select_related("description", "department").order_by("warranty_end")[:50],
-    })
-
-
-@login_required
-def suppliers(request):
-    manager = can_manage(request.user)
-    form = SupplierForm()
-    if request.method == "POST":
-        if not manager:
-            raise PermissionDenied("Only the HOD or the workshop's Engineer In-charge can add suppliers.")
-        form = SupplierForm(request.POST)
-        if form.is_valid():
-            supplier = form.save()
-            messages.success(request, f"Supplier {supplier.name} added.")
-            return redirect("assets:suppliers")
-    return render(request, "assets/suppliers.html", {
-        "form": form, "can_manage": manager,
-        "suppliers": Supplier.objects.filter(active_status=True),
     })
 
 
