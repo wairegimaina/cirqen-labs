@@ -69,9 +69,14 @@ class NavigationTests(TestCase):
     def test_warranties_and_suppliers_are_inventory_tabs(self):
         label, tabs, active = self.tabs(self.tech, reverse("supplier_list"))
         self.assertEqual(label, "Inventory")
-        self.assertEqual(tabs, ["Inventory List", "Summary View", "Analytics & Reports", "Warranties", "Suppliers"])
+        self.assertEqual(tabs, ["Inventory List", "Summary View", "Analytics & Reports", "Warranties", "Suppliers",
+                                "QR labels"])
         self.assertEqual(active, ["Suppliers"])
         self.assertNotIn("Suppliers", self.tabs(self.nurse, reverse("warranty_list"))[1])
+
+    def test_qr_labels_are_an_inventory_tab(self):
+        label, tabs, active = self.tabs(self.tech, reverse("equipment_labels"))
+        self.assertEqual((label, active), ("Inventory", ["QR labels"]))
 
     def test_failure_risk_is_a_machine_reports_tab(self):
         label, tabs, active = self.tabs(self.hod, reverse("failure_risk"))

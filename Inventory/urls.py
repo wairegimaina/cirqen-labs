@@ -1,9 +1,12 @@
 from django.urls import path
 from . import views
+from assets import views as asset_views
 
 urlpatterns = [
     # General inventory view
     path('', views.inventory, name='inventory'),
+    # QR labels for equipment (the page lives with the label PDF in assets)
+    path('labels/', asset_views.labels, name='equipment_labels'),
 
     # HOD-specific views
     path('view/<uuid:workshop_id>/', views.inventory_for_hod, name='inventory_for_hod'),

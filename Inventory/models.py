@@ -221,6 +221,41 @@ class Equipment(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
 
+    # QR label (Inventory > QR labels): when the label was last printed and
+    # what it showed, so the labels page can offer only equipment that has
+    # never had one or whose label no longer matches (moved department,
+    # corrected serial...). Synced, so every PC agrees on what is printed.
+    label_printed_at = models.DateTimeField(null=True, blank=True)
+    label_snapshot = models.JSONField(default=dict, blank=True, db_default=models.Value({}, models.JSONField()))
+
+    # What a label prints, in order; the keys are stored in label_snapshot.
+    LABEL_FIELDS = (("description", "Equipment"), ("serial_number", "Serial number"), ("model", "Model"),
+                    ("department", "Department"))
+
+    def label_content(self):
+        return {
+            "description": str(self.description or ""),
+            "serial_number": self.serial_number or "",
+            "model": self.model or "",
+            "department": str(self.department or ""),
+        }
+
+    def label_changes(self):
+        """(field label, printed, now) for each thing that differs from the
+        printed label; empty when the label is current or was never printed."""
+        if not self.label_printed_at:
+            return []
+        printed, current = self.label_snapshot or {}, self.label_content()
+        return [(label, printed.get(key, ""), current[key]) for key, label in self.LABEL_FIELDS
+                if printed.get(key, "") != current[key]]
+
+    @property
+    def label_state(self):
+        """"new" (never printed), "changed" or "current"."""
+        if not self.label_printed_at:
+            return "new"
+        return "changed" if self.label_changes() else "current"
+
     # offline sync
     needs_sync = models.BooleanField(default=True)
     updated_at = models.DateTimeField(auto_now=True)

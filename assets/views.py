@@ -104,30 +104,88 @@ def machine(request, pk):
     })
 
 
+LABEL_SCOPES = (
+    ("todo", "New and changed"),
+    ("new", "New: never printed"),
+    ("changed", "Changed since printed (moved, corrected...)"),
+    ("all", "All equipment"),
+)
+LABEL_PAGE_SIZE = 200
+
+
+def _label_machines(request):
+    """Equipment this user may print labels for: not deleted, in their scope."""
+    return (for_user(Equipment.objects.filter(active_status=True, pending_delete=False), request.user)
+            .select_related("description", "department", "manufacturer"))
+
+
+@login_required
+def labels_moved(request):
+    """The labels page moved to Inventory; keep old links and bookmarks working."""
+    query = request.META.get("QUERY_STRING", "")
+    return redirect(reverse("equipment_labels") + (f"?{query}" if query else ""))
+
+
 @login_required
 def labels(request):
+    """Inventory > QR labels: print labels for new equipment, for equipment
+    whose label no longer matches (above all a move to another department),
+    or for machines picked by hand. Deleted equipment is never offered."""
+    machines = _label_machines(request)
     departments = for_user(Department.objects.order_by("name"), request.user)
-    department = None
-    if request.GET.get("department"):
-        department = departments.filter(pk=request.GET["department"]).first()
-    if department and request.GET.get("download"):
-        machines = (_machines(request).filter(department=department)
-                    .select_related("description", "department").order_by("description__name", "serial_number"))
+
+    if request.method == "POST":
+        chosen = list(machines.filter(pk__in=request.POST.getlist("equipment"))
+                      .order_by("department__name", "description__name", "serial_number"))
+        if not chosen:
+            messages.error(request, "Tick at least one machine to print.")
+            return redirect(request.get_full_path())
         from django.conf import settings
 
         from .labels import labels_pdf
 
-        base = getattr(settings, "SITE_URL", "") or request.build_absolute_uri("/").rstrip("/")
-
-        def url_for(m):
-            return f"{base.rstrip('/')}{reverse('assets:machine', args=[m.pk])}"
-
-        response = HttpResponse(labels_pdf(machines, url_for), content_type="application/pdf")
-        response["Content-Disposition"] = f'attachment; filename="qr-labels-{department.name}.pdf"'
+        base = (getattr(settings, "SITE_URL", "") or request.build_absolute_uri("/")).rstrip("/")
+        pdf = labels_pdf(chosen, lambda m: f"{base}{reverse('assets:machine', args=[m.pk])}")
+        if request.POST.get("mark_printed", "1") == "1":
+            now = timezone.now()
+            for machine in chosen:
+                # update(), not save(): no signals, and updated_at moves so
+                # the sync uploads it and every PC sees the label as printed.
+                Equipment.objects.filter(pk=machine.pk).update(
+                    label_printed_at=now, label_snapshot=machine.label_content(), updated_at=now, needs_sync=True)
+        response = HttpResponse(pdf, content_type="application/pdf")
+        response["Content-Disposition"] = (
+            f'attachment; filename="qr-labels-{timezone.localdate():%Y-%m-%d}-{len(chosen)}.pdf"')
         return response
+
+    scope = request.GET.get("scope") or "todo"
+    if scope not in dict(LABEL_SCOPES):
+        scope = "todo"
+    department = departments.filter(pk=request.GET.get("department") or None).first()
+    q = (request.GET.get("q") or "").strip()
+
+    rows = machines
+    if department:
+        rows = rows.filter(department=department)
+    if q:
+        # Picking specific machines: search every label state, not only the scope.
+        rows = rows.filter(Q(serial_number__icontains=q) | Q(asset_tag__icontains=q)
+                           | Q(description__name__icontains=q) | Q(model__icontains=q))
+    rows = list(rows.order_by("department__name", "description__name", "serial_number"))
+
+    counts = {"new": 0, "changed": 0, "current": 0}
+    for machine in rows:
+        counts[machine.label_state] += 1
+    if not q:
+        keep = {"todo": ("new", "changed"), "new": ("new",), "changed": ("changed",),
+                "all": ("new", "changed", "current")}[scope]
+        rows = [m for m in rows if m.label_state in keep]
+
+    page = Paginator(rows, LABEL_PAGE_SIZE).get_page(request.GET.get("page"))
     return render(request, "assets/labels.html", {
-        "departments": departments, "department": department,
-        "count": _machines(request).filter(department=department).count() if department else None,
+        "departments": departments, "department": department, "scope": scope, "scopes": LABEL_SCOPES,
+        "q": q, "page": page, "counts": counts, "shown": len(rows),
+        "preselect": q == "" and scope != "all",
     })
 
 

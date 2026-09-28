@@ -10,6 +10,7 @@
   </div>
   <div>
     {% if is_tech %}<a class="btn btn-primary" href="{% url 'jobcard:create_job_card' %}?equipment={{ m.id }}"><i class="fas fa-plus-circle"></i> Start work order</a>{% endif %}
+    {% if m.active_status and not m.pending_delete %}<a class="btn btn-secondary" href="{% url 'equipment_labels' %}?q={{ m.serial_number|urlencode }}"><i class="fas fa-qrcode"></i> Print QR label</a>{% endif %}
   </div>
 </div>
 <div class="as-grid">

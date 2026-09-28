@@ -42,6 +42,28 @@ def _job_cards_waiting_count(user, role):
     return JobCard.objects.filter(status="Waiting Approval", workshop=profile.workshop).count()
 
 
+# Pages reached before or while signing in: no sidebar, because its links
+# would lead nowhere (FirstLoginSetupMiddleware keeps such users on them).
+_BARE_URL_NAMES = {
+    "custom_login", "forgot_password", "verify_reset_code", "reset_password", "force_setup",
+    "two_factor_verify",
+}
+
+
+def _sidebar_allowed(request, user):
+    match = getattr(request, "resolver_match", None)
+    if match is not None and match.url_name in _BARE_URL_NAMES:
+        return False
+    profile = getattr(user, "userprofile", None)
+    if profile is None or profile.must_change_password:
+        return False
+    if match is not None and match.url_name == "two_factor_setup":
+        # Opened from the sidebar it keeps it; forced on first sign-in it does not.
+        from users.middleware import FirstLoginSetupMiddleware
+        return not FirstLoginSetupMiddleware._needs_two_factor(user, profile)
+    return True
+
+
 def nav_context(request):
     """Expose role-based navigation flags and queue/notification counts to
     every template.
@@ -62,6 +84,10 @@ def nav_context(request):
     role = get_user_role(user) if is_authenticated else None
 
     return {
+        # Every signed-in page has the sidebar unless it is one of the
+        # sign-in pages or the user is held on first-login setup. A view can
+        # still pass show_sidebar itself; its context wins over this default.
+        "show_sidebar": is_authenticated and _sidebar_allowed(request, user),
         # Site details page (core.SiteProfile), else client.name from config.json.
         "site_name": organisation_name(default=getattr(settings, "SITE_NAME", "Cirqen")),
         "nav": {
@@ -107,6 +133,7 @@ _SPA_HOSTS = {"ppm_dashboard", "ppm_by_department", "inventory", "inventory_for_
 _WARRANTY_PAGES = {"warranty_list", "warranty_create", "warranty_detail", "warranty_update",
                    "equipment_warranty"}
 _SUPPLIER_PAGES = {"supplier_list", "supplier_create", "supplier_update"}
+_LABEL_PAGES = {"equipment_labels"}
 _WORK_ORDER_PAGES = {"jobcard:create_job_card", "jobcard:waiting_jobcards", "jobcard:approved_jobcards",
                      "jobcard:declined_jobcards", "jobcard:work_order_detail", "jobcard:approvals"}
 _CALIBRATION_PAGES = {"schedule:calibration_dashboard", "schedule:calibration_by_department"}
@@ -185,7 +212,7 @@ def _module(request, role, name):
         return "Work Orders", tabs
 
     # Inventory: the inventory page's sections, then warranties and suppliers.
-    if name in _WARRANTY_PAGES or name in _SUPPLIER_PAGES:
+    if name in _WARRANTY_PAGES or name in _SUPPLIER_PAGES or name in _LABEL_PAGES:
         inv = reverse("inventory")
         tabs = [
             _tab("Inventory List", "fa-list-ul", inv + "#inventory"),
@@ -195,6 +222,7 @@ def _module(request, role, name):
         ]
         if is_tech or is_hod:
             tabs.append(_tab("Suppliers", "fa-truck", reverse("supplier_list"), name in _SUPPLIER_PAGES))
+        tabs.append(_tab("QR labels", "fa-qrcode", reverse("equipment_labels"), name in _LABEL_PAGES))
         return "Inventory", tabs
 
     # Machine reports: its sections, then failure risk.
