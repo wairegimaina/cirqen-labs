@@ -69,6 +69,28 @@ that one function.
 
 Every stored result is rounded to 6 decimal places, half up.
 
+**One-sided limits.** A parameter can be judged against a single limit
+instead of ± tolerance: "at most" (upper) or "at least" (lower) the set
+value, which is then the limit L. With expanded uncertainty U, an upper
+limit gives PASS if x ≤ L − U, FAIL if x ≥ L + U, otherwise INDETERMINATE; a
+lower limit gives PASS if x ≥ L + U, FAIL if x ≤ L − U. TUR does not apply.
+
+**Readings taken by Fluke Ansur (instrument rule).** An Ansur session holds
+one analyser measurement x per test point, so there is no Type A:
+
+| Quantity | Method |
+|---|---|
+| u_spec | (\|x\| × accuracy % / 100 + fixed part) / √3, from the analyser's datasheet (rectangular) |
+| u_res | analyser resolution / √12 |
+| u_cal | expanded uncertainty on the analyser's certificate / its k |
+| Reference component (stored) | √(u_spec² + u_cal²), the analyser's whole contribution |
+| u_c | √(u_spec² + u_res² + u_cal²), from full-precision components |
+| k, U | k = 2, U = 2 × u_c |
+| Error, verdict | as above; Ansur's own Pass/Fail is stored beside Cirqen's verdict and never replaces it |
+
+The minimum-readings rule (R4) does not apply to Ansur sessions: the source
+is recorded on the session and printed on the certificate.
+
 Minimum readings: each set value needs at least the number of readings the
 procedure asks for, and never fewer than 3 (at most 10 are stored). The
 software will not save a calibration with a shortfall and names the rows
@@ -100,6 +122,10 @@ All run on every change in CI.
 | R14 | Records made offline reach HQ intact; the newer edit wins, deletes carry through | sync `test_conflict_resolver.py`, sync `test_upload_download.py`, HQ `test_upsert_lww.py`, HQ `test_apply_change_simplified_lww.py`, HQ `test_soft_delete_cascade.py`, HQ `test_null_propagation.py` |
 | R15 | Backups are taken and are readable | `core/tests/test_backup_verify.py` |
 | R16 | Only updates signed by Cirqen Labs are installed | `updates/test_package_signing.py`, `updates/test_updater_flow.py` |
+| R17 | An Ansur record is imported only when its job number, serial, template and analysers (registered, in date) match, it is not aborted or incomplete, and every set value and tolerance of the procedure has exactly one result; otherwise nothing is saved and every reason is given | `CalSoft/test_ansur_import.py`, `CalSoft/test_ansur_start.py` |
+| R18 | One-sided verdicts and the single-reading budget are computed as in section 3 | `CalSoft/test_ansur_maths.py` (pins section 5.1) |
+| R19 | The imported Ansur record and PDF are kept with their SHA-256; Ansur's PDF is attached to the issued certificate only if it still matches | `CalSoft/test_ansur_import.py`, `CalSoft/test_ansur_review.py` |
+| R20 | An Ansur session cannot be approved by its performer, and a disagreement between Ansur's verdict and Cirqen's must be acknowledged by the reviewer, with an audit entry | `CalSoft/test_ansur_review.py` |
 
 ## 5. Worked example (repeat this by hand)
 
@@ -131,6 +157,27 @@ can ship.
 Laboratory acceptance: create a test procedure with these values, calibrate
 a test device with these five readings, and compare the certificate with
 the table. Record the result in section 8.
+
+### 5.1 Worked example for an Ansur reading
+
+Defibrillator energy, set 360 J, tolerance ±36 J. Ansur measured
+**352.4 J**. Analyser accuracy ±(1% of reading + 0.1 J), resolution 0.1 J,
+analyser certificate 1.0 J at k = 2.
+
+| Step | Working | Result |
+|---|---|---|
+| u_spec | (0.01 × 352.4 + 0.1) / √3 | 2.092317 |
+| u_res | 0.1 / √12 | 0.028868 |
+| u_cal | 1.0 / 2 | 0.500000 |
+| u_c | √(2.092317² + 0.028868² + 0.5²) | 2.151424 |
+| U | 2 × u_c | 4.302848 |
+| Error | 360 − 352.4 | 7.600000 |
+| TUR | 36 / 4.302848 | 8.37 |
+| Verdict | 7.6 ≤ 36 − 4.302848 = 31.697152 | PASS |
+
+One-sided: earth leakage at most 500 µA, measured 112 µA, accuracy
+±(1% + 1 µA), resolution 1 µA, certificate 2 µA at k = 2: U = 3.213389,
+PASS because 112 ≤ 500 − 3.213389 = 496.786611.
 
 ## 6. Test log procedure
 
@@ -167,6 +214,8 @@ says).
   - the certificate PDF layout or content (`CalSoft/pdf_generators/`)
   - certificate numbering, issued-copy storage or verification
   - the readings-entry rules
+  - the Ansur import checks, single-reading budget or one-sided verdicts
+    (`CalSoft/ansur/`, `CalSoft/utils.py`)
   Other releases need only the release note, and a laboratory may choose to
   repeat section 5 anyway.
 - **Supplier review.** Changes are reviewed and must pass all tests in CI

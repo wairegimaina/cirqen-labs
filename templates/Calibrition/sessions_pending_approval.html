@@ -175,6 +175,12 @@
             </div>
             <div class="modal-body">
                 <form id="approvalForm" autocomplete="off">
+                    <div class="alert alert-warning" id="ansurAck" hidden>
+                        <label class="form-check mb-0">
+                            <input class="form-check-input" type="checkbox" name="acknowledge_ansur" value="1">
+                            <span class="form-check-label">I have reviewed the <span data-ansur-count></span> test point(s) where Ansur's verdict differs from Cirqen's.</span>
+                        </label>
+                    </div>
                     <div class="mb-0">
                         <label class="form-label" for="approvalComments">Comments <span class="text-muted">(optional)</span></label>
                         <textarea class="form-control" id="approvalComments"

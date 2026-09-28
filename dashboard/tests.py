@@ -113,6 +113,8 @@ class WorkshopStatsTests(HodDashboardTestCase):
         month = date.today().replace(day=1)
         PPMSchedule.objects.create(equipment=equipment, workshop=self.workshop,
                                    scheduled_month=month, status="completed")
+        # Completing one may schedule the next; keep one open schedule, this one.
+        PPMSchedule.objects.filter(equipment=equipment).exclude(status="completed").delete()
         PPMSchedule.objects.create(equipment=equipment, workshop=self.workshop,
                                    scheduled_month=date(month.year + 1, month.month, 1),
                                    status="pending")

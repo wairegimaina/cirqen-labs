@@ -7,6 +7,35 @@ using the new version for certificates.
 
 ## Unreleased: re-validation required
 
+### Fluke Ansur
+- **Start with Ansur** on Perform Calibration, for procedures linked to an
+  Ansur template: Cirqen writes the work order, opens Ansur with the device
+  filled in and locked, and follows the job live until Ansur's record has
+  been checked and turned into a session. Re-open Ansur, cancel, or import a
+  record by hand if needed.
+- Ansur records are refused, with every reason, unless the job number,
+  serial, template, analysers (in the standards register and in date) and
+  every set value and tolerance match the procedure. Refused records go to a
+  quarantine folder with the reason beside them.
+- Cirqen computes its own uncertainty and guard-banded verdict for Ansur
+  results: one analyser reading per test point, with the budget taken from
+  the analyser's datasheet accuracy, resolution and certificate. Limits can
+  now be one-sided ("at most" / "at least" the set value), for manual
+  procedures too.
+- Ansur's own Pass/Fail is kept beside Cirqen's; where they differ the
+  reviewer sees it highlighted and must tick to confirm before approving.
+- Ansur's Pass/Fail-only checks (visual inspection, alarms) are kept with
+  the session, shown to the reviewer and printed on the certificate; a
+  failed check fails the calibration. The page says when Ansur has been
+  closed without a saved record.
+- The certificate says the readings were taken with Ansur, and Ansur's
+  detailed PDF is attached as Annex A inside the issued copy.
+- New **Ansur connection** page (HOD): find Ansur, create the work folders,
+  link procedures to templates and parameters to Ansur steps, with a status
+  list saying what is left to do.
+- Deploy: apply HQ migration `2026_add_ansur_calibration.sql` (new synced
+  columns) before sites update. Sites need `pypdf` (now in requirements).
+
 ### Calibration
 - A calibration cannot be saved with fewer readings than the procedure asks
   for (never fewer than 3); the message names the rows that are short.

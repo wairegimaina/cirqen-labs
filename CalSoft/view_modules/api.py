@@ -21,6 +21,8 @@ from CalSoft.models import (
 )
 from calSchedules.models import CalibrationSchedule
 from core.eat import fmt_eat
+from CalSoft.utils import reading_conformity
+from CalSoft.view_modules.ansur import ansur_review_details
 
 logger = logging.getLogger(__name__)
 
@@ -414,6 +416,8 @@ def api_session_details(request, session_id):
         "overall_pass": session.overall_pass,
         "certificate_number": session.certificate_number,
         "notes": session.notes,
+        "source": session.source,
+        "ansur": ansur_review_details(session),
         "readings": [],
     }
 
@@ -452,6 +456,9 @@ def api_session_details(request, session_id):
                     float(r.expanded_uncertainty) if r.expanded_uncertainty is not None else None
                 ),
                 "passes_tolerance": r.passes_tolerance,
+                "verdict": reading_conformity(r),
+                "limit_type": r.parameter.limit_type,
+                "ansur_status": r.ansur_status,
             }
         )
 

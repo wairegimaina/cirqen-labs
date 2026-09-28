@@ -286,6 +286,29 @@
       "</div>" +
       "</div>";
 
+    const fromAnsur = data.source === "ansur" && data.ansur;
+    if (fromAnsur) {
+      const a = data.ansur;
+      html +=
+        '<div class="alert ' + (a.disagreements ? "alert-warning" : "alert-info") + ' mt-3">' +
+        '<i class="fas fa-plug me-2" aria-hidden="true"></i><strong>Measured with Fluke Ansur</strong>' +
+        (a.job_number ? " (job " + escapeHTML(a.job_number) + ")" : "") +
+        (a.operator ? ", operator " + escapeHTML(a.operator) : "") + ". One analyser reading per test point." +
+        (a.pdf_url ? ' <a href="' + escapeHTML(a.pdf_url) + '" target="_blank" rel="noopener">Open Ansur\'s PDF</a>.' : "") +
+        (a.disagreements
+          ? "<div class=\"mt-1\"><strong>Ansur's verdict differs from Cirqen's at " + a.disagreements +
+            " test point(s)</strong>, highlighted below. Cirqen's guard-banded verdict is the one on the certificate.</div>"
+          : "") +
+        (a.checks && a.checks.length
+          ? '<div class="mt-1">Checks: ' + a.checks.map(function (c) {
+              const failed = c.status === "Fail";
+              return (failed ? "<strong class=\"text-danger\">" : "") + escapeHTML(c.name) + ": " +
+                escapeHTML(c.status) + (failed ? "</strong>" : "");
+            }).join("; ") + "</div>"
+          : "") +
+        "</div>";
+    }
+
     if (data.readings && data.readings.length > 0) {
       html +=
         '<h6 class="border-bottom pb-2 mb-3"><i class="fas fa-chart-line text-success me-2"></i>Calibration Results</h6>' +
@@ -302,13 +325,26 @@
         "<th>Error</th>" +
         "<th>Expanded Unc.</th>" +
         "<th>Status</th>" +
+        (fromAnsur ? "<th>Ansur</th>" : "") +
         "</tr>" +
         "</thead>" +
         "<tbody>";
 
+      const verdictBadge = function (reading) {
+        const verdict = reading.verdict || (reading.passes_tolerance ? "PASS" : "FAIL");
+        if (verdict === "PASS") return '<span class="badge bg-success"><i class="fas fa-check"></i> PASS</span>';
+        if (verdict === "INDETERMINATE") return '<span class="badge bg-warning text-dark">INDETERMINATE</span>';
+        return '<span class="badge bg-danger"><i class="fas fa-times"></i> FAIL</span>';
+      };
+      const disagrees = function (reading) {
+        const verdict = reading.verdict || "";
+        return (reading.ansur_status === "Pass" && verdict !== "PASS") ||
+          (reading.ansur_status === "Fail" && verdict === "PASS");
+      };
+
       data.readings.forEach(function (reading) {
         html +=
-          "<tr>" +
+          (fromAnsur && disagrees(reading) ? '<tr class="table-warning">' : "<tr>") +
           "<td><strong>" +
           safeValue(reading.parameter) +
           "</strong></td>" +
@@ -338,10 +374,9 @@
             : "N/A") +
           "</td>" +
           "<td>" +
-          (reading.passes_tolerance
-            ? '<span class="badge bg-success"><i class="fas fa-check"></i> PASS</span>'
-            : '<span class="badge bg-danger"><i class="fas fa-times"></i> FAIL</span>') +
+          verdictBadge(reading) +
           "</td>" +
+          (fromAnsur ? "<td>" + escapeHTML(reading.ansur_status || "N/A") + "</td>" : "") +
           "</tr>";
       });
 
@@ -494,6 +529,16 @@
     const reviewModalEl = document.getElementById("reviewModal");
     const approvalModalEl = document.getElementById("approvalModal");
 
+    const ack = approvalModalEl.querySelector("#ansurAck");
+    if (ack) {
+      const count = (currentSessionData && currentSessionData.ansur && currentSessionData.ansur.disagreements) || 0;
+      ack.hidden = !count;
+      const box = ack.querySelector("input[name=acknowledge_ansur]");
+      if (box) { box.checked = false; box.required = !!count; }
+      const n = ack.querySelector("[data-ansur-count]");
+      if (n) n.textContent = count;
+    }
+
     const reviewModal = bootstrap.Modal.getInstance(reviewModalEl);
     if (reviewModal) {
       // Wait for review modal to fully close before opening approval modal,
@@ -563,6 +608,13 @@
     const form = approvalModalEl.querySelector("#approvalForm, form");
     if (!form) {
       console.error("approvalForm not found inside approvalModal");
+      confirmButton.disabled = false;
+      confirmButton.innerHTML = originalButtonText;
+      return;
+    }
+    const ackBox = form.querySelector("input[name=acknowledge_ansur]");
+    if (ackBox && ackBox.required && !ackBox.checked) {
+      showToast("Tick the box to confirm you have reviewed where Ansur's verdict differs.", "error");
       confirmButton.disabled = false;
       confirmButton.innerHTML = originalButtonText;
       return;

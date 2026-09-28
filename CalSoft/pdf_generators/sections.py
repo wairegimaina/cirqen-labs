@@ -2,6 +2,7 @@
 """CalSoft.pdf_generators — the B-12 hospital certificate generator + thin wrapper."""
 import base64
 import calendar
+from xml.sax.saxutils import escape
 import io
 import os
 from datetime import datetime, timedelta
@@ -310,6 +311,32 @@ class SectionsMixin:
             + "), each derived from that parameter's effective degrees of freedom"
         )
 
+    def build_ansur_checks_content(self):
+        """Ansur's Pass/Fail-only steps (visual inspection, alarms...).
+
+        Not measurements, so they carry no uncertainty; a failed check fails
+        the calibration, as a failed reading does.
+        """
+        rows = [['Check', 'Result']]
+        for check in getattr(self.session, 'ansur_checks', None) or []:
+            rows.append([Paragraph(escape(str(check.get('name', ''))), self.styles['NormalText']),
+                         str(check.get('status', ''))])
+        table = Table(rows, colWidths=[5.2 * inch, 1.6 * inch])
+        style = [
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('BACKGROUND', (0, 0), (-1, 0), HexColor('#e5e7eb')),
+            ('BOX', (0, 0), (-1, -1), 0.5, HexColor('#d1d5db')),
+            ('INNERGRID', (0, 0), (-1, -1), 0.25, HexColor('#d1d5db')),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ]
+        for i, row in enumerate(rows[1:], 1):
+            if row[1] == 'Fail':
+                style += [('TEXTCOLOR', (1, i), (1, i), HexColor('#dc2626')),
+                          ('FONTNAME', (1, i), (1, i), 'Helvetica-Bold')]
+        table.setStyle(TableStyle(style))
+        return [table]
+
     def build_notes_content(self):
         """Build notes content with failure-specific notes."""
         base_notes = [
@@ -327,6 +354,18 @@ class SectionsMixin:
             "5. Where the test uncertainty ratio is below 4:1 the measurement is not sharp enough to judge the tolerance by simple comparison, and the guarded rule above governs."
         ]
 
+        # Readings taken by Fluke Ansur: say so, and how the budget differs.
+        if getattr(self.session, 'source', 'manual') == 'ansur':
+            job = getattr(self.session, 'ansur_job', None)  # reverse one-to-one; None if absent
+            job_text = f" (job {job.job_number}, template {job.template_file})" if job else ""
+            annex = " Ansur's detailed report is attached as Annex A." if job and job.pdf_copy else ""
+            base_notes.append(
+                f"{len(base_notes) + 1}. MEASURED WITH FLUKE ANSUR{job_text}: one analyser reading per test "
+                f"point. The uncertainty is computed by this laboratory from the analyser's specified "
+                f"accuracy, resolution and calibration certificate; where a limit is one-sided (max or min) "
+                f"the guard band is applied on that side only.{annex}"
+            )
+
         # Name the parameters that fall below the ratio, rather than leaving
         # the reader to compare every printed TUR against the floor.
         capability = self.measurement_capability_warnings()
@@ -335,7 +374,7 @@ class SectionsMixin:
                 f"{w['parameter']} ({w['tur']:.1f}:1)" for w in capability
             )
             base_notes.append(
-                f"6. MEASUREMENT CAPABILITY: the following parameters were measured "
+                f"{len(base_notes) + 1}. MEASUREMENT CAPABILITY: the following parameters were measured "
                 f"with a test uncertainty ratio below the customary 4:1 floor: "
                 f"{listed}. For these, the guarded decision rule in note 3 governs, "
                 f"and a result reported PASS close to the tolerance should be "

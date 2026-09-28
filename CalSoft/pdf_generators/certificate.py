@@ -241,6 +241,9 @@ class BtwelveHospitalCertificateGenerator(
         elements.extend(self.build_section_with_header("LINEARITY ANALYSIS", self.build_linearity_content()))
         elements.extend(self.build_section_with_header("DRIFT ANALYSIS", self.build_drift_analysis_content()))
         elements.extend(self.build_section_with_header("CALIBRATION RESULTS & STATISTICS", self.build_results_table()))
+        checks = getattr(self.session, 'ansur_checks', None) or []
+        if getattr(self.session, 'source', 'manual') == 'ansur' and checks:
+            elements.extend(self.build_section_with_header("CHECKS RECORDED IN ANSUR", self.build_ansur_checks_content()))
 
         # Add failure analysis section if there are failures
         if self.is_failed_report or self.failure_stats['failed_parameters']:

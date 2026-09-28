@@ -59,15 +59,17 @@ def issued_pdf(session, user, build):
     """PDF bytes for ``session``; see the module docstring."""
     from CalSoft.models import IssuedCertificate
 
+    from CalSoft.ansur.annex import with_annex
+
     if not is_issued(session):
-        return build()
+        return with_annex(session, build())
 
     record = IssuedCertificate.objects.filter(
         session=session, certificate_number=session.certificate_number).first()
     if record:
         return _read_verified(record)
 
-    data = build()
+    data = with_annex(session, build())
     digest = fingerprint(data)
     try:
         with transaction.atomic():

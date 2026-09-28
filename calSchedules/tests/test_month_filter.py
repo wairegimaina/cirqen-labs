@@ -35,10 +35,14 @@ class MonthFilterBase(TestCase):
 
     def equipment(self, dept):
         self.serial += 1
-        return Equipment.objects.create(
+        equipment = Equipment.objects.create(
             department=dept, workshop=self.workshop, description=self.desc,
             model="M1", serial_number=f"SN{self.serial}", status="Working",
         )
+        # One open schedule per equipment: the tests set their own.
+        CalibrationSchedule.objects.filter(equipment=equipment).delete()
+        PPMSchedule.objects.filter(equipment=equipment).delete()
+        return equipment
 
 
 class CalibrationMonthFilterTest(MonthFilterBase):

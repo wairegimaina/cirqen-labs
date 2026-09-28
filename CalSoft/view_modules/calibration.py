@@ -158,6 +158,12 @@ def _handle_calibration_post(request):
 
     schedule_was_created = False
     if not schedule:
+        # An equipment has at most one open schedule (enforced in the
+        # database); calibrate against it rather than opening another.
+        schedule = (CalibrationSchedule.objects
+                    .filter(equipment=equipment, active_status=True, pending_delete=False)
+                    .exclude(status="completed").order_by("scheduled_month").first())
+    if not schedule:
         grouped_schedule = _find_grouped_schedule_for_equipment(equipment)
         scheduled_month = grouped_schedule.scheduled_month if grouped_schedule else timezone.localdate()
         schedule, created = CalibrationSchedule.objects.get_or_create(
@@ -345,6 +351,32 @@ def _process_readings(request, session, procedure, equipment, schedule, return_d
                 if not reading.passes_tolerance:
                     overall_pass = False
 
+    schedule = finalise_session(session, procedure, equipment, schedule, request.user, overall_pass)
+
+    messages.success(request, f"Calibration session completed. Result: {'PASSED' if overall_pass else 'FAILED'}")
+
+    params = []
+    if return_department:
+        params.append(f"return_department={return_department}")
+    if return_month:
+        params.append(f"return_month={return_month}")
+    if return_year:
+        params.append(f"return_year={return_year}")
+    if schedule and schedule.pk:
+        params.append(f"selected={schedule.id}")
+    params.append("returned_from=calibration")
+    params.append(f"result={'pass' if overall_pass else 'fail'}")
+
+    return_url = reverse("schedule:pending_calibrations")
+    if params:
+        return_url += "?" + "&".join(params)
+    return redirect(return_url)
+
+
+def finalise_session(session, procedure, equipment, schedule, user, overall_pass):
+    """Everything after the readings are stored, shared by manual entry and
+    Ansur imports: verdict, next due date, schedule status, history, audit.
+    Returns the (saved) schedule."""
     session.overall_pass = overall_pass
 
     # Record when this calibration next falls due.
@@ -372,29 +404,12 @@ def _process_readings(request, session, procedure, equipment, schedule, return_d
     _store_historical_data(session)
 
     CalibrationAuditLog.objects.create(
-        user=request.user, action='complete_calibration',
-        description=f"Calibration completed for {equipment.description}",
+        user=user, action='complete_calibration',
+        description=f"Calibration completed for {equipment.description}"
+                    + (" (Fluke Ansur)" if getattr(session, "source", "") == "ansur" else ""),
         schedule=schedule, equipment=equipment, session=session
     )
-
-    messages.success(request, f"Calibration session completed. Result: {'PASSED' if overall_pass else 'FAILED'}")
-
-    params = []
-    if return_department:
-        params.append(f"return_department={return_department}")
-    if return_month:
-        params.append(f"return_month={return_month}")
-    if return_year:
-        params.append(f"return_year={return_year}")
-    if schedule and schedule.pk:
-        params.append(f"selected={schedule.id}")
-    params.append("returned_from=calibration")
-    params.append(f"result={'pass' if overall_pass else 'fail'}")
-
-    return_url = reverse("schedule:pending_calibrations")
-    if params:
-        return_url += "?" + "&".join(params)
-    return redirect(return_url)
+    return schedule
 
 
 def _handle_calibration_get(request):
@@ -460,7 +475,22 @@ def _handle_calibration_get(request):
     other_procedures = [{'id': p.id, 'name': p.name, 'is_recommended': False}
         for p in all_procedures if p.id not in recommended_procedure_ids]
 
+    # Start with Ansur: offered for procedures the Ansur connection page has
+    # fully set up, and an unfinished Ansur job for this equipment reopens
+    # its status panel.
+    from CalSoft.models import AnsurJob
+    from CalSoft.view_modules.ansur import ansur_available, job_payload
+
+    ansur_procedures = sorted(ansur_available())
+    ansur_open_job = None
+    if selected_equipment:
+        job = (AnsurJob.objects.filter(equipment=selected_equipment)
+               .exclude(status=AnsurJob.CANCELLED).order_by("-created_at").first())
+        if job and (job.is_open or (job.imported_at and job.imported_at > timezone.now() - timedelta(hours=12))):
+            ansur_open_job = job_payload(job)
+
     return render(request, 'Calibrition/calibration.html', {
+        'ansur_procedures': ansur_procedures, 'ansur_open_job': ansur_open_job,
         'pending_schedules': pending_schedules, 'equipment_list': equipment_list,
         'recommended_procedures': recommended_procedures, 'other_procedures': other_procedures,
         'form': CalibrationSessionForm(), 'selected_equipment': selected_equipment,

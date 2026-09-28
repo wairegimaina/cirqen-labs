@@ -94,6 +94,16 @@ app.conf.beat_schedule = {
         "task": "core.tasks.prune_security_log",
         "schedule": crontab(hour=2, minute=41),
     },
+    # Fluke Ansur: records saved on this PC become calibration sessions.
+    # Does nothing until the Ansur connection page switches it on.
+    "scan-ansur-results": {
+        "task": "CalSoft.tasks.scan_ansur_results",
+        "schedule": timedelta(seconds=5),
+    },
+    "prune-ansur-archive": {
+        "task": "CalSoft.tasks.prune_ansur_archive",
+        "schedule": crontab(hour=3, minute=17),
+    },
     # ============================================================================
     # SCHEDULING (PPM and calibration): one planner for both, see scheduling/
     # ============================================================================
