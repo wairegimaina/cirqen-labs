@@ -107,24 +107,33 @@ class NotificationTests(AssetsBase):
                                           equipment_description=self.vent_type, workshop=self.workshop,
                                           stock_count=10, reorder_level=3)
         self.assertFalse(AccessoryRequest.objects.exists())
-        part.stock_count = 2
-        part.save()
-        part.stock_count = 1
-        part.save()
+        with self.captureOnCommitCallbacks(execute=True):  # the stock email and bell go after commit
+            part.stock_count = 2
+            part.save()
+            part.stock_count = 1
+            part.save()
         request = AccessoryRequest.objects.get()
         self.assertEqual((request.request_type, request.requested_by.user, request.status),
                          ("restock", self.lead, "Pending"))
         self.assertTrue(CalibrationNotification.objects.filter(recipient=self.lead,
                                                                notification_type="stock_low").exists())
 
-    def test_daily_alerts_cover_contracts_and_stock_not_the_digest(self):
+    @override_settings(NOTIFICATIONS_DIGEST_SENDER=False)
+    def test_daily_alerts_run_on_the_site_sender_pc_only(self):
+        from assets.tasks import daily_alerts
+
+        self.assertEqual(daily_alerts(), {})
+
+    @override_settings(NOTIFICATIONS_DIGEST_SENDER=True)
+    def test_daily_alerts_cover_standards_and_contracts_only(self):
         from assets.tasks import daily_alerts
 
         today = timezone.localdate()
         ServiceContract.objects.create(equipment=self.pump, start_date=today - datetime.timedelta(days=300),
                                        end_date=today + datetime.timedelta(days=20))
         created = daily_alerts()
-        self.assertEqual(set(created), {"standards", "contracts", "stock"})  # PPM etc. are in the digest
+        # PPM etc. are in the digest; stock is mailed when it runs low (notifications.stock)
+        self.assertEqual(set(created), {"standards", "contracts"})
         self.assertGreaterEqual(created["contracts"], 2)  # HOD and the in-charge
         self.assertEqual(daily_alerts()["contracts"], 0)  # not repeated while unread
 
@@ -174,7 +183,7 @@ class PageTests(AssetsBase):
 
         with mock.patch("assets.labels.qrcode.make", side_effect=spy), \
                 override_settings(SITE_URL="https://cirqen.hospital.local"):
-            response = self.client.get(reverse("assets:labels"), {"department": self.icu.pk, "download": 1})
+            response = self.client.post(reverse("equipment_labels"), {"equipment": [self.vent.pk]})
         self.assertEqual(response["Content-Type"], "application/pdf")
         self.assertTrue(response.content.startswith(b"%PDF"))
         self.assertEqual(captured, [f"https://cirqen.hospital.local{reverse('assets:machine', args=[self.vent.pk])}"])
@@ -204,17 +213,26 @@ class PageTests(AssetsBase):
 
 
 class MonthlyReportTests(AssetsBase):
-    @override_settings(EMAIL_HOST_USER="cirqen@hospital.example")
+    @override_settings(EMAIL_HOST_USER="cirqen@hospital.example", NOTIFICATIONS_DIGEST_SENDER=True)
     def test_the_hod_gets_a_pdf(self):
         from assets.tasks import monthly_hod_report
+        from notifications.mailer import send_pending
 
         self._repair(self.vent, TODAY - datetime.timedelta(days=20))
         self.assertEqual(monthly_hod_report(today=datetime.date(2026, 10, 1)), 1)
+        self.assertEqual(monthly_hod_report(today=datetime.date(2026, 10, 1)), 0)  # queued once
+        self.assertEqual(send_pending(), (1, 0))
         message = mail.outbox[0]
         self.assertIn("September 2026", message.subject)
         name, content, mimetype = message.attachments[0]
         self.assertEqual((name, mimetype), ("cirqen-report-2026-09.pdf", "application/pdf"))
         self.assertTrue(content.startswith(b"%PDF"))
+
+    @override_settings(EMAIL_HOST_USER="cirqen@hospital.example", NOTIFICATIONS_DIGEST_SENDER=False)
+    def test_only_the_site_sender_pc_sends_it(self):
+        from assets.tasks import monthly_hod_report
+
+        self.assertEqual(monthly_hod_report(today=datetime.date(2026, 10, 1)), 0)
 
 
 class SyncTableTests(SimpleTestCase):

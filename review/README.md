@@ -22,6 +22,8 @@ half-wired, 10 not started and 2 waiting on a decision. Start at
 | **08** | `08_CALSCHEDULES_REFERENCE.pdf` | Anyone planning calibration work | 4 |
 | **09** | `09_HQ_CONNECTION_CONFIG.pdf` | Whoever owns sync, updates or installers | 28 |
 | **12** | `12_ANSUR_PERFORM_CALIBRATION_PLAN.pdf` | Whoever builds the Ansur connector; biomed and IT at the hospital | 10 |
+| **13** | `13_ANSUR_INTEGRATION_REVIEW.pdf` | Calibration-centre lead, CalSoft maintainers, biomed and IT | 8 |
+| **14** | `14_ALERTS_AND_EMAIL_PLAN.pdf` | The HOD, whoever maintains Cirqen, IT at the site | 8 |
 
 **01 — The Mathematics of Calibration.** How every number on a certificate is
 arrived at, built up from first principles. No programming content. Includes one

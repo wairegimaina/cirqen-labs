@@ -124,6 +124,9 @@ class UserProfile(models.Model):
         default=False,
         help_text='Whether sidebar is collapsed by default'
     )
+    # Email categories this person has switched off (notifications.preferences);
+    # the bell notification still comes. Synced, so it follows them to any PC.
+    email_muted = models.JSONField(default=list, blank=True, db_default=models.Value([], models.JSONField()))
 
     # Offline sync
     needs_sync = models.BooleanField(default=True)

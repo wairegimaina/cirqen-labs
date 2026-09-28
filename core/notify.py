@@ -1,9 +1,10 @@
-"""Notifications: in-app always, email and SMS when configured.
+"""Notifications: in-app always, email (through the notifications outbox) and SMS when configured.
 
 In-app notifications use CalSoft.CalibrationNotification (a general
 recipient/type/title/message/link record despite its name), which the header
 bell already counts. Email goes to the user's address when outgoing mail is
-configured (EMAIL_HOST_USER). SMS goes through Africa's Talking when
+configured; it is queued in notifications.EmailOutbox, so it is sent when the
+PC is next online. SMS goes through Africa's Talking when
 AFRICASTALKING_USERNAME and AFRICASTALKING_API_KEY are set, for the kinds
 listed in NOTIFY_SMS_KINDS (default: approval_needed, calibration_overdue), to
 the phone number on the user's profile.
@@ -73,17 +74,22 @@ def _absolute(url):
 
 
 def _email(user, title, message, url):
-    if not (user.email and getattr(settings, "EMAIL_HOST_USER", "")):
+    """Queue the email in the outbox, so it survives the PC being offline.
+    Addressed to this one person only: no copy rule (each person gets their
+    own notification already)."""
+    if not user.email:
         return
-    from django.core.mail import send_mail
+    import hashlib
 
-    from core.branding import organisation_name
+    from notifications.mailer import queue
 
-    body = f"{message}\n\n{_absolute(url)}\n\n— Cirqen, {organisation_name()}" if url else message
+    today = timezone.localdate()
+    key = f"notify:{user.pk}:{today.isoformat()}:{hashlib.sha1(title.encode()).hexdigest()[:16]}"
     try:
-        send_mail(f"[Cirqen] {title}", body, None, [user.email], fail_silently=False)
-    except Exception as exc:  # mail down must not stop the work that triggered it
-        logger.warning("Notification email to %s failed: %s", user.email, exc)
+        queue(kind="notify", dedupe_key=key, to_users=[user], subject=f"[Cirqen] {title}", template="simple",
+              context={"message": message, "link": _absolute(url) if url else ""}, copy_rule=False)
+    except Exception as exc:  # mail must not stop the work that triggered it
+        logger.warning("Notification email to %s could not be queued: %s", user.email, exc)
 
 
 def _sms_kinds():

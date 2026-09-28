@@ -6,7 +6,8 @@
                          work orders
     In-Charge            work orders waiting for their approval, PPMs due in
                          their department
-    HOD                  per-workshop totals of all of the above
+    HOD                  per-workshop totals of all of the above, and parts
+                         running low (at or below their lower limit)
 
 Each section is {'title', 'items' (lines), 'total'}; empty sections are
 dropped and a user with nothing to do gets no email.
@@ -158,8 +159,26 @@ def _hod_sections(today):
     sections = [_section("Workshops needing attention", lines, str, total=len(lines))]
     sections.append(_section(f"Warranties expiring in {_warranty_days()} days", _warranty_expiring(today),
                              _warranty_line))
+    sections.append(_section("Parts running low", _running_low(), _part_line))
     sections.append(_risk_section(Equipment.objects.filter(active_status=True)))
     return sections
+
+
+def _running_low():
+    """Parts at or below their lower limit, out of stock first."""
+    from django.db.models import F
+    from parts_tools.models import Accessories
+
+    return (Accessories.objects.filter(active_status=True, pending_delete=False, reorder_level__gt=0,
+                                       stock_count__lte=F("reorder_level"))
+            .select_related("name", "workshop").order_by("stock_count", "workshop__name"))
+
+
+def _part_line(part):
+    name = part.name.name if part.name else "Part"
+    where = part.workshop.name if part.workshop else "no workshop"
+    state = "OUT OF STOCK" if part.stock_count <= 0 else f"{part.stock_count} left"
+    return f"{name} ({where}): {state}, lower limit {part.reorder_level}"
 
 
 def any_due(sections):

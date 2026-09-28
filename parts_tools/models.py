@@ -190,8 +190,12 @@ class Accessories(models.Model):
     )
     note = models.TextField(max_length=100, blank=True, null=True)
     stock_count = models.PositiveIntegerField(default=0)
-    # At or below this count a restock request is raised (0 = no alert).
+    # The lower limit: at or below it the part is "running low" and everyone in
+    # its workshop is emailed once (notifications.stock). 0 = no limit.
     reorder_level = models.PositiveIntegerField(default=0)
+    # When that email went; cleared once the stock is back above the limit,
+    # so each time the part runs low is mailed once, from one PC.
+    low_stock_alerted_at = models.DateTimeField(null=True, blank=True)
     supplier = models.ForeignKey('Inventory.Supplier', on_delete=models.SET_NULL, null=True, blank=True,
                                  related_name='accessories')
 
@@ -222,6 +226,36 @@ class Accessories(models.Model):
         accessory_name = self.name.name if self.name else "Unnamed Accessory"
         equipment_name = self.equipment_description.name if self.equipment_description else "Unknown Equipment"
         return f"{accessory_name} for {equipment_name} (Stock: {self.stock_count})"
+
+    @property
+    def stock_state(self):
+        """"out", "low" (at or below the lower limit) or "ok"."""
+        if self.stock_count <= 0:
+            return "out"
+        if self.reorder_level and self.stock_count <= self.reorder_level:
+            return "low"
+        return "ok"
+
+    @property
+    def stock_label(self):
+        return {"out": "Out of stock", "low": "Running low", "ok": "In stock"}[self.stock_state]
+
+    @property
+    def is_running_low(self):
+        """At or below a set lower limit (out of stock included)."""
+        return bool(self.reorder_level) and self.stock_count <= self.reorder_level
+
+    @staticmethod
+    def can_set_lower_limit(user, accessory=None):
+        """The HOD, or the Engineer In-charge of the part's workshop."""
+        profile = getattr(user, "userprofile", None)
+        if profile is None:
+            return False
+        if profile.role == "HOD":
+            return True
+        if profile.role != "Tech" or profile.level != "Engineer Incharge":
+            return False
+        return accessory is None or accessory.workshop_id == profile.workshop_id
 
     class Meta:
         verbose_name_plural = "Accessories"
@@ -413,6 +447,57 @@ class AccessoryRequest(models.Model):
             models.Index(fields=['status', 'workshop']),
             models.Index(fields=['requested_by', 'status']),
         ]
+
+
+class StockMovement(models.Model):
+    """One change to a part's stock: rows are only ever added, never edited.
+
+    A part's stock is the total of its movements (parts_tools.stock), so two
+    PCs using the same part while apart both count when they sync: their rows
+    are different rows, where a synced count would keep only the last one.
+    ``Accessories.stock_count`` stays as the running total the screens read,
+    and is corrected from the movements every minute.
+    """
+    OPENING, WORK_ORDER, WORK_ORDER_UNDONE, RECEIVED, ADJUSTMENT = (
+        "opening", "work_order", "work_order_undone", "received", "adjustment")
+    REASONS = [
+        (OPENING, "Opening balance"),
+        (WORK_ORDER, "Used on a work order"),
+        (WORK_ORDER_UNDONE, "Work order declined: returned"),
+        (RECEIVED, "Received"),
+        (ADJUSTMENT, "Stock count corrected"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    # No database constraints: sync can deliver a movement before its part,
+    # work order or request, and a movement must never be lost for that.
+    accessory = models.ForeignKey(Accessories, on_delete=models.DO_NOTHING, db_constraint=False,
+                                  related_name="movements")
+    change = models.IntegerField(help_text="+ into stock, - out of stock")
+    reason = models.CharField(max_length=20, choices=REASONS)
+    job_card = models.ForeignKey('jobcard.jobcard', on_delete=models.DO_NOTHING, db_constraint=False,
+                                 null=True, blank=True, related_name="stock_movements")
+    request = models.ForeignKey(AccessoryRequest, on_delete=models.DO_NOTHING, db_constraint=False,
+                                null=True, blank=True, related_name="stock_movements")
+    created_by = models.ForeignKey('accounts.CustomUser', on_delete=models.DO_NOTHING, db_constraint=False,
+                                   null=True, blank=True, related_name="+")
+    note = models.CharField(max_length=200, blank=True)
+
+    # offline sync
+    needs_sync = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    pending_delete = models.BooleanField(default=False)
+    active_status = models.BooleanField(default=True)
+
+    syncable = True
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["accessory", "reason"])]
+
+    def __str__(self):
+        return f"{self.change:+d} {self.get_reason_display()} ({self.accessory_id})"
 
 
 class AccessoryRequestHistory(models.Model):

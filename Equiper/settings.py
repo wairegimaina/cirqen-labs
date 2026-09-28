@@ -600,6 +600,11 @@ NOTIFICATIONS_EMAIL_ENABLED = bool(config.get("notifications.email_enabled", Tru
 NOTIFICATIONS_DIGEST_SENDER = bool(config.get("notifications.digest_sender", False))
 NOTIFICATIONS_DIGEST_HOUR = int(config.get("notifications.digest_hour", 7))  # EAT
 NOTIFICATIONS_APP_NAME = "Cirqen"
+# One email per work order is noise at a busy hospital: off unless asked for.
+# The bell notification is always made; the HOD gets the weekly report.
+NOTIFICATIONS_WORK_ORDER_EMAIL = bool(config.get("notifications.work_order_email", False))
+# Unsent email older than this is marked expired instead of delivered late.
+NOTIFICATIONS_OUTBOX_KEEP_DAYS = int(config.get("notifications.outbox_keep_days", 7))
 
 # Warranties within this many days of expiry show as "Expiring Soon".
 WARRANTY_EXPIRING_SOON_DAYS = int(config.get("warranty.expiring_soon_days", 60))

@@ -37,6 +37,7 @@ urlpatterns = [
     path('get/<uuid:pk>/', views.get_accessory, name='get_accessory'),
     path('delete/<uuid:pk>/', views.delete_accessory, name='delete_accessory'),
     path('list/', views.accessory_list, name='accessory_list'),
+    path('<uuid:pk>/lower-limit/', views.set_lower_limit, name='set_lower_limit'),
 
     # ── AJAX helpers — accessories ────────────────────────────────────────────
     path('ajax/add-accessory-name/', views.ajax_add_accessory_name, name='add_accessory_name'),

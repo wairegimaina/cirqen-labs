@@ -8,7 +8,7 @@ from django.utils import timezone
 from django.utils.timezone import localdate
 
 from . import digest
-from .mailer import queue, send_pending
+from .mailer import is_site_sender, queue, send_pending
 from .models import EmailOutbox
 
 logger = logging.getLogger(__name__)
@@ -29,10 +29,11 @@ def send_daily_digests(force=False):
 
     Runs hourly and acts once the local (EAT) hour reaches
     NOTIFICATIONS_DIGEST_HOUR, so a machine switched on late still sends.
-    Only a desktop with ``notifications.digest_sender`` set does this; with
-    the flag on every desktop, every user would get one copy per machine.
+    Only the site's sender PC does this (Settings > Email, or
+    ``notifications.digest_sender`` in config.json); with it on every desktop,
+    every user would get one copy per machine.
     """
-    if not getattr(settings, 'NOTIFICATIONS_DIGEST_SENDER', False) and not force:
+    if not is_site_sender() and not force:
         return 0
     if not force and timezone.localtime().hour < getattr(settings, 'NOTIFICATIONS_DIGEST_HOUR', 7):
         return 0
@@ -63,3 +64,14 @@ def send_daily_digests(force=False):
         ):
             queued += 1
     return queued
+
+
+@shared_task(name="notifications.tasks.weekly_report_reminders", ignore_result=True)
+def weekly_report_reminders():
+    """Hourly; on Monday from 08:00 (EAT) remind the Engineer In-charge of any
+    workshop whose report for last week is missing. Site sender PC only."""
+    if not is_site_sender():
+        return 0
+    from .reports import remind_missing_weekly_reports
+
+    return remind_missing_weekly_reports()

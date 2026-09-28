@@ -18,7 +18,7 @@ def _month_end(day):
 
 @shared_task
 def daily_alerts(today=None):
-    """Reference standards due, service contracts ending, low stock.
+    """Reference standards due and service contracts ending.
 
     PPM and calibration due dates, warranties and high-risk devices are in the
     daily digest (notifications.digest); this covers what it does not. One summary notification per person per subject, repeated each day while
@@ -27,11 +27,13 @@ def daily_alerts(today=None):
     """
     from CalSoft.models import Standard
     from core.notify import notify, recipients, workshop_leads
-    from parts_tools.models import Accessories
+    from notifications.mailer import is_site_sender
     from workshop.models import Workshop
 
     from .models import ServiceContract
 
+    if not is_site_sender():
+        return {}  # one PC per site, or everyone gets a copy per PC
     today = today or timezone.localdate()
     created = {}
 
@@ -68,24 +70,9 @@ def daily_alerts(today=None):
                       f"{count} service contract(s) end within {CONTRACT_WARNING_DAYS} days",
                       "Renew or plan cover before they lapse.", url=reverse("assets:contracts"))
 
-    def stock():
-        total = 0
-        from django.db.models import F
-
-        low = Accessories.objects.filter(active_status=True, reorder_level__gt=0,
-                                         stock_count__lte=F("reorder_level")).select_related("workshop")
-        by_workshop = {}
-        for item in low:
-            by_workshop.setdefault(item.workshop, []).append(item)
-        for workshop, items in by_workshop.items():
-            if workshop is None:
-                continue
-            total += notify(workshop_leads(workshop), "stock_low", f"{len(items)} part(s) at or below reorder level",
-                            ", ".join(f"{i.name} ({i.stock_count})" for i in items[:6]) + ".",
-                            url=reverse("assets:stock_alerts"))
-        return total
-
-    for subject, fn in (("standards", standards), ("contracts", contracts), ("stock", stock)):
+    # Stock running low is mailed when it happens (notifications.stock) and
+    # listed in the HOD's digest, so it is not repeated here.
+    for subject, fn in (("standards", standards), ("contracts", contracts)):
         safe(subject, fn)
     logger.info("Daily alerts: %s", created)
     return created
@@ -94,35 +81,32 @@ def daily_alerts(today=None):
 @shared_task
 def monthly_hod_report(today=None):
     """On the 1st: last month's KPIs, failure-risk list and backlog, emailed to each HOD
-    with an email address, as a PDF attachment. Returns how many were sent."""
-    from django.conf import settings
-    from django.core.mail import EmailMessage
-
+    with an email address, as a PDF attachment, through the outbox (so it is
+    sent when the PC is next online). Only the site's sender PC does it.
+    Returns how many were queued."""
     from core.branding import organisation_name
     from core.notify import recipients
     from Inventory.models import Equipment
+    from notifications.mailer import is_site_sender, queue
 
     from .reports import monthly_report_pdf
 
+    if not is_site_sender():
+        return 0
     today = today or timezone.localdate()
     last_month_end = today.replace(day=1) - timedelta(days=1)
     label = last_month_end.strftime("%B %Y")
-    if not getattr(settings, "EMAIL_HOST_USER", ""):
-        logger.info("Monthly report not emailed: outgoing email is not configured")
+    hods = [h for h in recipients("HOD") if h.email]
+    if not hods:
         return 0
     pdf = monthly_report_pdf(Equipment.objects.filter(active_status=True), last_month_end)
-    sent = 0
-    for hod in recipients("HOD"):
-        if not hod.email:
-            continue
-        message = EmailMessage(
-            f"[Cirqen] {organisation_name()} maintenance report — {label}",
-            f"Attached: equipment maintenance for {label}. KPIs cover the 12 months to the end of {label}.",
-            to=[hod.email])
-        message.attach(f"cirqen-report-{last_month_end:%Y-%m}.pdf", pdf, "application/pdf")
-        try:
-            message.send()
-            sent += 1
-        except Exception as exc:
-            logger.warning("Monthly report to %s failed: %s", hod.email, exc)
-    return sent
+    queued = 0
+    for hod in hods:
+        if queue(kind="monthly_report", dedupe_key=f"monthly-report:{hod.pk}:{last_month_end:%Y-%m}", to_users=[hod],
+                 subject=f"[Cirqen] {organisation_name()} maintenance report — {label}", template="simple",
+                 context={"message": f"Attached: equipment maintenance for {label}. KPIs cover the 12 months to "
+                                     f"the end of {label}.", "link": ""},
+                 attachment=(f"cirqen-report-{last_month_end:%Y-%m}.pdf", pdf, "application/pdf"),
+                 copy_rule=False):
+            queued += 1
+    return queued

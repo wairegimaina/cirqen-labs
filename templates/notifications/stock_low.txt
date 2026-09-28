@@ -1,0 +1,14 @@
+{% autoescape off %}{{ name }} in {{ workshop }} is {{ state|lower }}.
+
+Part:          {{ name }}{% if equipment %} (for {{ equipment }}){% endif %}
+In stock:      {{ part.stock_count }}
+Lower limit:   {{ part.reorder_level }}
+Suggested order: {{ suggested }}{% if supplier %}
+Supplier:      {{ supplier.name }}{% if supplier.phone %}, {{ supplier.phone }}{% endif %}{% if supplier.email %}, {{ supplier.email }}{% endif %}{% endif %}
+
+{% if restock %}A restock request for {{ restock.requested_quantity }} was raised automatically and is {{ restock.status|lower }}{% if restock.status == 'Pending' %}: waiting for the HOD's approval{% endif %}.
+{{ link }}{% else %}Raise a restock request in Parts & tools:
+{{ link }}{% endif %}
+
+You will not be emailed about this part again until it has been restocked above its lower limit.
+{% endautoescape %}

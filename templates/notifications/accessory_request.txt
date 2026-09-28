@@ -1,0 +1,16 @@
+{% autoescape off %}{% if event == "requested" %}{{ requester }} ({{ workshop }}) has requested an accessory. It is waiting for your approval.{% elif event == "approved" %}Your accessory request was approved by {{ decided_by }}.{% elif event == "declined" %}Your accessory request was declined by {{ decided_by }}.{% else %}{{ received_by }} has received this accessory into {{ workshop }}'s stock.{% endif %}
+
+Request:     {{ kind }}
+Item:        {{ item }}
+For:         {{ equipment }}
+Quantity:    {{ req.requested_quantity }}{% if event != "requested" and event != "declined" %}
+Unit cost:   KSh {{ req.unit_cost }}
+Total:       KSh {{ total }}{% endif %}{% if event == "received" and stock is not None %}
+Stock now:   {{ stock }}{% endif %}{% if req.note and event == "requested" %}
+Note:        {{ req.note }}{% endif %}{% if req.approval_reason and event != "requested" %}
+{% if event == "declined" %}Reason:      {% else %}HOD's note:  {% endif %}{{ req.approval_reason }}{% endif %}
+{% if event == "approved" %}
+Mark it as received in Parts & tools when it arrives.{% endif %}
+
+{{ link }}
+{% endautoescape %}

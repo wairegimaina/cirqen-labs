@@ -7,3 +7,4 @@ class NotificationsConfig(AppConfig):
 
     def ready(self):
         from . import events  # noqa: F401  (connects the work order signals)
+        from . import stock  # noqa: F401  (connects the stock-running-low signal)

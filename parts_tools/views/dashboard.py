@@ -1,4 +1,5 @@
 """Dashboard view — the main accessories & tools management page."""
+from django.db.models import F, Q
 import logging
 
 from django.shortcuts import render, redirect
@@ -131,10 +132,27 @@ def accessories_dashboard(request, dept_id=None):
         else Accessories.objects.filter(active_status=True)
     )
 
+    # Stock filter: everything, or only what is running low (at or below the
+    # lower limit, out of stock included) or out of stock.
+    stock_filter = request.GET.get('stock', '')
+    low_q = Q(reorder_level__gt=0, stock_count__lte=F('reorder_level')) | Q(stock_count__lte=0)
+    stock_counts = {
+        'all': all_accessories.count(),
+        'low': all_accessories.filter(low_q).count(),
+        'out': all_accessories.filter(stock_count__lte=0).count(),
+    }
+    if stock_filter == 'low':
+        all_accessories = all_accessories.filter(low_q).order_by('stock_count')
+    elif stock_filter == 'out':
+        all_accessories = all_accessories.filter(stock_count__lte=0)
+
     context = {
         'show_sidebar': True,
         'tools': all_tools,
         'accessories': all_accessories,
+        'stock_filter': stock_filter,
+        'stock_counts': stock_counts,
+        'can_set_limit': Accessories.can_set_lower_limit(request.user),
         'departments': departments,
         'selected_department_id': str(dept_id) if dept_id else None,
         'is_hod': is_hod,

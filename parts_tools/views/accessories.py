@@ -11,6 +11,7 @@ from django.db.models import Q
 from django.core.exceptions import ValidationError
 from django.views.decorators.http import require_POST
 
+from .. import stock
 from ..models import Accessories, AccessoriesManufacturer, Accessoriesname
 from Inventory.models import EquipmentDescription
 
@@ -69,10 +70,17 @@ def edit_accessory(request, pk):
             equipment = get_object_or_404(EquipmentDescription, id=equipment_id)
             accessory.equipment_description = equipment
 
-        accessory.stock_count = int(stock_count)
+        counted = int(stock_count)
+        if counted < 0:
+            raise ValidationError("Stock cannot be negative.")
         accessory.unit_cost = float(unit_cost)
         accessory.note = note
-        accessory.save()
+        # Everything but the count; a new count is a stock take, recorded as
+        # an adjustment in the stock ledger so it syncs as a change, not a total.
+        accessory.save(update_fields=['name', 'manufacturer', 'equipment_description', 'unit_cost', 'note',
+                                      'updated_at'])
+        stock.set_count(accessory.pk, counted, note=f"Edited by {request.user.get_full_name() or request.user.username}",
+                        created_by=request.user)
 
         name_display = accessory.name.name if accessory.name else 'Unnamed'
         logger.info(f"Accessory '{name_display}' updated by HOD {request.user.username}")
@@ -244,3 +252,39 @@ def delete_accessory_manufacturer(request, manufacturer_id):
     except Exception as e:
         logger.error(f"Error deleting accessory manufacturer {manufacturer_id}: {e}")
         return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_POST
+def set_lower_limit(request, pk):
+    """Set a part's lower limit (at or below it the part is running low and its
+    workshop is emailed). The HOD, or the Engineer In-charge of its workshop."""
+    accessory = get_object_or_404(Accessories, pk=pk, active_status=True)
+    wants_json = request.headers.get("x-requested-with") == "XMLHttpRequest"
+    if not Accessories.can_set_lower_limit(request.user, accessory):
+        message = "Only the HOD or this workshop's Engineer In-charge can change the lower limit."
+        if wants_json:
+            return JsonResponse({"success": False, "error": message}, status=403)
+        messages.error(request, message)
+        return redirect("partstools:accessories_dashboard")
+    try:
+        limit = int(request.POST.get("reorder_level", ""))
+        if limit < 0:
+            raise ValueError
+    except ValueError:
+        message = "The lower limit must be a whole number, 0 or more (0 means no limit)."
+        if wants_json:
+            return JsonResponse({"success": False, "error": message}, status=400)
+        messages.error(request, message)
+        return redirect("partstools:accessories_dashboard")
+    accessory.reorder_level = limit
+    accessory.save(update_fields=["reorder_level", "updated_at"])  # the stock signal runs from here
+    name = accessory.name.name if accessory.name else "the part"
+    if wants_json:
+        return JsonResponse({"success": True, "reorder_level": limit, "stock_state": accessory.stock_state,
+                             "stock_label": accessory.stock_label})
+    messages.success(request, f"Lower limit for {name} set to {limit}." if limit else f"No lower limit for {name}.")
+    target = request.POST.get("next") or ""
+    if not target.startswith("/") or target.startswith("//"):
+        target = "partstools:accessories_dashboard"
+    return redirect(target)

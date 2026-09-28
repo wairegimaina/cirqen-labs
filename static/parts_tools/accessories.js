@@ -211,7 +211,15 @@ const AccessoryManager = {
     const tbody = document.querySelector('#accessories-table tbody');
     if (!tbody) return;
     const isHod = document.body.dataset.isHod === 'true';
-    const cols = isHod ? 9 : 7;
+    const cols = isHod ? 10 : 8;
+    // Keep the page's Running low / Out of stock filter when redrawing.
+    const stockFilter = new URLSearchParams(window.location.search).get('stock');
+    if (stockFilter === 'low') accessories = accessories.filter((a) => a.stock_state !== 'ok');
+    if (stockFilter === 'out') accessories = accessories.filter((a) => a.stock_state === 'out');
+    const csrfInput = document.querySelector('input[name=csrfmiddlewaretoken]');
+    const csrf = csrfInput ? csrfInput.value : '';
+    const here = window.location.pathname + window.location.search;
+    const badge = { out: 'bg-danger', low: 'bg-warning text-dark', ok: 'bg-success' };
 
     if (!accessories.length) {
       tbody.innerHTML = `<tr><td colspan="${escapeHTML(cols)}" class="text-center text-muted py-4">No accessories found.</td></tr>`;
@@ -227,9 +235,21 @@ const AccessoryManager = {
         <td>${escapeHTML(a.equipment || '-')}</td>
         <td>${escapeHTML(a.manufacturer || '-')}</td>
         <td>
-          <span class="badge ${a.stock_count < 5 ? 'bg-danger' : a.stock_count < 10 ? 'bg-warning text-dark' : 'bg-success'}">
-            ${a.stock_count}
-          </span>
+          <span class="badge ${badge[a.stock_state] || 'bg-success'}">${escapeHTML(a.stock_count)}</span>
+          ${a.stock_state && a.stock_state !== 'ok'
+            ? `<div class="small fw-semibold ${a.stock_state === 'out' ? 'text-danger' : 'text-warning-emphasis'}">${escapeHTML(a.stock_label)}</div>`
+            : ''}
+        </td>
+        <td>
+          ${a.can_set_limit
+            ? `<form method="post" action="${escapeHTML(a.limit_url)}" class="d-flex gap-1 lower-limit-form">
+                 <input type="hidden" name="csrfmiddlewaretoken" value="${escapeHTML(csrf)}">
+                 <input type="hidden" name="next" value="${escapeHTML(here)}">
+                 <input type="number" min="0" name="reorder_level" value="${escapeHTML(a.reorder_level)}"
+                        class="form-control form-control-sm" style="width:5.5rem" aria-label="Lower limit">
+                 <button type="submit" class="btn btn-sm btn-outline-primary" title="Save lower limit" aria-label="Save lower limit"><i class="fas fa-check"></i></button>
+               </form>`
+            : (a.reorder_level ? escapeHTML(a.reorder_level) : '<span class="text-muted">None</span>')}
         </td>
         <td>${escapeHTML(a.unit_cost)} KSh</td>
         <td>${escapeHTML(a.note || '-')}</td>

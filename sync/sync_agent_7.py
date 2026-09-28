@@ -756,6 +756,37 @@ class DownloadCertHeartbeatMixin(SmartDeleteMixin):
             LOG.info("Certificate request: session upload still pending after %.0fs; asking HQ anyway", timeout)
             return False
 
+    def get_email_summary(self):
+            """This PC's email outbox, for HQ to notice a site whose mail has
+            stopped: waiting, the oldest wait, refused or expired this week,
+            and the last send. None when the outbox table is not there yet."""
+            conn = None
+            try:
+                conn = self.pool.getconn()
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT COUNT(*) FILTER (WHERE status = 'pending'),
+                               EXTRACT(EPOCH FROM NOW() - MIN(created_at) FILTER (WHERE status = 'pending')) / 3600,
+                               COUNT(*) FILTER (WHERE status IN ('failed', 'expired')
+                                                AND created_at > NOW() - INTERVAL '7 days'),
+                               MAX(sent_at)
+                        FROM notifications_emailoutbox""")
+                    pending, oldest_hours, problems, last_sent = cur.fetchone()
+                return {
+                    "pending": pending,
+                    "oldest_pending_hours": round(float(oldest_hours), 1) if oldest_hours is not None else None,
+                    "refused_or_expired_7d": problems,
+                    "last_sent": last_sent.isoformat() if last_sent else None,
+                }
+            except Exception as e:
+                if conn is not None:
+                    conn.rollback()
+                LOG.debug("Email summary unavailable: %s", e)
+                return None
+            finally:
+                if conn is not None:
+                    self.pool.putconn(conn)
+
     def send_heartbeat(self):
             """Send heartbeat to HQ server"""
             try:
@@ -785,6 +816,8 @@ class DownloadCertHeartbeatMixin(SmartDeleteMixin):
                         "unreviewed_conflicts": local_status.get("unreviewed_conflicts"),
                         "schema_drift": local_status.get("schema_drift"),
                         "last_status_update": local_status.get("last_update"),
+                        # Lets HQ notice a site whose email has stopped (ops_summary).
+                        "email": self.get_email_summary(),
                     },
                 }
 
