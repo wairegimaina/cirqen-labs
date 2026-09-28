@@ -19,7 +19,6 @@ from django.template.loader import render_to_string
 from django.utils import timezone
 
 from .models import EmailOutbox, EmailSettings
-from .preferences import wants
 from .recipients import addresses
 
 logger = logging.getLogger(__name__)
@@ -102,15 +101,10 @@ def queue(kind, dedupe_key, to_users, subject, template, context, in_app_message
     skip = {getattr(u, 'pk', u) for u in exclude if u is not None}
     to_users = [u for u in to_users if u is not None and u.pk not in skip]
     if in_app_message:
-        _bell(to_users, kind, subject, in_app_message)  # the bell comes whatever email is wanted
+        _bell(to_users, kind, subject, in_app_message)
     if not enabled():
         return None
-    # People who switched this kind of email off (My email) get the bell only.
-    # Copies follow the event, so the HOD is still copied when every main
-    # recipient has switched this email off; then the copies become the recipients.
-    to, cc = addresses(to_users, copy_rule=copy_rule, exclude=skip, keep=lambda u: wants(u, kind))
-    if not to and cc:
-        to, cc = cc, []
+    to, cc = addresses(to_users, copy_rule=copy_rule, exclude=skip)
     if not to:
         logger.info("notifications: %s has no recipient with an email address", kind)
         return None

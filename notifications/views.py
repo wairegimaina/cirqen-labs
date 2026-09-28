@@ -122,27 +122,3 @@ def outbox_action(request, pk):
         target = reverse("notifications:outbox")
     return redirect(target)
 
-
-@login_required
-def my_email(request):
-    """Which emails I get. Everyone; the bell notifications always come."""
-    from users.models import UserProfile
-
-    from . import preferences
-
-    profile = getattr(request.user, "userprofile", None)
-    if profile is None:
-        messages.error(request, "Your account has no profile.")
-        return redirect("dashboard:dashboard-main")
-    if request.method == "POST":
-        wanted = set(request.POST.getlist("on"))
-        muted = sorted(k for k in preferences.MUTABLE if k not in wanted)
-        # update(), not save(): the profile's full_clean has nothing to do with
-        # this, and updated_at moves so the choice syncs to every PC.
-        UserProfile.objects.filter(pk=profile.pk).update(email_muted=muted, updated_at=timezone.now(),
-                                                         needs_sync=True)
-        messages.success(request, "Your email choices are saved. Notifications in Cirqen still come.")
-        return redirect("notifications:my_email")
-    return render(request, "notifications/pages/my_email.html", {
-        "rows": preferences.rows(request.user), "address": request.user.email,
-    })

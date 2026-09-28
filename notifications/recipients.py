@@ -49,17 +49,16 @@ def cc_for(user):
     return [u for u in copies if u.pk != user.pk]
 
 
-def addresses(to_users, copy_rule=True, exclude=(), keep=None):
+def addresses(to_users, copy_rule=True, exclude=()):
     """(to, cc) address lists for one message to ``to_users``, copy rule applied.
 
     Nobody appears twice, nobody is copied on mail they already receive, and
-    users whose pk is in ``exclude`` (whoever did the thing) are left out, as
-    are copies ``keep`` rejects (people who switched this email off).
+    users whose pk is in ``exclude`` (whoever did the thing) are left out.
     """
     to, seen = [], set()
     for user in to_users:
         addr = email_of(user)
-        if addr and addr.lower() not in seen and user.pk not in exclude and (keep is None or keep(user)):
+        if addr and addr.lower() not in seen and user.pk not in exclude:
             seen.add(addr.lower())
             to.append(addr)
     cc = []
@@ -67,7 +66,7 @@ def addresses(to_users, copy_rule=True, exclude=(), keep=None):
         return to, cc
     for user in to_users:
         for copy in cc_for(user):
-            if copy.pk in exclude or (keep is not None and not keep(copy)):
+            if copy.pk in exclude:
                 continue
             addr = email_of(copy)
             if addr and addr.lower() not in seen:
