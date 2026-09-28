@@ -63,6 +63,13 @@ app.conf.beat_schedule = {
     },
     # Monday from 08:00: remind the Engineer In-charge if last week's report
     # is missing (hourly so a PC switched on late still sends it; once per week).
+    # Parts running low that were never announced (e.g. already short before
+    # stock alerts existed): emailed from the site sender PC.
+    "notifications-stock-sweep": {
+        "task": "notifications.tasks.stock_sweep",
+        "schedule": timedelta(minutes=15),
+        "options": {"expires": 600},
+    },
     "notifications-weekly-report-reminders": {
         "task": "notifications.tasks.weekly_report_reminders",
         "schedule": crontab(minute=20),

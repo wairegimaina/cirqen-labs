@@ -206,3 +206,60 @@ class WorkOrderStockTests(Base):
         self.wo.decline_job_card(self.nic, "Wrong device")
         self.sensor.refresh_from_db()
         self.assertEqual(self.sensor.stock_count, 4)
+
+
+@override_settings(**EMAIL)
+class StockSweepTests(Base):
+    """Nothing that is running low goes unannounced."""
+
+    def _part(self, **extra):
+        values = dict(name=Accessoriesname.objects.create(name=extra.pop("label", "Flow Sensor")),
+                      equipment_description=EquipmentDescription.objects.get(name="Ventilator"),
+                      stock_count=6, reorder_level=3, workshop=self.workshop)
+        values.update(extra)
+        part = Accessories.objects.create(**values)
+        # Already short before alerts existed: changed without a save on this PC.
+        Accessories.objects.filter(pk=part.pk).update(stock_count=1)
+        return part
+
+    @override_settings(NOTIFICATIONS_DIGEST_SENDER=True)
+    def test_a_part_already_low_is_announced_by_the_sweep_once(self):
+        from notifications.tasks import stock_sweep
+
+        self._part()
+        self.assertEqual(stock_sweep(), 1)
+        self.assertEqual(stock_sweep(), 0)
+        self.assertIn("Flow Sensor is running low: 1 left (Biomed)",
+                      EmailOutbox.objects.get(kind="stock_low").subject)
+
+    @override_settings(NOTIFICATIONS_DIGEST_SENDER=False)
+    def test_the_sweep_runs_on_the_site_sender_pc_only(self):
+        from notifications.tasks import stock_sweep
+
+        self._part()
+        self.assertEqual(stock_sweep(), 0)
+
+    def test_a_part_with_no_workshop_goes_to_the_hod(self):
+        from notifications.stock import alert_all_missing
+
+        self._part(label="Spare Fuse", workshop=None)
+        alert_all_missing()
+        msg = EmailOutbox.objects.get(kind="stock_low")
+        self.assertEqual((msg.to, msg.cc), ("n_hod@hospital.test", "n_deputy@hospital.test"))
+        self.assertIn("(no workshop)", msg.subject)
+
+    def test_a_workshop_nobody_can_be_emailed_in_goes_to_the_hod(self):
+        from notifications.stock import alert_all_missing
+
+        empty = Workshop.objects.create(name="Dental", category="maintenance")
+        self._user("n_dent", "Tech", email=False, workshop=empty, level="Engineer")
+        self._part(label="Handpiece", workshop=empty)
+        alert_all_missing()
+        self.assertEqual(EmailOutbox.objects.get(kind="stock_low").to, "n_hod@hospital.test")
+
+    def test_deleted_parts_are_not_announced(self):
+        from notifications.stock import alert_all_missing
+
+        part = self._part(label="Old Cable")
+        Accessories.objects.filter(pk=part.pk).update(pending_delete=True)
+        self.assertEqual(alert_all_missing(), 0)

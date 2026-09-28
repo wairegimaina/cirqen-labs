@@ -75,3 +75,14 @@ def weekly_report_reminders():
     from .reports import remind_missing_weekly_reports
 
     return remind_missing_weekly_reports()
+
+
+@shared_task(name="notifications.tasks.stock_sweep", ignore_result=True)
+def stock_sweep():
+    """Every 15 minutes on the site sender PC: email any part running low that
+    was never announced (for example parts already short before alerts)."""
+    if not is_site_sender():
+        return 0
+    from .stock import alert_all_missing
+
+    return alert_all_missing()
