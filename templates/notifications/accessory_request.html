@@ -15,5 +15,4 @@
   {% if req.approval_reason and event != "requested" %}<tr><td style="color:#6b7280;">{% if event == "declined" %}Reason{% else %}HOD's note{% endif %}</td><td>{{ req.approval_reason }}</td></tr>{% endif %}
 </table>
 {% if event == "approved" %}<p>Mark it as received in Parts &amp; tools when it arrives.</p>{% endif %}
-<p><a href="{{ link }}" style="color:#0b4f71;">Open Parts &amp; tools</a></p>
 {% endblock %}

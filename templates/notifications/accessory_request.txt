@@ -12,5 +12,4 @@ Note:        {{ req.note }}{% endif %}{% if req.approval_reason and event != "re
 {% if event == "approved" %}
 Mark it as received in Parts & tools when it arrives.{% endif %}
 
-{{ link }}
 {% endautoescape %}

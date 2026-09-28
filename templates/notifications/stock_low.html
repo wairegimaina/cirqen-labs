@@ -8,6 +8,6 @@
   <tr><td style="color:#6b7280;">Suggested order</td><td>{{ suggested }}</td></tr>
   {% if supplier %}<tr><td style="color:#6b7280;">Supplier</td><td>{{ supplier.name }}{% if supplier.phone %}, {{ supplier.phone }}{% endif %}{% if supplier.email %}, {{ supplier.email }}{% endif %}</td></tr>{% endif %}
 </table>
-{% if restock %}<p>A restock request for {{ restock.requested_quantity }} was raised automatically and is {{ restock.status|lower }}{% if restock.status == 'Pending' %}: waiting for the HOD's approval{% endif %}.</p><p><a href="{{ link }}" style="color:#0b4f71;">Open Parts &amp; tools</a></p>{% else %}<p><a href="{{ link }}" style="color:#0b4f71;">Raise a restock request in Parts &amp; tools</a></p>{% endif %}
+{% if restock %}<p>A restock request for {{ restock.requested_quantity }} was raised automatically and is {{ restock.status|lower }}{% if restock.status == 'Pending' %}: waiting for the HOD's approval{% endif %}.</p><p><a href="{{ link }}" style="color:#15803d;">Open Parts &amp; tools</a></p>{% else %}<p><a href="{{ link }}" style="color:#15803d;">Raise a restock request in Parts &amp; tools</a></p>{% endif %}
 <p style="color:#6b7280;font-size:12px;">You will not be emailed about this part again until it has been restocked above its lower limit.</p>
 {% endblock %}

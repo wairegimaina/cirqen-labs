@@ -46,7 +46,8 @@ class AccessoryRequestMailTests(Base):
         self.assertEqual((msg.to, msg.cc), ("n_hod@hospital.test", "n_deputy@hospital.test"))
         self.assertIn("4 × Flow sensor", msg.subject)
         self.assertIn("Two broken", msg.body_text)
-        self.assertIn("https://cirqen.hospital.test/", msg.body_text)
+        self.assertNotIn("https://cirqen.hospital.test/", msg.body_text)  # no link in request emails
+        self.assertIn("#15803d", msg.body_html)  # the theme's green
         self.assertTrue(CalibrationNotification.objects.filter(recipient=self.hod,
                                                                notification_type="accessory_requested").exists())
         self.assertEqual(req.status, "Pending")

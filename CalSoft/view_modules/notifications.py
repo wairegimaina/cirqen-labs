@@ -38,12 +38,12 @@ def _unread_queryset(user):
 @login_required
 @require_GET
 def notifications_list_api(request):
-    """Most recent notifications for the current user (read + unread, most
-    recent first, capped at 20) — populates the header dropdown on open."""
-    notifications = list(
-        _unread_queryset(request.user).order_by("-created_at")[:20]
-    )
-    unread_count = sum(1 for n in notifications if not n.is_read)
+    """The current user's unread notifications, most recent first (up to 20),
+    for the header dropdown. Read ones are cleared from the list: opening one
+    or Mark all read removes it for this user only (each user has their own)."""
+    unread = _unread_queryset(request.user).filter(is_read=False)
+    notifications = list(unread.order_by("-created_at")[:20])
+    unread_count = unread.count()
     return JsonResponse(
         {
             "success": True,
