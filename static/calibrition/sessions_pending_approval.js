@@ -294,7 +294,8 @@
         '<i class="fas fa-plug me-2" aria-hidden="true"></i><strong>Measured with Fluke Ansur</strong>' +
         (a.job_number ? " (job " + escapeHTML(a.job_number) + ")" : "") +
         (a.operator ? ", operator " + escapeHTML(a.operator) : "") + ". One analyser reading per test point." +
-        (a.pdf_url ? ' <a href="' + escapeHTML(a.pdf_url) + '" target="_blank" rel="noopener">Open Ansur\'s PDF</a>.' : "") +
+        (a.pdf_url ? ' <a href="' + escapeHTML(a.pdf_url) + '" target="_blank" rel="noopener">Open Ansur\'s PDF</a>.'
+          : (a.pdf_note ? " " + escapeHTML(a.pdf_note) : "")) +
         (a.disagreements
           ? "<div class=\"mt-1\"><strong>Ansur's verdict differs from Cirqen's at " + a.disagreements +
             " test point(s)</strong>, highlighted below. Cirqen's guard-banded verdict is the one on the certificate.</div>"

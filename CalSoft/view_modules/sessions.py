@@ -13,6 +13,7 @@ from django.core.paginator import Paginator
 from django.db.models import Q, Case, When, Value, IntegerField
 from functools import wraps
 
+from CalSoft.view_modules.ansur import ansur_review_details
 from CalSoft.models import (
     CalibrationSession,
     CalibrationReading,
@@ -143,6 +144,7 @@ def session_detail(request, pk):
         "standards_used": standards_used,
         "device_description": session.device_description,
         "related_equipment": Equipment.objects.filter(serial_number=session.device_serial).first(),
+        "ansur": ansur_review_details(session),
         "show_sidebar": True,
     }
 

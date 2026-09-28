@@ -319,7 +319,7 @@ class CalibrationParameter(models.Model):
     # lower: the set value is itself the limit (e.g. leakage at most 500 uA)
     # and the tolerance is not used. See CalSoft.utils.reading_conformity.
     limit_type = models.CharField(
-        max_length=12, default='two_sided',
+        max_length=12, default='two_sided', db_default='two_sided',
         choices=[('two_sided', 'Set value ± tolerance'), ('upper', 'At most the set value'),
                  ('lower', 'At least the set value')],
     )
@@ -327,7 +327,7 @@ class CalibrationParameter(models.Model):
     # Fluke Ansur: which test step in an Ansur record gives this parameter,
     # and what the analyser's datasheet says about its accuracy. Used only by
     # procedures linked to an Ansur template (CalSoft.ansur).
-    ansur_step = models.CharField(max_length=150, blank=True)
+    ansur_step = models.CharField(max_length=150, blank=True, db_default='')
     analyser_accuracy_pct = models.DecimalField(
         max_digits=8, decimal_places=4, null=True, blank=True, help_text="± % of reading")
     analyser_accuracy_floor = models.DecimalField(
@@ -505,13 +505,16 @@ class CalibrationSession(models.Model):
     # differs from Cirqen's guard-banded verdict; a reviewer must acknowledge
     # them before approving.
     source = models.CharField(
-        max_length=10, default='manual', choices=[('manual', 'Manual entry'), ('ansur', 'Fluke Ansur')])
-    ansur_operator = models.CharField(max_length=150, blank=True)
-    ansur_record_sha256 = models.CharField(max_length=64, blank=True)
-    ansur_disagreements = models.PositiveSmallIntegerField(default=0)
+        max_length=10, default='manual', db_default='manual', choices=[('manual', 'Manual entry'), ('ansur', 'Fluke Ansur')])
+    ansur_operator = models.CharField(max_length=150, blank=True, db_default='')
+    ansur_record_sha256 = models.CharField(max_length=64, blank=True, db_default='')
+    # The Ansur job's number, kept on the session so every PC can show it
+    # (AnsurJob itself stays on the Ansur PC).
+    ansur_job_number = models.CharField(max_length=30, blank=True, default='', db_default='')
+    ansur_disagreements = models.PositiveSmallIntegerField(default=0, db_default=0)
     # Ansur's Pass/Fail-only steps (visual inspection, alarms...), as
     # [{"name": ..., "status": "Pass" | "Fail" | "NA"}], in record order.
-    ansur_checks = models.JSONField(default=list, blank=True)
+    ansur_checks = models.JSONField(default=list, blank=True, db_default=models.Value([], models.JSONField()))
 
     # offline sync
     needs_sync = models.BooleanField(default=True)
@@ -607,7 +610,7 @@ class CalibrationReading(models.Model):
     passes_tolerance = models.BooleanField(default=False)
 
     # Ansur's own verdict for this point (Pass / Fail), kept beside Cirqen's.
-    ansur_status = models.CharField(max_length=20, blank=True)
+    ansur_status = models.CharField(max_length=20, blank=True, db_default='')
 
     # offline sync
     pending_delete = models.BooleanField(default=False)

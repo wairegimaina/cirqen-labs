@@ -47,7 +47,7 @@ class StartWithAnsurTests(AnsurFixture, TestCase):
         self.assertEqual(command, [str(self.exe), job.job_file])
         root = ET.parse(job.job_file).getroot()
         self.assertEqual(root.attrib["Type"], "JobOrder")
-        setup_el = root.find("JobOrder/Setup")
+        setup_el = root.find("Setup")
         self.assertEqual(setup_el.attrib["ReadOnly"], "True")
         self.assertEqual(setup_el.attrib["ResultFile"], jobfile.result_file_name(job))
         self.assertTrue(setup_el.attrib["Template"].endswith("Defibrillator.mtt"))
@@ -55,6 +55,45 @@ class StartWithAnsurTests(AnsurFixture, TestCase):
         self.assertEqual(items["Serial No"], "DF-44102")
         self.assertEqual(items["Cirqen Job"], job.job_number)
         self.assertEqual(root.find("JobOrder/OutputDir").text, str(self.base / "results"))
+        self.assertEqual(setup_el.find("ServiceEvents/Activity").attrib["Event"], "PM")
+        self.assertEqual(setup_el.find("Standard").attrib["AlphaName"], "IEC 60601-2-4")
+
+    def test_the_work_order_has_the_layout_in_ansurs_manual(self):
+        # The example work order printed in the Ansur Test Executive Users
+        # Manual (FBC-0001 Rev. 6, p. 4-37), reduced to its element structure.
+        manual = ET.fromstring(
+            '<METRONFile Version="1.3.3" Type="JobOrder">'
+            '<JobOrder><Language GUI="" Report=""/><OutputDir>C:\\My Documents</OutputDir></JobOrder>'
+            '<Setup Template="Testing1.mtt" ResultFile="Testing2.mtr" ReadOnly="True">'
+            '<ServiceEvents><Activity Type="" Event=""/></ServiceEvents>'
+            '<Standard AlphaName="HP" CompleteName="HP Factory"/>'
+            '<DUT><Item Name="Serial No" Ord="2" Caption="Ser No" Key="True">12345</Item></DUT>'
+            '</Setup></METRONFile>')
+
+        def shape(element, path=""):
+            here = f"{path}/{element.tag}"
+            out = {(here, tuple(sorted(element.attrib)))}
+            for child in element:
+                out |= shape(child, here)
+            return out
+
+        self._start()
+        written = ET.parse(AnsurJob.objects.get().job_file).getroot()
+        # Every element and attribute of the manual's example is present, at
+        # the same place; Cirqen adds only further DUT items.
+        written_shape = shape(written)
+        for element in shape(manual):
+            self.assertIn(element, written_shape)
+        self.assertEqual({e[0] for e in written_shape} - {e[0] for e in shape(manual)}, set())
+
+    def test_the_work_order_is_written_in_the_manuals_encoding(self):
+        self.equipment.model = "Défib µ-3"
+        self.equipment.save()
+        self._start()
+        raw = Path(AnsurJob.objects.get().job_file).read_bytes()
+        self.assertTrue(raw.startswith(b"<?xml version='1.0' encoding='iso-8859-1'?>"))
+        items = {i.attrib["Name"]: i.text for i in ET.fromstring(raw).findall("Setup/DUT/Item")}
+        self.assertEqual(items["Model"], "Défib µ-3")
 
     def test_the_launch_arguments_come_from_settings(self):
         self.cfg.launch_arguments = '/job "{job}" /hide'

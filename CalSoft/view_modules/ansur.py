@@ -13,6 +13,7 @@ from pathlib import Path
 from django import forms
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
 from django.db import IntegrityError, transaction
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -21,12 +22,13 @@ from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
 from calSchedules.models import CalibrationSchedule
-from CalSoft.ansur import jobfile, launcher, setup, watcher
+from CalSoft.ansur import jobfile, launcher, setup, template, watcher
 from CalSoft.ansur.importer import ImportRefused, import_record, refuse
-from CalSoft.models import AnsurJob, AnsurSettings, AnsurTemplateMap, CalibrationProcedure
+from CalSoft.ansur.parser import RecordError
+from CalSoft.models import AnsurJob, AnsurSettings, AnsurTemplateMap, CalibrationProcedure, Standard
 from CalSoft.view_modules.calibration_helpers import _reference_standard_status
 from Inventory.models import Equipment
-from users.control import get_user_role, role_required
+from users.control import get_user_role
 
 
 class AnsurSettingsForm(forms.ModelForm):
@@ -114,7 +116,8 @@ def _save_parameter_links(procedure, post):
             errors.append(f"{parameter.name}: choose how it is judged.")
             continue
         values = {}
-        for name in ("analyser_accuracy_pct", "analyser_accuracy_floor", "analyser_resolution"):
+        for name in ("analyser_accuracy_pct", "analyser_accuracy_floor", "analyser_resolution",
+                     "reference_uncertainty"):
             raw = (post.get(prefix + name) or "").strip()
             if raw == "":
                 values[name] = None
@@ -137,14 +140,20 @@ def _save_parameter_links(procedure, post):
     for parameter, step, limit_type, values in updates:
         parameter.ansur_step, parameter.limit_type = step, limit_type
         for name, value in values.items():
+            if name == "reference_uncertainty" and value is None:
+                continue  # left blank: keep what the procedure has
             setattr(parameter, name, value)
         parameter.save()
     return []
 
 
 @login_required
-@role_required("HOD")
 def ansur_settings(request):
+    # Set up by the calibration centre, who run calibrations with Ansur, or
+    # the HOD: the same people who review calibration sessions.
+    from CalSoft.view_modules.pending_sessions import can_review_calibrations
+    if not can_review_calibrations(request.user):
+        raise PermissionDenied("Only calibration-centre staff and the HOD can set up the Ansur connection.")
     cfg = AnsurSettings.load()
     form = AnsurSettingsForm(instance=cfg)
     map_form = TemplateMapForm()
@@ -192,6 +201,30 @@ def ansur_settings(request):
                 link = map_form.save()
                 messages.success(request, f"{link.procedure} now runs with {link.template_file}.")
                 return redirect("calibration:ansur_settings")
+
+        elif action == "from_template":
+            file_name = (request.POST.get("template_file") or "").strip()
+            name = (request.POST.get("procedure_name") or "").strip() or Path(file_name).stem
+            if file_name not in setup.list_templates(cfg.base_folder):
+                messages.error(request, "Choose a template from the templates folder.")
+                return redirect("calibration:ansur_settings")
+            if CalibrationProcedure.objects.filter(name__iexact=name, pending_delete=False).exists():
+                messages.error(request, f"A procedure called {name} already exists. Give the new one another name.")
+                return redirect("calibration:ansur_settings")
+            standard = Standard.objects.filter(pk=request.POST.get("standard") or None, active_status=True).first()
+            data = (Path(setup.folder_paths(cfg.base_folder)["templates"]) / file_name).read_bytes()
+            try:
+                procedure, found = template.create_procedure(
+                    file_name, data, name=name, user=request.user, standard=standard,
+                    service_event=(request.POST.get("service_event") or "PM").strip()[:60],
+                    ansur_standard=(request.POST.get("ansur_standard") or "").strip()[:100])
+            except RecordError as exc:
+                messages.error(request, f"{file_name}: {exc}")
+            else:
+                messages.success(request, f"Created {procedure.name} with {len(found)} parameter(s) from "
+                                          f"{file_name}, linked to it. Fill in the analyser accuracy and the "
+                                          f"reference uncertainty below to switch it on.")
+            return redirect("calibration:ansur_settings")
 
         elif action == "save_parameters":
             link = get_object_or_404(AnsurTemplateMap, pk=request.POST.get("map_id"))
@@ -242,6 +275,9 @@ def ansur_settings(request):
         "checks": checks,
         "ready": all(c.ok for c in checks),
         "folders": setup.folder_paths(cfg.base_folder),
+        "unlinked_templates": [t for t in templates if t.lower() not in {m.template_file.lower() for m in maps}],
+        "ready_count": sum(1 for m in maps if not m.problems),
+        "standards": Standard.objects.filter(active_status=True).order_by("name"),
     })
 
 
@@ -268,6 +304,8 @@ def procedure_problems(procedure):
             problems.append(f"{parameter.name} is not linked to an Ansur test step.")
         if parameter.analyser_accuracy_pct is None and parameter.analyser_accuracy_floor is None:
             problems.append(f"{parameter.name} has no analyser accuracy.")
+        if not parameter.reference_uncertainty:
+            problems.append(f"{parameter.name} has no reference uncertainty (from the analyser's certificate).")
         if parameter.sub_parameters.filter(active_status=True).exists():
             problems.append(f"{parameter.name} has sub-parameters, which Ansur results cannot fill.")
     return problems
@@ -385,7 +423,11 @@ def ansur_job_status(request):
 
 
 def _may_manage(user, job):
-    return job.created_by_id == user.id or get_user_role(user) in ("HOD", "NIC")
+    """The person who started the job, the in-charge, or anyone who works the
+    calibration centre's queue (so a colleague can finish a stuck job)."""
+    from CalSoft.view_modules.pending_sessions import can_review_calibrations
+    return (job.created_by_id == user.id or get_user_role(user) in ("HOD", "NIC")
+            or can_review_calibrations(user))
 
 
 @login_required
@@ -393,7 +435,8 @@ def _may_manage(user, job):
 def ansur_job_action(request):
     job = get_object_or_404(AnsurJob, pk=request.POST.get("job"))
     if not _may_manage(request.user, job):
-        return _error("Only the person who started this job, the in-charge or the HOD can change it.", 403)
+        return _error("Only the person who started this job, calibration-centre staff, the in-charge or the HOD "
+                      "can change it.", 403)
     if not job.is_open:
         return _error(f"Job {job.job_number} is {job.get_status_display().lower()}.")
 
@@ -424,7 +467,8 @@ def ansur_upload(request):
     """Fallback: import a record the technician picks by hand."""
     job = get_object_or_404(AnsurJob, pk=request.POST.get("job"))
     if not _may_manage(request.user, job):
-        return _error("Only the person who started this job, the in-charge or the HOD can import for it.", 403)
+        return _error("Only the person who started this job, calibration-centre staff, the in-charge or the HOD "
+                      "can import for it.", 403)
     upload = request.FILES.get("record")
     if upload is None or not upload.name.lower().endswith(".mtr"):
         return _error("Choose the Ansur test record (.mtr) to import.")
@@ -462,11 +506,17 @@ def ansur_review_details(session):
     if session.source != "ansur":
         return None
     job = AnsurJob.objects.filter(session=session).first()
+    pdf_url = reverse("calibration:ansur_session_pdf", args=[session.pk]) if job and job.pdf_copy else ""
     return {
-        "job_number": job.job_number if job else "",
+        "job_number": session.ansur_job_number or (job.job_number if job else ""),
         "operator": session.ansur_operator,
         "disagreements": session.ansur_disagreements,
-        "pdf_url": reverse("calibration:ansur_session_pdf", args=[session.pk]) if job and job.pdf_copy else "",
+        "pdf_url": pdf_url,
+        # The job, the record copy and Ansur's PDF stay on the PC that ran
+        # Ansur; say so instead of showing nothing on any other PC.
+        "pdf_note": "" if pdf_url else (
+            "Ansur's PDF is kept on the Ansur PC. Open this session there to see it."
+            if job is None else "Ansur's PDF could not be produced for this job."),
         "record_sha256": session.ansur_record_sha256,
         "checks": session.ansur_checks or [],
     }

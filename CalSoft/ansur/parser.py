@@ -51,6 +51,11 @@ STATUSES = {
 _NUMBER = re.compile(r"[-+]?\d+(?:[.,]\d+)?(?:[eE][-+]?\d+)?")
 
 
+PROTECTED = ("Cirqen cannot read this file as an Ansur record. If it is one, Ansur saved it protected: "
+             "in Ansur, turn off Tools > Options > General > Restrict Access, and sign in with Disable "
+             "Electronic Signature ticked, then run the test again and save.")
+
+
 class RecordError(ValueError):
     """The file is not an Ansur record this module can read."""
 
@@ -126,6 +131,11 @@ def _norm(text):
 
 def _local(tag):
     return tag.rsplit("}", 1)[-1] if isinstance(tag, str) else ""
+
+
+def _plain(value):
+    """A Decimal as people write it: 360, 0.25, never 3.6E+2."""
+    return format(value.normalize(), "f")
 
 
 def parse_number(text):
@@ -232,10 +242,15 @@ def parse_bytes(data: bytes) -> Record:
     head = data[:4096].lower()
     if b"<!doctype" in head or b"<!entity" in data.lower():
         raise RecordError("The file contains a document type declaration, which Ansur records do not.")
+    if not data.lstrip(b"\xef\xbb\xbf \t\r\n").startswith(b"<"):
+        # Ansur writes records as XML unless they are protected. Restrict
+        # Access encrypts them, and so may saving with an electronic signature
+        # (Ansur 3.0+; Users Manual 2-9, 4-35).
+        raise RecordError(PROTECTED)
     try:
         root = ET.fromstring(data)
     except ET.ParseError as exc:
-        raise RecordError(f"The file is not readable XML ({exc}). It may be locked by Ansur's Restrict access.")
+        raise RecordError(f"The file is not readable XML ({exc}). " + PROTECTED)
 
     if _local(root.tag) != "METRONFile":
         raise RecordError("Not an Ansur file: the root element is not METRONFile.")
