@@ -122,9 +122,16 @@ def site_profile(request):
             return redirect("core:site_profile")
     else:
         form = SiteProfileForm(instance=profile)
+    from notifications import mailer
+    from notifications.models import EmailOutbox
+
+    server = mailer.smtp()
     return render(request, "core/site_profile.html", {
         "form": form, "profile": profile,
         "effective_name": branding.organisation_name(default=""),
+        # The Email card: Settings > Email lives here, not in the sidebar.
+        "email_on": server.configured, "email_from": server.from_email,
+        "email_waiting": EmailOutbox.objects.filter(status="pending").count(),
     })
 
 

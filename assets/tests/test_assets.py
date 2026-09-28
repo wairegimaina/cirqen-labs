@@ -83,11 +83,10 @@ class KpiTests(AssetsBase):
         self.assertEqual((k.ppm_completed, k.ppm_due, k.ppm_completion_percent), (1, 2, 50.0))
         self.assertEqual(k.by_type[0]["type"], "Ventilator")
 
-    def test_kpi_page_is_scoped_for_an_in_charge(self):
-        self._repair(self.pump, TODAY)
+    def test_the_old_kpi_page_opens_machine_reports(self):
         self.client.force_login(self.nic)
-        page = self.client.get(reverse("assets:kpis"))
-        self.assertEqual(page.context["k"].machines, 1)  # ICU only
+        self.assertRedirects(self.client.get(reverse("assets:kpis")), reverse("equipment_dashboard"),
+                             fetch_redirect_response=False)
 
 
 class NotificationTests(AssetsBase):
@@ -200,16 +199,18 @@ class PageTests(AssetsBase):
         self.assertContains(bad, "No machine with that serial number")
         self.assertContains(bad, "end date is before the start date")
 
-    def test_reorder_levels_are_set_on_the_stock_page(self):
+    def test_lower_limits_are_set_on_the_parts_page_and_the_old_page_leads_there(self):
         part = Accessories.objects.create(name=Accessoriesname.objects.create(name="Battery"),
                                           equipment_description=self.vent_type, workshop=self.workshop,
                                           stock_count=4)
         self.client.force_login(self.lead)
-        self.client.post(reverse("assets:stock_alerts"), {"part": part.pk, "reorder_level": 5})
+        self.client.post(reverse("partstools:set_lower_limit", args=[part.pk]), {"reorder_level": 5})
         part.refresh_from_db()
         self.assertEqual(part.reorder_level, 5)
-        self.assertContains(self.client.get(reverse("assets:stock_alerts")), "At or below reorder level")
         self.assertEqual(AccessoryRequest.objects.count(), 1)  # 4 <= 5 raised a restock request
+        self.assertRedirects(self.client.get(reverse("assets:stock_alerts")),
+                             reverse("partstools:accessories_dashboard") + "?stock=low",
+                             fetch_redirect_response=False)
 
 
 class MonthlyReportTests(AssetsBase):

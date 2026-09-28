@@ -570,6 +570,18 @@ a.kpi-card:hover { border-color: var(--border-mid); }
   padding: 0;
 }
 .notif-mark-all:hover { text-decoration: underline; }
+.notif-dropdown-footer {
+  display: block;
+  padding: .6rem 1rem;
+  border-top: 1px solid var(--border-color);
+  font-size: var(--fs-xs);
+  color: var(--primary-color);
+  text-decoration: none;
+  position: sticky;
+  bottom: 0;
+  background: var(--bg-card);
+}
+.notif-dropdown-footer:hover { text-decoration: underline; }
 .notif-loading, .notif-empty {
   padding: 1.75rem 1rem;
   text-align: center;
