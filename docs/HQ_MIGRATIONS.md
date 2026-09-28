@@ -10,11 +10,16 @@ migrations.
 In a terminal on the developer PC, in `cirqen-labs` with the release checked out:
 
 ```
-export HQ_DATABASE_URL='postgresql://USER:PASSWORD@HOST:5432/postgres?sslmode=require'
-venv/bin/python manage.py migrate_hq            # shows the plan, changes nothing
-venv/bin/python manage.py migrate_hq --apply    # does it
+export HQ_DATABASE_URL='postgresql://postgres.nwlwaeeyduxroykrgksi@aws-0-eu-north-1.pooler.supabase.com:5432/postgres?sslmode=require'
+venv/bin/python manage.py migrate_hq            # asks for the password, shows the plan, changes nothing
+venv/bin/python manage.py migrate_hq --apply    # asks again, then does it
 unset HQ_DATABASE_URL
 ```
+
+Leave the password out of the address: the command asks for it (hidden) each
+time and never stores it. It is HQ's database password (Render: `cirqen-hq` >
+Environment > `POSTGRES_HQ_PASSWORD`), not a login password. Use port 5432
+(Supabase's session pooler), not HQ's 6543.
 
 - Take the address from the HQ database provider (Supabase: *Project settings >
   Database > Connection string*, the direct or session connection on port 5432).

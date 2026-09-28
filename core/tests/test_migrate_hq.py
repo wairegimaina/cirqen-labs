@@ -44,3 +44,20 @@ class CommandTests(TestCase):
     def test_without_hq_database_url_it_says_how_to_set_it(self):
         with self.assertRaisesMessage(CommandError, "export HQ_DATABASE_URL="):
             call_command("migrate_hq")
+
+
+class PasswordPromptTests(TestCase):
+    def test_it_asks_for_a_password_the_address_leaves_out(self):
+        from unittest import mock
+
+        from django.db import connections
+
+        hq = dict(connections.databases["default"], PASSWORD="", HOST="hq.invalid", USER="postgres.x")
+        with mock.patch.dict(connections.databases, {"hq": hq}), \
+                mock.patch("sys.stdin.isatty", return_value=True), \
+                mock.patch("getpass.getpass", return_value="s3cret") as ask, \
+                mock.patch("django.db.backends.base.base.BaseDatabaseWrapper.ensure_connection",
+                           side_effect=RuntimeError("stop here")):
+            with self.assertRaisesMessage(CommandError, "Cannot reach HQ's database at hq.invalid"):
+                call_command("migrate_hq")
+        self.assertIn("postgres.x on hq.invalid", ask.call_args[0][0])

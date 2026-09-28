@@ -170,6 +170,17 @@ class Command(BaseCommand):
                 "then run this again.")
         connection = connections[ALIAS]
         settings = connection.settings_dict
+        if not settings.get("PASSWORD"):
+            # The address can leave the password out; it is asked for here and
+            # never stored, shown or written to the shell's history.
+            import getpass
+            import sys
+
+            if not sys.stdin.isatty():
+                raise CommandError("HQ_DATABASE_URL has no password and there is no terminal to ask for one.")
+            settings["PASSWORD"] = getpass.getpass(f"Password for {settings['USER']} on {settings['HOST']}: ")
+            if not settings["PASSWORD"]:
+                raise CommandError("No password given.")
         try:
             connection.ensure_connection()
         except Exception as exc:
