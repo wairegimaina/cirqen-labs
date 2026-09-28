@@ -197,9 +197,36 @@ DATABASES = {
             "options": "-c statement_timeout=30000",
         },
     },
-    # No "hq" alias: this app never connects to the HQ database. HQ is
-    # reached through its sync API only.
+    # No "hq" alias in normal running: installed PCs reach HQ through its sync
+    # API only and never hold its database password (commit 9abdf3e).
 }
+
+# Operator only: HQ_DATABASE_URL, set in the shell of the person migrating HQ
+# (never in config.json, provisioning or a build), adds an "hq" database for
+# `manage.py migrate_hq`. Example:
+#   HQ_DATABASE_URL='postgresql://user:password@host:5432/postgres?sslmode=require'
+if os.getenv("HQ_DATABASE_URL"):
+    from urllib.parse import parse_qsl, unquote, urlparse
+
+    _hq = urlparse(os.environ["HQ_DATABASE_URL"])
+    DATABASES["hq"] = {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": unquote(_hq.path.lstrip("/")) or "postgres",
+        "USER": unquote(_hq.username or ""),
+        "PASSWORD": unquote(_hq.password or ""),
+        "HOST": _hq.hostname or "",
+        "PORT": str(_hq.port or 5432),
+        "CONN_MAX_AGE": 0,
+        "OPTIONS": {
+            "connect_timeout": 20,
+            "sslmode": "require",
+            # Schema changes on a large table take longer than the app's 30 s.
+            "options": "-c statement_timeout=900000",
+            **dict(parse_qsl(_hq.query)),
+        },
+        # Never used by tests (they would build a test copy on HQ).
+        "TEST": {"MIRROR": "default"},
+    }
 
 # ============================================================
 # 🔄 OFFLINE-FIRST & SYNCHRONIZATION SETTINGS
