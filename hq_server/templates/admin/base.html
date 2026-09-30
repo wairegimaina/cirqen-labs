@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>{% block title %}Cirqen Control{% endblock %}</title>
+<link rel="stylesheet" href="/admin/static/admin.css">
+</head>
+<body>
+{% if admin %}
+<header class="top">
+  <a class="brand" href="/admin/">Cirqen Control</a>
+  <nav>
+    <a href="/admin/">Hospitals</a>
+    {% if admin.role == 'owner' %}<a href="/admin/audit">Audit log</a><a href="/admin/admins">Admins</a>{% endif %}
+  </nav>
+  <form method="post" action="/admin/logout" class="who">
+    <span>{{ admin.username }} · {{ admin.role }}</span>
+    <input type="hidden" name="csrf" value="{{ session.csrf }}">
+    <button class="link">Sign out</button>
+  </form>
+</header>
+{% endif %}
+<main>{% block main %}{% endblock %}</main>
+</body>
+</html>

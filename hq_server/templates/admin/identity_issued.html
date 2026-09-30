@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Identity for {{ h.code }} · Cirqen Control{% endblock %}
+{% block main %}
+<h1>{{ 'New identity' if action == 'new' else 'Renewed certificate' }} for {{ h.code }}</h1>
+<section class="card">
+  <p class="note"><strong>Shown once.</strong> Copy these into the HQ web service of {{ h.name }} on Render
+    (Environment), then redeploy it.{% if action == 'new' %} The private key is not kept anywhere else: if you lose it, issue a new identity.{% endif %}</p>
+  <dl class="env">
+    {% for k, v in env %}<dt>{{ k }}</dt><dd><textarea readonly rows="{{ 4 if k == 'HQ_CERTIFICATE' else 1 }}">{{ v }}</textarea></dd>{% endfor %}
+  </dl>
+  <p class="muted">Certificate valid until {{ expires | eat }}. After the redeploy, the hospital page should show the HQ answering as {{ h.code }} with identity <em>ok</em>.</p>
+  <p><a class="button" href="/admin/hospitals/{{ h.code }}">Done</a></p>
+</section>
+{% endblock %}

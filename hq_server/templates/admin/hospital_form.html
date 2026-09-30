@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Add hospital' if creating else 'Edit ' ~ h.code }} · Cirqen Control{% endblock %}
+{% block main %}
+<h1>{{ 'Add hospital' if creating else 'Edit ' ~ h.code }}</h1>
+{% if errors %}<ul class="error" role="alert">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+<form method="post" class="card grid-form">
+  <input type="hidden" name="csrf" value="{{ session.csrf }}">
+  {% if creating %}<label>Hospital code <input name="code" value="{{ h.code or '' }}" placeholder="CH0002" required></label>{% endif %}
+  <label>Name <input name="name" value="{{ h.name or '' }}" required></label>
+  <label>County <input name="county" value="{{ h.county or '' }}"></label>
+  <label>Status
+    <select name="status">{% for s in ('active', 'suspended', 'closed') %}<option {{ 'selected' if h.status == s }}>{{ s }}</option>{% endfor %}</select>
+  </label>
+  <label>HOD name <input name="hod_name" value="{{ h.hod_name or '' }}"></label>
+  <label>HOD e-mail <input name="hod_email" type="email" value="{{ h.hod_email or '' }}"></label>
+  <label>HOD phone <input name="hod_phone" value="{{ h.hod_phone or '' }}"></label>
+  <label>Certificate prefix <input name="cert_prefix" value="{{ h.cert_prefix or '' }}" placeholder="KRH-"></label>
+  <label class="wide">HQ sync address <input name="sync_url" value="{{ h.sync_url or '' }}" placeholder="https://hq-ch0002.cirqenlabs.com/api/sync"></label>
+  <label class="wide">Fallback addresses (one per line)<textarea name="fallbacks" rows="2">{{ h.fallbacks | join('\n') }}</textarea></label>
+  <label class="wide">Update server (blank: this server) <input name="updates_url" value="{{ h.updates_url or '' }}" placeholder="https://updates.cirqenlabs.com"></label>
+  <label class="wide">Notes <textarea name="notes" rows="3">{{ h.notes or '' }}</textarea></label>
+  <div class="wide actions"><button>Save</button> <a href="{{ '/admin/' if creating else '/admin/hospitals/' ~ h.code }}">Cancel</a></div>
+</form>
+<p class="muted small">Desktops of this hospital follow a changed address within about 15 minutes, and only after the new address proves it is this hospital's HQ.</p>
+{% endblock %}

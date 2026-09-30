@@ -32,7 +32,8 @@ FLEET_HOSPITALS        JSON, one entry per hospital:
                                    "updates": "https://updates.cirqenlabs.com"}}
                        served at /api/endpoints/<code>/. Each document names its
                        hospital, and a desktop with a hospital code accepts only
-                       its own. (The admin panel replaces this setting later.)
+                       its own. A hospital set up in the admin panel
+                       (control_store) takes precedence over this setting.
 """
 from __future__ import annotations
 
@@ -120,11 +121,32 @@ def hospitals() -> dict:
             if isinstance(v, dict) and HOSPITAL_CODE.match(str(k).strip().upper())}
 
 
+def _panel_entry(code: str) -> dict | None:
+    """The hospital as set in the admin panel (control_store), in the
+    FLEET_HOSPITALS shape; None if the panel does not know it."""
+    try:
+        import control_store
+
+        if not control_store.db_path().exists():
+            return None
+        row = control_store.get_hospital(code)
+    except Exception:  # noqa: BLE001 - no panel database yet: fall back to the env
+        return None
+    if row is None:
+        return None
+    if row["status"] == "closed":
+        return {"closed": True}
+    return {"sync": row["sync_url"], "fallbacks": row["fallbacks"], "updates": row["updates_url"]}
+
+
 def build_hospital_document(code: str) -> dict | None:
-    """The document for one hospital, or None if it is not in FLEET_HOSPITALS."""
+    """The document for one hospital, from the admin panel or else
+    FLEET_HOSPITALS; None for an unknown or closed hospital."""
     code = str(code or "").strip().upper()
-    entry = hospitals().get(code)
+    entry = _panel_entry(code)
     if entry is None:
+        entry = hospitals().get(code)
+    if entry is None or entry.get("closed"):
         return None
     endpoints: dict[str, object] = {}
     sync_url = str(entry.get("sync") or "").strip().rstrip("/")

@@ -47,6 +47,22 @@ jobs:
       - run: coverage run manage.py test --settings=Equiper.test_settings
       - run: coverage report
 
+  control-tests:
+    # Cirqen Control (hq_server/): the update server and its admin panel, on
+    # the versions Render installs from hq_server/requirements.txt.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: hq_server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt pytest
+      - run: python -m pytest -q tests
+
   django-pg-tests:
     # Tests of the raw PostgreSQL SQL the sync agent and migrate_hq run
     # (core.testing.requires_postgres). They skip on SQLite, so run them here.

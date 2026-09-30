@@ -1,0 +1,302 @@
+"""The admin panel: who gets in, what each role may do, and that what it
+issues and serves is exactly what hospitals' desktops accept."""
+import base64
+import json
+import re
+from unittest import mock
+
+import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+import admin_auth as auth
+import control_store as cs
+
+PASSWORD = "correct horse battery"
+SYNC = "https://hq-ch0001.example.com/api/sync"
+
+
+class Clock:
+    """Authenticator codes are single-use, so each use needs the next 30 s step."""
+
+    def __init__(self):
+        self.t = 1_900_000_000.0
+
+    def tick(self):
+        self.t += auth.STEP
+        return self.t
+
+
+@pytest.fixture
+def clock(monkeypatch):
+    c = Clock()
+    monkeypatch.setattr(auth.time, "time", lambda: c.t)
+    return c
+
+
+@pytest.fixture
+def control_key(monkeypatch):
+    key = Ed25519PrivateKey.generate()
+    seed = key.private_bytes(serialization.Encoding.Raw, serialization.PrivateFormat.Raw,
+                             serialization.NoEncryption())
+    monkeypatch.setenv("HQ_SIGNING_PRIVATE_KEY", base64.b64encode(seed).decode())
+    return key
+
+
+@pytest.fixture
+def app(tmp_path, monkeypatch, clock):
+    monkeypatch.setenv("CONTROL_DB", str(tmp_path / "control.db"))
+    monkeypatch.setenv("ADMIN_INSECURE_COOKIES", "true")   # TestClient speaks http
+    monkeypatch.delenv("ADMIN_HOSTS", raising=False)
+    monkeypatch.delenv("FLEET_HOSPITALS", raising=False)
+    import admin_panel
+
+    async def fake_health(h):
+        return {"state": "up", "hospital": h["code"], "identity": "ok", "prefix": h["cert_prefix"]}
+
+    monkeypatch.setattr(admin_panel, "fetch_health", fake_health)
+    application = FastAPI()
+    admin_panel.install(application)
+    return application
+
+
+def make_admin(username, role):
+    return auth.create_admin(username, PASSWORD, role)
+
+
+def sign_in(app, clock, username, secret):
+    client = TestClient(app)
+    resp = client.post("/admin/login", data={"username": username, "password": PASSWORD,
+                                             "code": auth.totp_now(secret, clock.tick())},
+                       follow_redirects=False)
+    assert resp.status_code == 303, resp.text
+    return client
+
+
+def csrf(client, path="/admin/"):
+    return re.search(r'name="csrf" value="([^"]+)"', client.get(path).text).group(1)
+
+
+@pytest.fixture
+def owner(app, clock):
+    secret = make_admin("owner", "owner")
+    return sign_in(app, clock, "owner", secret), secret
+
+
+def add_hospital(client, **overrides):
+    form = {"csrf": csrf(client), "code": "ch0001", "name": "Pilot Hospital", "status": "active",
+            "sync_url": SYNC + "/", "fallbacks": "https://old.example.com/api/sync", "cert_prefix": "bnh-"}
+    form.update(overrides)
+    return client.post("/admin/hospitals/new", data=form, follow_redirects=False)
+
+
+# ── getting in ───────────────────────────────────────────────────────────────
+
+def test_the_panel_needs_a_sign_in(app):
+    resp = TestClient(app).get("/admin/", follow_redirects=False)
+    assert (resp.status_code, resp.headers["location"]) == (303, "/admin/login")
+
+
+def test_password_and_code_let_an_admin_in(owner):
+    client, _ = owner
+    page = client.get("/admin/")
+    assert page.status_code == 200 and "Hospitals" in page.text
+    assert "default-src 'none'" in page.headers["content-security-policy"]
+
+
+def test_a_wrong_code_is_refused_with_the_same_message(app, clock):
+    make_admin("tech", "support")
+    resp = TestClient(app).post("/admin/login", data={"username": "tech", "password": PASSWORD, "code": "000000"})
+    assert resp.status_code == 401 and "Wrong username, password or code" in resp.text
+
+
+def test_a_code_cannot_be_used_twice(app, clock):
+    secret = make_admin("tech", "support")
+    code = auth.totp_now(secret, clock.tick())
+    first = TestClient(app).post("/admin/login", data={"username": "tech", "password": PASSWORD, "code": code},
+                                 follow_redirects=False)
+    again = TestClient(app).post("/admin/login", data={"username": "tech", "password": PASSWORD, "code": code})
+    assert (first.status_code, again.status_code) == (303, 401)
+
+
+def test_repeated_failures_lock_the_account(app, clock):
+    secret = make_admin("tech", "support")
+    client = TestClient(app)
+    for _ in range(auth.MAX_FAILS_PER_USER):
+        client.post("/admin/login", data={"username": "tech", "password": "wrong", "code": "000000"})
+    resp = client.post("/admin/login", data={"username": "tech", "password": PASSWORD,
+                                             "code": auth.totp_now(secret, clock.tick())})
+    assert resp.status_code == 401 and "Too many failed attempts" in resp.text
+
+
+def test_a_form_without_its_token_is_refused(owner):
+    client, _ = owner
+    resp = client.post("/admin/hospitals/new", data={"code": "CH0001", "name": "X"})
+    assert resp.status_code == 403
+
+
+def test_other_host_names_do_not_serve_the_panel(app, monkeypatch):
+    monkeypatch.setenv("ADMIN_HOSTS", "admin.cirqenlabs.com")
+    client = TestClient(app)
+    assert client.get("/admin/login", headers={"host": "updates.cirqenlabs.com"}).status_code == 404
+    assert client.get("/admin/login", headers={"host": "admin.cirqenlabs.com"}).status_code == 200
+
+
+def test_signing_out_ends_the_session(owner):
+    client, _ = owner
+    client.post("/admin/logout", data={"csrf": csrf(client)})
+    assert client.get("/admin/", follow_redirects=False).status_code == 303
+
+
+# ── hospitals ────────────────────────────────────────────────────────────────
+
+def test_adding_a_hospital(owner):
+    client, _ = owner
+    resp = add_hospital(client)
+    assert (resp.status_code, resp.headers["location"]) == (303, "/admin/hospitals/CH0001")
+    h = cs.get_hospital("CH0001")
+    assert (h["sync_url"], h["fallbacks"], h["cert_prefix"]) == (SYNC, ["https://old.example.com/api/sync"], "BNH-")
+    assert cs.audit_entries(target="CH0001")[0]["action"] == "hospital_created"
+
+
+def test_a_wrong_address_is_explained_not_saved(owner):
+    client, _ = owner
+    resp = add_hospital(client, sync_url="http://hq.example.com/sync")
+    assert resp.status_code == 400 and "https address ending in /api/sync" in resp.text
+    assert cs.get_hospital("CH0001") is None
+
+
+def test_editing_records_what_changed(owner):
+    client, _ = owner
+    add_hospital(client)
+    token = csrf(client, "/admin/hospitals/CH0001/edit")
+    client.post("/admin/hospitals/CH0001/edit", data={"csrf": token, "name": "Pilot Hospital", "status": "suspended",
+                                                      "sync_url": SYNC})
+    event = cs.audit_entries(target="CH0001")[0]
+    assert event["action"] == "hospital_updated"
+    assert json.loads(event["detail"])["status"] == {"from": "active", "to": "suspended"}
+
+
+def test_finance_can_look_but_not_change(app, clock, owner):
+    add_hospital(owner[0])
+    client = sign_in(app, clock, "books", make_admin("books", "finance"))
+    assert client.get("/admin/hospitals/CH0001").status_code == 200
+    assert client.get("/admin/hospitals/new").status_code == 403
+    assert client.get("/admin/audit").status_code == 403
+
+
+# ── HQ identity ──────────────────────────────────────────────────────────────
+
+def issue(client, clock, secret, action):
+    return client.post("/admin/hospitals/CH0001/identity",
+                       data={"csrf": csrf(client, "/admin/hospitals/CH0001"), "action": action,
+                             "code": auth.totp_now(secret, clock.tick())})
+
+
+def env_values(page):
+    import html
+
+    pairs = re.findall(r"<dt>([A-Z_]+)</dt><dd><textarea readonly rows=\"\d\">(.*?)</textarea>", page, re.S)
+    return {k: html.unescape(v) for k, v in pairs}
+
+
+def test_an_issued_identity_passes_the_desktops_check(owner, clock, control_key):
+    client, secret = owner
+    add_hospital(client)
+    page = issue(client, clock, secret, "new")
+    assert page.status_code == 200, page.text
+    env = env_values(page.text)
+    assert env["HOSPITAL_CODE"] == "CH0001" and env["CERT_PREFIX"] == "BNH-"
+
+    import hq_handshake
+
+    hq_key = Ed25519PrivateKey.from_private_bytes(base64.b64decode(env["HQ_IDENTITY_PRIVATE_KEY"]))
+    nonce = b"n" * 32
+    answer = {"hospital": "CH0001", "certificate": json.loads(env["HQ_CERTIFICATE"]),
+              "proof": base64.b64encode(hq_key.sign(hq_handshake.hello_message(nonce, "CH0001"))).decode()}
+    for url in (SYNC, "https://old.example.com/api/sync"):
+        assert hq_handshake.check_answer(answer, nonce, url, "CH0001", control_key.public_key()) == ""
+    # Control keeps the public half only.
+    assert env["HQ_IDENTITY_PRIVATE_KEY"] not in open(cs.db_path(), "rb").read().decode("latin-1")
+
+
+def test_renewing_keeps_the_key(owner, clock, control_key):
+    client, secret = owner
+    add_hospital(client)
+    issue(client, clock, secret, "new")
+    first = cs.latest_certificate("CH0001")["public_key"]
+    page = issue(client, clock, secret, "renew")
+    assert "HQ_IDENTITY_PRIVATE_KEY" not in env_values(page.text)
+    assert cs.latest_certificate("CH0001")["public_key"] == first
+
+
+def test_issuing_needs_a_fresh_code(owner, clock, control_key):
+    client, _ = owner
+    add_hospital(client)
+    resp = client.post("/admin/hospitals/CH0001/identity",
+                       data={"csrf": csrf(client, "/admin/hospitals/CH0001"), "action": "new", "code": "123456"})
+    assert resp.status_code == 403 and cs.latest_certificate("CH0001") is None
+
+
+def test_support_cannot_issue_identities(app, clock, owner, control_key):
+    add_hospital(owner[0])
+    secret = make_admin("helper", "support")
+    client = sign_in(app, clock, "helper", secret)
+    assert issue(client, clock, secret, "new").status_code == 403
+
+
+# ── what desktops are sent ───────────────────────────────────────────────────
+
+def test_desktops_get_the_panels_addresses(owner, control_key, monkeypatch):
+    client, _ = owner
+    add_hospital(client)
+    monkeypatch.setenv("FLEET_HOSPITALS", json.dumps({"CH0001": {"sync": "https://stale.example.com/api/sync"}}))
+    import endpoints
+
+    document = endpoints.build_hospital_document("ch0001")
+    assert document["endpoints"]["sync.api_url"] == SYNC          # the panel wins over the env
+    assert document["fallbacks"] == {"sync.api_url": ["https://old.example.com/api/sync"]}
+
+    token = csrf(client, "/admin/hospitals/CH0001/edit")
+    client.post("/admin/hospitals/CH0001/edit", data={"csrf": token, "name": "Pilot", "status": "closed",
+                                                      "sync_url": SYNC})
+    assert endpoints.build_hospital_document("CH0001") is None   # closed: nothing at all
+
+
+# ── admins ───────────────────────────────────────────────────────────────────
+
+def test_an_owner_adds_an_admin_with_a_fresh_code(owner, clock):
+    client, secret = owner
+    page = client.post("/admin/admins/new", data={"csrf": csrf(client, "/admin/admins"), "username": "Mary",
+                                                  "password": PASSWORD, "role": "support",
+                                                  "code": auth.totp_now(secret, clock.tick())})
+    assert page.status_code == 200 and "mary created" in page.text
+    assert auth.get_admin(username="mary")["role"] == "support"
+
+
+def test_a_deactivated_admin_is_signed_out(app, clock, owner):
+    client, secret = owner
+    helper_secret = make_admin("helper", "support")
+    helper = sign_in(app, clock, "helper", helper_secret)
+    target = auth.get_admin(username="helper")["id"]
+    client.post(f"/admin/admins/{target}/deactivate",
+                data={"csrf": csrf(client, "/admin/admins"), "code": auth.totp_now(secret, clock.tick())})
+    assert helper.get("/admin/", follow_redirects=False).status_code == 303
+
+
+def test_the_update_server_serves_the_panel_and_its_addresses(tmp_path, monkeypatch, clock, control_key):
+    monkeypatch.setenv("CONTROL_DB", str(tmp_path / "control.db"))
+    monkeypatch.setenv("HQ_PACKAGES_DIR", str(tmp_path / "packages"))
+    monkeypatch.setenv("HQ_STATE_DB", str(tmp_path / "hq_state.db"))
+    import main
+
+    cs.init()
+    cs.save_hospital("CH0001", {"name": "Pilot", "sync_url": SYNC, "status": "active"}, create=True)
+    client = TestClient(main.app)                     # no startup: nothing is built
+    assert client.get("/admin/login").status_code == 200
+    assert client.get("/docs").status_code == 404
+    payload = client.get("/api/endpoints/CH0001/").json()
+    assert json.loads(payload["document"])["endpoints"]["sync.api_url"] == SYNC
+    assert client.get("/api/endpoints/CH0009/").status_code == 404

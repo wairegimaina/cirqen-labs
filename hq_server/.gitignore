@@ -8,3 +8,5 @@ __pycache__/
 # can sign packages that every desktop executes.
 *.private
 hq_signing_key.*
+control.db
+control.db-*

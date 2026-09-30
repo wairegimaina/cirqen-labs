@@ -63,7 +63,13 @@ VERSION_FILE = BASE_DIR / "version.txt"
 API_KEY = os.environ.get("HQ_API_KEY", "change-this-in-render-env-vars")
 LOCK_TIMEOUT_SECONDS = 300  # stale migration locks are auto-stealable after this
 
-app = FastAPI(title="Cirqen HQ Update Server", version="1.0.0")
+app = FastAPI(title="Cirqen HQ Update Server", version="1.0.0", docs_url=None, redoc_url=None,
+              openapi_url=None)
+
+# The admin panel (/admin): hospitals, HQ identities, admins, audit log.
+import admin_panel  # noqa: E402
+
+admin_panel.install(app)
 
 
 @app.on_event("startup")

@@ -46,6 +46,15 @@ services:
       - key: HQ_STATE_DB
         value: /var/lib/cirqen/hq_state.db
 
+      # ── Admin panel (/admin) ──────────────────────────────────────────────
+      # Hospitals, HQ identities, admins, audit log: on the same disk.
+      # Create the first owner in Render > Shell: python admin_cli.py create-owner <name>
+      - key: CONTROL_DB
+        value: /var/lib/cirqen/control.db
+      # The panel answers only on these names (everywhere else /admin is 404).
+      - key: ADMIN_HOSTS
+        value: admin.cirqenlabs.com
+
       # Built update packages. On the disk so PREVIOUS versions survive a
       # redeploy — delta downloads need the old manifest, and without them
       # every desktop re-downloads the full package.

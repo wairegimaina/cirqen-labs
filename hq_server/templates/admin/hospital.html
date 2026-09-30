@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}{{ h.code }} · Cirqen Control{% endblock %}
+{% block main %}
+<div class="head">
+  <h1>{{ h.code }} · {{ h.name }}</h1>
+  {% if admin.role in ('owner', 'support') %}<a class="button secondary" href="/admin/hospitals/{{ h.code }}/edit">Edit</a>{% endif %}
+</div>
+<div class="cards">
+  <section class="card">
+    <h2>Hospital</h2>
+    <dl>
+      <dt>Status</dt><dd><span class="pill {{ h.status }}">{{ h.status }}</span></dd>
+      <dt>County</dt><dd>{{ h.county or '—' }}</dd>
+      <dt>HOD</dt><dd>{{ h.hod_name or '—' }}{% if h.hod_email %}<br>{{ h.hod_email }}{% endif %}{% if h.hod_phone %}<br>{{ h.hod_phone }}{% endif %}</dd>
+      <dt>Certificate prefix</dt><dd>{{ h.cert_prefix or '—' }}</dd>
+    </dl>
+  </section>
+  <section class="card">
+    <h2>HQ</h2>
+    <dl>
+      <dt>Sync address</dt><dd class="break">{{ h.sync_url or '—' }}</dd>
+      <dt>Fallbacks</dt><dd class="break">{{ h.fallbacks | join(', ') or '—' }}</dd>
+      <dt>State</dt><dd><span class="pill {{ 'ok' if health.state == 'up' else 'bad' }}">{{ health.state }}</span></dd>
+      <dt>Answers as</dt><dd>{{ health.hospital or '—' }} {% if health.identity %}<span class="pill {{ 'ok' if health.identity == 'ok' else 'bad' }}">{{ health.identity }}</span>{% endif %}</dd>
+      <dt>Prefix in use</dt><dd>{{ health.prefix or '—' }}{% if h.cert_prefix and health.prefix and health.prefix != h.cert_prefix %} <span class="pill bad">differs</span>{% endif %}</dd>
+    </dl>
+  </section>
+  <section class="card">
+    <h2>HQ identity</h2>
+    {% if cert %}
+    <dl>
+      <dt>Expires</dt><dd>{{ cert.expires_at | eat }}</dd>
+      <dt>Covers</dt><dd class="break">{{ cert.urls | join(', ') }}</dd>
+      <dt>Issued</dt><dd>{{ cert.issued_at | eat }} by {{ cert.issued_by }}</dd>
+    </dl>
+    {% else %}<p class="muted">No identity issued yet. Desktops with this hospital's code will not sync until it is.</p>{% endif %}
+    {% if admin.role == 'owner' %}
+    <form method="post" action="/admin/hospitals/{{ h.code }}/identity" class="stack">
+      <input type="hidden" name="csrf" value="{{ session.csrf }}">
+      <label>Authenticator code <input name="code" inputmode="numeric" autocomplete="one-time-code" required></label>
+      <div class="actions">
+        {% if cert %}<button name="action" value="renew">Renew certificate (same key)</button>{% endif %}
+        <button name="action" value="new" class="{{ 'secondary' if cert }}">Issue new identity</button>
+      </div>
+      <p class="muted small">Renew after adding an address, or before it expires. A new identity replaces the HQ's key: set both values on its Render service and redeploy.</p>
+    </form>
+    {% endif %}
+  </section>
+</div>
+<section class="card">
+  <h2>What its desktops are sent</h2>
+  {% if document %}<pre>{{ document }}</pre>{% else %}<p class="muted">Nothing: {{ 'the hospital is closed' if h.status == 'closed' else 'no address set' }}.</p>{% endif %}
+</section>
+<section class="card">
+  <h2>History</h2>
+  {% if events %}
+  <div class="table-wrap"><table><thead><tr><th>When</th><th>Who</th><th>What</th></tr></thead><tbody>
+  {% for e in events %}<tr><td>{{ e.at | eat }}</td><td>{{ e.actor }}</td><td>{{ e.action | replace('_', ' ') }}</td></tr>{% endfor %}
+  </tbody></table></div>
+  {% else %}<p class="muted">Nothing yet.</p>{% endif %}
+</section>
+{% endblock %}
