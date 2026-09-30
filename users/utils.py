@@ -271,54 +271,7 @@ Biomedical Engineering Management System
 This is an automated message. Please do not reply to this email.
         """
 
-        # --- Email config diagnostics ---
-        from_email = getattr(settings, "DEFAULT_FROM_EMAIL", None)
-        email_backend = getattr(settings, "EMAIL_BACKEND", None)
-        email_host = getattr(settings, "EMAIL_HOST", None)
-        email_port = getattr(settings, "EMAIL_PORT", None)
-        email_use_tls = getattr(settings, "EMAIL_USE_TLS", None)
-        email_use_ssl = getattr(settings, "EMAIL_USE_SSL", None)
-        email_host_user = getattr(settings, "EMAIL_HOST_USER", None)
-
-        logger.info(
-            "[WELCOME EMAIL] Attempting to send welcome email | "
-            "to=%s | from=%s | backend=%s | host=%s | port=%s | "
-            "use_tls=%s | use_ssl=%s | host_user=%s",
-            user.email,
-            from_email,
-            email_backend,
-            email_host,
-            email_port,
-            email_use_tls,
-            email_use_ssl,
-            email_host_user,
-        )
-
-        try:
-            msg = EmailMultiAlternatives(
-                subject,
-                plain_message,
-                from_email,
-                [user.email],
-            )
-            msg.attach_alternative(html_message, "text/html")
-            msg.send(fail_silently=False)
-            logger.info(
-                "[WELCOME EMAIL] Successfully sent welcome email to %s (user: %s)",
-                user.email,
-                user.username,
-            )
-            return True
-        except Exception as e:
-            logger.error(
-                "[WELCOME EMAIL] FAILED to send welcome email | "
-                "to=%s | user=%s | error=%s | traceback:\n%s",
-                user.email,
-                user.username,
-                str(e),
-                traceback.format_exc(),
-            )
-            return False
+        return _deliver('welcome', subject, plain_message, html_message, user)
 
     @staticmethod
     def create_password_reset_token(user, created_by):
@@ -547,51 +500,41 @@ Biomedical Engineering Management System
 This is an automated security message. Please do not reply to this email.
         """
 
-        # --- Email config diagnostics ---
-        from_email = getattr(settings, "DEFAULT_FROM_EMAIL", None)
-        email_backend = getattr(settings, "EMAIL_BACKEND", None)
-        email_host = getattr(settings, "EMAIL_HOST", None)
-        email_port = getattr(settings, "EMAIL_PORT", None)
-        email_use_tls = getattr(settings, "EMAIL_USE_TLS", None)
-        email_use_ssl = getattr(settings, "EMAIL_USE_SSL", None)
-        email_host_user = getattr(settings, "EMAIL_HOST_USER", None)
+        return _deliver('password_reset', subject, plain_message, html_message, user)
 
-        logger.info(
-            "[RESET EMAIL] Attempting to send password reset email | "
-            "to=%s | from=%s | backend=%s | host=%s | port=%s | "
-            "use_tls=%s | use_ssl=%s | host_user=%s",
-            user.email,
-            from_email,
-            email_backend,
-            email_host,
-            email_port,
-            email_use_tls,
-            email_use_ssl,
-            email_host_user,
-        )
 
+def _deliver(kind, subject, plain_message, html_message, user):
+    """Send an account email now through the mail server the HOD set on
+    Settings > Email (config.json / the environment when that is blank).
+
+    Returns True when it went out. When it could not be sent now (no internet,
+    email not set up yet) it waits in the notifications outbox and goes out
+    with the next flush, and this returns False so the caller can show the
+    temporary password on screen.
+    """
+    from notifications import mailer
+    from notifications.models import EmailOutbox
+
+    if not user.email:
+        return False
+    server = mailer.smtp()
+    if server.configured:
         try:
-            msg = EmailMultiAlternatives(
-                subject,
-                plain_message,
-                from_email,
-                [user.email],
-            )
+            msg = EmailMultiAlternatives(subject, plain_message, server.from_email, [user.email],
+                                         connection=mailer.connection_for(server))
             msg.attach_alternative(html_message, "text/html")
             msg.send(fail_silently=False)
-            logger.info(
-                "[RESET EMAIL] Successfully sent password reset email to %s (user: %s)",
-                user.email,
-                user.username,
-            )
+            logger.info("[%s EMAIL] sent to %s (user: %s) via %s", kind.upper(), user.email, user.username,
+                        server.source)
             return True
-        except Exception as e:
-            logger.error(
-                "[RESET EMAIL] FAILED to send password reset email | "
-                "to=%s | user=%s | error=%s | traceback:\n%s",
-                user.email,
-                user.username,
-                str(e),
-                traceback.format_exc(),
-            )
-            return False
+        except Exception:
+            logger.error("[%s EMAIL] could not send to %s (user: %s), queued instead:\n%s", kind.upper(),
+                         user.email, user.username, traceback.format_exc())
+    else:
+        logger.warning("[%s EMAIL] outgoing email is not set up (Settings > Email); queued for %s",
+                       kind.upper(), user.email)
+    EmailOutbox.objects.create(
+        kind=kind, dedupe_key=f"{kind}:{user.pk}:{uuid.uuid4().hex}", to=user.email,
+        subject=subject[:255], body_text=plain_message, body_html=html_message,
+    )
+    return False

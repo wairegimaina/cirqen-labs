@@ -124,7 +124,7 @@ def accessories_dashboard(request, dept_id=None):
     accessory_names = Accessoriesname.objects.filter(active_status=True).order_by('name')
     tools_manufacturers = ToolsManufacturer.objects.all().order_by('name')
     accessories_manufacturers = AccessoriesManufacturer.objects.filter(active_status=True).order_by('name')
-    equipment_descriptions = EquipmentDescription.objects.all()
+    equipment_descriptions = EquipmentDescription.objects.filter(active_status=True, pending_delete=False)
 
     existing_accessories = (
         Accessories.objects.filter(workshop=selected_workshop, active_status=True)

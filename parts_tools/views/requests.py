@@ -17,6 +17,7 @@ from ..models import (
 )
 from Inventory.models import EquipmentDescription
 from notifications import accessories as accessory_mail
+from core.names import get_or_create_named
 
 logger = logging.getLogger(__name__)
 
@@ -257,16 +258,10 @@ def accept_accessory_request(request, request_id):
 
         with transaction.atomic():
             if accessory_request.request_type == 'new':
-                accessory_name_obj, _ = Accessoriesname.objects.get_or_create(
-                    name__iexact=accessory_request.accessory_name,
-                    defaults={'name': accessory_request.accessory_name}
-                )
+                accessory_name_obj, _ = get_or_create_named(Accessoriesname, accessory_request.accessory_name)
                 manufacturer_obj = None
                 if accessory_request.manufacturer_name:
-                    manufacturer_obj, _ = AccessoriesManufacturer.objects.get_or_create(
-                        name__iexact=accessory_request.manufacturer_name,
-                        defaults={'name': accessory_request.manufacturer_name}
-                    )
+                    manufacturer_obj, _ = get_or_create_named(AccessoriesManufacturer, accessory_request.manufacturer_name)
 
                 new_accessory = Accessories.objects.create(
                     name=accessory_name_obj,

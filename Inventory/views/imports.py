@@ -33,6 +33,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
 
 from core import hq_link
+from core.names import find_same
 from Inventory.models import Department, Equipment, EquipmentDescription, Manufacturer
 
 logger = logging.getLogger(__name__)
@@ -293,7 +294,7 @@ def _locate_header(ws):
 
 
 def _resolve_description(name, create_missing, created_descriptions):
-    description = EquipmentDescription.objects.filter(name__iexact=name).first()
+    description = find_same(EquipmentDescription.objects.all(), name)
     if description:
         return description, None
     if not create_missing:
@@ -304,7 +305,7 @@ def _resolve_description(name, create_missing, created_descriptions):
 
 
 def _resolve_manufacturer(name, create_missing, created_manufacturers):
-    manufacturer = Manufacturer.objects.filter(name__iexact=name).first()
+    manufacturer = find_same(Manufacturer.objects.all(), name)
     if manufacturer:
         return manufacturer, None
     if not create_missing:

@@ -3,6 +3,7 @@ from django.db import models
 from django.core.exceptions import ValidationError
 from workshop.models import Workshop
 from users.models import UserProfile
+from core.names import check_unique, tidy
 
 # Tools Models
 class ToolsManufacturer(models.Model):
@@ -20,11 +21,8 @@ class ToolsManufacturer(models.Model):
     def clean(self):
         if not self.name:
             raise ValidationError({"name": "Manufacturer name cannot be empty."})
-        normalized_name = self.name.strip()
-        existing = ToolsManufacturer.objects.filter(name__iexact=normalized_name).exclude(pk=self.pk)
-        if existing.exists():
-            raise ValidationError({"name": f"Manufacturer '{normalized_name.title()}' already exists."})
-        self.name = normalized_name.title()
+        self.name = tidy(self.name).title()
+        check_unique(self, "Manufacturer")
 
     def save(self, *args, **kwargs):
         self.full_clean()
@@ -49,11 +47,8 @@ class Toolname(models.Model):
     def clean(self):
         if not self.name:
             raise ValidationError({"name": "Tool name cannot be empty."})
-        normalized_name = self.name.strip()
-        existing = Toolname.objects.filter(name__iexact=normalized_name).exclude(pk=self.pk)
-        if existing.exists():
-            raise ValidationError({"name": f"Tool name '{normalized_name.title()}' already exists."})
-        self.name = normalized_name.title()
+        self.name = tidy(self.name).title()
+        check_unique(self, "Tool name")
 
     def save(self, *args, **kwargs):
         self.full_clean()
@@ -122,11 +117,8 @@ class AccessoriesManufacturer(models.Model):
     def clean(self):
         if not self.name:
             raise ValidationError({"name": "Manufacturer name cannot be empty."})
-        normalized_name = self.name.strip()
-        existing = AccessoriesManufacturer.objects.filter(name__iexact=normalized_name).exclude(pk=self.pk)
-        if existing.exists():
-            raise ValidationError({"name": f"Manufacturer '{normalized_name.title()}' already exists."})
-        self.name = normalized_name.title()
+        self.name = tidy(self.name).title()
+        check_unique(self, "Manufacturer")
 
     def save(self, *args, **kwargs):
         self.full_clean()
@@ -151,11 +143,8 @@ class Accessoriesname(models.Model):
     def clean(self):
         if not self.name:
             raise ValidationError({"name": "Accessory name cannot be empty."})
-        normalized_name = self.name.strip()
-        existing = Accessoriesname.objects.filter(name__iexact=normalized_name).exclude(pk=self.pk)
-        if existing.exists():
-            raise ValidationError({"name": f"Accessory '{normalized_name.title()}' already exists."})
-        self.name = normalized_name.title()
+        self.name = tidy(self.name).title()
+        check_unique(self, "Accessory")
 
     def save(self, *args, **kwargs):
         self.needs_sync = True

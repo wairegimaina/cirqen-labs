@@ -410,10 +410,16 @@
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Add New Equipment</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <h5 class="modal-title" id="addEquipmentTitle">Add New Equipment</h5>
+                <button type="button" class="btn btn-sm btn-outline-secondary ms-auto me-2" id="nameListsToggle"
+                        onclick="NameLists.toggle()" title="Edit or delete descriptions, manufacturers and models"
+                        aria-label="Edit lists">
+                    <i class="fas fa-cog"></i>
+                </button>
+                <button type="button" class="btn-close ms-0" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
+                {% include "Inventory/_name_lists_panel.html" %}
                 <form id="add_form" action="{% url 'add_inventory' %}" method="post" autocomplete="off">
                     {% csrf_token %}
 
@@ -462,8 +468,22 @@
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label" for="model">Model</label>
-                        <input type="text" name="model" id="model" class="form-control" required>
+                        <label class="form-label" for="model">Model <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <select name="model" id="model" class="form-select" required>
+                                <option value="" disabled selected>Select a description first...</option>
+                            </select>
+                            <button class="btn btn-outline-secondary" type="button" onclick="ModelSelect.showNew('add')" aria-label="Add new model">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                        </div>
+                        <div id="new-model-group-add" class="mt-2" style="display: none;">
+                            <input type="text" id="new_model_add" class="form-control" maxlength="100" placeholder="New Model">
+                            <div class="mt-2">
+                                <button type="button" class="btn btn-sm btn-success" onclick="ModelSelect.addNew('add')">Save</button>
+                                <button type="button" class="btn btn-sm btn-secondary" onclick="ModelSelect.cancelNew('add')">Cancel</button>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="mb-3">
@@ -656,7 +676,19 @@
 
                     <div class="mb-3">
                         <label class="form-label" for="edit_model">Model</label>
-                        <input type="text" name="model" id="edit_model" class="form-control" required>
+                        <div class="input-group">
+                            <select name="model" id="edit_model" class="form-select" required></select>
+                            <button class="btn btn-outline-secondary" type="button" onclick="ModelSelect.showNew('edit')" aria-label="Add new model">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                        </div>
+                        <div id="new-model-group-edit" class="mt-2" style="display: none;">
+                            <input type="text" id="new_model_edit" class="form-control" maxlength="100" placeholder="New Model">
+                            <div class="mt-2">
+                                <button type="button" class="btn btn-sm btn-success" onclick="ModelSelect.addNew('edit')">Save</button>
+                                <button type="button" class="btn btn-sm btn-secondary" onclick="ModelSelect.cancelNew('edit')">Cancel</button>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="mb-3">

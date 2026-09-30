@@ -4,6 +4,7 @@ from .imports import download_user_import_template, upload_users_excel
 from .views import (
     admin_reset_user_password,
     api_create_user,
+    api_restore_user,
     activity_ping,
     two_factor_setup,
     two_factor_verify,
@@ -54,6 +55,7 @@ urlpatterns = [
     # ============================================================================
 
     path('api/create-user/', api_create_user, name='api_create_user'),
+    path('api/users/<uuid:user_id>/restore/', api_restore_user, name='api_restore_user'),
 
     path('manage/', manage_users_view, name='manage_users'),
 

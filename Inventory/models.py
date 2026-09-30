@@ -2,6 +2,7 @@ import uuid
 from django.db import models
 from django.core.exceptions import ValidationError
 from workshop.models import Workshop
+from core.names import check_unique, same_spelling, tidy
 
 
 class Department(models.Model):
@@ -75,15 +76,9 @@ class EquipmentDescription(models.Model):
     syncable = True  # <- important, so sync task knows to sync this model
 
     def clean(self):
-        """Prevent case-insensitive duplicates in name."""
-        duplicates = EquipmentDescription.objects.filter(
-            name__iexact=self.name
-        ).exclude(pk=self.pk)
-
-        if duplicates.exists():
-            raise ValidationError({
-                'name': f"Equipment description with name '{self.name}' already exists."
-            })
+        """Prevent duplicates that differ only in case, spacing or punctuation."""
+        self.name = tidy(self.name)
+        check_unique(self, "Equipment description")
 
     def save(self, *args, **kwargs):
         # Run validations + normalization before saving
@@ -120,19 +115,10 @@ class Manufacturer(models.Model):
         if not self.name:
             raise ValidationError({"name": "Manufacturer name cannot be empty."})
 
-        # Trim spaces
-        normalized_name = self.name.strip()
-
-        # Check duplicates case-insensitively
-        existing = Manufacturer.objects.filter(
-            name__iexact=normalized_name
-        ).exclude(pk=self.pk)
-
-        if existing.exists():
-            raise ValidationError({"name": f"Manufacturer '{normalized_name.title()}' already exists."})
-
-        # Normalize format (e.g., "sony", "SONY" -> "Sony")
-        self.name = normalized_name.title()
+        # Normalize format (e.g., "sony", "SONY" -> "Sony"), then refuse
+        # near-duplicates ("Mindray" vs "mind-ray").
+        self.name = tidy(self.name).title()
+        check_unique(self, "Manufacturer")
 
     def save(self, *args, **kwargs):
         # Run validations + normalization before saving
@@ -302,6 +288,16 @@ class Equipment(models.Model):
         # Normalize serial number before validation
         if self.serial_number:
             self.serial_number = self.serial_number.strip().upper()
+
+        # A model typed as "mx-450" joins the "MX 450" already used for this
+        # description rather than becoming a second entry in the model list.
+        update_fields = kwargs.get('update_fields')
+        if self.model and self.description_id and (update_fields is None or 'model' in update_fields):
+            self.model = same_spelling(
+                Equipment.objects.filter(description_id=self.description_id).exclude(pk=self.pk)
+                .values_list('model', flat=True).distinct(),
+                self.model,
+            )
 
         # ✅ Handle optional skip_clean argument safely
         skip_clean = kwargs.pop('skip_clean', False)

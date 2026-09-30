@@ -14,6 +14,7 @@ from django.views.decorators.http import require_POST
 from .. import stock
 from ..models import Accessories, AccessoriesManufacturer, Accessoriesname
 from Inventory.models import EquipmentDescription
+from core.names import find_same, get_or_create_named, is_live
 
 logger = logging.getLogger(__name__)
 
@@ -45,9 +46,7 @@ def edit_accessory(request, pk):
             if accessory_name:
                 accessory.name = accessory_name
         elif new_name:
-            accessory_name, created = Accessoriesname.objects.get_or_create(
-                name__iexact=new_name, defaults={'name': new_name.strip()}
-            )
+            accessory_name, created = get_or_create_named(Accessoriesname, new_name)
             accessory.name = accessory_name
             if created:
                 logger.info(f"New accessory name '{new_name}' created by HOD {request.user.username}")
@@ -58,9 +57,7 @@ def edit_accessory(request, pk):
             if manufacturer:
                 accessory.manufacturer = manufacturer
         elif new_manufacturer:
-            manufacturer, created = AccessoriesManufacturer.objects.get_or_create(
-                name__iexact=new_manufacturer, defaults={'name': new_manufacturer.strip()}
-            )
+            manufacturer, created = get_or_create_named(AccessoriesManufacturer, new_manufacturer)
             accessory.manufacturer = manufacturer
             if created:
                 logger.info(f"New manufacturer '{new_manufacturer}' created by HOD {request.user.username}")
@@ -173,10 +170,12 @@ def ajax_add_accessory_name(request):
         if not name:
             return JsonResponse({'error': 'Accessory name cannot be empty.'}, status=400)
 
-        if Accessoriesname.objects.filter(name__iexact=name).exists():
-            return JsonResponse({'error': f'Accessory name "{name}" already exists.'}, status=400)
+        same = find_same(Accessoriesname.objects.all(), name)
+        if same and is_live(same):
+            return JsonResponse({'error': f'Accessory name "{same.name}" already exists.'}, status=400)
 
-        accessory_name = Accessoriesname.objects.create(name=name.title())
+        # A deleted row with this name comes back rather than failing on the name.
+        accessory_name, _ = get_or_create_named(Accessoriesname, name)
         logger.info(f"New accessory name '{name}' created by {request.user.username}")
         return JsonResponse({'success': True, 'id': str(accessory_name.id), 'name': accessory_name.name})
 
@@ -194,10 +193,12 @@ def ajax_add_manufacturer(request):
         if not name:
             return JsonResponse({'error': 'Manufacturer name cannot be empty.'}, status=400)
 
-        if AccessoriesManufacturer.objects.filter(name__iexact=name).exists():
-            return JsonResponse({'error': f'Manufacturer "{name}" already exists.'}, status=400)
+        same = find_same(AccessoriesManufacturer.objects.all(), name)
+        if same and is_live(same):
+            return JsonResponse({'error': f'Manufacturer "{same.name}" already exists.'}, status=400)
 
-        manufacturer = AccessoriesManufacturer.objects.create(name=name.title())
+        # A deleted row with this name comes back rather than failing on the name.
+        manufacturer, _ = get_or_create_named(AccessoriesManufacturer, name)
         logger.info(f"New accessory manufacturer '{name}' created by {request.user.username}")
         return JsonResponse({'success': True, 'id': str(manufacturer.id), 'name': manufacturer.name})
 

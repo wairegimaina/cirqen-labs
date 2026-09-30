@@ -14,6 +14,7 @@ from django.core.exceptions import ValidationError
 from django.views.decorators.http import require_POST
 
 from ..models import Tools, ToolsManufacturer, Toolname
+from core.names import find_same, get_or_create_named, is_live
 
 logger = logging.getLogger(__name__)
 
@@ -41,10 +42,7 @@ def add_tool(request):
         if name_id:
             tool_name = Toolname.objects.filter(id=name_id).first()
         elif new_name:
-            tool_name, created = Toolname.objects.get_or_create(
-                name__iexact=new_name,
-                defaults={'name': new_name.strip()}
-            )
+            tool_name, created = get_or_create_named(Toolname, new_name)
             if created:
                 logger.info(f"New tool name '{new_name}' created by {request.user.username}")
 
@@ -57,10 +55,7 @@ def add_tool(request):
         if manufacturer_id:
             manufacturer = ToolsManufacturer.objects.filter(id=manufacturer_id).first()
         elif new_manufacturer:
-            manufacturer, created = ToolsManufacturer.objects.get_or_create(
-                name__iexact=new_manufacturer,
-                defaults={'name': new_manufacturer.strip()}
-            )
+            manufacturer, created = get_or_create_named(ToolsManufacturer, new_manufacturer)
             if created:
                 logger.info(f"New tool manufacturer '{new_manufacturer}' created by {request.user.username}")
 
@@ -109,9 +104,7 @@ def edit_tool(request, pk):
         if name_id:
             tool.name = get_object_or_404(Toolname, id=name_id)
         elif new_name:
-            tool_name, created = Toolname.objects.get_or_create(
-                name__iexact=new_name, defaults={'name': new_name}
-            )
+            tool_name, created = get_or_create_named(Toolname, new_name)
             tool.name = tool_name
             if created:
                 logger.info(f"New tool name '{new_name}' created during edit by {request.user.username}")
@@ -119,9 +112,7 @@ def edit_tool(request, pk):
         if manufacturer_id:
             tool.manufacturer = get_object_or_404(ToolsManufacturer, id=manufacturer_id)
         elif new_manufacturer:
-            manufacturer, created = ToolsManufacturer.objects.get_or_create(
-                name__iexact=new_manufacturer, defaults={'name': new_manufacturer}
-            )
+            manufacturer, created = get_or_create_named(ToolsManufacturer, new_manufacturer)
             tool.manufacturer = manufacturer
             if created:
                 logger.info(f"New manufacturer '{new_manufacturer}' created during edit by {request.user.username}")
@@ -214,10 +205,12 @@ def ajax_add_tool_name(request):
         if not name:
             return JsonResponse({'error': 'Tool name cannot be empty.'}, status=400)
 
-        if Toolname.objects.filter(name__iexact=name).exists():
-            return JsonResponse({'error': f'Tool name "{name}" already exists.'}, status=400)
+        same = find_same(Toolname.objects.all(), name)
+        if same and is_live(same):
+            return JsonResponse({'error': f'Tool name "{same.name}" already exists.'}, status=400)
 
-        tool_name = Toolname.objects.create(name=name.title())
+        # A deleted row with this name comes back rather than failing on the name.
+        tool_name, _ = get_or_create_named(Toolname, name)
         logger.info(f"New tool name '{name}' created by {request.user.username}")
         return JsonResponse({'success': True, 'id': str(tool_name.id), 'name': tool_name.name})
 
@@ -235,10 +228,12 @@ def ajax_add_tool_manufacturer(request):
         if not name:
             return JsonResponse({'error': 'Manufacturer name cannot be empty.'}, status=400)
 
-        if ToolsManufacturer.objects.filter(name__iexact=name).exists():
-            return JsonResponse({'error': f'Manufacturer "{name}" already exists.'}, status=400)
+        same = find_same(ToolsManufacturer.objects.all(), name)
+        if same and is_live(same):
+            return JsonResponse({'error': f'Manufacturer "{same.name}" already exists.'}, status=400)
 
-        manufacturer = ToolsManufacturer.objects.create(name=name.title())
+        # A deleted row with this name comes back rather than failing on the name.
+        manufacturer, _ = get_or_create_named(ToolsManufacturer, name)
         logger.info(f"New tool manufacturer '{name}' created by {request.user.username}")
         return JsonResponse({'success': True, 'id': str(manufacturer.id), 'name': manufacturer.name})
 
