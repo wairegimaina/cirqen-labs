@@ -32,6 +32,11 @@ class NetworkLoopsMixin(SmartDeleteMixin):
             import requests as _rq
             backoff = 1.0
             online = self._check_hq_online_once(retries, _rq, backoff)
+            # Reachable is not enough: an HQ that cannot prove it is this PC's
+            # hospital counts as offline, so nothing is uploaded to it or
+            # downloaded from it and local work waits in the queue.
+            if online and getattr(self, "hospital_code", ""):
+                online = self.hq_identity_confirmed()
             # A move adopted from the update server is on probation: sustained
             # failure of the new address reverts it without anyone on site.
             try:
@@ -41,6 +46,31 @@ class NetworkLoopsMixin(SmartDeleteMixin):
             except Exception:  # noqa: BLE001 - never let this break the check
                 pass
             return online
+
+    HQ_RECONFIRM_SECONDS = 6 * 3600
+
+    def hq_identity_confirmed(self) -> bool:
+            """Run the hello handshake (hq_handshake.py) for the current address,
+            at most every HQ_RECONFIRM_SECONDS once it has passed; a failure is
+            retried on the next check."""
+            state = self._hq_confirmed
+            if state["url"] == self.api_url and time.time() - state["at"] < self.HQ_RECONFIRM_SECONDS:
+                return True
+            try:
+                import hq_handshake
+
+                ok, reason = hq_handshake.confirm(self.api_url, self.hospital_code)
+            except Exception as exc:  # noqa: BLE001 - a broken check must fail closed
+                ok, reason = False, f"handshake failed: {exc}"
+            if ok:
+                if state["url"] != self.api_url:
+                    LOG.info("🏥 HQ %s confirmed as hospital %s", self.api_url, self.hospital_code)
+                state.update(url=self.api_url, at=time.time(), reason="")
+                return True
+            if reason != state["reason"]:
+                LOG.error("🚫 Not syncing with %s: %s (working offline)", self.api_url, reason)
+            state.update(url="", at=0.0, reason=reason)
+            return False
 
     def _check_hq_online_once(self, retries, _rq, backoff):
             for attempt in range(retries + 1):

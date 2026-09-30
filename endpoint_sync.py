@@ -185,24 +185,38 @@ def _probe(url: str) -> bool:
     return response.status_code in (200, 401, 403)
 
 
-def fetch_and_apply(data_path, update_server_url: str, session=None) -> dict:
+def _probe_update_server(url: str, http) -> bool:
+    try:
+        response = http.get(f"{url.rstrip('/')}/health/", timeout=PROBE_TIMEOUT)
+        return response.status_code == 200
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def fetch_and_apply(data_path, update_server_url: str, session=None, hospital_code: str = "") -> dict:
     """One poll. Returns a result dict describing what happened and why.
 
     Never raises: this runs on a background loop, and a failure to learn about
     a move must not disturb a machine that is working.
+
+    With ``hospital_code`` the PC asks for its own hospital's document, refuses
+    any document that is not for that hospital (including the fleet-wide one),
+    and adopts a new address only after it passes the hq_handshake.
     """
     import requests
 
     http = session or requests
     result = {"changed": False, "adopted": None, "reason": ""}
+    code = str(hospital_code or "").strip().upper()
 
     if not update_server_url:
         result["reason"] = "no update server address configured"
         return result
 
+    path = f"/api/endpoints/{code}/" if code else "/api/endpoints/"
     try:
         response = http.get(
-            f"{update_server_url.rstrip('/')}/api/endpoints/", timeout=FETCH_TIMEOUT
+            f"{update_server_url.rstrip('/')}{path}", timeout=FETCH_TIMEOUT
         )
     except Exception as exc:  # noqa: BLE001
         result["reason"] = f"update server unreachable: {str(exc)[:120]}"
@@ -221,6 +235,13 @@ def fetch_and_apply(data_path, update_server_url: str, session=None) -> dict:
     if document is None:
         LOG.warning("Refusing endpoint document: %s", why)
         result["reason"] = why
+        return result
+
+    if code and str(document.get("hospital") or "").strip().upper() != code:
+        # Signed, but not for this hospital: never move this PC with it.
+        LOG.error("Refusing endpoint document for hospital %r; this PC is %s",
+                  document.get("hospital"), code)
+        result["reason"] = f"document is for hospital {document.get('hospital')!r}, not {code}"
         return result
 
     state = read_state(data_path)
@@ -244,10 +265,28 @@ def fetch_and_apply(data_path, update_server_url: str, session=None) -> dict:
         return result
 
     sync_url = endpoints.get("sync.api_url")
-    if sync_url and not _probe(sync_url):
+    if sync_url and code:
+        import hq_handshake
+
+        ok, why = hq_handshake.confirm(sync_url, code, session=session)
+        if not ok:
+            LOG.warning("Advertised sync address %s failed the hospital check: %s; keeping current",
+                        sync_url, why)
+            result["reason"] = f"advertised address {sync_url} failed the hospital check: {why}"
+            return result
+    elif sync_url and not _probe(sync_url):
         LOG.warning("Advertised sync address %s does not answer; keeping current", sync_url)
         result["reason"] = f"advertised address {sync_url} does not answer"
         return result
+
+    # A new update server address must answer too: adopting a dead one would
+    # cut this PC off from every later update and document.
+    update_url = endpoints.get("update.server_url")
+    if update_url and update_url.rstrip("/") != (update_server_url or "").rstrip("/"):
+        if not _probe_update_server(update_url, http):
+            LOG.warning("Advertised update server %s does not answer; keeping current", update_url)
+            result["reason"] = f"advertised update server {update_url} does not answer"
+            return result
 
     previous = state.get("endpoints") or {}
     _write_state(data_path, {

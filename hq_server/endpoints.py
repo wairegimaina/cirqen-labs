@@ -23,12 +23,23 @@ With FLEET_SYNC_API_URL unset the endpoint reports ``configured: false`` and
 carries no addresses, so a client keeps whatever it already has. That is the
 safe default for a server that has not been told anything yet: silence must
 never be read as "move to nowhere".
+
+Per hospital
+------------
+FLEET_HOSPITALS        JSON, one entry per hospital:
+                       {"CH0001": {"sync": "https://hq-ch0001.cirqenlabs.com/api/sync",
+                                   "fallbacks": ["https://old-hq.example.com/api/sync"],
+                                   "updates": "https://updates.cirqenlabs.com"}}
+                       served at /api/endpoints/<code>/. Each document names its
+                       hospital, and a desktop with a hospital code accepts only
+                       its own. (The admin panel replaces this setting later.)
 """
 from __future__ import annotations
 
 import hashlib
 import json
 import os
+import re
 from datetime import datetime, timezone
 
 DEFAULT_POLL_SECONDS = 900
@@ -90,12 +101,59 @@ def build_document() -> dict:
     }
 
 
+HOSPITAL_CODE = re.compile(r"^[A-Z0-9][A-Z0-9-]{1,31}$")
+
+
+def hospitals() -> dict:
+    """FLEET_HOSPITALS parsed: {"CH0001": {"sync": ..., "fallbacks": [...], "updates": ...}}.
+    A malformed setting serves nothing rather than something wrong."""
+    raw = _env("FLEET_HOSPITALS")
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except ValueError:
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+    return {str(k).strip().upper(): v for k, v in parsed.items()
+            if isinstance(v, dict) and HOSPITAL_CODE.match(str(k).strip().upper())}
+
+
+def build_hospital_document(code: str) -> dict | None:
+    """The document for one hospital, or None if it is not in FLEET_HOSPITALS."""
+    code = str(code or "").strip().upper()
+    entry = hospitals().get(code)
+    if entry is None:
+        return None
+    endpoints: dict[str, object] = {}
+    sync_url = str(entry.get("sync") or "").strip().rstrip("/")
+    if sync_url:
+        endpoints["sync.api_url"] = sync_url
+    updates_url = str(entry.get("updates") or "").strip().rstrip("/")
+    if updates_url:
+        endpoints["update.server_url"] = updates_url
+    fallbacks = [str(u).strip().rstrip("/") for u in entry.get("fallbacks") or [] if str(u).strip()]
+    material = json.dumps({"hospital": code, "endpoints": endpoints, "fallbacks": fallbacks},
+                          sort_keys=True, separators=(",", ":"))
+    return {
+        "hospital": code,
+        "serial": hashlib.sha256(material.encode()).hexdigest()[:16],
+        "issued_at": datetime.now(timezone.utc).isoformat(),
+        "configured": bool(endpoints),
+        "endpoints": endpoints,
+        "fallbacks": {"sync.api_url": fallbacks} if fallbacks else {},
+        "poll_seconds": _int_env("FLEET_POLL_SECONDS", DEFAULT_POLL_SECONDS),
+        "max_age_seconds": _int_env("FLEET_MAX_AGE_SECONDS", DEFAULT_MAX_AGE_SECONDS),
+    }
+
+
 def canonical_bytes(document: dict) -> bytes:
     """Exactly what is signed and verified — byte-for-byte on both sides."""
     return json.dumps(document, sort_keys=True, separators=(",", ":")).encode()
 
 
-def signed_response() -> dict:
+def signed_response(document: dict | None = None) -> dict:
     """The document plus its signature, ready to return.
 
     An unsigned response is still served (so an operator can see what the
@@ -103,7 +161,8 @@ def signed_response() -> dict:
     """
     from build_package import _sign_bytes
 
-    document = build_document()
+    if document is None:
+        document = build_document()
     payload = canonical_bytes(document)
     signature = _sign_bytes(payload)
 

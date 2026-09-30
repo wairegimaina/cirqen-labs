@@ -346,6 +346,7 @@ def load_config_from_unified_manager(data_path: Path = None):
     sync_config = {
         "api_url": config.get("sync.api_url"),
         "auth_token": config.get("sync.auth_token"),
+        "hospital_code": config.get("sync.hospital_code") or "",
         "local_db": {
             "host": config.get("local_db.host"),
             "port": config.get("local_db.port"),
@@ -421,6 +422,7 @@ def load_config_from_env_fallback():
         # failing. Everything comes from the environment.
         "api_url": os.getenv("SYNC_API_URL", "").rstrip("/"),
         "auth_token": os.getenv("SYNC_AUTH_TOKEN", ""),
+        "hospital_code": os.getenv("CIRQEN_HOSPITAL_CODE", ""),
         "local_db": {
             "host": os.getenv("POSTGRES_LOCAL_HOST", "127.0.0.1"),
             "port": int(os.getenv("POSTGRES_LOCAL_PORT", "5432")),

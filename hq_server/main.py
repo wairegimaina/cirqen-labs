@@ -173,6 +173,17 @@ def fleet_endpoint_document():
     return fleet_endpoints.signed_response()
 
 
+@app.get("/api/endpoints/{hospital}/")
+def hospital_endpoint_document(hospital: str):
+    """The same signed document for one hospital (FLEET_HOSPITALS). Unknown
+    hospitals get 404, never the fleet document: a desktop with a hospital
+    code must not be moved by anything that is not addressed to it."""
+    document = fleet_endpoints.build_hospital_document(hospital)
+    if document is None:
+        raise HTTPException(status_code=404, detail="unknown hospital")
+    return fleet_endpoints.signed_response(document)
+
+
 @app.get("/api/updates/latest/")
 def check_latest(current_version: str = "0.0.0", machine_id: Optional[str] = None,
                  x_api_key: Optional[str] = Header(None)):

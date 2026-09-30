@@ -342,6 +342,10 @@ class CirqenConfig:
             "api_url": HQ_ENDPOINT_DEFAULTS["sync.api_url"],
             "auth_token": "",  # secret: env SYNC_AUTH_TOKEN, or issued at enrollment
             "enrollment_code": "",  # secret: installer's one-time code (provisioning.json)
+            # Which hospital this PC belongs to (e.g. CH0001), from provisioning.json
+            # or CIRQEN_HOSPITAL_CODE. Set: this PC syncs only with an HQ that proves
+            # it is that hospital (hq_handshake.py). Empty: the pre-hospital behaviour.
+            "hospital_code": "",
             "enabled": True,
             "debug": False,
             "poll_interval": 1,
@@ -886,6 +890,9 @@ class CirqenConfig:
         "sync.auth_token": "SYNC_AUTH_TOKEN",
         "sync.enrollment_code": "SYNC_ENROLLMENT_CODE",
         "update.api_key": "HQ_API_KEY",
+        # Not a secret, but provisioned the same way: from the installer's
+        # provisioning.json (or the environment) once, then kept in config.json.
+        "sync.hospital_code": "CIRQEN_HOSPITAL_CODE",
     }
 
     def _provisioning_candidates(self):

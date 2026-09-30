@@ -496,6 +496,9 @@ class UploadMixin(SmartDeleteMixin):
             # request bodies are retried or queued.
             headers["X-Client-ID"] = self.client_id
             headers["X-Device-ID"] = self.client_id
+            # HQ refuses (409) any request that names another hospital.
+            if getattr(self, "hospital_code", ""):
+                headers["X-Cirqen-Hospital"] = self.hospital_code
             return headers
     def get_column_type_client(self, conn, table: str, column: str) -> str:
             _COLUMN_TYPE_CACHE = {}

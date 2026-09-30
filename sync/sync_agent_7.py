@@ -103,7 +103,9 @@ class DownloadCertHeartbeatMixin(SmartDeleteMixin):
 
             while not self.stop_event.is_set():
                 try:
-                    result = endpoint_sync.fetch_and_apply(self.data_path, update_url)
+                    result = endpoint_sync.fetch_and_apply(
+                        self.data_path, update_url, hospital_code=getattr(self, "hospital_code", "")
+                    )
                     if result.get("changed"):
                         LOG.warning(
                             "🧭 HQ addresses changed by the update server: %s",
