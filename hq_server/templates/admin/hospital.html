@@ -67,6 +67,22 @@
     {% endif %}
   </section>
 </div>
+<section class="card" id="profile">
+  <h2>Modules and menu</h2>
+  <p class="muted">{% if h.profile_version %}Published version {{ h.profile_version }}. {% else %}Not published yet: its PCs have every module. {% endif %}A switched-off module is closed on its PCs (pages and data access), not only hidden; its records stay and keep syncing. Label: the name in their menu (blank keeps the usual name).</p>
+  <form method="post" action="/admin/hospitals/{{ h.code }}/profile">
+    <input type="hidden" name="csrf" value="{{ session.csrf }}">
+    <div class="table-wrap"><table>
+      <thead><tr><th>On</th><th>Module</th><th>Menu label</th></tr></thead>
+      <tbody>{% for m in modules %}<tr>
+        <td><input type="checkbox" name="on" value="{{ m.key }}" aria-label="{{ m.default }} on" {{ 'checked' if m.on }} {{ 'disabled' if admin.role not in ('owner', 'support') }}></td>
+        <td>{{ m.default }}</td>
+        <td><input name="label_{{ m.key }}" value="{{ m.label }}" placeholder="{{ m.default }}" maxlength="40" {{ 'disabled' if admin.role not in ('owner', 'support') }}></td>
+      </tr>{% endfor %}</tbody>
+    </table></div>
+    {% if admin.role in ('owner', 'support') %}<div class="actions spaced"><button class="secondary">Publish to its PCs</button></div>{% endif %}
+  </form>
+</section>
 <section class="card" id="installers">
   <h2>Installers</h2>
   <p class="muted">Each installer file lets up to its number of new PCs join this hospital's HQ until it expires. Put

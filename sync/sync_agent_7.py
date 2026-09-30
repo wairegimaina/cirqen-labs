@@ -106,6 +106,11 @@ class DownloadCertHeartbeatMixin(SmartDeleteMixin):
                     result = endpoint_sync.fetch_and_apply(
                         self.data_path, update_url, hospital_code=getattr(self, "hospital_code", "")
                     )
+                    if getattr(self, "hospital_code", ""):
+                        # The hospital's modules and menu, from the same server.
+                        import hospital_profile
+
+                        hospital_profile.fetch_and_store(self.data_path, update_url, self.hospital_code)
                     if result.get("changed"):
                         LOG.warning(
                             "🧭 HQ addresses changed by the update server: %s",

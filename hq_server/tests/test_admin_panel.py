@@ -351,3 +351,31 @@ def test_the_identity_page_includes_controls_public_key(owner, clock, control_ke
     expected = base64.b64encode(control_key.public_key().public_bytes(
         serialization.Encoding.Raw, serialization.PublicFormat.Raw)).decode()
     assert env["CONTROL_PUBLIC_KEY"] == expected
+
+
+def test_publishing_a_profile_that_its_pcs_accept(owner, control_key, tmp_path, monkeypatch):
+    client, _ = owner
+    add_hospital(client)
+    token = csrf(client, "/admin/hospitals/CH0001")
+    on = ["jobcard", "inventory", "ppms", "reports", "machine_reports", "parts_tools"]   # calibration off
+    client.post("/admin/hospitals/CH0001/profile",
+                data={"csrf": token, "on": on, "label_jobcard": "Job cards"})
+    h = cs.get_hospital("CH0001")
+    assert h["profile_version"] == 1 and h["profile"]["modules"]["calibration"] is False
+    assert json.loads(cs.audit_entries(target="CH0001")[0]["detail"])["off"] == ["calibration"]
+
+    monkeypatch.setenv("HQ_PACKAGES_DIR", str(tmp_path / "packages"))
+    import main
+
+    payload = TestClient(main.app).get("/api/profiles/CH0001/").json()
+    import hospital_profile   # the desktop's own check
+
+    fields, why = hospital_profile.verify(payload, "CH0001", control_key.public_key())
+    assert fields is not None, why
+    states = hospital_profile.module_states(fields)
+    assert states["calibration"]["on"] is False and states["jobcard"]["label"] == "Job cards"
+    assert hospital_profile.verify(payload, "CH0002", control_key.public_key())[0] is None
+
+    client.post("/admin/hospitals/CH0001/profile", data={"csrf": token, "on": on})
+    assert cs.get_hospital("CH0001")["profile_version"] == 2      # every publish goes up
+    assert TestClient(main.app).get("/api/profiles/CH0009/").status_code == 404

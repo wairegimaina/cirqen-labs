@@ -67,3 +67,4 @@ ul.error { padding-left: 32px; }
 .key { font: 600 1.2rem ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .08em; overflow-wrap: anywhere; }
 pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow-x: auto; font-size: .82rem; margin: 0; }
 code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.spaced { margin-top: 12px; }

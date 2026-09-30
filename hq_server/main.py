@@ -192,6 +192,26 @@ def hospital_endpoint_document(hospital: str):
     return fleet_endpoints.signed_response(document)
 
 
+@app.get("/api/profiles/{hospital}/")
+def hospital_profile_document(hospital: str):
+    """The hospital's signed profile (modules and menu labels, profiles.py).
+    404 until one is published, or for a closed hospital; a PC then keeps
+    every module on (or its last profile)."""
+    import control_store
+    import hq_certificates
+    import profiles
+
+    code = hospital.strip().upper()
+    row = control_store.get_hospital(code) if control_store.db_path().exists() else None
+    if row is None or row["status"] == "closed" or not row["profile_version"]:
+        raise HTTPException(status_code=404, detail="no profile")
+    try:
+        key = hq_certificates._signing_key(None)
+    except SystemExit:
+        raise HTTPException(status_code=503, detail="no signing key") from None
+    return profiles.signed(code, row["profile"], row["profile_version"], key)
+
+
 @app.get("/api/updates/latest/")
 def check_latest(current_version: str = "0.0.0", machine_id: Optional[str] = None,
                  hospital_code: Optional[str] = None, x_api_key: Optional[str] = Header(None)):

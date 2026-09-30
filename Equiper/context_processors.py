@@ -64,6 +64,17 @@ def _sidebar_allowed(request, user):
     return True
 
 
+def _modules():
+    try:
+        from core.module_gate import modules
+
+        return modules()
+    except Exception:  # noqa: BLE001 - a broken profile must never hide the menu
+        import hospital_profile
+
+        return hospital_profile.module_states(None)
+
+
 def nav_context(request):
     """Expose role-based navigation flags and queue/notification counts to
     every template.
@@ -98,6 +109,8 @@ def nav_context(request):
             "unread_notification_count": _unread_notification_count(user) if is_authenticated else 0,
             "pending_approval_count": _pending_approval_count(role),
             "job_cards_waiting_count": _job_cards_waiting_count(user, role) if is_authenticated else 0,
+            # Modules on and their menu labels (the hospital's profile from Control).
+            "modules": _modules(),
         }
     }
 

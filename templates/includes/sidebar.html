@@ -73,21 +73,24 @@
       {% if nav.is_tech or nav.is_nic %}
       <!-- Work Orders (Tech & NIC). Waiting, approved, declined and, for
            technologists, Checklists are tabs on the work order pages. -->
+      {% if nav.modules.jobcard.on %}
       <li class="menu-entry" role="none">
         <a href="{% url 'jobcard:create_job_card' %}"
           class="menu-link {% if module_label == 'Work Orders' %}active-link{% endif %}" role="menuitem">
           <div class="link-icon" aria-hidden="true">
             <i class="fas fa-file-alt"></i>
           </div>
-          <span class="link-label">Work Orders</span>
+          <span class="link-label">{{ nav.modules.jobcard.label }}</span>
           {% if nav.job_cards_waiting_count %}
           <span class="queue-badge">{{ nav.job_cards_waiting_count }}</span>
           {% endif %}
         </a>
       </li>
       {% endif %}
+      {% endif %}
 
       <!-- Inventory (Equipment, Warranties, Suppliers are tabs) -->
+      {% if nav.modules.inventory.on %}
       <li class="menu-entry" role="none">
         <a href="{% url 'inventory' %}"
           class="menu-link {% if module_label == 'Inventory' or 'inventory' in request.path %}active-link{% endif %}"
@@ -95,12 +98,14 @@
           <div class="link-icon" aria-hidden="true">
             <i class="fas fa-boxes"></i>
           </div>
-          <span class="link-label">Inventory</span>
+          <span class="link-label">{{ nav.modules.inventory.label }}</span>
         </a>
       </li>
+      {% endif %}
 
       <!-- Analytics: Machine Reports (Failure Risk is a tab there) -->
       {% with ws=selected_workshop|default:user.userprofile.workshop %}
+      {% if nav.modules.machine_reports.on %}
       {% if nav.is_hod or nav.is_tech and ws.category == 'maintenance' or nav.is_tech and not ws %}
       <li class="menu-section-header" role="none">
         <span class="section-label">Analytics</span>
@@ -111,14 +116,15 @@
           <div class="link-icon" aria-hidden="true">
             <i class="fas fa-microchip"></i>
           </div>
-          <span class="link-label">Machine Reports</span>
+          <span class="link-label">{{ nav.modules.machine_reports.label }}</span>
         </a>
       </li>
+      {% endif %}
       {% endif %}
       {% endwith %}
 
       <!-- Reports -->
-      {% if nav.is_tech %}
+      {% if nav.is_tech and nav.modules.reports.on %}
       <li class="menu-section-header" role="none">
         <span class="section-label">Reports</span>
       </li>
@@ -128,7 +134,7 @@
           <div class="link-icon" aria-hidden="true">
             <i class="fas fa-chart-line"></i>
           </div>
-          <span class="link-label">Report Hub</span>
+          <span class="link-label">{{ nav.modules.reports.label }}</span>
         </a>
       </li>
       {% endif %}
@@ -141,18 +147,23 @@
 
       <!-- HODs oversee every workshop's schedules, read only: the workshops
            plan and schedule them. -->
+      {% if nav.modules.ppms.on or nav.modules.calibration.on %}
       <li class="menu-section-header" role="none">
         <span class="section-label">Schedules</span>
       </li>
+      {% endif %}
+      {% if nav.modules.ppms.on %}
       <li class="menu-entry" role="none">
         <a href="{% url 'ppm_dashboard' %}"
           class="menu-link {% if module_label == 'PPM' %}active-link{% endif %}" role="menuitem">
           <div class="link-icon" aria-hidden="true">
             <i class="fas fa-clipboard-list"></i>
           </div>
-          <span class="link-label">PPM Schedules</span>
+          <span class="link-label">{{ nav.modules.ppms.label }}</span>
         </a>
       </li>
+      {% endif %}
+      {% if nav.modules.calibration.on %}
       <li class="menu-entry" role="none">
         <a href="{% url 'schedule:calibration_dashboard' %}"
           class="menu-link {% if request.resolver_match.namespace == 'schedule' %}active-link{% endif %}" role="menuitem">
@@ -162,6 +173,7 @@
           <span class="link-label">Calibration Schedules</span>
         </a>
       </li>
+      {% endif %}
 
       <li class="menu-section-header" role="none">
         <span class="section-label">Administration</span>
@@ -228,6 +240,7 @@
           <span class="link-label">Site details</span>
         </a>
       </li>
+      {% if nav.modules.calibration.on %}
       <li class="menu-entry" role="none">
         <a href="{% url 'calibration:ansur_settings' %}"
           class="menu-link {% if request.resolver_match.url_name == 'ansur_settings' %}active-link{% endif %}"
@@ -238,6 +251,7 @@
           <span class="link-label">Ansur connection</span>
         </a>
       </li>
+      {% endif %}
     {% endif %}
 
     {# ══════════════════════════════════════════════════════ #}
@@ -282,6 +296,7 @@
     <!-- ╚═══════════════════════════════════════════════════════╝ -->
     {% if nav.is_tech or nav.is_nic %}
     {% with ws=selected_workshop|default:user.userprofile.workshop %}
+    {% if nav.modules.ppms.on %}
     {% if nav.is_nic or ws.category == 'maintenance' %}
 
     <li class="menu-section-header" role="none">
@@ -295,9 +310,10 @@
         <div class="link-icon" aria-hidden="true">
           <i class="fas fa-clipboard-list"></i>
         </div>
-        <span class="link-label">PPM Schedules</span>
+        <span class="link-label">{{ nav.modules.ppms.label }}</span>
       </a>
     </li>
+    {% endif %}
     {% endif %}
     {% endwith %}
     {% endif %}
@@ -307,7 +323,7 @@
     <!-- ║  CALIBRATION BLOCK                                    ║ -->
     <!-- ║  Visible to: Tech in calibration_center only          ║ -->
     <!-- ╚═══════════════════════════════════════════════════════╝ -->
-    {% if nav.is_tech %}
+    {% if nav.is_tech and nav.modules.calibration.on %}
     {% with ws=selected_workshop|default:user.userprofile.workshop %}
     {% if ws.category == 'calibration_center' %}
 
@@ -321,7 +337,7 @@
         <div class="link-icon" aria-hidden="true">
           <i class="fas fa-drafting-compass"></i>
         </div>
-        <span class="link-label">Calibration</span>
+        <span class="link-label">{{ nav.modules.calibration.label }}</span>
         <i class="fas fa-chevron-down submenu-toggle-arrow" aria-hidden="true"></i>
       </a>
       <ul class="dropdown-menu" role="menu">
@@ -411,6 +427,7 @@
     <!-- ║  RESOURCES BLOCK                                      ║ -->
     <!-- ║  Visible to: HOD or Tech                              ║ -->
     <!-- ╚═══════════════════════════════════════════════════════╝ -->
+    {% if nav.modules.parts_tools.on %}
     {% if nav.is_hod or nav.is_tech %}
 
     <li class="menu-section-header" role="none">
@@ -424,10 +441,11 @@
         <div class="link-icon" aria-hidden="true">
           <i class="fas fa-wrench"></i>
         </div>
-        <span class="link-label">Parts &amp; Tools</span>
+        <span class="link-label">{{ nav.modules.parts_tools.label }}</span>
       </a>
     </li>
 
+    {% endif %}
     {% endif %}
     {# ── END RESOURCES BLOCK ── #}
 

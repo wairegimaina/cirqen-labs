@@ -265,7 +265,17 @@ async def hospital_page(request: Request, code: str):
         "cert": cs.latest_certificate(h["code"]), "document": json.dumps(document, indent=2) if document else "",
         "events": cs.audit_entries(50, target=h["code"]), "issued": None, "versions": _versions(),
         "tokens": cs.enrollment_tokens(h["code"]), "now": datetime.now(timezone.utc).isoformat(),
+        "modules": _module_rows(h),
     })
+
+
+def _module_rows(h: dict) -> list[dict]:
+    import profiles
+
+    modules = h["profile"].get("modules", {})
+    labels = h["profile"].get("labels", {})
+    return [{"key": k, "default": d, "on": modules.get(k, True), "label": labels.get(k, "")}
+            for k, d in profiles.MODULES.items()]
 
 
 @router.get("/hospitals/{code}/edit", response_class=HTMLResponse)
@@ -436,6 +446,33 @@ def installer_download(request: Request, code: str, token_id: str):
     cs.audit(admin["username"], "installer_downloaded", h["code"], {"token_id": token_id}, _ip(request))
     return Response(body, media_type="application/json",
                     headers={"Content-Disposition": f'attachment; filename="provisioning-{h["code"].lower()}.json"'})
+
+
+@router.post("/hospitals/{code}/profile")
+@guarded
+async def hospital_profile(request: Request, code: str):
+    """Publish which modules this hospital's PCs have and their menu labels.
+    Each save is a new profile_version; PCs pick it up within ~15 minutes."""
+    import profiles
+
+    session, admin = _current(request, CAN_EDIT)
+    form = await request.form()
+    _check_csrf(session, form.get("csrf", ""))
+    h = cs.get_hospital(code.upper())
+    if h is None:
+        return RedirectResponse("/admin/", status_code=303)
+    on = set(form.getlist("on"))
+    profile = {
+        "modules": {k: k in on for k in profiles.MODULES},
+        "labels": {k: str(form.get(f"label_{k}") or "").strip()[:40] for k in profiles.MODULES
+                   if str(form.get(f"label_{k}") or "").strip()},
+    }
+    version = int(h["profile_version"] or 0) + 1
+    cs.save_hospital(h["code"], {"profile": profile, "profile_version": version}, create=False)
+    off = sorted(k for k, v in profile["modules"].items() if not v)
+    cs.audit(admin["username"], "profile_published", h["code"],
+             {"version": version, "off": off, "labels": profile["labels"]}, _ip(request))
+    return RedirectResponse(f"/admin/hospitals/{h['code']}#profile", status_code=303)
 
 
 # ── audit and admins ─────────────────────────────────────────────────────────

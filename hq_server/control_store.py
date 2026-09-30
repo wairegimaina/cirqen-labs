@@ -119,6 +119,8 @@ CREATE TABLE IF NOT EXISTS audit (
 ADDED_COLUMNS = [
     ("hospitals", "release_mode", "TEXT NOT NULL DEFAULT 'follow'"),   # follow | pin | hold
     ("hospitals", "release_version", "TEXT NOT NULL DEFAULT ''"),       # for pin
+    ("hospitals", "profile", "TEXT NOT NULL DEFAULT '{}'"),            # modules + labels (profiles.py)
+    ("hospitals", "profile_version", "INTEGER NOT NULL DEFAULT 0"),    # 0: no profile published
 ]
 
 
@@ -152,7 +154,8 @@ def audit_entries(limit: int = 200, target: str | None = None) -> list[dict]:
 # ── hospitals ────────────────────────────────────────────────────────────────
 
 HOSPITAL_FIELDS = ("name", "county", "hod_name", "hod_email", "hod_phone", "sync_url", "fallbacks",
-                   "updates_url", "cert_prefix", "status", "notes", "release_mode", "release_version")
+                   "updates_url", "cert_prefix", "status", "notes", "release_mode", "release_version",
+                   "profile", "profile_version")
 
 
 def _hospital(row) -> dict | None:
@@ -160,6 +163,7 @@ def _hospital(row) -> dict | None:
         return None
     d = dict(row)
     d["fallbacks"] = json.loads(d["fallbacks"] or "[]")
+    d["profile"] = json.loads(d.get("profile") or "{}")
     return d
 
 
@@ -175,6 +179,8 @@ def save_hospital(code: str, values: dict, *, create: bool) -> None:
     fields = {k: values[k] for k in HOSPITAL_FIELDS if k in values}
     if "fallbacks" in fields:
         fields["fallbacks"] = json.dumps(list(fields["fallbacks"]))
+    if "profile" in fields:
+        fields["profile"] = json.dumps(fields["profile"], sort_keys=True)
     stamp = now()
     if create:
         cols = ["code", *fields, "created_at", "updated_at"]
