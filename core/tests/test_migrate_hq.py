@@ -5,8 +5,10 @@ from django.db.migrations.loader import MigrationLoader
 from django.test import TestCase
 
 from core.management.commands.migrate_hq import Schema, classify
+from core.testing import requires_postgres
 
 
+@requires_postgres
 class ClassifyTests(TestCase):
     def setUp(self):
         self.loader = MigrationLoader(connection)

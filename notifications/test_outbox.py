@@ -9,6 +9,7 @@ from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
+from core.testing import requires_postgres
 from notifications import mailer
 from notifications.mailer import queue, send_pending
 from notifications.models import EmailOutbox, EmailSettings
@@ -149,6 +150,7 @@ class EmailPagesTests(Base):
         self.assertEqual(other.status, "cancelled")
 
 
+@requires_postgres
 @override_settings(**EMAIL)
 class HeartbeatEmailSummaryTests(Base):
     """The sync agent tells HQ how this PC's email is doing (heartbeat)."""

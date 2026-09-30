@@ -8,6 +8,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from Inventory.models import Department, Equipment, EquipmentDescription
+from core.testing import requires_postgres
 from parts_tools import stock
 from parts_tools.models import Accessories, Accessoriesname, AccessoryRequest, StockMovement
 from parts_tools.tasks import reconcile_stock
@@ -102,6 +103,7 @@ class LedgerTests(LedgerBase):
                          [("opening", 0), ("received", 4)])
 
 
+@requires_postgres
 class TwoPcTests(LedgerBase):
     """What the ledger is for: two PCs each using the same part while apart."""
 
