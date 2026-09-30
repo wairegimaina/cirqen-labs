@@ -2456,23 +2456,6 @@ def generate_spec():
 
     # ===== CHARTJS =====
 
-    # ===== KAFKA/REDPANDA =====
-    'kafka',
-    'kafka.errors',
-    'kafka.producer',
-    'kafka.producer.future',
-    'kafka.consumer',
-    'kafka.consumer.fetcher',
-    'kafka.consumer.group_coordinator',
-    'kafka.consumer.subscription_state',
-    'kafka.admin',
-    'kafka.cluster',
-    'kafka.conn',
-    'kafka.metrics',
-    'kafka.partitioner',
-    'kafka.protocol',
-    'kafka.serializer',
-
     # ===== MULTIPROCESSING & ASYNC =====
     'multiprocessing',
     'multiprocessing.process',
@@ -3113,7 +3096,6 @@ Key settings:
   • Database connections (local & HQ)
   • Redis configuration
   • Mirror system settings
-  • Redpanda/Kafka CDC
 
 ══════════════════════════════════════════════════════════════════════
 
