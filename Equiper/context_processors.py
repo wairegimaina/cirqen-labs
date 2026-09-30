@@ -84,6 +84,15 @@ def _licence():
         return None
 
 
+def _waiting():
+    try:
+        from core.device_status import waiting_for_approval
+
+        return waiting_for_approval()
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def nav_context(request):
     """Expose role-based navigation flags and queue/notification counts to
     every template.
@@ -122,6 +131,7 @@ def nav_context(request):
             "modules": _modules(),
         },
         "licence_banner": _licence() if is_authenticated else None,
+        "waiting_for_approval": _waiting() if is_authenticated else False,
     }
 
 

@@ -64,7 +64,37 @@ def ensure_client_key(config_manager, hq_base_url, client_id):
         config_manager.set("sync.auth_token", key)
         config_manager.set("sync.enrollment_code", "")
         LOG.info("Enrolled with HQ as %s; key saved to config.json", client_id)
+        forget_token_in_provisioning(getattr(config_manager, "data_path", None), code)
     return key
+
+
+def forget_token_in_provisioning(data_path, code):
+    """Remove the used enrollment token from every provisioning.json this PC
+    reads, so a copy of this PC's files cannot enroll another computer. The
+    rest of the file (hospital code, addresses) stays."""
+    import json
+
+    try:
+        from config import _provisioning_candidates_for
+    except ImportError:
+        return
+    for path in _provisioning_candidates_for(Path(data_path) if data_path else Path.home() / ".cmms"):
+        try:
+            data = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+        sync = data.get("sync") if isinstance(data, dict) else None
+        if not isinstance(sync, dict) or sync.get("enrollment_code") != code:
+            continue
+        sync["enrollment_code"] = ""
+        try:
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(data, indent=2))
+            tmp.replace(path)
+            LOG.info("Removed the used enrollment token from %s", path)
+        except OSError as exc:
+            LOG.warning("Could not remove the used enrollment token from %s (%s); delete that file by hand",
+                        path, exc)
 
 
 def ensure_client_key_for_data_path(data_path, hq_base_url, client_id):

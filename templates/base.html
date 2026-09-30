@@ -195,6 +195,15 @@
 
     <!-- ═══════════════ ALERTS / MESSAGES ═══════════════ -->
     {% if user.is_authenticated %}{% include 'includes/licence_banner.html' %}{% endif %}
+    {% if waiting_for_approval %}
+    <div class="messages-container" role="status">
+      <div class="alert alert-info equiper-alert"><div class="alert-inner">
+        <i class="fas fa-hourglass-half alert-icon" aria-hidden="true"></i>
+        <span class="alert-text">This computer is waiting for the head of department to approve it (Settings &gt; Computers
+          on their computer). You can keep working; everything syncs once it is approved.</span>
+      </div></div>
+    </div>
+    {% endif %}
     {% if messages %}
     <div class="messages-container" role="alert" aria-live="polite">
       {% for message in messages %}

@@ -70,3 +70,20 @@ def test_with_a_hospital_code_the_token_goes_only_to_a_confirmed_hq():
     with mock.patch.object(hq_handshake, "confirm", return_value=(True, "")), \
             mock.patch("requests.post", return_value=_response(200, {"api_key": "issued"})):
         assert enrollment.ensure_client_key(cfg, "https://hq/", "dev-1") == "issued"
+
+
+def test_the_used_token_is_removed_from_provisioning(tmp_path, monkeypatch):
+    import json
+
+    import config
+
+    prov = tmp_path / "provisioning.json"
+    prov.write_text(json.dumps({"sync": {"hospital_code": "CH0001", "enrollment_code": "cqe1.a.b",
+                                         "api_url": "https://hq/api/sync"}}))
+    monkeypatch.setattr(config, "_provisioning_candidates_for", lambda data_path: [prov])
+    cfg = FakeConfig(**{"sync.enrollment_code": "cqe1.a.b"})
+    cfg.data_path = tmp_path
+    with mock.patch("requests.post", return_value=_response(200, {"api_key": "issued"})):
+        assert enrollment.ensure_client_key(cfg, "https://hq", "dev-1") == "issued"
+    data = json.loads(prov.read_text())
+    assert data["sync"] == {"hospital_code": "CH0001", "enrollment_code": "", "api_url": "https://hq/api/sync"}
