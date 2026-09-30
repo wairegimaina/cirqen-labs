@@ -265,8 +265,14 @@ async def hospital_page(request: Request, code: str):
         "cert": cs.latest_certificate(h["code"]), "document": json.dumps(document, indent=2) if document else "",
         "events": cs.audit_entries(50, target=h["code"]), "issued": None, "versions": _versions(),
         "tokens": cs.enrollment_tokens(h["code"]), "now": datetime.now(timezone.utc).isoformat(),
-        "modules": _module_rows(h),
+        "modules": _module_rows(h), **_billing_context(h),
     })
+
+
+def _billing_context(h: dict) -> dict:
+    import admin_billing
+
+    return admin_billing.context(h)
 
 
 def _module_rows(h: dict) -> list[dict]:
@@ -543,6 +549,8 @@ def install(app, versions=None) -> None:
     if versions is not None:
         _versions = versions
     cs.init()
+    import admin_billing  # noqa: F401  (adds the billing pages to the router)
+
     app.include_router(router)
     app.mount("/admin/static", StaticFiles(directory=str(Path(__file__).parent / "static" / "admin")),
               name="admin-static")

@@ -13,6 +13,7 @@
   <a class="brand" href="/admin/">Cirqen Control</a>
   <nav>
     <a href="/admin/">Hospitals</a>
+    {% if admin.role in ('owner', 'finance') %}<a href="/admin/money">Money</a>{% endif %}
     {% if admin.role == 'owner' %}<a href="/admin/audit">Audit log</a><a href="/admin/admins">Admins</a>{% endif %}
   </nav>
   <form method="post" action="/admin/logout" class="who">

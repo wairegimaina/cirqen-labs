@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Invoice {{ inv.number }} · Cirqen{% endblock %}
+{% block main %}
+<div class="head noprint">
+  <a href="/admin/hospitals/{{ inv.hospital }}#billing">← {{ inv.hospital }}</a>
+  {% if inv.status == 'open' and not inv.paid_kes and admin.role in ('owner', 'finance') %}
+  <form method="post" action="/admin/invoices/{{ inv.number }}/void" class="inline">
+    <input type="hidden" name="csrf" value="{{ session.csrf }}"><button class="secondary">Void invoice</button>
+  </form>{% endif %}
+</div>
+<article class="card paper">
+  <header class="paper-head">
+    <div><h1>Invoice</h1><p class="muted">Cirqen Labs · cirqenlabs.com</p></div>
+    <dl><dt>Number</dt><dd>{{ inv.number }}</dd><dt>Issued</dt><dd>{{ inv.issued_on }}</dd><dt>Due</dt><dd>{{ inv.due_on }}</dd>
+      <dt>Status</dt><dd>{{ inv.status }}</dd></dl>
+  </header>
+  <p><strong>Bill to</strong><br>{{ h.name }} ({{ h.code }}){% if h.county %}, {{ h.county }}{% endif %}{% if h.hod_name %}<br>{{ h.hod_name }}{% endif %}{% if h.hod_email %}<br>{{ h.hod_email }}{% endif %}</p>
+  <table><thead><tr><th>Description</th><th>Months</th><th>Amount (KES)</th></tr></thead>
+    <tbody><tr><td>{{ inv.description }}</td><td>{{ inv.months }}</td><td>{{ '{:,}'.format(inv.amount_kes) }}</td></tr></tbody>
+    <tfoot><tr><th colspan="2">Paid</th><th>{{ '{:,}'.format(inv.paid_kes) }}</th></tr>
+      <tr><th colspan="2">Balance</th><th>{{ '{:,}'.format(inv.amount_kes - inv.paid_kes) }}</th></tr></tfoot></table>
+  <h2>How to pay</h2>
+  {% if paybill %}<p>M-Pesa: Paybill <strong>{{ paybill }}</strong>, Account <strong>{{ h.code }}</strong></p>{% endif %}
+  {% if bank %}<p>Bank: {{ bank }}. Reference: <strong>{{ inv.number }}</strong></p>{% endif %}
+  {% if not paybill and not bank %}<p class="muted noprint">Set PAYBILL_NUMBER and BANK_DETAILS on the Control service to print payment details here.</p>{% endif %}
+</article>
+<p class="muted small noprint">Print or save as PDF from the browser (Ctrl+P).</p>
+{% endblock %}

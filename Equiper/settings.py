@@ -142,6 +142,8 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     # Closes modules the hospital's profile from Control switches off.
     "core.module_gate.ModuleGateMiddleware",
+    # Read-only when the hospital's licence has lapsed (never locked out).
+    "core.licence_gate.LicenceGateMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "users.middleware.ActiveUserMiddleware",

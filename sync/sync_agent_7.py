@@ -111,6 +111,9 @@ class DownloadCertHeartbeatMixin(SmartDeleteMixin):
                         import hospital_profile
 
                         hospital_profile.fetch_and_store(self.data_path, update_url, self.hospital_code)
+                        import licence
+
+                        licence.fetch_and_store(self.data_path, update_url, self.hospital_code)
                     if result.get("changed"):
                         LOG.warning(
                             "🧭 HQ addresses changed by the update server: %s",

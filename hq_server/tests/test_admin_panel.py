@@ -379,3 +379,74 @@ def test_publishing_a_profile_that_its_pcs_accept(owner, control_key, tmp_path, 
     client.post("/admin/hospitals/CH0001/profile", data={"csrf": token, "on": on})
     assert cs.get_hospital("CH0001")["profile_version"] == 2      # every publish goes up
     assert TestClient(main.app).get("/api/profiles/CH0009/").status_code == 404
+
+
+# ── licences and payments ────────────────────────────────────────────────────
+
+def set_licence(client, clock, secret, **overrides):
+    form = {"csrf": csrf(client, "/admin/hospitals/CH0001"), "plan": "standard", "devices": "10",
+            "starts_on": "2025-11-01", "ends_on": "2026-10-31", "grace_days": "14", "status": "active",
+            "code": auth.totp_now(secret, clock.tick())}
+    form.update(overrides)
+    return client.post("/admin/hospitals/CH0001/licence", data=form)
+
+
+def test_finance_bills_and_the_pcs_get_the_new_end_date(app, clock, owner, control_key, tmp_path, monkeypatch):
+    import billing
+    from datetime import date
+
+    monkeypatch.setattr(billing, "today", lambda: date(2026, 10, 1))
+    add_hospital(owner[0])
+    books_secret = make_admin("books", "finance")
+    books = sign_in(app, clock, "books", books_secret)
+    assert set_licence(books, clock, books_secret, code="000000").status_code == 403   # needs a real code
+    set_licence(books, clock, books_secret)
+
+    token = csrf(books, "/admin/hospitals/CH0001")
+    books.post("/admin/hospitals/CH0001/invoices", data={"csrf": token, "months": "12", "amount_kes": "120,000",
+                                                          "due_days": "14"})
+    inv = billing.invoices("CH0001")[0]
+    assert (inv["number"], inv["amount_kes"]) == ("CQ-2026-0001", 120_000)
+    assert "CQ-2026-0001" in books.get("/admin/invoices/CQ-2026-0001").text
+
+    receipt = books.post("/admin/hospitals/CH0001/payments",
+                         data={"csrf": token, "amount_kes": "120000", "method": "mpesa", "reference": "sjk4h7q2xb",
+                               "paid_on": "2026-10-01", "invoice_id": str(inv["id"]), "months": "0"})
+    assert "Receipt" in receipt.text and "now valid to 2027-10-31" in receipt.text
+    assert json.loads(cs.audit_entries(target="CH0001")[0]["detail"])["extended_months"] == 12
+
+    monkeypatch.setenv("HQ_PACKAGES_DIR", str(tmp_path / "packages"))
+    import licence   # the desktop's own check
+    import main
+
+    payload = TestClient(main.app).get("/api/licences/CH0001/").json()
+    fields, why = licence.verify(payload, "CH0001", control_key.public_key())
+    assert fields is not None, why
+    assert licence.state(fields, today=date(2026, 10, 1))["state"] == "active"
+    assert fields["ends_on"] == "2027-10-31" and fields["licence_version"] == 2
+
+
+def test_support_cannot_record_money_and_only_owners_reverse(app, clock, owner, control_key):
+    import billing
+
+    client, secret = owner
+    add_hospital(client)
+    set_licence(client, clock, secret)
+    token = csrf(client, "/admin/hospitals/CH0001")
+    client.post("/admin/hospitals/CH0001/payments", data={"csrf": token, "amount_kes": "10000", "method": "bank",
+                                                           "reference": "FT123", "paid_on": "2026-10-01", "months": "1"})
+    paid = billing.payments("CH0001")[0]
+
+    helper = sign_in(app, clock, "helper", make_admin("helper", "support"))
+    assert helper.post("/admin/hospitals/CH0001/payments", data={"csrf": csrf(helper, "/admin/hospitals/CH0001"),
+                                                                 "amount_kes": "1", "method": "bank",
+                                                                 "reference": "X", "paid_on": "2026-10-01"}
+                       ).status_code == 403
+    books = sign_in(app, clock, "books", make_admin("books", "finance"))
+    assert books.post(f"/admin/payments/{paid['id']}/reverse",
+                      data={"csrf": csrf(books, "/admin/hospitals/CH0001"), "reason": "x", "code": "1"}
+                      ).status_code == 403
+    client.post(f"/admin/payments/{paid['id']}/reverse",
+                data={"csrf": token, "reason": "wrong hospital", "code": auth.totp_now(secret, clock.tick())})
+    assert [p["amount_kes"] for p in billing.payments("CH0001")] == [-10000, 10000]
+    assert client.get("/admin/money").status_code == 200

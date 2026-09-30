@@ -67,6 +67,79 @@
     {% endif %}
   </section>
 </div>
+<section class="card" id="billing">
+  <h2>Licence and payments</h2>
+  {% if licence %}
+  <dl>
+    <dt>Plan</dt><dd>{{ licence.plan }}, up to {{ licence.devices }} PCs</dd>
+    <dt>Valid</dt><dd>{{ licence.starts_on }} to <strong>{{ licence.ends_on }}</strong> (+{{ licence.grace_days }} days grace)</dd>
+    <dt>Its PCs show</dt><dd><span class="pill {{ 'ok' if licence_state == 'active' else ('bad' if 'read-only' in licence_state else 'suspended') }}">{{ licence_state }}</span></dd>
+  </dl>
+  {% else %}<p class="muted">No licence yet: its PCs enforce nothing. Set one to start.</p>{% endif %}
+
+  {% if invoices %}
+  <h3>Invoices</h3>
+  <div class="table-wrap"><table><thead><tr><th>Number</th><th>Issued</th><th>Months</th><th>Amount (KES)</th><th>Paid</th><th>Status</th></tr></thead><tbody>
+  {% for i in invoices %}<tr><td><a href="/admin/invoices/{{ i.number }}">{{ i.number }}</a></td><td>{{ i.issued_on }}</td><td>{{ i.months }}</td>
+    <td>{{ '{:,}'.format(i.amount_kes) }}</td><td>{{ '{:,}'.format(i.paid_kes) }}</td><td><span class="pill {{ 'ok' if i.status == 'paid' else ('bad' if i.status == 'void' else 'suspended') }}">{{ i.status }}</span></td></tr>{% endfor %}
+  </tbody></table></div>
+  {% endif %}
+
+  {% if payments %}
+  <h3>Payments</h3>
+  <div class="table-wrap"><table><thead><tr><th>Paid on</th><th>Method</th><th>Reference</th><th>KES</th><th>Months</th><th>By</th><th></th></tr></thead><tbody>
+  {% for p in payments %}<tr><td>{{ p.paid_on }}</td><td>{{ p.method }}</td><td><a href="/admin/payments/{{ p.id }}">{{ p.reference }}</a></td>
+    <td>{{ '{:,}'.format(p.amount_kes) }}</td><td>{{ p.months_credited or '' }}</td><td>{{ p.recorded_by }}</td>
+    <td>{% if p.reverses %}<span class="muted small">reversal: {{ p.note }}</span>{% elif admin.role == 'owner' %}
+      <details><summary>Reverse</summary>
+        <form method="post" action="/admin/payments/{{ p.id }}/reverse" class="stack">
+          <input type="hidden" name="csrf" value="{{ session.csrf }}">
+          <label>Why <input name="reason" required></label>
+          <label>Your code <input name="code" inputmode="numeric" required></label>
+          <button class="secondary">Reverse this payment</button>
+        </form></details>{% endif %}</td></tr>{% endfor %}
+  </tbody></table></div>
+  {% endif %}
+
+  {% if admin.role in ('owner', 'finance') %}
+  <div class="cards spaced">
+    <form method="post" action="/admin/hospitals/{{ h.code }}/payments" class="card stack">
+      <h3>Record a payment</h3>
+      <input type="hidden" name="csrf" value="{{ session.csrf }}">
+      <label>Amount (KES) <input name="amount_kes" inputmode="numeric" required></label>
+      <label>Method <select name="method">{% for m in methods %}<option value="{{ m }}">{{ 'M-Pesa' if m == 'mpesa' else m|capitalize }}</option>{% endfor %}</select></label>
+      <label>M-Pesa or bank reference <input name="reference" required></label>
+      <label>Paid on <input name="paid_on" type="date" value="{{ today }}" required></label>
+      <label>For invoice <select name="invoice_id"><option value="">none</option>{% for i in invoices if i.status == 'open' %}<option value="{{ i.id }}">{{ i.number }} (KES {{ '{:,}'.format(i.amount_kes - i.paid_kes) }} due)</option>{% endfor %}</select></label>
+      <label>Months (only without an invoice) <input name="months" type="number" min="0" max="36" value="0"></label>
+      <label>Note <input name="note"></label>
+      <button>Record payment</button>
+    </form>
+    <form method="post" action="/admin/hospitals/{{ h.code }}/invoices" class="card stack">
+      <h3>New invoice</h3>
+      <input type="hidden" name="csrf" value="{{ session.csrf }}">
+      <label>Months <input name="months" type="number" min="1" max="36" value="12" required></label>
+      <label>Amount (KES) <input name="amount_kes" inputmode="numeric" required></label>
+      <label>Description <input name="description" placeholder="Cirqen licence, 12 months"></label>
+      <label>Due in (days) <input name="due_days" type="number" min="0" max="90" value="14"></label>
+      <button class="secondary">Create invoice</button>
+    </form>
+    <form method="post" action="/admin/hospitals/{{ h.code }}/licence" class="card stack">
+      <h3>Set the licence by hand</h3>
+      <input type="hidden" name="csrf" value="{{ session.csrf }}">
+      <label>Plan <input name="plan" value="{{ licence.plan if licence else 'standard' }}"></label>
+      <label>PCs <input name="devices" type="number" min="1" value="{{ licence.devices if licence else 10 }}"></label>
+      <label>Starts <input name="starts_on" type="date" value="{{ licence.starts_on if licence else today }}" required></label>
+      <label>Ends <input name="ends_on" type="date" value="{{ licence.ends_on if licence else today }}" required></label>
+      <label>Grace days <input name="grace_days" type="number" min="0" max="60" value="{{ licence.grace_days if licence else 14 }}"></label>
+      <label>Status <select name="status">{% for s in ('active', 'suspended') %}<option {{ 'selected' if licence and licence.status == s }}>{{ s }}</option>{% endfor %}</select></label>
+      <label>Your code <input name="code" inputmode="numeric" required></label>
+      <button class="secondary">Save licence</button>
+      <p class="muted small">For the first licence or a correction. Payments extend it on their own.</p>
+    </form>
+  </div>
+  {% endif %}
+</section>
 <section class="card" id="profile">
   <h2>Modules and menu</h2>
   <p class="muted">{% if h.profile_version %}Published version {{ h.profile_version }}. {% else %}Not published yet: its PCs have every module. {% endif %}A switched-off module is closed on its PCs (pages and data access), not only hidden; its records stay and keep syncing. Label: the name in their menu (blank keeps the usual name).</p>

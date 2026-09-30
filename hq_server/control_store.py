@@ -103,6 +103,45 @@ CREATE TABLE IF NOT EXISTS enrollment_tokens (
     created_by  TEXT NOT NULL,
     created_at  TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS licences (
+    hospital         TEXT PRIMARY KEY REFERENCES hospitals(code),
+    plan             TEXT NOT NULL DEFAULT 'standard',
+    devices          INTEGER NOT NULL DEFAULT 10,
+    starts_on        TEXT NOT NULL,
+    ends_on          TEXT NOT NULL,
+    grace_days       INTEGER NOT NULL DEFAULT 14,
+    status           TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended')),
+    licence_version  INTEGER NOT NULL DEFAULT 1,
+    updated_at       TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS invoices (
+    id           INTEGER PRIMARY KEY,
+    number       TEXT NOT NULL UNIQUE,
+    hospital     TEXT NOT NULL REFERENCES hospitals(code),
+    issued_on    TEXT NOT NULL,
+    due_on       TEXT NOT NULL,
+    months       INTEGER NOT NULL,
+    amount_kes   INTEGER NOT NULL CHECK (amount_kes > 0),
+    description  TEXT NOT NULL,
+    status       TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'paid', 'void')),
+    created_by   TEXT NOT NULL,
+    created_at   TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS payments (
+    id               INTEGER PRIMARY KEY,
+    hospital         TEXT NOT NULL REFERENCES hospitals(code),
+    invoice_id       INTEGER REFERENCES invoices(id),
+    amount_kes       INTEGER NOT NULL,
+    method           TEXT NOT NULL CHECK (method IN ('mpesa', 'bank', 'cash', 'other')),
+    reference        TEXT NOT NULL,
+    paid_on          TEXT NOT NULL,
+    months_credited  INTEGER NOT NULL DEFAULT 0,
+    reverses         INTEGER REFERENCES payments(id),
+    note             TEXT NOT NULL DEFAULT '',
+    recorded_by      TEXT NOT NULL,
+    recorded_at      TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS payments_reference ON payments (method, reference) WHERE reverses IS NULL;
 CREATE TABLE IF NOT EXISTS audit (
     id      INTEGER PRIMARY KEY,
     at      TEXT NOT NULL,

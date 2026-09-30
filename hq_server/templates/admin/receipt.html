@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Receipt {{ p.reference }} · Cirqen{% endblock %}
+{% block main %}
+<div class="head noprint"><a href="/admin/hospitals/{{ p.hospital }}#billing">← {{ p.hospital }}</a></div>
+<article class="card paper">
+  <header class="paper-head">
+    <div><h1>{{ 'Reversal' if p.reverses else 'Receipt' }}</h1><p class="muted">Cirqen Labs · cirqenlabs.com</p></div>
+    <dl><dt>Receipt</dt><dd>R-{{ '%06d' % p.id }}</dd><dt>Paid on</dt><dd>{{ p.paid_on }}</dd>
+      <dt>Method</dt><dd>{{ 'M-Pesa' if p.method == 'mpesa' else p.method|capitalize }}</dd><dt>Reference</dt><dd>{{ p.reference }}</dd></dl>
+  </header>
+  <p><strong>Received from</strong><br>{{ h.name }} ({{ h.code }})</p>
+  <table><tbody>
+    <tr><th>Amount (KES)</th><td>{{ '{:,}'.format(p.amount_kes) }}</td></tr>
+    {% if inv %}<tr><th>For invoice</th><td>{{ inv.number }} ({{ inv.status }})</td></tr>{% endif %}
+    {% if p.months_credited %}<tr><th>Licence extended</th><td>{{ p.months_credited }} month(s){% if licence %}, now valid to {{ licence.ends_on }}{% endif %}</td></tr>{% endif %}
+    {% if p.note %}<tr><th>Note</th><td>{{ p.note }}</td></tr>{% endif %}
+  </tbody></table>
+  <p class="muted small">Recorded by {{ p.recorded_by }}, {{ p.recorded_at | eat }}.</p>
+</article>
+{% endblock %}

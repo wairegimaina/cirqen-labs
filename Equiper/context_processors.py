@@ -75,6 +75,15 @@ def _modules():
         return hospital_profile.module_states(None)
 
 
+def _licence():
+    try:
+        from core.licence_gate import current
+
+        return current()
+    except Exception:  # noqa: BLE001 - a broken licence file must never break pages
+        return None
+
+
 def nav_context(request):
     """Expose role-based navigation flags and queue/notification counts to
     every template.
@@ -111,7 +120,8 @@ def nav_context(request):
             "job_cards_waiting_count": _job_cards_waiting_count(user, role) if is_authenticated else 0,
             # Modules on and their menu labels (the hospital's profile from Control).
             "modules": _modules(),
-        }
+        },
+        "licence_banner": _licence() if is_authenticated else None,
     }
 
 

@@ -212,6 +212,26 @@ def hospital_profile_document(hospital: str):
     return profiles.signed(code, row["profile"], row["profile_version"], key)
 
 
+@app.get("/api/licences/{hospital}/")
+def hospital_licence_document(hospital: str):
+    """The hospital's signed licence (billing.py): plan, end date, grace,
+    status. 404 until the hospital has a licence; its PCs then enforce
+    nothing, as before."""
+    import billing
+    import control_store
+    import hq_certificates
+
+    code = hospital.strip().upper()
+    lic = billing.get_licence(code) if control_store.db_path().exists() else None
+    if lic is None:
+        raise HTTPException(status_code=404, detail="no licence")
+    try:
+        key = hq_certificates._signing_key(None)
+    except SystemExit:
+        raise HTTPException(status_code=503, detail="no signing key") from None
+    return billing.signed_licence(lic, key)
+
+
 @app.get("/api/updates/latest/")
 def check_latest(current_version: str = "0.0.0", machine_id: Optional[str] = None,
                  hospital_code: Optional[str] = None, x_api_key: Optional[str] = Header(None)):
