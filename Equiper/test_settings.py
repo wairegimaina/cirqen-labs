@@ -8,12 +8,35 @@ Runs the suite entirely in-process:
 
 Usage:
     ./venv/bin/python manage.py test Inventory --settings=Equiper.test_settings
+
+Tests marked core.testing.requires_postgres skip on SQLite. To run them, point
+CIRQEN_TEST_DATABASE_URL at a PostgreSQL server you can create databases on
+(Django makes and drops test_<name>):
+    CIRQEN_TEST_DATABASE_URL=postgresql://user:pass@127.0.0.1:5432/cirqen \
+        ./venv/bin/python manage.py test --tag postgres --settings=Equiper.test_settings
 """
+import os
+from urllib.parse import unquote, urlparse
+
 from Equiper.settings import *  # noqa: F401,F403
 
-DATABASES = {
-    "default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"},
-}
+_pg_url = os.getenv("CIRQEN_TEST_DATABASE_URL", "")
+if _pg_url:
+    _u = urlparse(_pg_url)
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": _u.path.lstrip("/") or "cirqen",
+            "USER": unquote(_u.username or ""),
+            "PASSWORD": unquote(_u.password or ""),
+            "HOST": _u.hostname or "127.0.0.1",
+            "PORT": str(_u.port or 5432),
+        },
+    }
+else:
+    DATABASES = {
+        "default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"},
+    }
 
 # All models resolve to the single default test DB.
 DATABASE_ROUTERS = []

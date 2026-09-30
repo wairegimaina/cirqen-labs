@@ -16,7 +16,7 @@ Usage (from cirqen-labs):
 The installed app's database (~/.local/share/cirqen, port 2216 on the dev PC):
     venv/bin/python helper_scripts/compare_local_hq.py --local-config ~/.local/share/cirqen/config.json --local-port 2216
 
-HQ address: HQ_DATABASE_URL if set, else HQ's Supabase session pooler. The
+HQ address: HQ_DATABASE_URL (required, as for manage.py migrate_hq). The
 password is asked for (hidden) and never stored. The local database comes from
 _creds (env / ~/.cirqen/data/config.json / .env) unless --local-config names a
 config.json to take it from (the repo .env is then ignored: it holds the dev
@@ -38,10 +38,6 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 from _creds import LOCAL_DB  # noqa: E402
 
-DEFAULT_HQ_URL = (
-    "postgresql://postgres.nwlwaeeyduxroykrgksi@aws-0-eu-north-1.pooler.supabase.com:5432/postgres?sslmode=require"
-)
-
 # Bookkeeping that legitimately differs between a site and HQ.
 IGNORED_COLUMNS = {"needs_sync", "source_updated_at", "last_synced_at", "sync_status"}
 # Framework tables, not application data.
@@ -60,7 +56,12 @@ def sync_tables():
 
 
 def hq_connect():
-    url = os.getenv("HQ_DATABASE_URL") or DEFAULT_HQ_URL
+    url = os.getenv("HQ_DATABASE_URL")
+    if not url:
+        sys.exit("Set HQ_DATABASE_URL to HQ's database address, e.g.\n"
+                 "  HQ_DATABASE_URL='postgresql://USER@HOST:5432/postgres?sslmode=require' "
+                 "venv/bin/python helper_scripts/compare_local_hq.py\n"
+                 "The password is asked for if the address leaves it out.")
     u = urlparse(url)
     password = unquote(u.password) if u.password else getpass.getpass(f"HQ database password for {u.username}@{u.hostname}: ")
     params = dict(p.split("=", 1) for p in u.query.split("&") if "=" in p)

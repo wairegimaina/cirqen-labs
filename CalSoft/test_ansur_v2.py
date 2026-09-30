@@ -13,6 +13,7 @@ from CalSoft.ansur.parser import PROTECTED, RecordError, parse_bytes
 from CalSoft.ansur.testing import ANALYSER_SERIAL, AnsurFixture, record_xml
 from CalSoft.models import AnsurJob, AnsurTemplateMap, CalibrationProcedure, CalibrationSession
 from CalSoft.view_modules.ansur import ansur_available
+from core.testing import requires_postgres
 from workshop.models import Workshop
 
 SETTINGS = reverse("calibration:ansur_settings")
@@ -186,6 +187,7 @@ class ColleagueTests(AnsurFixture, TestCase):
         self.assertEqual(self.client.post(ACTION, {"job": self.job.pk, "action": "cancel"}).status_code, 403)
 
 
+@requires_postgres
 class DatabaseDefaultTests(AnsurFixture, TestCase):
     """A row written without the Ansur columns (an older build, or a row from
     HQ before its migration) must still insert."""
