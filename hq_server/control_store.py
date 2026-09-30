@@ -1,9 +1,15 @@
 """Cirqen Control's own records: hospitals, admin accounts, sessions, the
 certificates issued to each hospital's HQ, and the audit log.
 
-SQLite on the service's persistent disk (CONTROL_DB, beside HQ_STATE_DB),
-like store.py. It never holds hospital data (equipment, job cards,
-calibration): that lives only in each hospital's own HQ database.
+Where they live:
+  CONTROL_DATABASE_URL set   PostgreSQL (e.g. a Supabase project of its
+                             own). For hosts without a persistent disk,
+                             such as Render's free plan.
+  otherwise                  SQLite at CONTROL_DB (beside HQ_STATE_DB), on
+                             the service's persistent disk, like store.py.
+Callers write SQLite-style SQL ("?" placeholders); _PgConnection adapts it.
+It never holds hospital data (equipment, job cards, calibration): that
+lives only in each hospital's own HQ database.
 
 The audit table is append-only: nothing in this module updates or deletes it.
 """
@@ -28,7 +34,99 @@ def now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def conn() -> sqlite3.Connection:
+def database_url() -> str:
+    return os.environ.get("CONTROL_DATABASE_URL", "").strip()
+
+
+def is_postgres() -> bool:
+    return bool(database_url())
+
+
+def available() -> bool:
+    """Whether Control has its records store yet (callers that only read)."""
+    return is_postgres() or db_path().exists()
+
+
+# Tables whose id is generated: an INSERT into them returns it (lastrowid).
+_SERIAL_TABLES = {"admins", "login_attempts", "hq_certificates", "audit", "invoices", "payments"}
+
+
+class _PgCursor:
+    def __init__(self, cur, lastrowid=None):
+        self._cur, self.lastrowid = cur, lastrowid
+
+    def fetchone(self):
+        return self._cur.fetchone()
+
+    def fetchall(self):
+        return self._cur.fetchall()
+
+    def __iter__(self):
+        return iter(self._cur.fetchall() if self._cur.description else [])
+
+
+class _PgConnection:
+    """The few sqlite3.Connection calls this code uses, on psycopg2:
+    "?" placeholders, INSERT OR IGNORE, lastrowid, executescript. Autocommit,
+    like the SQLite connection (isolation_level=None)."""
+
+    def __init__(self, url):
+        import psycopg2
+
+        self._psycopg2 = psycopg2
+        self._url = url
+        self._connect()
+
+    def _connect(self):
+        from psycopg2.extras import DictCursor
+
+        self._conn = self._psycopg2.connect(self._url, cursor_factory=DictCursor, connect_timeout=15)
+        self._conn.autocommit = True
+
+    def _translate(self, sql):
+        text = sql.replace("?", "%s")
+        if text.lstrip().upper().startswith("INSERT OR IGNORE"):
+            text = text.replace("INSERT OR IGNORE", "INSERT", 1) + " ON CONFLICT DO NOTHING"
+        return text
+
+    def execute(self, sql, params=()):
+        text = self._translate(sql)
+        returning = None
+        head = text.lstrip().upper()
+        if head.startswith("INSERT INTO ") and "RETURNING" not in head:
+            table = text.lstrip().split()[2].split("(")[0].lower()
+            if table in _SERIAL_TABLES:
+                text += " RETURNING id"
+                returning = True
+        for attempt in (1, 2):
+            try:
+                cur = self._conn.cursor()
+                cur.execute(text, tuple(params))
+                break
+            except (self._psycopg2.OperationalError, self._psycopg2.InterfaceError):
+                # Supabase closes idle connections; reconnect once.
+                if attempt == 2 or not self._conn.closed:
+                    raise
+                self._connect()
+        lastrowid = cur.fetchone()[0] if returning else None
+        return _PgCursor(cur, lastrowid)
+
+    def executescript(self, script):
+        self._conn.cursor().execute(script)
+
+
+def _pg_schema(schema: str) -> str:
+    return (schema.replace("INTEGER PRIMARY KEY,", "BIGSERIAL PRIMARY KEY,")
+            .replace(" REAL NOT NULL", " DOUBLE PRECISION NOT NULL"))
+
+
+def conn():
+    if is_postgres():
+        c = getattr(_local, "pg", None)
+        if c is None or getattr(_local, "pg_url", None) != database_url() or c._conn.closed:
+            c = _PgConnection(database_url())
+            _local.pg, _local.pg_url = c, database_url()
+        return c
     path = str(db_path())
     c = getattr(_local, "conn", None)
     if c is None or getattr(_local, "path", None) != path:
@@ -164,6 +262,12 @@ ADDED_COLUMNS = [
 
 
 def init() -> None:
+    if is_postgres():
+        c = conn()
+        c.executescript(_pg_schema(SCHEMA))
+        for table, column, definition in ADDED_COLUMNS:
+            c.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {definition}")
+        return
     db_path().parent.mkdir(parents=True, exist_ok=True)
     c = conn()
     c.executescript(SCHEMA)

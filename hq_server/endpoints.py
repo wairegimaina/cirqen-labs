@@ -127,7 +127,7 @@ def _panel_entry(code: str) -> dict | None:
     try:
         import control_store
 
-        if not control_store.db_path().exists():
+        if not control_store.available():
             return None
         row = control_store.get_hospital(code)
     except Exception:  # noqa: BLE001 - no panel database yet: fall back to the env

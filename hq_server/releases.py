@@ -29,7 +29,7 @@ def policy_for(hospital_code: str | None) -> dict:
     try:
         import control_store
 
-        if not control_store.db_path().exists():
+        if not control_store.available():
             return {"mode": "follow", "version": ""}
         row = control_store.get_hospital(str(hospital_code).strip().upper())
     except Exception:  # noqa: BLE001 - no panel yet: behave as before

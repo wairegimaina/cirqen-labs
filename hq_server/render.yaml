@@ -48,9 +48,17 @@ services:
 
       # ── Admin panel (/admin) ──────────────────────────────────────────────
       # Hospitals, HQ identities, admins, audit log: on the same disk.
-      # Create the first owner in Render > Shell: python admin_cli.py create-owner <name>
       - key: CONTROL_DB
         value: /var/lib/cirqen/control.db
+      # Free plan (no disk): keep them in PostgreSQL instead, e.g. a Supabase
+      # project used only for this. Use its "Session pooler" connection string
+      # (IPv4) with ?sslmode=require. Set, it takes precedence over CONTROL_DB.
+      - key: CONTROL_DATABASE_URL
+        sync: false
+      # First owner, without a shell: set a long random value, open
+      # /admin/setup, create the owner, then delete this variable.
+      - key: ADMIN_SETUP_TOKEN
+        sync: false
       # The panel answers only on these names (everywhere else /admin is 404).
       - key: ADMIN_HOSTS
         value: admin.cirqenlabs.com

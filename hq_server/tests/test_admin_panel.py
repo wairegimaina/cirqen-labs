@@ -218,8 +218,9 @@ def test_an_issued_identity_passes_the_desktops_check(owner, clock, control_key)
               "proof": base64.b64encode(hq_key.sign(hq_handshake.hello_message(nonce, "CH0001"))).decode()}
     for url in (SYNC, "https://old.example.com/api/sync"):
         assert hq_handshake.check_answer(answer, nonce, url, "CH0001", control_key.public_key()) == ""
-    # Control keeps the public half only.
-    assert env["HQ_IDENTITY_PRIVATE_KEY"] not in open(cs.db_path(), "rb").read().decode("latin-1")
+    # Control keeps the public half only: the private key is in no table.
+    for table in ("hospitals", "hq_certificates", "audit", "enrollment_tokens"):
+        assert env["HQ_IDENTITY_PRIVATE_KEY"] not in str([tuple(r) for r in cs.conn().execute(f"SELECT * FROM {table}")])
 
 
 def test_renewing_keeps_the_key(owner, clock, control_key):
@@ -508,3 +509,12 @@ def test_setup_attempts_are_limited(app, monkeypatch):
     blocked = client.post("/admin/setup", data={"token": "long-random-setup-token", "username": "moses",
                                                 "password": PASSWORD, "password2": PASSWORD})
     assert blocked.status_code == 429 and auth.count_admins() == 0
+
+
+def test_postgres_reconnects_after_the_server_drops_it(tmp_path, monkeypatch):
+    """Supabase closes idle connections; the next query must just work."""
+    if not cs.is_postgres():
+        pytest.skip("PostgreSQL only (TEST_CONTROL_DATABASE_URL)")
+    cs.save_hospital("CH0001", {"name": "Pilot"}, create=True)
+    cs.conn()._conn.close()
+    assert cs.get_hospital("CH0001")["name"] == "Pilot"

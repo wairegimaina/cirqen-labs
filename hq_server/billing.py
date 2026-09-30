@@ -110,7 +110,12 @@ def create_invoice(hospital: str, *, months: int, amount_kes: int, description: 
     issued = today()
     prefix = f"CQ-{issued.year}-"
     c = cs.conn()
-    c.execute("BEGIN IMMEDIATE")   # one number at a time, even across processes
+    # One number at a time, even across processes and servers.
+    if cs.is_postgres():
+        c.execute("BEGIN")
+        c.execute("LOCK TABLE invoices IN SHARE ROW EXCLUSIVE MODE")
+    else:
+        c.execute("BEGIN IMMEDIATE")
     try:
         last = c.execute("SELECT number FROM invoices WHERE number LIKE ? ORDER BY number DESC LIMIT 1",
                          (prefix + "%",)).fetchone()

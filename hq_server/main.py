@@ -202,7 +202,7 @@ def hospital_profile_document(hospital: str):
     import profiles
 
     code = hospital.strip().upper()
-    row = control_store.get_hospital(code) if control_store.db_path().exists() else None
+    row = control_store.get_hospital(code) if control_store.available() else None
     if row is None or row["status"] == "closed" or not row["profile_version"]:
         raise HTTPException(status_code=404, detail="no profile")
     try:
@@ -222,7 +222,7 @@ def hospital_licence_document(hospital: str):
     import hq_certificates
 
     code = hospital.strip().upper()
-    lic = billing.get_licence(code) if control_store.db_path().exists() else None
+    lic = billing.get_licence(code) if control_store.available() else None
     if lic is None:
         raise HTTPException(status_code=404, detail="no licence")
     try:
