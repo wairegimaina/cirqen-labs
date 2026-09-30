@@ -88,5 +88,10 @@ services:
       # during a move so a desktop that misses the change is not stranded.
       - key: FLEET_SYNC_FALLBACKS
         sync: false
+      # The hospital whose address (from the admin panel) PCs without a
+      # hospital code follow; while it is not set up in the panel,
+      # FLEET_SYNC_API_URL above still answers.
+      - key: FLEET_DEFAULT_HOSPITAL
+        value: CH0001
       - key: FLEET_POLL_SECONDS
         value: "900"

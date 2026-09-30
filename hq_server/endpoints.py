@@ -19,6 +19,12 @@ FLEET_SYNC_FALLBACKS   comma-separated addresses to try if the primary fails
 FLEET_POLL_SECONDS     how often clients should re-ask (default 900)
 FLEET_MAX_AGE_SECONDS  how long a fetched document stays valid (default 7 days)
 
+FLEET_DEFAULT_HOSPITAL a hospital code (e.g. CH0001): when that hospital is
+                       set up in the admin panel with a sync address, this
+                       document uses its address and fallbacks instead of the
+                       two settings above, so PCs without a hospital code
+                       follow the panel too. Until then, the settings above.
+
 With FLEET_SYNC_API_URL unset the endpoint reports ``configured: false`` and
 carries no addresses, so a client keeps whatever it already has. That is the
 safe default for a server that has not been told anything yet: silence must
@@ -59,11 +65,26 @@ def _int_env(name: str, default: int) -> int:
     return value if value > 0 else default
 
 
+def _default_hospital() -> dict | None:
+    """FLEET_DEFAULT_HOSPITAL's addresses from the admin panel, when that
+    hospital is set up there with a sync address and is not closed. PCs
+    without a hospital code (older installs) then follow the panel too, so
+    the panel is the one place addresses are edited."""
+    code = _env("FLEET_DEFAULT_HOSPITAL").upper()
+    if not code:
+        return None
+    entry = _panel_entry(code)
+    if not entry or entry.get("closed") or not str(entry.get("sync") or "").strip():
+        return None
+    return entry
+
+
 def build_endpoints() -> dict:
     """The addresses this server currently advertises, or {} if told nothing."""
     endpoints: dict[str, object] = {}
 
-    sync_url = _env("FLEET_SYNC_API_URL").rstrip("/")
+    default = _default_hospital()
+    sync_url = (str(default["sync"]) if default else _env("FLEET_SYNC_API_URL")).strip().rstrip("/")
     if sync_url:
         endpoints["sync.api_url"] = sync_url
 
@@ -73,6 +94,9 @@ def build_endpoints() -> dict:
 
 
 def _fallbacks() -> list:
+    default = _default_hospital()
+    if default:
+        return [str(u).strip().rstrip("/") for u in default.get("fallbacks") or [] if str(u).strip()]
     raw = _env("FLEET_SYNC_FALLBACKS")
     return [part.strip().rstrip("/") for part in raw.split(",") if part.strip()]
 

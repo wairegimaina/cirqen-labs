@@ -608,6 +608,32 @@ async def admin_deactivate(request: Request, admin_id: int):
     return _page(request, "admins.html", context, 400 if context["error"] else 200)
 
 
+_store = {"error": "", "tried": 0.0}
+
+
+def _open_store() -> bool:
+    """Create the panel's tables. A database problem closes the panel only:
+    this server's real job, updates and addresses for desktops, must keep
+    running. Retried at most once a minute."""
+    if _store["tried"] and not _store["error"]:
+        return True
+    if _store["error"] and time.time() - _store["tried"] < 60:
+        return False
+    _store["tried"] = time.time()
+    try:
+        import mpesa
+
+        cs.init()
+        mpesa.init()
+        _store["error"] = ""
+        return True
+    except Exception as exc:  # noqa: BLE001
+        # First line only: never echo a connection string back.
+        _store["error"] = f"{type(exc).__name__}: {str(exc).splitlines()[0][:200] if str(exc) else ''}"
+        print(f"⚠️  Admin panel closed, database unavailable: {_store['error']}")
+        return False
+
+
 def install(app, versions=None) -> None:
     """Mount the panel, its stylesheet, the host restriction and headers.
     ``versions``: callable returning the built release versions, newest first."""
@@ -616,13 +642,11 @@ def install(app, versions=None) -> None:
 
     if versions is not None:
         _versions = versions
-    cs.init()
     import admin_billing  # noqa: F401  (adds the billing pages to the router)
     import admin_mpesa  # noqa: F401  (the M-Pesa inbox)
-    import mpesa
 
-    mpesa.init()
-
+    _store.update(error="", tried=0.0)      # every start tries once
+    _open_store()
     app.include_router(router)
     app.mount("/admin/static", StaticFiles(directory=str(Path(__file__).parent / "static" / "admin")),
               name="admin-static")
@@ -635,6 +659,12 @@ def install(app, versions=None) -> None:
         host = (request.headers.get("host") or "").split(":")[0].lower()
         if hosts and host not in hosts:
             return Response("Not Found", status_code=404)
+        if _store["error"] and not request.url.path.startswith("/admin/static") and not _open_store():
+            return Response(
+                "The admin panel's database is unavailable, so the panel is closed. Updates and "
+                f"addresses for desktops keep working.\n\nReason: {_store['error']}\n\nCheck "
+                "CONTROL_DATABASE_URL on this service; the panel retries every minute.",
+                status_code=503, media_type="text/plain")
         response = await call_next(request)
         response.headers["Content-Security-Policy"] = (
             "default-src 'none'; style-src 'self'; img-src 'self' data:; form-action 'self'; "
