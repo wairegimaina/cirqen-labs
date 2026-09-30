@@ -539,3 +539,21 @@ def test_pcs_without_a_code_follow_the_default_hospital_in_the_panel(owner, monk
     client.post("/admin/hospitals/CH0001/edit", data={"csrf": token, "name": "Pilot", "status": "active",
                                                       "sync_url": "https://hq-ch0001-new.example.com/api/sync"})
     assert endpoints.build_document()["endpoints"]["sync.api_url"] == "https://hq-ch0001-new.example.com/api/sync"
+
+
+def test_a_broken_panel_database_closes_only_the_panel(tmp_path, monkeypatch):
+    """A wrong CONTROL_DATABASE_URL must not stop the update server."""
+    import admin_panel
+
+    monkeypatch.setenv("CONTROL_DATABASE_URL", "postgresql://nobody:secret-pw@127.0.0.1:1/none?connect_timeout=1")
+    monkeypatch.setenv("FLEET_SYNC_API_URL", "https://hq.example.com/api/sync")
+    monkeypatch.setenv("FLEET_DEFAULT_HOSPITAL", "CH0001")
+    monkeypatch.setitem(admin_panel._store, "error", "")
+    monkeypatch.setitem(admin_panel._store, "tried", 0.0)
+    app = FastAPI()
+    admin_panel.install(app)                              # does not raise
+    import endpoints
+
+    panel = TestClient(app).get("/admin/login")
+    assert panel.status_code == 503 and "secret-pw" not in panel.text
+    assert endpoints.build_document()["endpoints"]["sync.api_url"] == "https://hq.example.com/api/sync"
