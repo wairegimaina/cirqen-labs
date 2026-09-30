@@ -467,3 +467,16 @@ def test_the_mpesa_inbox_page_assigns_a_payment(owner, monkeypatch):
                                                   "months": "0"})
     assert mpesa.inbox_row("SJK1")["status"] == "matched"
     assert billing.payments("CH0001")[0]["reference"] == "SJK1"
+
+
+def test_recording_a_closed_hospitals_data_deletion(owner, clock):
+    client, secret = owner
+    add_hospital(client)
+    token = csrf(client, "/admin/hospitals/CH0001/edit")
+    client.post("/admin/hospitals/CH0001/edit", data={"csrf": token, "name": "Pilot", "status": "closed",
+                                                      "sync_url": SYNC})
+    assert "exit checklist" in client.get("/admin/hospitals/CH0001").text
+    client.post("/admin/hospitals/CH0001/deleted",
+                data={"csrf": token, "note": "Export given to HOD 2026-11-02; Render services deleted",
+                      "code": auth.totp_now(secret, clock.tick())})
+    assert cs.audit_entries(target="CH0001")[0]["action"] == "hospital_data_deleted"

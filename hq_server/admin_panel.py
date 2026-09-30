@@ -481,6 +481,27 @@ async def hospital_profile(request: Request, code: str):
     return RedirectResponse(f"/admin/hospitals/{h['code']}#profile", status_code=303)
 
 
+@router.post("/hospitals/{code}/deleted")
+@guarded
+async def hospital_data_deleted(request: Request, code: str):
+    """Record that a closed hospital's HQ data was handed over and deleted."""
+    session, admin = _current(request, ("owner",))
+    form = dict(await request.form())
+    _check_csrf(session, form.get("csrf", ""))
+    h = cs.get_hospital(code.upper())
+    if h is None or h["status"] != "closed":
+        return RedirectResponse("/admin/", status_code=303)
+    if not auth.verify_totp(admin, form.get("code", "")):
+        return _page(request, "error.html", {"admin": admin, "session": session, "back": f"/admin/hospitals/{h['code']}",
+                                             "message": "The authenticator code was not accepted."}, 403)
+    note = (form.get("note") or "").strip()
+    if len(note) < 10:
+        return _page(request, "error.html", {"admin": admin, "session": session, "back": f"/admin/hospitals/{h['code']}",
+                                             "message": "Say what was handed over and deleted, and when."}, 400)
+    cs.audit(admin["username"], "hospital_data_deleted", h["code"], {"note": note}, _ip(request))
+    return RedirectResponse(f"/admin/hospitals/{h['code']}", status_code=303)
+
+
 # ── audit and admins ─────────────────────────────────────────────────────────
 
 @router.get("/audit", response_class=HTMLResponse)

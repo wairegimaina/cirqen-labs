@@ -250,6 +250,16 @@
           <span class="link-label">Subscription</span>
         </a>
       </li>
+      <li class="menu-entry" role="none">
+        <a href="{% url 'core:support_access' %}"
+          class="menu-link {% if request.resolver_match.url_name == 'support_access' %}active-link{% endif %}"
+          role="menuitem">
+          <div class="link-icon" aria-hidden="true">
+            <i class="fas fa-user-shield"></i>
+          </div>
+          <span class="link-label">Support access</span>
+        </a>
+      </li>
       {% if nav.modules.calibration.on %}
       <li class="menu-entry" role="none">
         <a href="{% url 'calibration:ansur_settings' %}"

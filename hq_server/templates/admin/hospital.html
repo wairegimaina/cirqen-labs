@@ -67,6 +67,26 @@
     {% endif %}
   </section>
 </div>
+{% if h.status == 'closed' %}
+<section class="card" id="exit">
+  <h2>Hospital leaving: exit checklist</h2>
+  <ol>
+    <li>Ask its HOD for a support code (Settings &gt; Support access on their PC).</li>
+    <li>Download its data: <code>python tools/export_hospital.py &lt;its HQ address&gt; --code &lt;code&gt; --person &lt;you&gt;</code> (hq_server repository). The command checks every file.</li>
+    <li>Give the ZIP to the hospital and get written confirmation they received it.</li>
+    <li>In Render, delete its HQ web service, worker, Redis and database.</li>
+    <li>Record it below. Its PCs already get no addresses, profile or updates for it.</li>
+  </ol>
+  {% if admin.role == 'owner' %}
+  <form method="post" action="/admin/hospitals/{{ h.code }}/deleted" class="grid-form">
+    <input type="hidden" name="csrf" value="{{ session.csrf }}">
+    <label class="wide">What was handed over and deleted, and when <input name="note" required minlength="10"></label>
+    <label>Your code <input name="code" inputmode="numeric" required></label>
+    <div class="actions"><button class="secondary">Record data deletion</button></div>
+  </form>
+  {% endif %}
+</section>
+{% endif %}
 <section class="card" id="billing">
   <h2>Licence and payments</h2>
   {% if licence %}
