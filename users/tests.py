@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
-from django.test import TestCase, Client
+from django.core import mail
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from users.models import UserProfile, UserSignature, UserPasswordReset
 from workshop.models import Workshop
@@ -164,9 +165,14 @@ class UserViewsTestCase(TestCase):
     # ------------------------
     # Test Forgot Password Flow
     # ------------------------
+    # Account emails go out only when a mail server is set up (Settings > Email,
+    # or config/environment); otherwise they wait in the outbox. Give it one.
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+                       EMAIL_HOST_USER="cirqen@hospital.test")
     def test_forgot_password_flow(self):
         response = self.client.post(
             reverse("forgot_password"), {"email": "hod@test.com"}
         )
         self.assertEqual(response.status_code, 302)  # redirect to verify_reset_code
         self.assertTrue(UserPasswordReset.objects.filter(user=self.hod_user).exists())
+        self.assertEqual([m.to for m in mail.outbox], [["hod@test.com"]])
