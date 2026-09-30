@@ -1,4 +1,5 @@
 """JSON API endpoints — power the JS fetch calls in accessories.js."""
+from django.urls import reverse
 import json
 import logging
 
@@ -43,6 +44,11 @@ def api_accessories(request):
             'equipment': a.equipment_description.name if a.equipment_description else '',
             'manufacturer': a.manufacturer.name if a.manufacturer else '',
             'stock_count': a.stock_count,
+            'reorder_level': a.reorder_level,
+            'stock_state': a.stock_state,
+            'stock_label': a.stock_label,
+            'can_set_limit': Accessories.can_set_lower_limit(request.user, a),
+            'limit_url': reverse('partstools:set_lower_limit', args=[a.pk]),
             'unit_cost': str(a.unit_cost),
             'note': a.note or '',
             'workshop': a.workshop.name if a.workshop else 'Global',

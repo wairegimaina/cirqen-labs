@@ -1,25 +1,164 @@
 {% extends 'base.html' %}
 {% block title %}QR labels — {{ site_name }}{% endblock %}
 {% block page_title %}QR labels{% endblock %}
-{% block extra_css %}{% include 'assets/_styles.html' %}{% endblock %}
+{% block extra_css %}
+<style>
+.ql-filters { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr); align-items: end; }
+@media (min-width: 900px) { .ql-filters { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.4fr) auto; } }
+.ql-field { display: grid; gap: .35rem; min-width: 0; }
+.ql-field .form-label { margin: 0; }
+.ql-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+.ql-table { margin: 0; }
+.ql-table th { font-size: var(--fs-xs); white-space: nowrap; color: var(--text-secondary); }
+.ql-table td { vertical-align: middle; font-size: var(--fs-sm); }
+.ql-table td.ql-tick, .ql-table th.ql-tick { width: 2.5rem; }
+.ql-table input[type=checkbox] { width: 1.05rem; height: 1.05rem; }
+.ql-change { font-size: var(--fs-xs); color: var(--text-secondary); }
+.ql-change b { color: var(--text-primary); font-weight: 600; }
+.ql-change s { color: var(--text-muted); }
+.ql-head { display: flex; gap: .75rem 1.5rem; align-items: center; flex-wrap: wrap; }
+.ql-toolbar { margin-left: auto; display: flex; gap: .5rem .75rem; align-items: center; flex-wrap: wrap; }
+.ql-head { position: sticky; top: var(--header-height, 60px); z-index: 5; box-shadow: 0 1px 0 var(--border-color); background: var(--bg-card, #fff); border-top-left-radius: inherit; border-top-right-radius: inherit; }
+.ql-check { display: flex; gap: .5rem; align-items: center; font-size: var(--fs-sm); }
+.ql-check input { width: 1.05rem; height: 1.05rem; }
+.ql-kpi-link { color: inherit; text-decoration: none; }
+.ql-kpi-link .kpi-card { height: 100%; }
+.ql-kpi-link.on .kpi-card { outline: 2px solid var(--primary-color); outline-offset: -2px; }
+</style>
+{% endblock %}
 {% block content %}
-<div class="page-head"><div>
-  <h1 class="page-title">Equipment QR labels</h1>
-  <p class="page-subtitle">A4 sheets of 24 labels (70 × 37 mm). Scanning a label opens the machine's page: history, contracts and a button to start a work order.</p>
-</div></div>
-<div class="section-card as-pad">
-  <form method="get" class="as-form">
-    <label>Department
-      <select name="department" required>
-        <option value="">Choose…</option>
-        {% for d in departments %}<option value="{{ d.id }}" {% if d == department %}selected{% endif %}>{{ d.name }}</option>{% endfor %}
-      </select>
-    </label>
-    <div><button type="submit" class="btn btn-secondary">Choose</button></div>
-  </form>
-  {% if department %}
-    <p>{{ count }} machine{{ count|pluralize }} in {{ department.name }}.</p>
-    {% if count %}<a class="btn btn-primary" href="?department={{ department.id }}&download=1"><i class="fas fa-print"></i> Download labels (PDF)</a>{% endif %}
-  {% endif %}
+<div class="page-wrap">
+  <div class="page-head"><div>
+    <h1 class="page-title">Equipment QR labels</h1>
+    <p class="page-subtitle">A4 sheets of 24 labels (70 × 37 mm). Scanning a label opens the machine's page: history, contracts and a button to start a work order. Deleted equipment is never listed.</p>
+  </div></div>
+
+  <div class="kpi-grid">
+    <a class="ql-kpi-link{% if scope == 'new' and not q %} on{% endif %}" href="?scope=new{% if department %}&department={{ department.id }}{% endif %}">
+      <div class="kpi-card kpi-info">
+        <div class="kpi-icon"><i class="fas fa-plus" aria-hidden="true"></i></div>
+        <div class="kpi-num">{{ counts.new }}</div>
+        <div class="kpi-label">New: never printed</div>
+      </div>
+    </a>
+    <a class="ql-kpi-link{% if scope == 'changed' and not q %} on{% endif %}" href="?scope=changed{% if department %}&department={{ department.id }}{% endif %}">
+      <div class="kpi-card kpi-warning">
+        <div class="kpi-icon"><i class="fas fa-exchange-alt" aria-hidden="true"></i></div>
+        <div class="kpi-num">{{ counts.changed }}</div>
+        <div class="kpi-label">Changed since printed</div>
+      </div>
+    </a>
+    <a class="ql-kpi-link{% if scope == 'all' and not q %} on{% endif %}" href="?scope=all{% if department %}&department={{ department.id }}{% endif %}">
+      <div class="kpi-card kpi-success">
+        <div class="kpi-icon"><i class="fas fa-check" aria-hidden="true"></i></div>
+        <div class="kpi-num">{{ counts.current }}</div>
+        <div class="kpi-label">Label up to date</div>
+      </div>
+    </a>
+  </div>
+
+  <section class="section-card">
+    <div class="section-card-body">
+      <form method="get" class="ql-filters">
+        <div class="ql-field">
+          <label class="form-label" for="ql-scope">What to print</label>
+          <select class="form-select" name="scope" id="ql-scope">
+            {% for value, label in scopes %}<option value="{{ value }}"{% if value == scope %} selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="ql-field">
+          <label class="form-label" for="ql-dept">Department</label>
+          <select class="form-select" name="department" id="ql-dept">
+            <option value="">All departments</option>
+            {% for d in departments %}<option value="{{ d.id }}"{% if d == department %} selected{% endif %}>{{ d.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="ql-field">
+          <label class="form-label" for="ql-q">Specific equipment</label>
+          <input type="search" class="form-control" name="q" id="ql-q" value="{{ q }}" placeholder="Serial number, asset tag, type or model">
+        </div>
+        <div class="ql-actions">
+          <button type="submit" class="btn btn-primary"><i class="fas fa-filter" aria-hidden="true"></i> Show</button>
+          {% if q or department or scope != 'todo' %}<a class="btn btn-secondary" href="?">Clear</a>{% endif %}
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <section class="section-card">
+    <form method="post" id="ql-print">
+      {% csrf_token %}
+      <div class="section-card-head ql-head">
+        <div>
+          <h2 class="section-card-title">
+            {% if q %}Equipment matching “{{ q }}”{% else %}{% for value, label in scopes %}{% if value == scope %}{{ label }}{% endif %}{% endfor %}{% endif %}{% if department %} in {{ department.name }}{% endif %}
+          </h2>
+          <p class="section-card-sub">{{ shown }} machine{{ shown|pluralize }}{% if page.paginator.num_pages > 1 %}, page {{ page.number }} of {{ page.paginator.num_pages }}{% endif %}. Tick the ones to print.</p>
+        </div>
+        {% if page.object_list %}
+        <div class="ql-toolbar">
+          <label class="ql-check">
+            <input type="hidden" name="mark_printed" value="0">
+            <input type="checkbox" name="mark_printed" value="1" checked>
+            Mark as printed
+          </label>
+          {% if page.has_previous %}<a class="btn btn-secondary" href="?{% if q %}q={{ q|urlencode }}&{% endif %}scope={{ scope }}{% if department %}&department={{ department.id }}{% endif %}&page={{ page.previous_page_number }}"><i class="fas fa-chevron-left" aria-hidden="true"></i> Previous</a>{% endif %}
+          {% if page.has_next %}<a class="btn btn-secondary" href="?{% if q %}q={{ q|urlencode }}&{% endif %}scope={{ scope }}{% if department %}&department={{ department.id }}{% endif %}&page={{ page.next_page_number }}">Next <i class="fas fa-chevron-right" aria-hidden="true"></i></a>{% endif %}
+          <button type="submit" class="btn btn-primary"><i class="fas fa-print" aria-hidden="true"></i> Download labels (PDF)</button>
+        </div>
+        {% endif %}
+      </div>
+
+      {% if page.object_list %}
+      <div class="table-responsive">
+        <table class="table ql-table">
+          <thead><tr>
+            <th class="ql-tick"><input type="checkbox" id="ql-all" aria-label="Tick all on this page"{% if preselect %} checked{% endif %}></th>
+            <th>Equipment</th><th>Serial number</th><th>Model</th><th>Department</th><th>Label</th>
+          </tr></thead>
+          <tbody>
+          {% for m in page.object_list %}
+            <tr>
+              <td class="ql-tick"><input type="checkbox" name="equipment" value="{{ m.pk }}" aria-label="Print a label for {{ m.serial_number }}"{% if preselect %} checked{% endif %}></td>
+              <td><b>{{ m.description }}</b>{% if m.asset_tag %}<div class="form-text">Tag {{ m.asset_tag }}</div>{% endif %}</td>
+              <td><span class="mono-chip">{{ m.serial_number }}</span></td>
+              <td>{{ m.model|default:"—" }}</td>
+              <td>{{ m.department }}</td>
+              <td>
+                {% if m.label_state == 'new' %}
+                  <span class="badge bg-info">New</span>
+                {% elif m.label_state == 'changed' %}
+                  <span class="badge bg-warning">Changed</span>
+                  {% for label, was, now in m.label_changes %}
+                    <div class="ql-change">{{ label }}: <s>{{ was|default:"—" }}</s> → <b>{{ now|default:"—" }}</b></div>
+                  {% endfor %}
+                {% else %}
+                  <span class="badge bg-success">Up to date</span>
+                  <div class="ql-change">Printed {{ m.label_printed_at|date:"j M Y" }}</div>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="section-card-body">
+        <div class="empty-state">
+          <div class="empty-state-icon"><i class="fas fa-qrcode" aria-hidden="true"></i></div>
+          <p class="mb-0">{% if q %}No equipment matches “{{ q }}”.{% elif scope == 'todo' %}Every label is up to date. Nothing new or changed to print.{% else %}Nothing to show here.{% endif %}</p>
+        </div>
+      </div>
+      {% endif %}
+    </form>
+  </section>
 </div>
+<script>
+(function () {
+  var all = document.getElementById("ql-all");
+  if (!all) return;
+  var boxes = document.querySelectorAll('#ql-print input[name="equipment"]');
+  all.addEventListener("change", function () { boxes.forEach(function (b) { b.checked = all.checked; }); });
+})();
+</script>
 {% endblock %}

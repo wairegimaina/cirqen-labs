@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Set up · Cirqen Control{% endblock %}
+{% block main %}
+<section class="card narrow">
+  <h1>Set up Cirqen Control</h1>
+  {% if created %}
+    <p class="note"><strong>Owner {{ created.username }} created.</strong> Now add this key to your authenticator app
+      (Google or Microsoft Authenticator: add account, <em>enter a setup key</em>, name it Cirqen Control). It is shown only now.</p>
+    <p class="key">{{ created.secret }}</p>
+    <p class="muted small break">{{ created.uri }}</p>
+    <p>Then remove ADMIN_SETUP_TOKEN from Render's Environment tab, and <a href="/admin/login">sign in</a>.</p>
+  {% else %}
+    <p class="muted">Create the first owner. This page disappears once any admin exists.</p>
+    {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+    <form method="post" action="/admin/setup" class="stack">
+      <label>Setup token (ADMIN_SETUP_TOKEN) <input name="token" type="password" required autocomplete="off"></label>
+      <label>Your username <input name="username" autocomplete="username" required></label>
+      <label>Password (12+ characters) <input name="password" type="password" autocomplete="new-password" minlength="12" required></label>
+      <label>Password again <input name="password2" type="password" autocomplete="new-password" minlength="12" required></label>
+      <button>Create owner</button>
+    </form>
+  {% endif %}
+</section>
+{% endblock %}

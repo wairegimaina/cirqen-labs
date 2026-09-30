@@ -42,6 +42,7 @@ from .accessories import (
     ajax_add_manufacturer,
     delete_accessory_name,
     delete_accessory_manufacturer,
+    set_lower_limit,
 )
 from .requests import (
     request_accessory,
@@ -83,6 +84,7 @@ __all__ = [
     "ajax_add_manufacturer",
     "delete_accessory_name",
     "delete_accessory_manufacturer",
+    "set_lower_limit",
     # requests
     "request_accessory",
     "approve_accessory_request",

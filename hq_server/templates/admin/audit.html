@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Audit log · Cirqen Control{% endblock %}
+{% block main %}
+<h1>Audit log</h1>
+<p class="muted">Every sign-in and change, newest first. Entries are never edited or removed.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>When</th><th>Who</th><th>What</th><th>On</th><th>Details</th><th>From</th></tr></thead>
+  <tbody>{% for e in events %}<tr><td>{{ e.at | eat }}</td><td>{{ e.actor }}</td><td>{{ e.action | replace('_', ' ') }}</td><td>{{ e.target }}</td><td class="break small">{{ e.detail if e.detail != '{}' else '' }}</td><td class="small">{{ e.ip }}</td></tr>{% endfor %}</tbody>
+</table></div>
+{% endblock %}

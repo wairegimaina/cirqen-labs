@@ -1,0 +1,37 @@
+<!-- Edit the Add Equipment drop-down lists; driven by NameLists in inventory.js -->
+<div id="nameListsPanel" style="display: none;">
+    <ul class="nav nav-tabs mb-3" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" type="button" data-list="description" onclick="NameLists.show('description')">Descriptions</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" type="button" data-list="manufacturer" onclick="NameLists.show('manufacturer')">Manufacturers</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" type="button" data-list="model" onclick="NameLists.show('model')">Models</button>
+        </li>
+    </ul>
+
+    <div id="nameListsModelPicker" class="mb-2" style="display: none;">
+        <label class="form-label small text-muted" for="nameListsModelDescription">Models used for</label>
+        <select id="nameListsModelDescription" class="form-select form-select-sm" onchange="NameLists.loadModels()">
+            <option value="" disabled selected>Select a description...</option>
+            {% for desc in equipment_descriptions %}
+            <option value="{{ desc.id }}">{{ desc.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <input type="search" id="nameListsFilter" class="form-control form-control-sm mb-2" placeholder="Search..."
+           oninput="NameLists.render()" aria-label="Search the list">
+
+    <div id="nameListsError" class="alert alert-danger py-2 small" style="display: none;"></div>
+
+    <div class="list-group small" id="nameListsRows" style="max-height: 50vh; overflow-y: auto;"></div>
+
+    <p class="form-text mb-0 mt-2" id="nameListsHint"></p>
+
+    <button type="button" class="btn btn-secondary w-100 mt-3" onclick="NameLists.toggle(false)">
+        <i class="fas fa-arrow-left me-1"></i> Back to the form
+    </button>
+</div>

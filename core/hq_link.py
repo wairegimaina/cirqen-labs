@@ -63,6 +63,35 @@ def _api_url():
     return (getattr(settings, "HQ_SYNC_API_URL", "") or "").rstrip("/")
 
 
+HQ_RECONFIRM_SECONDS = 6 * 3600
+_confirmed = {"url": "", "at": 0.0}
+
+
+def _hospital_code():
+    config = getattr(settings, "CIRQEN_CONFIG", None)
+    try:
+        return str(config.get("sync.hospital_code") or "").strip().upper() if config else ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _hq_confirmed(api_url, code):
+    """With a hospital code, push only to an HQ that passed the hospital
+    handshake (hq_handshake.py) in the last few hours, as the agent does."""
+    if not code:
+        return True
+    if _confirmed["url"] == api_url and time.monotonic() - _confirmed["at"] < HQ_RECONFIRM_SECONDS:
+        return True
+    import hq_handshake
+
+    ok, why = hq_handshake.confirm(api_url, code)
+    if ok:
+        _confirmed.update(url=api_url, at=time.monotonic())
+    else:
+        logger.warning("Not pushing to %s: %s", api_url, why)
+    return ok
+
+
 def _record_status(online):
     with _status_lock:
         _status["online"] = online
@@ -201,12 +230,18 @@ def push_events(events):
     if not api_url or not client_id:
         return False, "This machine is not configured to talk to HQ."
 
+    code = _hospital_code()
+    if not _hq_confirmed(api_url, code):
+        return False, "HQ has not proved it is this hospital's; the record will sync later."
+
     headers = {
         "Content-Type": "application/json",
         "User-Agent": f"Cirqen-Django (Client-ID: {client_id})",
         "X-Client-ID": client_id,
         "X-Device-ID": client_id,
     }
+    if code:
+        headers["X-Cirqen-Hospital"] = code   # HQ refuses (409) if it is another hospital's
     token = getattr(settings, "SYNC_AUTH_TOKEN", None)
     if token:
         headers["X-API-Key"] = token

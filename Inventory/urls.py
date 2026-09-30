@@ -1,9 +1,12 @@
 from django.urls import path
 from . import views
+from assets import views as asset_views
 
 urlpatterns = [
     # General inventory view
     path('', views.inventory, name='inventory'),
+    # QR labels for equipment (the page lives with the label PDF in assets)
+    path('labels/', asset_views.labels, name='equipment_labels'),
 
     # HOD-specific views
     path('view/<uuid:workshop_id>/', views.inventory_for_hod, name='inventory_for_hod'),
@@ -41,6 +44,12 @@ urlpatterns = [
     # Equipment description and manufacturer
     path('create_equipment_description/', views.create_equipment_description, name='create_equipment_description'),
     path('create-manufacturer/', views.create_manufacturer, name='create_manufacturer'),
+    # Edit / delete the Add Equipment drop-down lists (settings button on the modal)
+    path('api/name-lists/', views.name_lists, name='equipment_name_lists'),
+    path('api/name-lists/models/<uuid:description_id>/', views.model_list, name='equipment_model_list'),
+    path('api/name-lists/models/<uuid:description_id>/rename/', views.rename_model, name='equipment_model_rename'),
+    path('api/name-lists/<str:kind>/<uuid:pk>/rename/', views.rename_name, name='equipment_name_rename'),
+    path('api/name-lists/<str:kind>/<uuid:pk>/delete/', views.delete_name, name='equipment_name_delete'),
 
     # Bulk import (Excel upload)
     path('import_equipment_template/', views.download_equipment_import_template, name='download_equipment_import_template'),

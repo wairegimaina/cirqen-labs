@@ -1,0 +1,13 @@
+{% extends "notifications/_base.html" %}
+{% block body %}
+<p><strong>{{ name }}</strong> in {{ workshop }} is <strong style="color:{% if part.stock_count <= 0 %}#b42318{% else %}#b54708{% endif %};">{{ state|lower }}</strong>.</p>
+<table role="presentation" cellpadding="4" cellspacing="0" style="font-size:14px;">
+  <tr><td style="color:#6b7280;">Part</td><td>{{ name }}{% if equipment %} (for {{ equipment }}){% endif %}</td></tr>
+  <tr><td style="color:#6b7280;">In stock</td><td><strong>{{ part.stock_count }}</strong></td></tr>
+  <tr><td style="color:#6b7280;">Lower limit</td><td>{{ part.reorder_level }}</td></tr>
+  <tr><td style="color:#6b7280;">Suggested order</td><td>{{ suggested }}</td></tr>
+  {% if supplier %}<tr><td style="color:#6b7280;">Supplier</td><td>{{ supplier.name }}{% if supplier.phone %}, {{ supplier.phone }}{% endif %}{% if supplier.email %}, {{ supplier.email }}{% endif %}</td></tr>{% endif %}
+</table>
+{% if restock %}<p>A restock request for {{ restock.requested_quantity }} was raised automatically and is {{ restock.status|lower }}{% if restock.status == 'Pending' %}: waiting for the HOD's approval{% endif %}.</p><p><a href="{{ link }}" style="color:#15803d;">Open Parts &amp; tools</a></p>{% else %}<p><a href="{{ link }}" style="color:#15803d;">Raise a restock request in Parts &amp; tools</a></p>{% endif %}
+<p style="color:#6b7280;font-size:12px;">You will not be emailed about this part again until it has been restocked above its lower limit.</p>
+{% endblock %}

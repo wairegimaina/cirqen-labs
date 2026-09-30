@@ -1,0 +1,18 @@
+{% extends "notifications/_base.html" %}
+{% block body %}
+<p>{% if event == "requested" %}<strong>{{ requester }}</strong> ({{ workshop }}) has requested an accessory. It is waiting for your approval.{% elif event == "approved" %}Your accessory request was <strong style="color:#067647;">approved</strong> by {{ decided_by }}.{% elif event == "declined" %}Your accessory request was <strong style="color:#b42318;">declined</strong> by {{ decided_by }}.{% else %}<strong>{{ received_by }}</strong> has received this accessory into {{ workshop }}'s stock.{% endif %}</p>
+<table role="presentation" cellpadding="4" cellspacing="0" style="font-size:14px;">
+  <tr><td style="color:#6b7280;">Request</td><td>{{ kind }}</td></tr>
+  <tr><td style="color:#6b7280;">Item</td><td><strong>{{ item }}</strong></td></tr>
+  <tr><td style="color:#6b7280;">For</td><td>{{ equipment }}</td></tr>
+  <tr><td style="color:#6b7280;">Quantity</td><td>{{ req.requested_quantity }}</td></tr>
+  {% if event != "requested" and event != "declined" %}
+  <tr><td style="color:#6b7280;">Unit cost</td><td>KSh {{ req.unit_cost }}</td></tr>
+  <tr><td style="color:#6b7280;">Total</td><td>KSh {{ total }}</td></tr>
+  {% endif %}
+  {% if event == "received" and stock is not None %}<tr><td style="color:#6b7280;">Stock now</td><td>{{ stock }}</td></tr>{% endif %}
+  {% if req.note and event == "requested" %}<tr><td style="color:#6b7280;">Note</td><td>{{ req.note }}</td></tr>{% endif %}
+  {% if req.approval_reason and event != "requested" %}<tr><td style="color:#6b7280;">{% if event == "declined" %}Reason{% else %}HOD's note{% endif %}</td><td>{{ req.approval_reason }}</td></tr>{% endif %}
+</table>
+{% if event == "approved" %}<p>Mark it as received in Parts &amp; tools when it arrives.</p>{% endif %}
+{% endblock %}

@@ -12,7 +12,6 @@
 
   const dropdown = document.getElementById('notifDropdown');
   const list = document.getElementById('notifList');
-  const badge = document.getElementById('notifBadge');
   const markAllBtn = document.getElementById('notifMarkAll');
 
   const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
@@ -31,9 +30,11 @@
 
   const escapeHtml = window.escapeHTML; // static/js/escape.js
 
+  const EMPTY = '<div class="notif-empty">No new notifications.</div>';
+
   function render(notifications) {
     if (!notifications.length) {
-      list.innerHTML = '<div class="notif-empty">No notifications yet.</div>';
+      list.innerHTML = EMPTY;
       return;
     }
     list.innerHTML = notifications.map((n) => `
@@ -46,14 +47,16 @@
   }
 
   function updateBadge(count) {
+    // Looked up each time: the badge is removed at 0 and made again later.
+    let badge = document.getElementById('notifBadge');
     if (count > 0) {
       if (!badge) {
-        const b = document.createElement('span');
-        b.className = 'notif-badge';
-        b.id = 'notifBadge';
-        bell.appendChild(b);
+        badge = document.createElement('span');
+        badge.className = 'notif-badge';
+        badge.id = 'notifBadge';
+        bell.appendChild(badge);
       }
-      document.getElementById('notifBadge').textContent = count;
+      badge.textContent = count;
     } else if (badge) {
       badge.remove();
     }
@@ -66,6 +69,7 @@
       .then((data) => {
         if (!data.success) return;
         render(data.notifications);
+        updateBadge(data.unread_count);
         loaded = true;
       })
       .catch(() => {
@@ -106,9 +110,12 @@
     e.preventDefault();
     const id = item.dataset.id;
     const url = item.dataset.url;
-    item.classList.remove('is-unread');
     markRead(id);
-    updateBadge(document.querySelectorAll('.notif-item.is-unread').length);
+    // Read notifications are cleared from the list.
+    item.remove();
+    const left = list.querySelectorAll('.notif-item').length;
+    if (!left) list.innerHTML = EMPTY;
+    updateBadge(left);
     if (url) window.location.href = url;
   });
 
@@ -118,7 +125,7 @@
       credentials: 'same-origin',
       headers: { 'X-CSRFToken': csrfToken },
     }).then(() => {
-      list.querySelectorAll('.notif-item.is-unread').forEach((el) => el.classList.remove('is-unread'));
+      list.innerHTML = EMPTY;
       updateBadge(0);
     });
   });

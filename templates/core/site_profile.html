@@ -48,4 +48,22 @@
     <div><button type="submit" class="btn btn-primary">Save</button></div>
   </form>
 </div>
+
+<div class="section-card" style="margin-top:1.25rem">
+  <div class="section-card-head">
+    <div>
+      <h2 class="section-card-title"><i class="fas fa-envelope" aria-hidden="true"></i> Email</h2>
+      <p class="section-card-sub">The account Cirqen sends from, a test email, and the outbox.</p>
+    </div>
+    <a class="btn btn-primary" href="{% url 'notifications:email_settings' %}">Email settings</a>
+  </div>
+  <div class="section-card-body">
+    {% if email_on %}
+      <span class="badge bg-success">On</span> Sending as {{ email_from }}.
+    {% else %}
+      <span class="badge bg-warning">Off</span> No email account is set on this PC, so nothing is sent.
+    {% endif %}
+    {% if email_waiting %} {{ email_waiting }} message{{ email_waiting|pluralize }} waiting to send.{% endif %}
+  </div>
+</div>
 {% endblock %}

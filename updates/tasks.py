@@ -33,6 +33,7 @@ from celery import shared_task
 from django.conf import settings
 from django.utils import timezone
 from core.eat import fmt_eat
+from updates.hospital import latest_params
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +124,7 @@ def check_and_apply_updates(self):
     try:
         resp = requests.get(
             f"{cfg['server_url']}/api/updates/latest/",
-            params={"current_version": current, "machine_id": machine},
+            params=latest_params(current, machine),
             headers=headers,
             timeout=20,
         )

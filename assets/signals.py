@@ -8,17 +8,19 @@ import logging
 
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-from django.urls import reverse
 
 logger = logging.getLogger(__name__)
 
 
 @receiver(post_save, sender="parts_tools.Accessories")
 def low_stock(sender, instance, **kwargs):
-    """At or below the reorder level: one open restock request, and an alert."""
+    """At or below the lower limit: one open restock request for the HOD.
+
+    The email and bell to the workshop are sent once per shortage by
+    notifications.stock, which mentions this request."""
     if not instance.reorder_level or instance.stock_count > instance.reorder_level or not instance.workshop_id:
         return
-    from core.notify import notify, workshop_leads
+    from core.notify import workshop_leads
     from parts_tools.models import AccessoryRequest
 
     try:
@@ -32,9 +34,5 @@ def low_stock(sender, instance, **kwargs):
                 requested_quantity=max(instance.reorder_level * 2 - instance.stock_count, 1),
                 unit_cost=instance.unit_cost, workshop=instance.workshop, requested_by=leads[0].userprofile,
                 note=f"Raised automatically: {instance.stock_count} left, reorder level {instance.reorder_level}.")
-        notify(leads, "stock_low", f"Low stock: {instance.name}",
-               f"{instance.stock_count} left (reorder level {instance.reorder_level})."
-               + (f" Supplier: {instance.supplier}." if instance.supplier_id else ""),
-               url=reverse("assets:stock_alerts"))
     except Exception:
         logger.exception("Low-stock handling failed for accessory %s", instance.pk)

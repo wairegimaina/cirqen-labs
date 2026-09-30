@@ -151,40 +151,54 @@ class jobcard(models.Model):
         self.save(update_fields=['total_parts_cost', 'updated_at'])
 
     def deduct_stock(self):
-        """Deduct stock for all spare parts when job card is approved"""
+        """Deduct stock for all spare parts when job card is approved.
+
+        Each part goes through the stock ledger (parts_tools.stock): one
+        movement, and the count reduced in one database update only if that
+        much is left, so neither two approvals on this PC nor two PCs apart
+        lose a deduction. All or nothing: a part short of stock undoes the rest.
+        """
         if self.stock_deducted:
             return
 
-        for spare_part in self.spare_parts.all():
-            if spare_part.part and spare_part.quantity > 0:
-                accessory = spare_part.part
-                if accessory.stock_count >= spare_part.quantity:
-                    accessory.stock_count -= spare_part.quantity
-                    accessory.save(update_fields=['stock_count', 'updated_at'])
-                else:
-                    raise ValidationError(
-                        f"Insufficient stock for {accessory.name}. "
-                        f"Available: {accessory.stock_count}, Required: {spare_part.quantity}"
-                    )
+        from django.db import transaction
 
-        # Update costs when approving
-        self.update_costs()
-        self.stock_deducted = True
-        self.save(update_fields=['stock_deducted', 'updated_at'])
+        from parts_tools import stock
+        from parts_tools.models import StockMovement
+
+        with transaction.atomic():
+            for spare_part in self.spare_parts.select_related('part__name'):
+                if spare_part.part_id and spare_part.quantity > 0:
+                    try:
+                        # One movement in the stock ledger, and the count, together.
+                        stock.take(spare_part.part_id, spare_part.quantity, StockMovement.WORK_ORDER,
+                                   job_card=self, created_by=self.verified_by_nurse or self.performed_by)
+                    except stock.InsufficientStock as exc:
+                        raise ValidationError(str(exc))
+
+            # Update costs when approving
+            self.update_costs()
+            self.stock_deducted = True
+            self.save(update_fields=['stock_deducted', 'updated_at'])
 
     def restore_stock(self):
         """Restore stock if job card is declined after being approved"""
         if not self.stock_deducted:
             return
 
-        for spare_part in self.spare_parts.all():
-            if spare_part.part and spare_part.quantity > 0:
-                accessory = spare_part.part
-                accessory.stock_count += spare_part.quantity
-                accessory.save(update_fields=['stock_count', 'updated_at'])
+        from django.db import transaction
 
-        self.stock_deducted = False
-        self.save(update_fields=['stock_deducted', 'updated_at'])
+        from parts_tools import stock
+        from parts_tools.models import StockMovement
+
+        with transaction.atomic():
+            for spare_part in self.spare_parts.all():
+                if spare_part.part_id and spare_part.quantity > 0:
+                    stock.put(spare_part.part_id, spare_part.quantity, StockMovement.WORK_ORDER_UNDONE,
+                              job_card=self, created_by=self.verified_by_nurse)
+
+            self.stock_deducted = False
+            self.save(update_fields=['stock_deducted', 'updated_at'])
 
     def approve_job_card(self, nurse_user, nurse_signature_data=None, nurse_name=None):
         """
@@ -196,7 +210,8 @@ class jobcard(models.Model):
         if self.status == 'Declined':
             raise ValidationError("Cannot approve a declined work order.")
 
-        # Deduct stock
+        # Deduct stock (the approver is recorded on each stock movement)
+        self.verified_by_nurse = nurse_user
         self.deduct_stock()
 
         # Update status

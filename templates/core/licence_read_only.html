@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+
+{% block title %}Read-only — {{ site_name }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Nothing new can be saved right now</h1>
+    <p class="page-subtitle">
+      {% if licence.suspended %}Your hospital's Cirqen subscription is suspended.
+      {% else %}Your hospital's Cirqen subscription ended on {{ licence.ends_on|date:"j M Y" }}.{% endif %}
+      Everything can still be viewed, searched, printed and exported. Your head of department can renew it;
+      see <a href="{% url 'core:subscription' %}">Subscription</a>.
+    </p>
+  </div>
+</div>
+{% endblock %}

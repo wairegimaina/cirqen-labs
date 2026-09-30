@@ -240,6 +240,7 @@ class DataCheckerClient:
         allowed_tables: List[str],
         logger: Optional[logging.Logger] = None,
         batch_size: int = DEFAULT_BATCH_SIZE,
+        hospital_code: str = "",
     ):
         self.hq_url = hq_url.rstrip("/")
         self.api_key = api_key
@@ -255,6 +256,9 @@ class DataCheckerClient:
             "X-Client-ID": self.client_id,
             "Content-Type": "application/json",
         })
+        if hospital_code:
+            # HQ refuses (409) a request that names another hospital.
+            self._session.headers["X-Cirqen-Hospital"] = hospital_code
 
     # ─────────────────────────────────────────────────────────────────
     # Local DB helpers

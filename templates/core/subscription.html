@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+
+{% block title %}Subscription — {{ site_name }}{% endblock %}
+
+{% block page_title %}Subscription{% endblock %}
+
+{% block extra_css %}
+<style>
+.sub-card { max-width: 640px; display: grid; gap: .75rem; padding: 1.25rem; border: 1px solid var(--border-color);
+  border-radius: var(--radius-md, 10px); background: var(--bg-card); }
+.sub-row { display: grid; grid-template-columns: 11rem 1fr; gap: .75rem; }
+.sub-row dt { color: var(--text-secondary); }
+.sub-row dd { margin: 0; font-weight: 600; }
+.sub-help { color: var(--text-secondary); font-size: .9rem; max-width: 640px; }
+@media (max-width: 520px) { .sub-row { grid-template-columns: 1fr; gap: .15rem; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Subscription</h1>
+    <p class="page-subtitle">Your hospital's Cirqen licence.</p>
+  </div>
+</div>
+
+{% if licence.state == 'none' %}
+<p class="sub-help">No licence has been set up for this hospital yet. Everything works as usual.</p>
+{% else %}
+<dl class="sub-card">
+  <div class="sub-row"><dt>Status</dt><dd>
+    {% if licence.state == 'active' %}Active
+    {% elif licence.state == 'due' %}Renewal due: ends in {{ licence.days_left }} day{{ licence.days_left|pluralize }}
+    {% elif licence.state == 'grace' %}Ended; read-only from {{ licence.read_only_from|date:"j M Y" }} unless renewed
+    {% elif licence.suspended %}Suspended: read-only
+    {% else %}Ended: read-only{% endif %}
+  </dd></div>
+  <div class="sub-row"><dt>Valid until</dt><dd>{{ licence.ends_on|date:"j M Y" }}</dd></div>
+  {% if nav.is_hod %}
+  <div class="sub-row"><dt>Plan</dt><dd>{{ licence.plan|capfirst }}, up to {{ licence.devices }} computers</dd></div>
+  {% endif %}
+</dl>
+{% endif %}
+
+<p class="sub-help">
+  {% if nav.is_hod %}To renew, pay Cirqen as invoiced, quoting your hospital code. The new end date reaches every
+  computer on its own within a day; press "Check now" to load it here straight away.
+  {% else %}Your head of department renews the subscription.{% endif %}
+  Read-only means everything can still be viewed, searched, printed and exported; only new records are paused.
+</p>
+
+<form method="post">
+  {% csrf_token %}
+  <button class="btn btn-primary">Check now</button>
+</form>
+{% endblock %}

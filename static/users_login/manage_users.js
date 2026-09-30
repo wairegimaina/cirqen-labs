@@ -521,11 +521,8 @@ function toggleCreateRoleFields(role) {
   }
 }
 
-async function createUser() {
-  const overlay = document.getElementById('overlay');
-  overlay.classList.remove('hidden');
-
-  const formData = {
+function createFormData() {
+  return {
     firstName: document.getElementById('createFirstName').value.trim(),
     lastName: document.getElementById('createLastName').value.trim(),
     email: document.getElementById('createEmail').value.trim(),
@@ -534,6 +531,19 @@ async function createUser() {
     workshop: document.getElementById('createWorkshop').value,
     level: document.getElementById('createLevel').value,
   };
+}
+
+function emailNote(data) {
+  return data.emailSent
+    ? ' A welcome email with the temporary password has been sent.'
+    : ` The email could not be sent now; it will go out when email works. Temporary password: ${data.user.temporaryPassword}`;
+}
+
+async function createUser() {
+  const overlay = document.getElementById('overlay');
+  overlay.classList.remove('hidden');
+
+  const formData = createFormData();
 
   if (!formData.firstName || !formData.lastName || !formData.email || !formData.role) {
     overlay.classList.add('hidden');
@@ -554,13 +564,17 @@ async function createUser() {
     const data = await response.json();
 
     if (data.success) {
-      showCreateAlert(`User ${data.user.username} created successfully!`, 'success');
+      showCreateAlert(`User ${data.user.username} created successfully!` + emailNote(data), 'success', !data.emailSent);
       resetCreateForm();
       loadUsers();
-      setTimeout(() => {
-        const manageTab = new bootstrap.Tab(document.getElementById('manage-tab'));
-        manageTab.show();
-      }, 3000);
+      if (data.emailSent) {
+        setTimeout(() => {
+          const manageTab = new bootstrap.Tab(document.getElementById('manage-tab'));
+          manageTab.show();
+        }, 3000);
+      }
+    } else if (data.canRestore) {
+      openRestoreModal(data.deletedUser);
     } else {
       showCreateAlert('Failed to create user: ' + data.error, 'danger');
     }
@@ -568,6 +582,49 @@ async function createUser() {
     showCreateAlert('Error creating user: ' + error.message, 'danger');
   } finally {
     overlay.classList.add('hidden');
+  }
+}
+
+function openRestoreModal(u) {
+  document.getElementById('restoreUserId').value = u.id;
+  document.getElementById('restoreUserName').textContent = u.name;
+  document.getElementById('restoreUserUsername').textContent = u.username;
+  document.getElementById('restoreUserEmail').textContent = u.email;
+  document.getElementById('restoreUserWas').textContent =
+    [u.role, u.workshop, u.department].filter(Boolean).join(' · ') || '-';
+  document.getElementById('restoreUserModal').style.display = 'block';
+}
+
+function closeRestoreModal() {
+  document.getElementById('restoreUserModal').style.display = 'none';
+}
+
+async function confirmRestoreUser() {
+  const id = document.getElementById('restoreUserId').value;
+  const btn = document.getElementById('restoreUserBtn');
+  btn.disabled = true;
+  try {
+    const response = await fetch(`/login/api/users/${id}/restore/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCsrfToken(),
+      },
+      body: JSON.stringify(createFormData()),
+    });
+    const data = await response.json();
+    closeRestoreModal();
+    if (data.success) {
+      showCreateAlert(`User ${data.user.username} restored.` + emailNote(data), 'success', !data.emailSent);
+      resetCreateForm();
+      loadUsers();
+    } else {
+      showCreateAlert('Failed to restore user: ' + data.error, 'danger');
+    }
+  } catch (error) {
+    showCreateAlert('Error restoring user: ' + error.message, 'danger');
+  } finally {
+    btn.disabled = false;
   }
 }
 
@@ -706,7 +763,7 @@ function refreshUsers() {
   loadUsers();
 }
 
-function showAlert(message, type, container = 'alertContainer') {
+function showAlert(message, type, container = 'alertContainer', sticky = false) {
   const alertContainer = document.getElementById(container);
   const alertDiv = document.createElement('div');
   alertDiv.className = `alert alert-${type}`;
@@ -718,17 +775,20 @@ function showAlert(message, type, container = 'alertContainer') {
   alertContainer.appendChild(alertDiv);
   alertDiv.style.display = 'block';
 
-  setTimeout(() => {
-    if (alertDiv.parentNode) {
-      alertDiv.remove();
-    }
-  }, 5000);
+  // Sticky alerts (a temporary password to pass on) stay until closed.
+  if (!sticky) {
+    setTimeout(() => {
+      if (alertDiv.parentNode) {
+        alertDiv.remove();
+      }
+    }, 5000);
+  }
 
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-function showCreateAlert(message, type) {
-  showAlert(message, type, 'createUserAlerts');
+function showCreateAlert(message, type, sticky = false) {
+  showAlert(message, type, 'createUserAlerts', sticky);
 }
 
 function getCsrfToken() {

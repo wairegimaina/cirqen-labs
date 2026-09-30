@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block main %}
+<section class="card narrow">
+  <p class="error" role="alert">{{ message }}</p>
+  <p><a href="{{ back or '/admin/' }}">Back</a></p>
+</section>
+{% endblock %}

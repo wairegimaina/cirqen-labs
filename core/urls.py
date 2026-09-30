@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views
+from . import support, views
 
 app_name = "core"
 
@@ -10,6 +10,8 @@ urlpatterns = [
     path("hq-connection/reset/", views.hq_connection_reset, name="hq_connection_reset"),
     path("hq-connection/test/", views.hq_connection_test, name="hq_connection_test"),
     path("site/", views.site_profile, name="site_profile"),
+    path("subscription/", views.subscription, name="subscription"),
+    path("support/", support.support_access, name="support_access"),
     path("site/logo/", views.site_logo, name="site_logo"),
     path("reports/<slug:name>/start/", views.report_start, name="report_start"),
     path("reports/job/<slug:key>/", views.report_status, name="report_status"),

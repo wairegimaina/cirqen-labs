@@ -290,6 +290,9 @@ def report_hub(request):
                             submitted_by=request.user,
                             submitted_at=timezone.now()
                         )
+                        # The HOD receives it as a PDF (queued, so it goes when online).
+                        from notifications.reports import report_submitted
+                        report_submitted(report.pk, actor=request.user)
                         remarks = report.remarks
                     except Exception as e:
                         error_msg = f"Failed to save remarks: {str(e)}"

@@ -1,4 +1,5 @@
 """machineReports views — the equipment dashboard page."""
+from django.urls import reverse
 from uuid import UUID
 from django.shortcuts import redirect, render, get_object_or_404
 from django.http import HttpResponse, JsonResponse
@@ -67,7 +68,34 @@ def equipment_dashboard(request):
         return redirect("custom_login")
 
     descriptions = EquipmentDescription.objects.all()
-    categories = EquipmentCategory.objects.all()
+    categories = EquipmentCategory.objects.filter(active_status=True, pending_delete=False).order_by("name")
+    back_to_categories = reverse("equipment_dashboard") + "#assignments"
+
+    # ---- Create a category (then it can be assigned below) ----
+    if request.method == "POST" and "create_category" in request.POST:
+        if not is_hod:
+            messages.error(request, "Only the head of department can create equipment categories.")
+            return redirect(back_to_categories)
+        name = " ".join((request.POST.get("category_name") or "").split())[:100]
+        if not name:
+            messages.error(request, "Give the category a name.")
+            return redirect(back_to_categories)
+        is_critical = request.POST.get("is_critical") == "1"
+        description = (request.POST.get("category_description") or "").strip()
+        existing = EquipmentCategory.objects.filter(name__iexact=name).first()
+        if existing and existing.active_status and not existing.pending_delete:
+            messages.info(request, f"The category {existing.name} already exists; assign it below.")
+        elif existing:
+            # Deleted before: bring it back rather than fail on the unique name.
+            existing.active_status, existing.pending_delete = True, False
+            existing.is_critical = is_critical
+            existing.description = description or existing.description
+            existing.save()
+            messages.success(request, f"Category {existing.name} restored. Assign it to equipment below.")
+        else:
+            EquipmentCategory.objects.create(name=name, description=description, is_critical=is_critical)
+            messages.success(request, f"Category {name} created. Assign it to equipment below.")
+        return redirect(back_to_categories)
 
     # ---- Handle category assignment ----
     if request.method == "POST" and "assign_categories" in request.POST:
@@ -75,7 +103,7 @@ def equipment_dashboard(request):
         # hospital-wide settings: only the HOD may change them.
         if not is_hod:
             messages.error(request, "Only the head of department can change equipment categories.")
-            return redirect("equipment_dashboard")
+            return redirect(back_to_categories)
         updated_count = 0
         for desc in descriptions:
             category_id = request.POST.get(f"category_{desc.id}")
@@ -98,7 +126,7 @@ def equipment_dashboard(request):
             messages.success(request, f"Successfully updated {updated_count} equipment descriptions!")
         else:
             messages.info(request, "No changes were made.")
-        return redirect("equipment_dashboard")
+        return redirect(back_to_categories)
 
     # ---- Equipment Query with active_status filter ----
     equipment_qs = Equipment.objects.select_related("workshop", "category", "description", "manufacturer").filter(active_status=True)
@@ -303,6 +331,8 @@ def equipment_dashboard(request):
     context = {
         'show_sidebar': True,  # Enable sidebar with hamburger menu
         "categories": categories,
+        # For the Category section: how many equipment types use each one.
+        "category_usage": categories.annotate(description_count=Count("equipmentdescription", distinct=True)),
         "selected_category": category_id,
         "categorized_equipment": categorized_equipment,
         "manufacturer_performance": manufacturer_performance,  # rendered with |json_script

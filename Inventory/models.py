@@ -2,6 +2,7 @@ import uuid
 from django.db import models
 from django.core.exceptions import ValidationError
 from workshop.models import Workshop
+from core.names import check_unique, same_spelling, tidy
 
 
 class Department(models.Model):
@@ -75,15 +76,9 @@ class EquipmentDescription(models.Model):
     syncable = True  # <- important, so sync task knows to sync this model
 
     def clean(self):
-        """Prevent case-insensitive duplicates in name."""
-        duplicates = EquipmentDescription.objects.filter(
-            name__iexact=self.name
-        ).exclude(pk=self.pk)
-
-        if duplicates.exists():
-            raise ValidationError({
-                'name': f"Equipment description with name '{self.name}' already exists."
-            })
+        """Prevent duplicates that differ only in case, spacing or punctuation."""
+        self.name = tidy(self.name)
+        check_unique(self, "Equipment description")
 
     def save(self, *args, **kwargs):
         # Run validations + normalization before saving
@@ -120,19 +115,10 @@ class Manufacturer(models.Model):
         if not self.name:
             raise ValidationError({"name": "Manufacturer name cannot be empty."})
 
-        # Trim spaces
-        normalized_name = self.name.strip()
-
-        # Check duplicates case-insensitively
-        existing = Manufacturer.objects.filter(
-            name__iexact=normalized_name
-        ).exclude(pk=self.pk)
-
-        if existing.exists():
-            raise ValidationError({"name": f"Manufacturer '{normalized_name.title()}' already exists."})
-
-        # Normalize format (e.g., "sony", "SONY" -> "Sony")
-        self.name = normalized_name.title()
+        # Normalize format (e.g., "sony", "SONY" -> "Sony"), then refuse
+        # near-duplicates ("Mindray" vs "mind-ray").
+        self.name = tidy(self.name).title()
+        check_unique(self, "Manufacturer")
 
     def save(self, *args, **kwargs):
         # Run validations + normalization before saving
@@ -221,6 +207,41 @@ class Equipment(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
 
+    # QR label (Inventory > QR labels): when the label was last printed and
+    # what it showed, so the labels page can offer only equipment that has
+    # never had one or whose label no longer matches (moved department,
+    # corrected serial...). Synced, so every PC agrees on what is printed.
+    label_printed_at = models.DateTimeField(null=True, blank=True)
+    label_snapshot = models.JSONField(default=dict, blank=True, db_default=models.Value({}, models.JSONField()))
+
+    # What a label prints, in order; the keys are stored in label_snapshot.
+    LABEL_FIELDS = (("description", "Equipment"), ("serial_number", "Serial number"), ("model", "Model"),
+                    ("department", "Department"))
+
+    def label_content(self):
+        return {
+            "description": str(self.description or ""),
+            "serial_number": self.serial_number or "",
+            "model": self.model or "",
+            "department": str(self.department or ""),
+        }
+
+    def label_changes(self):
+        """(field label, printed, now) for each thing that differs from the
+        printed label; empty when the label is current or was never printed."""
+        if not self.label_printed_at:
+            return []
+        printed, current = self.label_snapshot or {}, self.label_content()
+        return [(label, printed.get(key, ""), current[key]) for key, label in self.LABEL_FIELDS
+                if printed.get(key, "") != current[key]]
+
+    @property
+    def label_state(self):
+        """"new" (never printed), "changed" or "current"."""
+        if not self.label_printed_at:
+            return "new"
+        return "changed" if self.label_changes() else "current"
+
     # offline sync
     needs_sync = models.BooleanField(default=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -267,6 +288,16 @@ class Equipment(models.Model):
         # Normalize serial number before validation
         if self.serial_number:
             self.serial_number = self.serial_number.strip().upper()
+
+        # A model typed as "mx-450" joins the "MX 450" already used for this
+        # description rather than becoming a second entry in the model list.
+        update_fields = kwargs.get('update_fields')
+        if self.model and self.description_id and (update_fields is None or 'model' in update_fields):
+            self.model = same_spelling(
+                Equipment.objects.filter(description_id=self.description_id).exclude(pk=self.pk)
+                .values_list('model', flat=True).distinct(),
+                self.model,
+            )
 
         # ✅ Handle optional skip_clean argument safely
         skip_clean = kwargs.pop('skip_clean', False)

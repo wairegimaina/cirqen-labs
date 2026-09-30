@@ -63,6 +63,10 @@ class AgentInitMixin(SmartDeleteMixin):
         # Where config.json and endpoints.json live; the endpoint poll needs it.
         self.data_path = Path(data_path) if data_path else Path.home() / ".cmms"
         self.api_url = self.config["api_url"].rstrip("/")
+        # This PC's hospital (e.g. CH0001). Set: every request names it and HQ
+        # must pass the hq_handshake before this PC syncs with it.
+        self.hospital_code = str(self.config.get("hospital_code") or "").strip().upper()
+        self._hq_confirmed = {"url": "", "at": 0.0, "reason": ""}
 
         # ============================================================
         # 🔧 FIX: Extract base URL for data checker (removes /api/sync path)
@@ -177,6 +181,7 @@ class AgentInitMixin(SmartDeleteMixin):
                 local_pool=self.pool,
                 allowed_tables=self.tables,
                 logger=LOG,
+                hospital_code=self.hospital_code,
             )
             LOG.info("✅ DataCheckerClient ready")
         else:

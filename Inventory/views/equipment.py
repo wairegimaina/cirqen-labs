@@ -12,6 +12,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from core.names import find_same, get_or_create_named, is_live
 from core.scoping import for_user, get_for_user_or_404
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
@@ -136,13 +137,15 @@ def create_equipment_description(request):
             response_data['error'] = 'Only Technologists can add equipment descriptions.'
             return JsonResponse(response_data, status=403)
 
-        # Check for duplicates (case-insensitive)
-        if EquipmentDescription.objects.filter(name__iexact=name).exists():
-            response_data['error'] = f'Equipment description "{name}" already exists.'
+        # Same name ignoring case, spaces and punctuation ("Patient Monitor" = "patient- monitor").
+        same = find_same(EquipmentDescription.objects.all(), name)
+        if same and is_live(same):
+            response_data.update({'error': f'Equipment description "{same.name}" already exists.',
+                                  'description_id': same.id, 'description_name': same.name, 'existing': True})
             return JsonResponse(response_data, status=409)
 
-        # Create new description
-        new_description = EquipmentDescription.objects.create(name=name)
+        # New, or a deleted one with this name brought back.
+        new_description, _ = get_or_create_named(EquipmentDescription, name)
 
         response_data.update({
             'success': True,
@@ -177,14 +180,15 @@ def create_manufacturer(request):
             response_data['error'] = 'Manufacturer name is required.'
             return JsonResponse(response_data, status=400)
 
-        # Check duplicates (case-insensitive)
-        existing = Manufacturer.objects.filter(name__iexact=name).first()
-        if existing:
-            response_data['error'] = f"Manufacturer '{existing.name}' already exists."
+        existing = find_same(Manufacturer.objects.all(), name)
+        if existing and is_live(existing):
+            response_data.update({'error': f"Manufacturer '{existing.name}' already exists.",
+                                  'manufacturer_id': existing.id, 'manufacturer_name': existing.name,
+                                  'existing': True})
             return JsonResponse(response_data, status=409)
 
-        # Normalize & save
-        new_manufacturer = Manufacturer.objects.create(name=name.title())
+        # New, or a deleted one with this name brought back.
+        new_manufacturer, _ = get_or_create_named(Manufacturer, name)
 
         response_data.update({
             'success': True,

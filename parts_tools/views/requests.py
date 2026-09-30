@@ -10,11 +10,14 @@ from django.core.exceptions import ValidationError
 from django.views.decorators.http import require_POST
 from django.db import transaction
 
+from .. import stock
 from ..models import (
     Accessories, AccessoryRequest, AccessoryRequestHistory,
-    AccessoriesManufacturer, Accessoriesname,
+    AccessoriesManufacturer, Accessoriesname, StockMovement,
 )
 from Inventory.models import EquipmentDescription
+from notifications import accessories as accessory_mail
+from core.names import get_or_create_named
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +84,7 @@ def request_accessory(request):
                     notes=f"Request created for new accessory: {accessory_name}",
                     new_status='Pending',
                 )
+                accessory_mail.request_made(accessory_request.pk, actor=request.user)
                 logger.info(f"New accessory request '{accessory_name}' created by {request.user.username}")
                 messages.success(request, f'Request for "{accessory_name}" submitted. HOD will set final quantity and cost.')
 
@@ -109,6 +113,7 @@ def request_accessory(request):
                     notes=f"Restock request for {existing_accessory.name.name if existing_accessory.name else 'accessory'}",
                     new_status='Pending',
                 )
+                accessory_mail.request_made(accessory_request.pk, actor=request.user)
                 logger.info(f"Restock request for '{existing_accessory}' created by {request.user.username}")
                 name_display = existing_accessory.name.name if existing_accessory.name else 'accessory'
                 messages.success(request, f'Restock request for "{name_display}" submitted. HOD will set final quantity and cost.')
@@ -193,6 +198,7 @@ def approve_accessory_request(request, request_id):
                     new_status='Approved',
                 )
 
+                accessory_mail.request_decided(accessory_request.pk, actor=request.user)
                 total = approved_quantity * approved_unit_cost
                 logger.info(f"Request {request_id} APPROVED by {request.user.username} — Qty: {approved_quantity}, Cost: {approved_unit_cost}")
                 messages.success(request, f'Request approved: {approved_quantity} units at KSh {approved_unit_cost} each (Total: KSh {total}).')
@@ -212,6 +218,7 @@ def approve_accessory_request(request, request_id):
                     previous_status='Pending',
                     new_status='Declined',
                 )
+                accessory_mail.request_decided(accessory_request.pk, actor=request.user)
                 logger.info(f"Request {request_id} DECLINED by {request.user.username}")
                 messages.warning(request, 'Request has been declined.')
 
@@ -251,26 +258,22 @@ def accept_accessory_request(request, request_id):
 
         with transaction.atomic():
             if accessory_request.request_type == 'new':
-                accessory_name_obj, _ = Accessoriesname.objects.get_or_create(
-                    name__iexact=accessory_request.accessory_name,
-                    defaults={'name': accessory_request.accessory_name}
-                )
+                accessory_name_obj, _ = get_or_create_named(Accessoriesname, accessory_request.accessory_name)
                 manufacturer_obj = None
                 if accessory_request.manufacturer_name:
-                    manufacturer_obj, _ = AccessoriesManufacturer.objects.get_or_create(
-                        name__iexact=accessory_request.manufacturer_name,
-                        defaults={'name': accessory_request.manufacturer_name}
-                    )
+                    manufacturer_obj, _ = get_or_create_named(AccessoriesManufacturer, accessory_request.manufacturer_name)
 
                 new_accessory = Accessories.objects.create(
                     name=accessory_name_obj,
                     manufacturer=manufacturer_obj,
                     equipment_description=accessory_request.equipment_description,
-                    stock_count=approved_quantity,
+                    stock_count=0,  # opening balance 0, then the receipt below
                     unit_cost=approved_unit_cost,
                     note=accessory_request.note,
                     workshop=accessory_request.workshop,
                 )
+                new_accessory = stock.put(new_accessory.pk, approved_quantity, StockMovement.RECEIVED,
+                                          request=accessory_request, created_by=request.user)
                 accessory_request.created_accessory = new_accessory
                 logger.info(f"New accessory '{new_accessory}' created from request {request_id}")
                 success_message = (
@@ -281,9 +284,13 @@ def accept_accessory_request(request, request_id):
 
             elif accessory_request.request_type == 'restock':
                 existing_accessory = accessory_request.existing_accessory
-                existing_accessory.stock_count += approved_quantity
+                # Through the stock ledger: a movement and the count together, so
+                # a work order approved at the same moment, here or on another
+                # PC, is not overwritten by this receipt (or the reverse).
+                existing_accessory = stock.put(existing_accessory.pk, approved_quantity, StockMovement.RECEIVED,
+                                               request=accessory_request, created_by=request.user)
                 existing_accessory.unit_cost = approved_unit_cost
-                existing_accessory.save()
+                existing_accessory.save(update_fields=['unit_cost', 'updated_at'])
                 accessory_request.created_accessory = existing_accessory
                 logger.info(f"Accessory '{existing_accessory}' restocked +{approved_quantity} units from request {request_id}")
                 success_message = (
@@ -311,6 +318,7 @@ def accept_accessory_request(request, request_id):
                 new_status='Accepted',
             )
 
+            accessory_mail.request_received(accessory_request.pk, actor=request.user)
             messages.success(request, success_message)
 
     except Exception as e:

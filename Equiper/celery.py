@@ -61,6 +61,27 @@ app.conf.beat_schedule = {
         "schedule": crontab(minute=5),
         "options": {"expires": 3000},
     },
+    # Monday from 08:00: remind the Engineer In-charge if last week's report
+    # is missing (hourly so a PC switched on late still sends it; once per week).
+    # Parts running low that were never announced (e.g. already short before
+    # stock alerts existed): emailed from the site sender PC.
+    "notifications-stock-sweep": {
+        "task": "notifications.tasks.stock_sweep",
+        "schedule": timedelta(minutes=15),
+        "options": {"expires": 600},
+    },
+    "notifications-weekly-report-reminders": {
+        "task": "notifications.tasks.weekly_report_reminders",
+        "schedule": crontab(minute=20),
+        "options": {"expires": 3000},
+    },
+    # Stock ledger: each part's count is the total of its movements, which
+    # arrive from other PCs through sync (parts_tools.stock).
+    "parts-reconcile-stock": {
+        "task": "parts_tools.tasks.reconcile_stock",
+        "schedule": timedelta(minutes=1),
+        "options": {"expires": 50},
+    },
     # Local database backup (core.backups). Midday rather than overnight:
     # clinic machines are often switched off at night and beat does not
     # catch up on missed runs.

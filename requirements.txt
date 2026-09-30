@@ -69,9 +69,6 @@ pytz>=2024.1
 # ── Cryptography & Security ───────────────────────────────────
 cryptography>=42.0
 
-# ── Messaging / Streaming ────────────────────────────────────
-kafka-python>=2.0
-
 # ── Monitoring / System ───────────────────────────────────────
 psutil>=5.9
 

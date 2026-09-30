@@ -124,6 +124,13 @@
         </div>
       </div>
 
+      <div class="stock-filter d-flex flex-wrap gap-2 align-items-center mb-3">
+        <a class="btn btn-sm {% if not stock_filter %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="?">All parts ({{ stock_counts.all }})</a>
+        <a class="btn btn-sm {% if stock_filter == 'low' %}btn-warning{% else %}btn-outline-warning{% endif %}" href="?stock=low"><i class="fas fa-exclamation-triangle"></i> Running low ({{ stock_counts.low }})</a>
+        <a class="btn btn-sm {% if stock_filter == 'out' %}btn-danger{% else %}btn-outline-danger{% endif %}" href="?stock=out">Out of stock ({{ stock_counts.out }})</a>
+        <span class="text-muted small ms-1">A part is <b>running low</b> at or below its lower limit; everyone in its workshop is emailed once.{% if can_set_limit %} You can change the limits.{% endif %}</span>
+      </div>
+
       <div class="table-responsive">
         <table class="table table-striped table-hover" id="accessories-table">
           <thead class="table-dark">
@@ -133,6 +140,7 @@
               <th>Equipment</th>
               <th>Manufacturer</th>
               <th>Stock</th>
+              <th>Lower limit</th>
               <th>Unit Cost</th>
               <th>Note</th>
               {% if is_hod %}<th>Workshop</th><th>Actions</th>{% endif %}
@@ -146,12 +154,22 @@
               <td>{{ accessory.equipment_description.name|default:"-" }}</td>
               <td>{{ accessory.manufacturer.name|default:"-" }}</td>
               <td>
-                <span class="badge
-                  {% if accessory.stock_count < 5 %}bg-danger
-                  {% elif accessory.stock_count < 10 %}bg-warning text-dark
-                  {% else %}bg-success{% endif %}">
+                <span class="badge {% if accessory.stock_state == 'out' %}bg-danger{% elif accessory.stock_state == 'low' %}bg-warning text-dark{% else %}bg-success{% endif %}">
                   {{ accessory.stock_count }}
                 </span>
+                {% if accessory.stock_state != 'ok' %}<div class="small {% if accessory.stock_state == 'out' %}text-danger{% else %}text-warning-emphasis{% endif %} fw-semibold">{{ accessory.stock_label }}</div>{% endif %}
+              </td>
+              <td>
+                {% if can_set_limit %}
+                <form method="post" action="{% url 'partstools:set_lower_limit' accessory.pk %}" class="d-flex gap-1 lower-limit-form">
+                  {% csrf_token %}
+                  <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                  <input type="number" min="0" name="reorder_level" value="{{ accessory.reorder_level }}" class="form-control form-control-sm" style="width:5.5rem" aria-label="Lower limit for {{ accessory.name.name|default:'this part' }}">
+                  <button type="submit" class="btn btn-sm btn-outline-primary" title="Save lower limit" aria-label="Save lower limit"><i class="fas fa-check"></i></button>
+                </form>
+                {% else %}
+                  {% if accessory.reorder_level %}{{ accessory.reorder_level }}{% else %}<span class="text-muted">None</span>{% endif %}
+                {% endif %}
               </td>
               <td>{{ accessory.unit_cost }} KSh</td>
               <td>{{ accessory.note|default:"-" }}</td>
@@ -176,9 +194,9 @@
             </tr>
             {% empty %}
             <tr>
-              <td colspan="{% if is_hod %}9{% else %}7{% endif %}"
+              <td colspan="{% if is_hod %}10{% else %}8{% endif %}"
                   class="text-center text-muted py-4">
-                No accessories found.
+                {% if stock_filter %}No parts {% if stock_filter == 'out' %}out of stock{% else %}running low{% endif %}.{% else %}No accessories found.{% endif %}
                 {% if not is_hod %}Submit a request to add accessories.{% endif %}
               </td>
             </tr>

@@ -66,8 +66,10 @@ class CopyRuleTests(Base):
         self.assertEqual(addresses([self.tech]), (["n_tech@hospital.test"], []))
 
 
-@override_settings(**EMAIL)
+@override_settings(**EMAIL, NOTIFICATIONS_WORK_ORDER_EMAIL=True)
 class WorkOrderEventTests(Base):
+    """With work-order email switched on (config.json notifications.work_order_email)."""
+
     def _raise(self):
         self.client.force_login(self.tech)
         with self.captureOnCommitCallbacks(execute=True):
@@ -117,7 +119,8 @@ class SendingTests(Base):
         with mock.patch("django.core.mail.backends.locmem.EmailBackend.open", side_effect=OSError("offline")):
             self.assertEqual(send_pending(), (0, 1))
         msg = EmailOutbox.objects.get(dedupe_key="k2")
-        self.assertEqual((msg.status, msg.attempts), ("pending", 1))
+        # Being offline is not the message's fault: no attempt is used up.
+        self.assertEqual((msg.status, msg.attempts), ("pending", 0))
         self.assertIsNotNone(msg.next_attempt_at)
         self.assertEqual(send_pending(), (0, 0))  # not due yet
 
@@ -175,3 +178,17 @@ class DigestTests(Base):
         hod_mail = digests.get(to="n_hod@hospital.test")
         self.assertEqual(hod_mail.cc_list(), ["n_deputy@hospital.test"])
         self.assertEqual(digests.filter(to="n_tech@hospital.test").count(), 1)
+
+
+@override_settings(**EMAIL, NOTIFICATIONS_WORK_ORDER_EMAIL=False)
+class WorkOrderBellOnlyTests(Base):
+    """The default: a bell notification for each work order, no email (the
+    HOD hears about work orders through the weekly report)."""
+
+    _raise = WorkOrderEventTests._raise
+
+    def test_a_work_order_rings_the_bell_but_sends_no_email(self):
+        self._raise()
+        self.assertFalse(EmailOutbox.objects.filter(kind__startswith="work_order").exists())
+        self.assertTrue(CalibrationNotification.objects.filter(recipient=self.nic,
+                                                               notification_type="work_order_submitted").exists())

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Hospitals · Cirqen Control{% endblock %}
+{% block main %}
+<div class="head">
+  <h1>Hospitals</h1>
+  {% if admin.role in ('owner', 'support') %}<a class="button" href="/admin/hospitals/new">Add hospital</a>{% endif %}
+</div>
+{% if not rows %}
+<section class="card"><p>No hospitals yet. Add the pilot hospital first (for example CH0001), with the address of its HQ.</p></section>
+{% else %}
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Code</th><th>Hospital</th><th>Status</th><th>HQ</th><th>Identity</th><th>Release</th><th>Certificate expires</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr>
+    <td><a href="/admin/hospitals/{{ r.h.code }}">{{ r.h.code }}</a></td>
+    <td>{{ r.h.name }}{% if r.h.county %}<br><span class="muted">{{ r.h.county }}</span>{% endif %}</td>
+    <td><span class="pill {{ r.h.status }}">{{ r.h.status }}</span></td>
+    <td><span class="pill {{ 'ok' if r.health.state == 'up' else 'bad' }}">{{ r.health.state }}</span></td>
+    <td>{% if r.health.identity %}<span class="pill {{ 'ok' if r.health.identity == 'ok' else 'bad' }}">{{ r.health.identity }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+    <td>{{ 'pinned ' ~ r.h.release_version if r.h.release_mode == 'pin' else ('on hold' if r.h.release_mode == 'hold' else 'newest') }}</td>
+    <td>{{ r.cert.expires_at | eat if r.cert else '—' }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="muted small">HQ status is read from each HQ's /api/sync/health (status only, never records) and refreshed every minute.</p>
+{% endif %}
+{% endblock %}

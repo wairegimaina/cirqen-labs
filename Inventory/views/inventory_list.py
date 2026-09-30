@@ -282,8 +282,8 @@ def inventory(request):
         ).order_by('name')
         all_workshops_context = [selected_workshop]
 
-    equipment_descriptions = EquipmentDescription.objects.all().order_by('name')
-    manufacturers = Manufacturer.objects.all().order_by('name')
+    equipment_descriptions = EquipmentDescription.objects.filter(active_status=True, pending_delete=False).order_by('name')
+    manufacturers = Manufacturer.objects.filter(active_status=True, pending_delete=False).order_by('name')
 
     # Get status choices for filters based on role (only ACTIVE equipment)
     if profile.role == 'NIC':
@@ -347,10 +347,10 @@ def inventory_for_hod(request, workshop_id):
     ).order_by('name')
 
     # Get equipment descriptions
-    equipment_descriptions = EquipmentDescription.objects.all().order_by('name')
+    equipment_descriptions = EquipmentDescription.objects.filter(active_status=True, pending_delete=False).order_by('name')
 
     # Get manufacturers
-    manufacturers = Manufacturer.objects.all().order_by('name')
+    manufacturers = Manufacturer.objects.filter(active_status=True, pending_delete=False).order_by('name')
 
     # --- Base queryset: ONLY ACTIVE equipment in this workshop ---
     equipments = Equipment.objects.filter(
@@ -543,7 +543,7 @@ def inventory_by_department(request, dept_id):
         all_workshops = [profile.workshop] if profile.workshop else []
 
     departments = Department.objects.filter(workshop=target_workshop).order_by('name')
-    equipment_descriptions = EquipmentDescription.objects.all().order_by('name')
+    equipment_descriptions = EquipmentDescription.objects.filter(active_status=True, pending_delete=False).order_by('name')
 
     return render(request, template_name, {
         'show_sidebar': True,  # Enable sidebar with hamburger menu

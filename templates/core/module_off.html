@@ -1,0 +1,67 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ module_label }} is not enabled — Cirqen</title>
+  <script>
+    try {
+      document.documentElement.setAttribute('data-theme', localStorage.getItem('equiper-theme') || 'light');
+    } catch (e) {}
+  </script>
+  <link rel="stylesheet" href="{% static 'css/base.css' %}" />
+  <link rel="stylesheet" href="{% static 'css/theme.css' %}" />
+  <style>
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 24px;
+    }
+    .error-page { max-width: 480px; }
+    .error-code {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      letter-spacing: 0;
+      color: var(--primary-color);
+      font-weight: 600;
+      margin: 0 0 12px;
+    }
+    .error-title { font-size: var(--fs-lg, 1.25rem); font-weight: 600; margin: 0 0 10px; }
+    .error-message { color: var(--text-secondary); margin: 0 0 28px; line-height: 1.6; }
+    .error-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .btn-home {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--primary-color); color: var(--text-white);
+      padding: 10px 20px; border-radius: 8px; text-decoration: none;
+      font-weight: 500; font-size: 14px; transition: background .15s ease;
+    }
+    .btn-home:hover { background: var(--primary-hover); }
+    .btn-back {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--bg-card); color: var(--text-primary);
+      border: 1px solid var(--border-color);
+      padding: 10px 20px; border-radius: 8px; text-decoration: none;
+      font-weight: 600; font-size: 14px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="error-page">
+    <p class="error-code">Not enabled</p>
+    <h1 class="error-title">{{ module_label }} is not enabled for your hospital</h1>
+    <p class="error-message">Your hospital's Cirqen set-up does not include this part of the system. Nothing has been
+      deleted. If you need it, ask your head of department to contact Cirqen.</p>
+    <div class="error-actions">
+      <a href="/dashboard/" class="btn-home">Go to dashboard</a>
+      <a href="javascript:history.back()" class="btn-back">Go back</a>
+    </div>
+  </div>
+</body>
+
+</html>

@@ -194,6 +194,7 @@
     {% endblock %}{# /header #}
 
     <!-- ═══════════════ ALERTS / MESSAGES ═══════════════ -->
+    {% if user.is_authenticated %}{% include 'includes/licence_banner.html' %}{% endif %}
     {% if messages %}
     <div class="messages-container" role="alert" aria-live="polite">
       {% for message in messages %}

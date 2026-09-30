@@ -11,8 +11,10 @@ from django.db.models import Q
 from django.core.exceptions import ValidationError
 from django.views.decorators.http import require_POST
 
+from .. import stock
 from ..models import Accessories, AccessoriesManufacturer, Accessoriesname
 from Inventory.models import EquipmentDescription
+from core.names import find_same, get_or_create_named, is_live
 
 logger = logging.getLogger(__name__)
 
@@ -44,9 +46,7 @@ def edit_accessory(request, pk):
             if accessory_name:
                 accessory.name = accessory_name
         elif new_name:
-            accessory_name, created = Accessoriesname.objects.get_or_create(
-                name__iexact=new_name, defaults={'name': new_name.strip()}
-            )
+            accessory_name, created = get_or_create_named(Accessoriesname, new_name)
             accessory.name = accessory_name
             if created:
                 logger.info(f"New accessory name '{new_name}' created by HOD {request.user.username}")
@@ -57,9 +57,7 @@ def edit_accessory(request, pk):
             if manufacturer:
                 accessory.manufacturer = manufacturer
         elif new_manufacturer:
-            manufacturer, created = AccessoriesManufacturer.objects.get_or_create(
-                name__iexact=new_manufacturer, defaults={'name': new_manufacturer.strip()}
-            )
+            manufacturer, created = get_or_create_named(AccessoriesManufacturer, new_manufacturer)
             accessory.manufacturer = manufacturer
             if created:
                 logger.info(f"New manufacturer '{new_manufacturer}' created by HOD {request.user.username}")
@@ -69,10 +67,17 @@ def edit_accessory(request, pk):
             equipment = get_object_or_404(EquipmentDescription, id=equipment_id)
             accessory.equipment_description = equipment
 
-        accessory.stock_count = int(stock_count)
+        counted = int(stock_count)
+        if counted < 0:
+            raise ValidationError("Stock cannot be negative.")
         accessory.unit_cost = float(unit_cost)
         accessory.note = note
-        accessory.save()
+        # Everything but the count; a new count is a stock take, recorded as
+        # an adjustment in the stock ledger so it syncs as a change, not a total.
+        accessory.save(update_fields=['name', 'manufacturer', 'equipment_description', 'unit_cost', 'note',
+                                      'updated_at'])
+        stock.set_count(accessory.pk, counted, note=f"Edited by {request.user.get_full_name() or request.user.username}",
+                        created_by=request.user)
 
         name_display = accessory.name.name if accessory.name else 'Unnamed'
         logger.info(f"Accessory '{name_display}' updated by HOD {request.user.username}")
@@ -165,10 +170,12 @@ def ajax_add_accessory_name(request):
         if not name:
             return JsonResponse({'error': 'Accessory name cannot be empty.'}, status=400)
 
-        if Accessoriesname.objects.filter(name__iexact=name).exists():
-            return JsonResponse({'error': f'Accessory name "{name}" already exists.'}, status=400)
+        same = find_same(Accessoriesname.objects.all(), name)
+        if same and is_live(same):
+            return JsonResponse({'error': f'Accessory name "{same.name}" already exists.'}, status=400)
 
-        accessory_name = Accessoriesname.objects.create(name=name.title())
+        # A deleted row with this name comes back rather than failing on the name.
+        accessory_name, _ = get_or_create_named(Accessoriesname, name)
         logger.info(f"New accessory name '{name}' created by {request.user.username}")
         return JsonResponse({'success': True, 'id': str(accessory_name.id), 'name': accessory_name.name})
 
@@ -186,10 +193,12 @@ def ajax_add_manufacturer(request):
         if not name:
             return JsonResponse({'error': 'Manufacturer name cannot be empty.'}, status=400)
 
-        if AccessoriesManufacturer.objects.filter(name__iexact=name).exists():
-            return JsonResponse({'error': f'Manufacturer "{name}" already exists.'}, status=400)
+        same = find_same(AccessoriesManufacturer.objects.all(), name)
+        if same and is_live(same):
+            return JsonResponse({'error': f'Manufacturer "{same.name}" already exists.'}, status=400)
 
-        manufacturer = AccessoriesManufacturer.objects.create(name=name.title())
+        # A deleted row with this name comes back rather than failing on the name.
+        manufacturer, _ = get_or_create_named(AccessoriesManufacturer, name)
         logger.info(f"New accessory manufacturer '{name}' created by {request.user.username}")
         return JsonResponse({'success': True, 'id': str(manufacturer.id), 'name': manufacturer.name})
 
@@ -244,3 +253,39 @@ def delete_accessory_manufacturer(request, manufacturer_id):
     except Exception as e:
         logger.error(f"Error deleting accessory manufacturer {manufacturer_id}: {e}")
         return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_POST
+def set_lower_limit(request, pk):
+    """Set a part's lower limit (at or below it the part is running low and its
+    workshop is emailed). The HOD, or the Engineer In-charge of its workshop."""
+    accessory = get_object_or_404(Accessories, pk=pk, active_status=True)
+    wants_json = request.headers.get("x-requested-with") == "XMLHttpRequest"
+    if not Accessories.can_set_lower_limit(request.user, accessory):
+        message = "Only the HOD or this workshop's Engineer In-charge can change the lower limit."
+        if wants_json:
+            return JsonResponse({"success": False, "error": message}, status=403)
+        messages.error(request, message)
+        return redirect("partstools:accessories_dashboard")
+    try:
+        limit = int(request.POST.get("reorder_level", ""))
+        if limit < 0:
+            raise ValueError
+    except ValueError:
+        message = "The lower limit must be a whole number, 0 or more (0 means no limit)."
+        if wants_json:
+            return JsonResponse({"success": False, "error": message}, status=400)
+        messages.error(request, message)
+        return redirect("partstools:accessories_dashboard")
+    accessory.reorder_level = limit
+    accessory.save(update_fields=["reorder_level", "updated_at"])  # the stock signal runs from here
+    name = accessory.name.name if accessory.name else "the part"
+    if wants_json:
+        return JsonResponse({"success": True, "reorder_level": limit, "stock_state": accessory.stock_state,
+                             "stock_label": accessory.stock_label})
+    messages.success(request, f"Lower limit for {name} set to {limit}." if limit else f"No lower limit for {name}.")
+    target = request.POST.get("next") or ""
+    if not target.startswith("/") or target.startswith("//"):
+        target = "partstools:accessories_dashboard"
+    return redirect(target)

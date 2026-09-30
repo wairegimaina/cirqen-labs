@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Admins · Cirqen Control{% endblock %}
+{% block main %}
+<h1>Admins</h1>
+{% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+{% if created %}
+<section class="card">
+  <p class="note"><strong>{{ created.username }} created.</strong> Give them this key for their authenticator app (shown once).
+    In the app choose <em>enter a setup key</em>, name it Cirqen Control, and type the key.</p>
+  <p class="key">{{ created.secret }}</p>
+  <p class="muted small break">{{ created.uri }}</p>
+</section>
+{% endif %}
+<div class="table-wrap"><table>
+  <thead><tr><th>User</th><th>Role</th><th>Status</th><th>Last sign-in</th><th></th></tr></thead>
+  <tbody>{% for a in admins %}
+  <tr><td>{{ a.username }}</td><td>{{ a.role }}</td><td>{{ 'active' if a.active else 'deactivated' }}</td><td>{{ a.last_login_at | eat }}</td>
+  <td>{% if a.active and a.id != admin.id %}
+    <form method="post" action="/admin/admins/{{ a.id }}/deactivate" class="inline">
+      <input type="hidden" name="csrf" value="{{ session.csrf }}">
+      <input name="code" inputmode="numeric" placeholder="code" aria-label="Your authenticator code" required size="7">
+      <button class="secondary">Deactivate</button>
+    </form>{% endif %}</td></tr>
+  {% endfor %}</tbody>
+</table></div>
+<section class="card">
+  <h2>Add an admin</h2>
+  <form method="post" action="/admin/admins/new" class="grid-form">
+    <input type="hidden" name="csrf" value="{{ session.csrf }}">
+    <label>Username <input name="username" required></label>
+    <label>Role <select name="role">{% for r in roles %}<option>{{ r }}</option>{% endfor %}</select></label>
+    <label>Temporary password (12+ characters) <input name="password" type="password" autocomplete="new-password" required minlength="12"></label>
+    <label>Your authenticator code <input name="code" inputmode="numeric" required></label>
+    <div class="wide actions"><button>Create</button></div>
+  </form>
+  <p class="muted small">Owner: everything. Support: hospitals and their addresses. Finance: read-only until payments arrive.</p>
+</section>
+{% endblock %}

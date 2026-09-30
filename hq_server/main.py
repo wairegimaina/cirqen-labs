@@ -39,11 +39,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 import endpoints as fleet_endpoints
+import releases
 import store
 from build_package import build_package_if_needed, build_delta_zip
 
@@ -63,7 +64,14 @@ VERSION_FILE = BASE_DIR / "version.txt"
 API_KEY = os.environ.get("HQ_API_KEY", "change-this-in-render-env-vars")
 LOCK_TIMEOUT_SECONDS = 300  # stale migration locks are auto-stealable after this
 
-app = FastAPI(title="Cirqen HQ Update Server", version="1.0.0")
+app = FastAPI(title="Cirqen HQ Update Server", version="1.0.0", docs_url=None, redoc_url=None,
+              openapi_url=None)
+
+# The admin panel (/admin): hospitals, HQ identities, admins, audit log.
+import admin_panel  # noqa: E402
+
+admin_panel.install(app, versions=lambda: [m["version"] for m in sorted(
+    _all_metas(), key=lambda d: _parse_version(d.get("version", "0.0.0")), reverse=True) if not m.get("yanked")])
 
 
 @app.on_event("startup")
@@ -173,22 +181,126 @@ def fleet_endpoint_document():
     return fleet_endpoints.signed_response()
 
 
+@app.get("/api/endpoints/{hospital}/")
+def hospital_endpoint_document(hospital: str):
+    """The same signed document for one hospital (FLEET_HOSPITALS). Unknown
+    hospitals get 404, never the fleet document: a desktop with a hospital
+    code must not be moved by anything that is not addressed to it."""
+    document = fleet_endpoints.build_hospital_document(hospital)
+    if document is None:
+        raise HTTPException(status_code=404, detail="unknown hospital")
+    return fleet_endpoints.signed_response(document)
+
+
+@app.get("/api/profiles/{hospital}/")
+def hospital_profile_document(hospital: str):
+    """The hospital's signed profile (modules and menu labels, profiles.py).
+    404 until one is published, or for a closed hospital; a PC then keeps
+    every module on (or its last profile)."""
+    import control_store
+    import hq_certificates
+    import profiles
+
+    code = hospital.strip().upper()
+    row = control_store.get_hospital(code) if control_store.available() else None
+    if row is None or row["status"] == "closed" or not row["profile_version"]:
+        raise HTTPException(status_code=404, detail="no profile")
+    try:
+        key = hq_certificates._signing_key(None)
+    except SystemExit:
+        raise HTTPException(status_code=503, detail="no signing key") from None
+    return profiles.signed(code, row["profile"], row["profile_version"], key)
+
+
+@app.get("/api/licences/{hospital}/")
+def hospital_licence_document(hospital: str):
+    """The hospital's signed licence (billing.py): plan, end date, grace,
+    status. 404 until the hospital has a licence; its PCs then enforce
+    nothing, as before."""
+    import billing
+    import control_store
+    import hq_certificates
+
+    code = hospital.strip().upper()
+    lic = billing.get_licence(code) if control_store.available() else None
+    if lic is None:
+        raise HTTPException(status_code=404, detail="no licence")
+    try:
+        key = hq_certificates._signing_key(None)
+    except SystemExit:
+        raise HTTPException(status_code=503, detail="no signing key") from None
+    return billing.signed_licence(lic, key)
+
+
+# ── M-Pesa (Daraja C2B): payments arriving by themselves (mpesa.py) ───────────
+
+def _caller_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for", "")
+    return (forwarded.split(",")[-1].strip() if forwarded else "") or (request.client.host if request.client else "")
+
+
+@app.post("/api/pay/mpesa/confirm/{secret}")
+async def mpesa_confirmation(secret: str, request: Request):
+    """Safaricom's confirmation of a Paybill payment. Stored once per receipt
+    number, then matched to an invoice or left for finance. Always answers
+    'accepted' to a genuine call, so Safaricom does not retry forever."""
+    import mpesa
+
+    if not mpesa.secret_ok(secret):
+        raise HTTPException(status_code=404)
+    if not mpesa.ip_ok(_caller_ip(request)):
+        raise HTTPException(status_code=403)
+    try:
+        payload = await request.json()
+        row = mpesa.receive(payload if isinstance(payload, dict) else {})
+        print(f"💰 M-Pesa {row['trans_id']} KES {row['amount_kes']} account {row['bill_ref']}: {row['status']}")
+    except Exception as exc:  # noqa: BLE001 - never make Safaricom retry a payment we cannot read
+        print(f"⚠️  M-Pesa confirmation not stored: {exc}")
+    return {"ResultCode": 0, "ResultDesc": "Accepted"}
+
+
+@app.post("/api/pay/mpesa/validate/{secret}")
+async def mpesa_validation(secret: str, request: Request):
+    """Asked before a payment completes (only if Safaricom enabled external
+    validation for the Paybill). Accepts, unless
+    MPESA_REJECT_UNKNOWN_ACCOUNTS=true and the account is not a hospital code
+    or open invoice."""
+    import mpesa
+
+    if not mpesa.secret_ok(secret):
+        raise HTTPException(status_code=404)
+    if not mpesa.ip_ok(_caller_ip(request)):
+        raise HTTPException(status_code=403)
+    if mpesa.env("MPESA_REJECT_UNKNOWN_ACCOUNTS").lower() == "true":
+        try:
+            payload = await request.json()
+            ref = str((payload or {}).get("BillRefNumber") or "").strip().upper()
+            hospital, _, _ = mpesa._target(ref)
+            if hospital is None and not (ref and mpesa.cs.get_hospital(ref)):
+                return {"ResultCode": "C2B00012", "ResultDesc": "Rejected"}
+        except Exception:  # noqa: BLE001
+            pass
+    return {"ResultCode": "0", "ResultDesc": "Accepted"}
+
+
 @app.get("/api/updates/latest/")
 def check_latest(current_version: str = "0.0.0", machine_id: Optional[str] = None,
-                 x_api_key: Optional[str] = Header(None)):
+                 hospital_code: Optional[str] = None, x_api_key: Optional[str] = Header(None)):
     _require_api_key(x_api_key)
 
     if machine_id:
         store.touch_check(machine_id, current_version)
 
-    latest = _get_latest_package()
-    if not latest:
-        return {"update_available": False, "message": "No packages available yet"}
+    # Each hospital follows the newest release, is pinned to one, or is on
+    # hold (admin panel; releases.py). PCs without a hospital code follow.
+    latest, why = releases.choose(_all_metas(), current_version, releases.policy_for(hospital_code))
+    if latest is None:
+        newest = _get_latest_package()
+        return {"update_available": False, "current_version": current_version,
+                "latest_version": newest["version"] if newest else None,
+                **({"message": why} if why else {})}
 
     latest_version = latest["version"]
-    if _parse_version(latest_version) <= _parse_version(current_version):
-        return {"update_available": False, "current_version": current_version,
-                "latest_version": latest_version}
 
     # #7 — kill switch / staged rollout / minimum-version gating
     if latest.get("yanked"):

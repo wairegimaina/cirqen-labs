@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+{% block title %}Email outbox — {{ site_name }}{% endblock %}
+{% block page_title %}Email outbox{% endblock %}
+{% block extra_css %}
+<style>
+.ob-filters { display: flex; flex-wrap: wrap; gap: .5rem; }
+.ob-table td { vertical-align: middle; font-size: var(--fs-sm); }
+.ob-table th { font-size: var(--fs-xs); white-space: nowrap; color: var(--text-secondary); }
+.ob-to { font-size: var(--fs-xs); color: var(--text-secondary); overflow-wrap: anywhere; }
+.ob-error { font-size: var(--fs-xs); color: var(--danger-color); overflow-wrap: anywhere; max-width: 28rem; }
+.ob-actions { display: flex; gap: .35rem; justify-content: flex-end; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="page-wrap">
+  <div class="page-head"><div>
+    <h1 class="page-title">Email outbox</h1>
+    <p class="page-subtitle">Everything this PC has queued to send. <a href="{% url 'notifications:email_settings' %}">Email settings</a></p>
+  </div></div>
+
+  <section class="section-card">
+    <div class="section-card-body">
+      <form method="get" class="d-flex gap-2 mb-3" role="search">
+        {% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}
+        <input type="search" class="form-control" name="q" value="{{ q }}" placeholder="Search: a part, a workshop, a person or an address" aria-label="Search the outbox">
+        <button type="submit" class="btn btn-primary"><i class="fas fa-search" aria-hidden="true"></i> Search</button>
+      </form>
+      <div class="ob-filters">
+        <a class="btn {% if not status %}btn-primary{% else %}btn-secondary{% endif %}" href="?{% if q %}q={{ q|urlencode }}{% endif %}">All</a>
+        {% for value, label in statuses %}
+          <a class="btn {% if status == value %}btn-primary{% else %}btn-secondary{% endif %}" href="?status={{ value }}{% if q %}&q={{ q|urlencode }}{% endif %}">{{ label }}{% for k, n in counts.items %}{% if k == value %} ({{ n }}){% endif %}{% endfor %}</a>
+        {% endfor %}
+      </div>
+    </div>
+    {% if page.object_list %}
+    <div class="table-responsive">
+      <table class="table ob-table">
+        <thead><tr><th>Queued</th><th>Subject</th><th>To</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+        {% for m in page.object_list %}
+          <tr>
+            <td>{{ m.created_at|date:"j M, H:i" }}</td>
+            <td><b>{{ m.subject }}</b>{% if m.attachment_name %}<div class="form-text"><i class="fas fa-paperclip" aria-hidden="true"></i> {{ m.attachment_name }}</div>{% endif %}</td>
+            <td class="ob-to">{{ m.to }}{% if m.cc %}<br>cc {{ m.cc }}{% endif %}</td>
+            <td>
+              <span class="badge {% if m.status == 'sent' %}bg-success{% elif m.status == 'pending' %}bg-info{% elif m.status == 'cancelled' %}bg-secondary{% else %}bg-danger{% endif %}">{{ m.get_status_display }}</span>
+              {% if m.status == 'sent' %}<div class="form-text">{{ m.sent_at|date:"j M, H:i" }}</div>{% endif %}
+              {% if m.last_error and m.status != 'sent' %}<div class="ob-error">{{ m.last_error }}</div>{% endif %}
+            </td>
+            <td>
+              <div class="ob-actions">
+                {% if m.status != 'sent' %}
+                <form method="post" action="{% url 'notifications:outbox_action' m.pk %}">{% csrf_token %}
+                  <input type="hidden" name="action" value="retry"><input type="hidden" name="next" value="{{ request.get_full_path }}">
+                  <button class="btn btn-sm btn-secondary" type="submit">Retry</button></form>
+                {% endif %}
+                {% if m.status == 'pending' or m.status == 'failed' or m.status == 'expired' %}
+                <form method="post" action="{% url 'notifications:outbox_action' m.pk %}">{% csrf_token %}
+                  <input type="hidden" name="action" value="discard"><input type="hidden" name="next" value="{{ request.get_full_path }}">
+                  <button class="btn btn-sm btn-outline-danger" type="submit">Discard</button></form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if page.has_other_pages %}
+    <div class="section-card-foot" style="display:flex;gap:.5rem;justify-content:flex-end">
+      {% if page.has_previous %}<a class="btn btn-secondary" href="?status={{ status }}&q={{ q|urlencode }}&page={{ page.previous_page_number }}">Previous</a>{% endif %}
+      {% if page.has_next %}<a class="btn btn-secondary" href="?status={{ status }}&q={{ q|urlencode }}&page={{ page.next_page_number }}">Next</a>{% endif %}
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="section-card-body"><div class="empty-state"><div class="empty-state-icon"><i class="fas fa-inbox" aria-hidden="true"></i></div><p class="mb-0">Nothing here.</p></div></div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

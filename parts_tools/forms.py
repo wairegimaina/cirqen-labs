@@ -2,7 +2,8 @@
 from django import forms
 
 from workshop.models import Workshop
-from .models import Tools, Accessories, AccessoryRequest
+from .models import Tools, Accessories, Accessoriesname, AccessoryRequest
+from core.names import find_same
 from django.core.exceptions import ValidationError
 from django.contrib import messages
 from users.models import UserProfile 
@@ -118,10 +119,10 @@ class AccessoryRequestForm(forms.ModelForm):
             raise ValidationError("Please select an existing accessory OR provide a new accessory name, not both.")
 
         if new_accessory_name and not accessory:
-            normalized_new_name = new_accessory_name.strip().lower()
-            existing_accessory = Accessories.objects.filter(
-                models.Q(name__iexact=normalized_new_name, workshop=self.workshop) |
-                models.Q(name__iexact=normalized_new_name, workshop__isnull=True)
+            # Same name ignoring case, spaces and punctuation ("Spo2 probe" = "SpO2-Probe").
+            same_name = find_same(Accessoriesname.objects.all(), new_accessory_name)
+            existing_accessory = same_name and Accessories.objects.filter(
+                models.Q(workshop=self.workshop) | models.Q(workshop__isnull=True), name=same_name,
             ).first()
             if existing_accessory:
                 cleaned_data['accessory'] = existing_accessory

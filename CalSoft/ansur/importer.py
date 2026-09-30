@@ -27,7 +27,7 @@ from CalSoft.models import (
 )
 from CalSoft.utils import PASS, reading_conformity
 
-from .parser import Record, RecordError, parse_bytes
+from .parser import Record, RecordError, _plain, parse_bytes
 
 SIX_DP = Decimal("0.000001")
 
@@ -140,24 +140,24 @@ def _match_steps(job, record, reasons):
                 continue
             match = next((sv for sv in set_values if _q(sv.value) == _q(set_point)), None)
             if match is None:
-                reasons.append(f"{parameter.name}: Ansur's value {set_point.normalize()} is not a set value "
+                reasons.append(f"{parameter.name}: Ansur's value {_plain(set_point)} is not a set value "
                                f"of the procedure.")
                 continue
             if (limit_type == "two_sided" and parameter.tolerance is not None
                     and _q(tolerance) != _q(parameter.tolerance)):
-                reasons.append(f"{parameter.name} at {match.value.normalize()}: Ansur's tolerance "
-                               f"±{tolerance.normalize()} differs from the procedure's "
-                               f"±{parameter.tolerance.normalize()}.")
+                reasons.append(f"{parameter.name} at {_plain(match.value)}: Ansur's tolerance "
+                               f"±{_plain(tolerance)} differs from the procedure's "
+                               f"±{_plain(parameter.tolerance)}.")
                 continue
             if match.pk in covered:
-                reasons.append(f"{parameter.name} at {match.value.normalize()}: more than one result.")
+                reasons.append(f"{parameter.name} at {_plain(match.value)}: more than one result.")
                 continue
             covered[match.pk] = step
             rows.append((parameter, match, step))
 
         for sv in set_values:
             if sv.pk not in covered and len(reasons) == errors_before:
-                reasons.append(f"No result for {parameter.name} at {sv.value.normalize()}.")
+                reasons.append(f"No result for {parameter.name} at {_plain(sv.value)}.")
     return rows
 
 
@@ -227,6 +227,7 @@ def import_record(job: AnsurJob, data: bytes, *, pdf: bytes | None = None, file_
             device_description=equipment.description, actual_temperature=job.actual_temperature,
             actual_humidity=job.actual_humidity, actual_pressure=job.actual_pressure,
             notes=_notes(job, record, plan), status="pending_review", source="ansur",
+            ansur_job_number=job.job_number,
             ansur_operator=record.operator[:150], ansur_record_sha256=sha,
             ansur_checks=[{"name": name[:150], "status": status[:20]} for name, status in record.checks],
         )

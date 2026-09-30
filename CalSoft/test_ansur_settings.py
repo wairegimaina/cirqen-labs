@@ -53,10 +53,22 @@ class AnsurSettingsPageTests(TestCase):
         self.client.post(URL, {"action": "add_map", "procedure": self.procedure.pk,
                                "template_file": "Defibrillator.mtt", "service_event": "PM"})
 
-    def test_only_the_hod_can_open_it(self):
+    def test_a_maintenance_workshop_technician_cannot_open_it(self):
         self.client.force_login(self._user("ansur_tech", "Tech", level="Engineer",
                                              workshop=Workshop.objects.create(name="Biomed")))
         self.assertEqual(self.client.get(URL).status_code, 403)
+
+    def test_the_calibration_centre_can_set_it_up(self):
+        centre = Workshop.objects.create(name="Calibration", category="calibration_center")
+        self.client.force_login(self._user("ansur_cal_tech", "Tech", level="Engineer", workshop=centre))
+        self.assertEqual(self.client.get(URL).status_code, 200)
+        self._save()
+        self.assertEqual(AnsurSettings.load().program_path, str(self.exe))
+
+    def test_the_calibration_menu_links_to_it(self):
+        centre = Workshop.objects.create(name="Calibration", category="calibration_center")
+        self.client.force_login(self._user("ansur_cal_tech", "Tech", level="Engineer", workshop=centre))
+        self.assertContains(self.client.get(reverse("calibration:certificate_list")), f'href="{URL}"')
 
     def test_a_fresh_install_says_what_to_do(self):
         page = self.client.get(URL)

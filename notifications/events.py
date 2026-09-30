@@ -1,4 +1,10 @@
-"""Emails triggered by work order changes.
+"""Notifications triggered by work order changes.
+
+Bell notifications only, by default: a busy hospital does 10-15 work orders
+a day per technologist, and an email for each (with the HOD copied) is noise.
+The HOD hears about work orders through the weekly report instead
+(notifications.reports). NOTIFICATIONS_WORK_ORDER_EMAIL (config.json
+``notifications.work_order_email``) turns the emails back on for a small site.
 
 These run on the desktop where the change was made. Rows that arrive from
 other machines through sync are written with SQL, not the ORM, so no signal
@@ -12,7 +18,9 @@ from django.dispatch import receiver
 
 from jobcard.models import jobcard
 
-from .mailer import queue
+from django.conf import settings
+
+from .mailer import _bell, queue
 from .recipients import department_in_charges
 
 logger = logging.getLogger(__name__)
@@ -45,6 +53,14 @@ def _safe(fn, pk):
         logger.exception("notifications: %s failed for work order %s", fn.__name__, pk)
 
 
+def _notify(to_users, kind, subject, in_app_message, **email):
+    """The bell always; the email only when work-order email is switched on."""
+    if getattr(settings, "NOTIFICATIONS_WORK_ORDER_EMAIL", False):
+        return queue(kind=kind, to_users=to_users, subject=subject, in_app_message=in_app_message, **email)
+    _bell([u for u in to_users if u is not None], kind, subject, in_app_message)
+    return None
+
+
 def _context(wo):
     entries = list(wo.checklist_entries.filter(active_status=True))
     return {
@@ -63,14 +79,10 @@ def work_order_submitted(pk):
     ctx = _context(wo)
     subject = (f"[Action] Work order {ctx['ref']} waiting for your approval — "
                f"{wo.equipment.description.name} ({wo.department.name})")
-    queue(
-        kind='work_order_submitted',
-        dedupe_key=f"wo-submitted:{wo.pk}",
-        to_users=department_in_charges(wo.department),
-        subject=subject,
-        template='work_order_submitted',
-        context=ctx,
-        in_app_message=f"{wo.action_taken} on {wo.equipment.serial_number} by {ctx['technician']} needs approval.",
+    _notify(
+        department_in_charges(wo.department), 'work_order_submitted', subject,
+        f"{wo.action_taken} on {wo.equipment.serial_number} by {ctx['technician']} needs approval.",
+        dedupe_key=f"wo-submitted:{wo.pk}", template='work_order_submitted', context=ctx,
     )
 
 
@@ -81,13 +93,10 @@ def work_order_decided(pk):
         return
     ctx = _context(wo)
     subject = f"Work order {ctx['ref']} {wo.status.lower()} — {wo.equipment.description.name} ({wo.department.name})"
-    queue(
-        kind='work_order_decided',
+    _notify(
+        [wo.performed_by], 'work_order_decided', subject,
+        (f"{wo.status}: {wo.action_taken} on {wo.equipment.serial_number}"
+         + (f" — {wo.decline_reason}" if wo.status == 'Declined' and wo.decline_reason else "")),
         dedupe_key=f"wo-decided:{wo.pk}:{wo.status}:{wo.nurse_signed_date.isoformat() if wo.nurse_signed_date else ''}",
-        to_users=[wo.performed_by],
-        subject=subject,
-        template='work_order_decided',
-        context=ctx,
-        in_app_message=(f"{wo.status}: {wo.action_taken} on {wo.equipment.serial_number}"
-                        + (f" — {wo.decline_reason}" if wo.status == 'Declined' and wo.decline_reason else "")),
+        template='work_order_decided', context=ctx,
     )

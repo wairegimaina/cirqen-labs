@@ -1,0 +1,4 @@
+{% autoescape off %}{{ message }}{% if link %}
+
+{{ link }}{% endif %}
+{% endautoescape %}

@@ -56,6 +56,7 @@ urlpatterns = [
         RedirectView.as_view(url="/accessories/%(rest)s", query_string=True),
     ),
     path("audit-log/", include("audit_log.urls")),
+    path("settings/email/", include("notifications.urls")),
     path("settings/", include("core.urls")),
     path("assets/", include("assets.urls")),
     path("health/", health_check, name="health_check"),

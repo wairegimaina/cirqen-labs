@@ -37,7 +37,7 @@ document.addEventListener('DOMContentLoaded', function () {
     initializeSearchAndFilter();
     initializePaginationSystem();
     EquipmentReactivation.init();
-    ModelAutocomplete.init();
+    ModelSelect.init();
     TransferLogic.init();
     ExcelImport.init();
 
@@ -485,7 +485,7 @@ const Modals = {
     document.getElementById('edit_equipment_id').value = data.id;
     document.getElementById('edit_description').value = data.description;
     document.getElementById('edit_manufacturer').value = data.manufacturer || ''; // ✅ FIXED ID
-    document.getElementById('edit_model').value = data.model || '';
+    ModelSelect.load('edit', data.model || '');
     document.getElementById('edit_serial_number').value = data.serial || '';
     document.getElementById('edit_asset_tag').value = data.assetTag || '';
     document.getElementById('edit_department').value = data.department;
@@ -498,9 +498,6 @@ const Modals = {
     // Show Modal
     const modal = new bootstrap.Modal(document.getElementById('editEquipmentModal'));
     modal.show();
-
-    // Re-init autocomplete for the edit form context
-    setTimeout(() => ModelAutocomplete.init('edit'), 200);
   },
 
   openDelete: (id) => {
@@ -845,47 +842,280 @@ function initializePaginationSystem() {}
 function initializeSearchAndFilter() {}
 
 // ==========================================
-// 10. MODEL AUTOCOMPLETE
+// 10. MODEL SELECT + EDITABLE LISTS
 // ==========================================
-const ModelAutocomplete = {
-  init: (mode = 'add') => {
-    const descId = mode === 'add' ? 'equipment_description_select' : 'edit_description';
-    const modelId = mode === 'add' ? 'model' : 'edit_model';
+// Same name ignoring case, spaces and punctuation: "PatienT MONITOR" = "patient- Monitor"
+// (core/names.py name_key does the same on the server).
+function nameKey(value) {
+  return String(value || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+}
 
-    const descInput = document.getElementById(descId);
-    const modelInput = document.getElementById(modelId);
+// The Model drop-down lists the models already used for the chosen
+// description; "+" adds one that is not there yet.
+const ModelSelect = {
+  ids: {
+    add: { desc: 'equipment_description_select', model: 'model', group: 'new-model-group-add', input: 'new_model_add' },
+    edit: { desc: 'edit_description', model: 'edit_model', group: 'new-model-group-edit', input: 'new_model_edit' },
+  },
 
-    if (!descInput || !modelInput) return;
-
-    descInput.addEventListener('change', () => {
-      const val = descInput.value;
-      modelInput.placeholder = 'Loading models...';
-      modelInput.value = '';
-
-      fetch(`/Inventory/api/models/${val}/`)
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.success && data.models.length > 0) {
-            modelInput.placeholder = `Type to search (${data.models.length} known models)...`;
-
-            let listId = 'model-list-' + mode;
-            let datalist = document.getElementById(listId);
-            if (!datalist) {
-              datalist = document.createElement('datalist');
-              datalist.id = listId;
-              document.body.appendChild(datalist);
-              modelInput.setAttribute('list', listId);
-            }
-            datalist.innerHTML = data.models.map((m) => `<option value="${escapeHTML(m)}">`).join('');
-          } else {
-            modelInput.placeholder = 'Enter new model name';
-            modelInput.removeAttribute('list');
-          }
-        })
-        .catch(() => (modelInput.placeholder = 'Enter model name'));
+  init() {
+    Object.entries(this.ids).forEach(([mode, ids]) => {
+      document.getElementById(ids.desc)?.addEventListener('change', () => this.load(mode));
     });
+    // Reopening the Add Equipment modal starts on the form, not the list editor.
+    document
+      .getElementById('addEquipmentModal')
+      ?.addEventListener('hidden.bs.modal', () => NameLists.toggle(false));
+  },
+
+  // Fill the list for the selected description, keeping ``keep`` selected.
+  load(mode, keep = '') {
+    const ids = this.ids[mode];
+    const desc = document.getElementById(ids.desc)?.value;
+    const select = document.getElementById(ids.model);
+    if (!select) return Promise.resolve();
+    if (!desc) {
+      select.innerHTML = '<option value="" disabled selected>Select a description first...</option>';
+      return Promise.resolve();
+    }
+    select.innerHTML = '<option value="" disabled selected>Loading models...</option>';
+    return fetch(`/Inventory/api/models/${desc}/`)
+      .then((res) => res.json())
+      .then((data) => this.fill(select, data.success ? data.models : [], keep))
+      .catch(() => this.fill(select, [], keep));
+  },
+
+  fill(select, models, keep) {
+    const names = [...models];
+    if (keep && !names.some((m) => m === keep)) names.unshift(keep);
+    const first = names.length
+      ? '<option value="" disabled>Select...</option>'
+      : '<option value="" disabled>No models yet - press + to add one</option>';
+    select.innerHTML =
+      first + names.map((m) => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
+    select.value = keep || '';
+  },
+
+  showNew(mode) {
+    const ids = this.ids[mode];
+    toggleVisible(ids.group);
+    document.getElementById(ids.input)?.focus();
+  },
+
+  cancelNew(mode) {
+    const ids = this.ids[mode];
+    document.getElementById(ids.group).style.display = 'none';
+    document.getElementById(ids.input).value = '';
+  },
+
+  addNew(mode) {
+    const ids = this.ids[mode];
+    const input = document.getElementById(ids.input);
+    const select = document.getElementById(ids.model);
+    const value = input.value.trim().replace(/\s+/g, ' ');
+    if (!value) return UI.showNotification('Please enter a model', 'warning');
+    // Already in the list under another spelling: pick that one.
+    const same = [...select.options].find((o) => o.value && nameKey(o.value) === nameKey(value));
+    if (same) {
+      select.value = same.value;
+      UI.showNotification(`"${same.value}" is already in the list - selected it`, 'info');
+    } else {
+      select.add(new Option(value, value, true, true));
+    }
+    this.cancelNew(mode);
   },
 };
+
+// Settings button on the Add Equipment modal: rename or delete descriptions,
+// manufacturers and models. Delete is offered only for names nothing uses.
+const NameLists = {
+  kind: 'description',
+  rows: [],
+
+  toggle(open) {
+    const panel = document.getElementById('nameListsPanel');
+    const form = document.getElementById('add_form');
+    const show = open === undefined ? panel.style.display === 'none' : open;
+    panel.style.display = show ? 'block' : 'none';
+    form.style.display = show ? 'none' : 'block';
+    setText('addEquipmentTitle', show ? 'Edit Lists' : 'Add New Equipment');
+    if (show) this.show(this.kind);
+  },
+
+  show(kind) {
+    this.kind = kind;
+    document.querySelectorAll('#nameListsPanel [data-list]').forEach((b) =>
+      b.classList.toggle('active', b.dataset.list === kind),
+    );
+    document.getElementById('nameListsModelPicker').style.display = kind === 'model' ? 'block' : 'none';
+    document.getElementById('nameListsFilter').value = '';
+    setText(
+      'nameListsHint',
+      kind === 'model'
+        ? 'A model is renamed on every device of this description. Renaming it to a model already listed merges the two.'
+        : 'Delete is only possible when nothing uses the name.',
+    );
+    this.error('');
+    if (kind === 'model') return this.loadModels();
+    this.rows = [];
+    this.render('Loading...');
+    fetch('/Inventory/api/name-lists/')
+      .then((res) => res.json())
+      .then((data) => {
+        if (!data.success) throw new Error(data.error || 'Could not load the list');
+        this.rows = data[kind + 's'];
+        this.render();
+      })
+      .catch((e) => this.error(e.message));
+  },
+
+  loadModels() {
+    const desc = document.getElementById('nameListsModelDescription').value;
+    this.rows = [];
+    if (!desc) return this.render('Pick a description to see its models.');
+    this.render('Loading...');
+    fetch(`/Inventory/api/name-lists/models/${desc}/`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (!data.success) throw new Error(data.error || 'Could not load the models');
+        this.rows = data.models.map((m) => ({ id: m.name, name: m.name, uses: m.uses }));
+        this.render();
+      })
+      .catch((e) => this.error(e.message));
+  },
+
+  render(message) {
+    const box = document.getElementById('nameListsRows');
+    if (message) {
+      box.innerHTML = `<div class="list-group-item text-muted">${escapeHtml(message)}</div>`;
+      return;
+    }
+    const filter = nameKey(document.getElementById('nameListsFilter').value);
+    const rows = this.rows.filter((r) => !filter || nameKey(r.name).includes(filter));
+    if (!rows.length) {
+      box.innerHTML = '<div class="list-group-item text-muted">Nothing to show.</div>';
+      return;
+    }
+    const isModel = this.kind === 'model';
+    box.innerHTML = rows
+      .map((r, i) => {
+        const devices = isModel ? r.uses : r.devices;
+        const used = devices
+          ? `<span class="badge text-bg-light border">${devices} device${devices === 1 ? '' : 's'}</span>`
+          : r.uses
+            ? '<span class="badge text-bg-light border" title="Used by other records">in use</span>'
+            : '<span class="badge text-bg-light border text-muted">unused</span>';
+        const del = isModel
+          ? ''
+          : `<button type="button" class="btn btn-sm btn-outline-danger" data-act="delete" data-i="${i}"
+               ${r.uses ? 'disabled title="In use - cannot be deleted"' : 'title="Delete"'} aria-label="Delete">
+               <i class="fas fa-trash"></i></button>`;
+        return `<div class="list-group-item d-flex align-items-center gap-2" data-row="${i}">
+            <span class="flex-grow-1 text-truncate" data-name>${escapeHtml(r.name)}</span>
+            ${used}
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-act="edit" data-i="${i}" title="Rename" aria-label="Rename">
+              <i class="fas fa-pen"></i></button>
+            ${del}
+          </div>`;
+      })
+      .join('');
+    box.querySelectorAll('[data-act]').forEach((btn) => {
+      const row = rows[Number(btn.dataset.i)];
+      btn.addEventListener('click', () => (btn.dataset.act === 'edit' ? this.startEdit(btn, row) : this.remove(row)));
+    });
+  },
+
+  startEdit(btn, row) {
+    const item = btn.closest('.list-group-item');
+    item.innerHTML = `
+      <input type="text" class="form-control form-control-sm" maxlength="${this.kind === 'model' ? 100 : 150}">
+      <button type="button" class="btn btn-sm btn-success" data-save aria-label="Save"><i class="fas fa-check"></i></button>
+      <button type="button" class="btn btn-sm btn-secondary" data-cancel aria-label="Cancel"><i class="fas fa-times"></i></button>`;
+    const input = item.querySelector('input');
+    input.value = row.name;
+    input.focus();
+    const save = () => this.rename(row, input.value.trim());
+    item.querySelector('[data-save]').addEventListener('click', save);
+    item.querySelector('[data-cancel]').addEventListener('click', () => this.render());
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        save();
+      } else if (e.key === 'Escape') {
+        e.stopPropagation();
+        this.render();
+      }
+    });
+  },
+
+  post(url, fields) {
+    const body = new FormData();
+    Object.entries(fields).forEach(([k, v]) => body.append(k, v));
+    body.append('csrfmiddlewaretoken', getCSRFToken());
+    return fetch(url, { method: 'POST', body, headers: { 'X-CSRFToken': getCSRFToken() } }).then((res) =>
+      res.json().then((data) => {
+        if (!data.success) throw new Error(data.error || 'Failed');
+        return data;
+      }),
+    );
+  },
+
+  rename(row, name) {
+    if (!name || name === row.name) return this.render();
+    this.error('');
+    const url =
+      this.kind === 'model'
+        ? `/Inventory/api/name-lists/models/${document.getElementById('nameListsModelDescription').value}/rename/`
+        : `/Inventory/api/name-lists/${this.kind}/${row.id}/rename/`;
+    this.post(url, { name, old: row.name })
+      .then((data) => {
+        if (this.kind === 'model') {
+          UI.showNotification(`Model renamed on ${data.changed} device(s)`, 'success');
+          return this.loadModels();
+        }
+        this.updateSelects(row.id, data.name);
+        row.name = data.name;
+        this.render();
+        UI.showNotification('Renamed', 'success');
+      })
+      .catch((e) => this.error(e.message));
+  },
+
+  remove(row) {
+    this.error('');
+    this.post(`/Inventory/api/name-lists/${this.kind}/${row.id}/delete/`, {})
+      .then(() => {
+        this.updateSelects(row.id, null);
+        this.rows = this.rows.filter((r) => r !== row);
+        this.render();
+        UI.showNotification(`"${row.name}" deleted`, 'success');
+      })
+      .catch((e) => this.error(e.message));
+  },
+
+  // Keep the page's drop-downs in step (name = null removes the option).
+  updateSelects(id, name) {
+    const selects =
+      this.kind === 'description'
+        ? ['equipment_description_select', 'edit_description', 'nameListsModelDescription']
+        : ['manufacturer_select', 'edit_manufacturer'];
+    selects.forEach((sid) => {
+      const opt = document.getElementById(sid)?.querySelector(`option[value="${CSS.escape(id)}"]`);
+      if (!opt) return;
+      if (name === null) opt.remove();
+      else opt.textContent = name;
+    });
+  },
+
+  error(message) {
+    const box = document.getElementById('nameListsError');
+    box.textContent = message;
+    box.style.display = message ? 'block' : 'none';
+  },
+};
+
+window.ModelSelect = ModelSelect;
+window.NameLists = NameLists;
 
 // ==========================================
 // 11. REPORTS & UTILS
@@ -939,18 +1169,26 @@ function submitAuxData(inputId, selectId, url, fieldName) {
   fetch(url, { method: 'POST', body: formData })
     .then((res) => res.json())
     .then((data) => {
-      if (data.success) {
-        const opt = document.createElement('option');
-        opt.value = data[fieldName.replace('_name', '_id')] || data.id;
-        opt.text = data[fieldName] || input.value;
-        opt.selected = true;
-        select.add(opt);
+      const id = data[fieldName.replace('_name', '_id')] || data.id;
+      if (data.success || data.existing) {
+        // An existing name (same apart from case, spaces or punctuation) is
+        // selected rather than added twice.
+        let opt = id && select.querySelector(`option[value="${CSS.escape(String(id))}"]`);
+        if (!opt) {
+          opt = new Option(data[fieldName] || input.value, id);
+          select.add(opt);
+        }
+        select.value = opt.value;
+        select.dispatchEvent(new Event('change'));
 
         input.parentElement.style.display = 'none';
         input.value = '';
-        UI.showNotification('Added successfully', 'success');
+        UI.showNotification(
+          data.existing ? `"${opt.text}" already exists - selected it` : 'Added successfully',
+          data.existing ? 'info' : 'success',
+        );
       } else {
-        alert(data.error || 'Failed to add');
+        UI.showNotification(data.error || 'Failed to add', 'danger');
       }
     });
 }

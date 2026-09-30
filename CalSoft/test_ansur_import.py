@@ -48,7 +48,8 @@ class ParserTests(SimpleTestCase):
 
     def test_refuses_what_is_not_a_record(self):
         for data, reason in [
-            (b"not xml", "not readable XML"),
+            (b"not xml", "cannot read this file as an Ansur record"),
+            (b"<unclosed", "not readable XML"),
             (b'<METRONFile Type="Template"/>', "not a test record"),
             (b"<Other/>", "root element"),
             (b'<!DOCTYPE x [<!ENTITY a "b">]><METRONFile Type="Record"/>', "document type"),

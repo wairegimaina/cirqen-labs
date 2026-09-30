@@ -122,9 +122,16 @@ def site_profile(request):
             return redirect("core:site_profile")
     else:
         form = SiteProfileForm(instance=profile)
+    from notifications import mailer
+    from notifications.models import EmailOutbox
+
+    server = mailer.smtp()
     return render(request, "core/site_profile.html", {
         "form": form, "profile": profile,
         "effective_name": branding.organisation_name(default=""),
+        # The Email card: Settings > Email lives here, not in the sidebar.
+        "email_on": server.configured, "email_from": server.from_email,
+        "email_waiting": EmailOutbox.objects.filter(status="pending").count(),
     })
 
 
@@ -171,3 +178,23 @@ def report_download(request, key):
     path, filename = found
     return FileResponse(open(path, "rb"), as_attachment=True, filename=filename,
                         content_type="application/pdf")
+
+
+@login_required
+def subscription(request):
+    """The hospital's licence: plan, end date and state, for everyone; "Check
+    now" fetches the latest from Cirqen at once (after a renewal)."""
+    from django.conf import settings
+
+    import licence
+    from core.licence_gate import current
+
+    if request.method == "POST":
+        config = getattr(settings, "CIRQEN_CONFIG", None)
+        result = licence.fetch_and_store(settings.DATA_PATH, config.get("update.server_url") if config else "",
+                                         (config.get("sync.hospital_code") or "") if config else "")
+        messages.info(request, {"saved": "The latest licence has been loaded.",
+                                "licence unchanged": "The licence is already up to date."}.get(
+                                    result, f"Could not check: {result}."))
+        return redirect("core:subscription")
+    return render(request, "core/subscription.html", {"licence": current()})

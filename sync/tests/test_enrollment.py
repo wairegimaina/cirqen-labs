@@ -54,3 +54,19 @@ def test_refusal_does_not_store_anything():
     with mock.patch("requests.post", return_value=_response(409, {"error": "already"})):
         assert enrollment.ensure_client_key(cfg, "https://hq", "dev-1") is None
     assert not cfg.get("sync.auth_token")
+
+
+def test_with_a_hospital_code_the_token_goes_only_to_a_confirmed_hq():
+    import hq_handshake
+
+    cfg = FakeConfig(**{"sync.enrollment_code": "cqe1.x.y", "sync.hospital_code": "CH0001"})
+    with mock.patch.object(hq_handshake, "confirm", return_value=(False, "belongs to CH0002")) as confirm, \
+            mock.patch("requests.post") as post:
+        assert enrollment.ensure_client_key(cfg, "https://hq/", "dev-1") is None
+    confirm.assert_called_once_with("https://hq/api/sync", "CH0001")
+    post.assert_not_called()
+    assert cfg.get("sync.enrollment_code") == "cqe1.x.y"
+
+    with mock.patch.object(hq_handshake, "confirm", return_value=(True, "")), \
+            mock.patch("requests.post", return_value=_response(200, {"api_key": "issued"})):
+        assert enrollment.ensure_client_key(cfg, "https://hq/", "dev-1") == "issued"

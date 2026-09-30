@@ -16,6 +16,7 @@ Everything is re-exported here so existing imports (``from Inventory import
 views`` / ``from . import views`` in ``urls.py``) keep working unchanged.
 """
 
+from .name_lists import delete_name, model_list, name_lists, rename_model, rename_name
 from .apis import (
     inventory_summary_api,
     equipment_analytics_api,

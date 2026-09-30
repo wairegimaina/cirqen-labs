@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Money · Cirqen Control{% endblock %}
+{% block main %}
+<div class="head">
+  <h1>Money</h1>
+  <form method="get" class="inline"><input type="month" name="month" value="{{ month }}" aria-label="Month"><button class="secondary">Show</button></form>
+</div>
+<section class="card">
+  <h2>{{ month }}: KES {{ '{:,}'.format(report.total) }} net</h2>
+  {% if report.rows %}
+  <div class="table-wrap"><table><thead><tr><th>Hospital</th><th>Received</th><th>Reversed</th><th>Net</th><th>Entries</th></tr></thead><tbody>
+  {% for r in report.rows %}<tr><td><a href="/admin/hospitals/{{ r.hospital }}#billing">{{ r.hospital }}</a></td><td>{{ '{:,}'.format(r.received) }}</td><td>{{ '{:,}'.format(r.reversed) }}</td><td>{{ '{:,}'.format(r.net) }}</td><td>{{ r.entries }}</td></tr>{% endfor %}
+  </tbody></table></div>
+  {% else %}<p class="muted">No payments that month.</p>{% endif %}
+</section>
+<section class="card">
+  <h2>Open invoices</h2>
+  {% if open_invoices %}
+  <div class="table-wrap"><table><thead><tr><th>Number</th><th>Hospital</th><th>Due</th><th>Balance (KES)</th></tr></thead><tbody>
+  {% for i in open_invoices %}<tr><td><a href="/admin/invoices/{{ i.number }}">{{ i.number }}</a></td><td>{{ i.hospital }}</td><td>{{ i.due_on }}{% if i.due_on < now[:10] %} <span class="pill bad">overdue</span>{% endif %}</td><td>{{ '{:,}'.format(i.amount_kes - i.paid_kes) }}</td></tr>{% endfor %}
+  </tbody></table></div>
+  {% else %}<p class="muted">None.</p>{% endif %}
+</section>
+<section class="card">
+  <h2>Latest payments</h2>
+  <div class="table-wrap"><table><thead><tr><th>Paid on</th><th>Hospital</th><th>Method</th><th>Reference</th><th>KES</th></tr></thead><tbody>
+  {% for p in payments %}<tr><td>{{ p.paid_on }}</td><td>{{ p.hospital }}</td><td>{{ p.method }}</td><td><a href="/admin/payments/{{ p.id }}">{{ p.reference }}</a></td><td>{{ '{:,}'.format(p.amount_kes) }}</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+{% endblock %}

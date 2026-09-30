@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+{% block title %}{{ h.code }} · Cirqen Control{% endblock %}
+{% block main %}
+<div class="head">
+  <h1>{{ h.code }} · {{ h.name }}</h1>
+  {% if admin.role in ('owner', 'support') %}<a class="button secondary" href="/admin/hospitals/{{ h.code }}/edit">Edit</a>{% endif %}
+</div>
+<div class="cards">
+  <section class="card">
+    <h2>Hospital</h2>
+    <dl>
+      <dt>Status</dt><dd><span class="pill {{ h.status }}">{{ h.status }}</span></dd>
+      <dt>County</dt><dd>{{ h.county or '—' }}</dd>
+      <dt>HOD</dt><dd>{{ h.hod_name or '—' }}{% if h.hod_email %}<br>{{ h.hod_email }}{% endif %}{% if h.hod_phone %}<br>{{ h.hod_phone }}{% endif %}</dd>
+      <dt>Certificate prefix</dt><dd>{{ h.cert_prefix or '—' }}</dd>
+    </dl>
+  </section>
+  <section class="card">
+    <h2>HQ</h2>
+    <dl>
+      <dt>Sync address</dt><dd class="break">{{ h.sync_url or '—' }}</dd>
+      <dt>Fallbacks</dt><dd class="break">{{ h.fallbacks | join(', ') or '—' }}</dd>
+      <dt>State</dt><dd><span class="pill {{ 'ok' if health.state == 'up' else 'bad' }}">{{ health.state }}</span></dd>
+      <dt>Answers as</dt><dd>{{ health.hospital or '—' }} {% if health.identity %}<span class="pill {{ 'ok' if health.identity == 'ok' else 'bad' }}">{{ health.identity }}</span>{% endif %}</dd>
+      <dt>Prefix in use</dt><dd>{{ health.prefix or '—' }}{% if h.cert_prefix and health.prefix and health.prefix != h.cert_prefix %} <span class="pill bad">differs</span>{% endif %}</dd>
+    </dl>
+  </section>
+  <section class="card">
+    <h2>HQ identity</h2>
+    {% if cert %}
+    <dl>
+      <dt>Expires</dt><dd>{{ cert.expires_at | eat }}</dd>
+      <dt>Covers</dt><dd class="break">{{ cert.urls | join(', ') }}</dd>
+      <dt>Issued</dt><dd>{{ cert.issued_at | eat }} by {{ cert.issued_by }}</dd>
+    </dl>
+    {% else %}<p class="muted">No identity issued yet. Desktops with this hospital's code will not sync until it is.</p>{% endif %}
+    {% if admin.role == 'owner' %}
+    <form method="post" action="/admin/hospitals/{{ h.code }}/identity" class="stack">
+      <input type="hidden" name="csrf" value="{{ session.csrf }}">
+      <label>Authenticator code <input name="code" inputmode="numeric" autocomplete="one-time-code" required></label>
+      <div class="actions">
+        {% if cert %}<button name="action" value="renew">Renew certificate (same key)</button>{% endif %}
+        <button name="action" value="new" class="{{ 'secondary' if cert }}">Issue new identity</button>
+      </div>
+      <p class="muted small">Renew after adding an address, or before it expires. A new identity replaces the HQ's key: set both values on its Render service and redeploy.</p>
+    </form>
+    {% endif %}
+  </section>
+  <section class="card">
+    <h2>Release</h2>
+    <p>{% if h.release_mode == 'pin' %}Pinned to <strong>{{ h.release_version }}</strong>{% elif h.release_mode == 'hold' %}<strong>On hold</strong>: its PCs get nothing new{% else %}Follows the newest release{% endif %}</p>
+    {% if admin.role in ('owner', 'support') %}
+    <form method="post" action="/admin/hospitals/{{ h.code }}/release" class="stack">
+      <input type="hidden" name="csrf" value="{{ session.csrf }}">
+      <label>Its PCs get
+        <select name="mode">
+          <option value="follow" {{ 'selected' if h.release_mode == 'follow' }}>the newest release</option>
+          <option value="pin" {{ 'selected' if h.release_mode == 'pin' }}>exactly the version below</option>
+          <option value="hold" {{ 'selected' if h.release_mode == 'hold' }}>nothing new (hold)</option>
+        </select>
+      </label>
+      <label>Version to pin
+        <select name="version">{% for v in versions %}<option {{ 'selected' if v == h.release_version }}>{{ v }}</option>{% else %}<option value="">no packages built</option>{% endfor %}</select>
+      </label>
+      <div class="actions"><button class="secondary">Save release</button></div>
+    </form>
+    {% endif %}
+  </section>
+</div>
+{% if h.status == 'closed' %}
+<section class="card" id="exit">
+  <h2>Hospital leaving: exit checklist</h2>
+  <ol>
+    <li>Ask its HOD for a support code (Settings &gt; Support access on their PC).</li>
+    <li>Download its data: <code>python tools/export_hospital.py &lt;its HQ address&gt; --code &lt;code&gt; --person &lt;you&gt;</code> (hq_server repository). The command checks every file.</li>
+    <li>Give the ZIP to the hospital and get written confirmation they received it.</li>
+    <li>In Render, delete its HQ web service, worker, Redis and database.</li>
+    <li>Record it below. Its PCs already get no addresses, profile or updates for it.</li>
+  </ol>
+  {% if admin.role == 'owner' %}
+  <form method="post" action="/admin/hospitals/{{ h.code }}/deleted" class="grid-form">
+    <input type="hidden" name="csrf" value="{{ session.csrf }}">
+    <label class="wide">What was handed over and deleted, and when <input name="note" required minlength="10"></label>
+    <label>Your code <input name="code" inputmode="numeric" required></label>
+    <div class="actions"><button class="secondary">Record data deletion</button></div>
+  </form>
+  {% endif %}
+</section>
+{% endif %}
+<section class="card" id="billing">
+  <h2>Licence and payments</h2>
+  {% if licence %}
+  <dl>
+    <dt>Plan</dt><dd>{{ licence.plan }}, up to {{ licence.devices }} PCs</dd>
+    <dt>Valid</dt><dd>{{ licence.starts_on }} to <strong>{{ licence.ends_on }}</strong> (+{{ licence.grace_days }} days grace)</dd>
+    <dt>Its PCs show</dt><dd><span class="pill {{ 'ok' if licence_state == 'active' else ('bad' if 'read-only' in licence_state else 'suspended') }}">{{ licence_state }}</span></dd>
+  </dl>
+  {% else %}<p class="muted">No licence yet: its PCs enforce nothing. Set one to start.</p>{% endif %}
+
+  {% if invoices %}
+  <h3>Invoices</h3>
+  <div class="table-wrap"><table><thead><tr><th>Number</th><th>Issued</th><th>Months</th><th>Amount (KES)</th><th>Paid</th><th>Status</th></tr></thead><tbody>
+  {% for i in invoices %}<tr><td><a href="/admin/invoices/{{ i.number }}">{{ i.number }}</a></td><td>{{ i.issued_on }}</td><td>{{ i.months }}</td>
+    <td>{{ '{:,}'.format(i.amount_kes) }}</td><td>{{ '{:,}'.format(i.paid_kes) }}</td><td><span class="pill {{ 'ok' if i.status == 'paid' else ('bad' if i.status == 'void' else 'suspended') }}">{{ i.status }}</span></td></tr>{% endfor %}
+  </tbody></table></div>
+  {% endif %}
+
+  {% if payments %}
+  <h3>Payments</h3>
+  <div class="table-wrap"><table><thead><tr><th>Paid on</th><th>Method</th><th>Reference</th><th>KES</th><th>Months</th><th>By</th><th></th></tr></thead><tbody>
+  {% for p in payments %}<tr><td>{{ p.paid_on }}</td><td>{{ p.method }}</td><td><a href="/admin/payments/{{ p.id }}">{{ p.reference }}</a></td>
+    <td>{{ '{:,}'.format(p.amount_kes) }}</td><td>{{ p.months_credited or '' }}</td><td>{{ p.recorded_by }}</td>
+    <td>{% if p.reverses %}<span class="muted small">reversal: {{ p.note }}</span>{% elif admin.role == 'owner' %}
+      <details><summary>Reverse</summary>
+        <form method="post" action="/admin/payments/{{ p.id }}/reverse" class="stack">
+          <input type="hidden" name="csrf" value="{{ session.csrf }}">
+          <label>Why <input name="reason" required></label>
+          <label>Your code <input name="code" inputmode="numeric" required></label>
+          <button class="secondary">Reverse this payment</button>
+        </form></details>{% endif %}</td></tr>{% endfor %}
+  </tbody></table></div>
+  {% endif %}
+
+  {% if admin.role in ('owner', 'finance') %}
+  <div class="cards spaced">
+    <form method="post" action="/admin/hospitals/{{ h.code }}/payments" class="card stack">
+      <h3>Record a payment</h3>
+      <input type="hidden" name="csrf" value="{{ session.csrf }}">
+      <label>Amount (KES) <input name="amount_kes" inputmode="numeric" required></label>
+      <label>Method <select name="method">{% for m in methods %}<option value="{{ m }}">{{ 'M-Pesa' if m == 'mpesa' else m|capitalize }}</option>{% endfor %}</select></label>
+      <label>M-Pesa or bank reference <input name="reference" required></label>
+      <label>Paid on <input name="paid_on" type="date" value="{{ today }}" required></label>
+      <label>For invoice <select name="invoice_id"><option value="">none</option>{% for i in invoices if i.status == 'open' %}<option value="{{ i.id }}">{{ i.number }} (KES {{ '{:,}'.format(i.amount_kes - i.paid_kes) }} due)</option>{% endfor %}</select></label>
+      <label>Months (only without an invoice) <input name="months" type="number" min="0" max="36" value="0"></label>
+      <label>Note <input name="note"></label>
+      <button>Record payment</button>
+    </form>
+    <form method="post" action="/admin/hospitals/{{ h.code }}/invoices" class="card stack">
+      <h3>New invoice</h3>
+      <input type="hidden" name="csrf" value="{{ session.csrf }}">
+      <label>Months <input name="months" type="number" min="1" max="36" value="12" required></label>
+      <label>Amount (KES) <input name="amount_kes" inputmode="numeric" required></label>
+      <label>Description <input name="description" placeholder="Cirqen licence, 12 months"></label>
+      <label>Due in (days) <input name="due_days" type="number" min="0" max="90" value="14"></label>
+      <button class="secondary">Create invoice</button>
+    </form>
+    <form method="post" action="/admin/hospitals/{{ h.code }}/licence" class="card stack">
+      <h3>Set the licence by hand</h3>
+      <input type="hidden" name="csrf" value="{{ session.csrf }}">
+      <label>Plan <input name="plan" value="{{ licence.plan if licence else 'standard' }}"></label>
+      <label>PCs <input name="devices" type="number" min="1" value="{{ licence.devices if licence else 10 }}"></label>
+      <label>Starts <input name="starts_on" type="date" value="{{ licence.starts_on if licence else today }}" required></label>
+      <label>Ends <input name="ends_on" type="date" value="{{ licence.ends_on if licence else today }}" required></label>
+      <label>Grace days <input name="grace_days" type="number" min="0" max="60" value="{{ licence.grace_days if licence else 14 }}"></label>
+      <label>Status <select name="status">{% for s in ('active', 'suspended') %}<option {{ 'selected' if licence and licence.status == s }}>{{ s }}</option>{% endfor %}</select></label>
+      <label>Your code <input name="code" inputmode="numeric" required></label>
+      <button class="secondary">Save licence</button>
+      <p class="muted small">For the first licence or a correction. Payments extend it on their own.</p>
+    </form>
+  </div>
+  {% endif %}
+</section>
+<section class="card" id="profile">
+  <h2>Modules and menu</h2>
+  <p class="muted">{% if h.profile_version %}Published version {{ h.profile_version }}. {% else %}Not published yet: its PCs have every module. {% endif %}A switched-off module is closed on its PCs (pages and data access), not only hidden; its records stay and keep syncing. Label: the name in their menu (blank keeps the usual name).</p>
+  <form method="post" action="/admin/hospitals/{{ h.code }}/profile">
+    <input type="hidden" name="csrf" value="{{ session.csrf }}">
+    <div class="table-wrap"><table>
+      <thead><tr><th>On</th><th>Module</th><th>Menu label</th></tr></thead>
+      <tbody>{% for m in modules %}<tr>
+        <td><input type="checkbox" name="on" value="{{ m.key }}" aria-label="{{ m.default }} on" {{ 'checked' if m.on }} {{ 'disabled' if admin.role not in ('owner', 'support') }}></td>
+        <td>{{ m.default }}</td>
+        <td><input name="label_{{ m.key }}" value="{{ m.label }}" placeholder="{{ m.default }}" maxlength="40" {{ 'disabled' if admin.role not in ('owner', 'support') }}></td>
+      </tr>{% endfor %}</tbody>
+    </table></div>
+    {% if admin.role in ('owner', 'support') %}<div class="actions spaced"><button class="secondary">Publish to its PCs</button></div>{% endif %}
+  </form>
+</section>
+<section class="card" id="installers">
+  <h2>Installers</h2>
+  <p class="muted">Each installer file lets up to its number of new PCs join this hospital's HQ until it expires. Put
+    the downloaded <code>provisioning.json</code> next to the installer. Nothing has to be set on the HQ for it.</p>
+  {% if tokens %}
+  <div class="table-wrap"><table><thead><tr><th>Created</th><th>By</th><th>PCs</th><th>Expires</th><th></th></tr></thead><tbody>
+  {% for t in tokens %}<tr><td>{{ t.created_at | eat }}</td><td>{{ t.created_by }}</td><td>up to {{ t.max_uses }}</td>
+    <td>{{ t.expires_at | eat }}{% if t.expires_at < now %} <span class="pill bad">expired</span>{% endif %}</td>
+    <td>{% if admin.role in ('owner', 'support') and t.expires_at >= now %}<a href="/admin/hospitals/{{ h.code }}/installers/{{ t.token_id }}/provisioning.json">Download provisioning.json</a>{% endif %}</td></tr>{% endfor %}
+  </tbody></table></div>
+  {% endif %}
+  {% if admin.role in ('owner', 'support') %}
+  <form method="post" action="/admin/hospitals/{{ h.code }}/installers" class="grid-form">
+    <input type="hidden" name="csrf" value="{{ session.csrf }}">
+    <label>New PCs it may enroll <input name="max_uses" type="number" min="1" max="500" value="10" required></label>
+    <label>Valid for (days) <input name="days" type="number" min="1" max="90" value="14" required></label>
+    <div class="wide actions"><button class="secondary">New installer file</button></div>
+  </form>
+  {% endif %}
+</section>
+<section class="card">
+  <h2>What its desktops are sent</h2>
+  {% if document %}<pre>{{ document }}</pre>{% else %}<p class="muted">Nothing: {{ 'the hospital is closed' if h.status == 'closed' else 'no address set' }}.</p>{% endif %}
+</section>
+<section class="card">
+  <h2>History</h2>
+  {% if events %}
+  <div class="table-wrap"><table><thead><tr><th>When</th><th>Who</th><th>What</th></tr></thead><tbody>
+  {% for e in events %}<tr><td>{{ e.at | eat }}</td><td>{{ e.actor }}</td><td>{{ e.action | replace('_', ' ') }}</td></tr>{% endfor %}
+  </tbody></table></div>
+  {% else %}<p class="muted">Nothing yet.</p>{% endif %}
+</section>
+{% endblock %}

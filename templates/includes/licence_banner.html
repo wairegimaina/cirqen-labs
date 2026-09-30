@@ -1,0 +1,16 @@
+{% if licence_banner and licence_banner.state in 'due grace read_only' %}
+<div class="messages-container" role="status">
+  <div class="alert {% if licence_banner.state == 'due' %}alert-warning{% else %}alert-danger{% endif %} equiper-alert">
+    <div class="alert-inner">
+      <i class="fas {% if licence_banner.state == 'due' %}fa-calendar-alt{% else %}fa-exclamation-triangle{% endif %} alert-icon" aria-hidden="true"></i>
+      <span class="alert-text">
+        {% if licence_banner.state == 'due' %}Subscription ends on {{ licence_banner.ends_on|date:"j M Y" }}.
+        {% elif licence_banner.state == 'grace' %}Subscription ended on {{ licence_banner.ends_on|date:"j M Y" }}. Read-only from {{ licence_banner.read_only_from|date:"j M Y" }} unless renewed.
+        {% elif licence_banner.suspended %}Subscription suspended: read-only.
+        {% else %}Subscription ended on {{ licence_banner.ends_on|date:"j M Y" }}: read-only.{% endif %}
+        <a href="{% url 'core:subscription' %}">{% if nav.is_hod %}Renew{% else %}Details{% endif %}</a>
+      </span>
+    </div>
+  </div>
+</div>
+{% endif %}

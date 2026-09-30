@@ -1,0 +1,70 @@
+{% extends 'base.html' %}
+
+{% block title %}Support access — {{ site_name }}{% endblock %}
+
+{% block page_title %}Support access{% endblock %}
+
+{% block extra_css %}
+<style>
+.sa-wrap { display: grid; gap: 1.25rem; max-width: 760px; }
+.sa-card { padding: 1.25rem; border: 1px solid var(--border-color); border-radius: var(--radius-md, 10px); background: var(--bg-card); }
+.sa-card h2 { font-size: 1.05rem; margin: 0 0 .75rem; }
+.sa-code { font: 600 1.6rem var(--font-mono, monospace); letter-spacing: .12em; margin: .25rem 0; }
+.sa-form { display: grid; gap: .75rem; grid-template-columns: 8rem 1fr; align-items: end; }
+.sa-form label { display: grid; gap: .3rem; font-weight: 600; font-size: .9rem; }
+.sa-form input, .sa-form select { padding: .5rem .65rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-card); color: inherit; font: inherit; }
+.sa-form .sa-actions { grid-column: 1 / -1; }
+.sa-help { color: var(--text-secondary); font-size: .9rem; }
+.sa-log { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.sa-log th, .sa-log td { text-align: left; padding: .45rem .5rem; border-bottom: 1px solid var(--border-color); vertical-align: top; }
+@media (max-width: 560px) { .sa-form { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1 class="page-title">Support access</h1>
+    <p class="page-subtitle">Cirqen support can see this hospital's records only when you allow it, for a few hours.</p>
+  </div>
+</div>
+
+<div class="sa-wrap">
+  {% if error %}<p class="sa-help" role="alert">{{ error }}</p>{% endif %}
+
+  {% if new_code %}
+  <section class="sa-card" role="status">
+    <h2>Read this code to Cirqen support</h2>
+    <p class="sa-code">{{ new_code.code }}</p>
+    <p class="sa-help">It works until {{ new_code.until }} and is shown only now.</p>
+  </section>
+  {% endif %}
+
+  <section class="sa-card">
+    <h2>{% if active %}Support is allowed now{% else %}Allow support{% endif %}</h2>
+    {% for g in active %}
+      <p>Allowed by {{ g.granted_by }} for "{{ g.reason }}", until {{ g.until }}.</p>
+    {% endfor %}
+    {% if active %}
+      <form method="post">{% csrf_token %}<input type="hidden" name="action" value="end">
+        <button class="btn btn-secondary">End support access now</button></form>
+    {% else %}
+      <form method="post" class="sa-form">{% csrf_token %}
+        <label>For <select name="hours">{% for h in "1234" %}<option value="{{ h }}"{% if h == "2" %} selected{% endif %}>{{ h }} hour{{ h|pluralize }}</option>{% endfor %}</select></label>
+        <label>Why <input name="reason" required minlength="5" placeholder="e.g. certificate numbers look wrong"></label>
+        <div class="sa-actions"><button class="btn btn-primary">Allow and get a code</button></div>
+      </form>
+    {% endif %}
+    <p class="sa-help">Without a code, Cirqen can only reach your records by writing down an emergency reason, which appears below.</p>
+  </section>
+
+  <section class="sa-card">
+    <h2>Every access</h2>
+    {% if log %}
+    <table class="sa-log"><thead><tr><th>When</th><th>What</th><th>Who</th><th>Why</th></tr></thead><tbody>
+      {% for e in log %}<tr><td>{{ e.when }}</td><td>{{ e.what }}</td><td>{{ e.who }}</td><td>{{ e.reason }} {{ e.detail }}</td></tr>{% endfor %}
+    </tbody></table>
+    {% else %}<p class="sa-help">Nothing yet.</p>{% endif %}
+  </section>
+</div>
+{% endblock %}

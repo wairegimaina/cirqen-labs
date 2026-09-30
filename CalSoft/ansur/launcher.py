@@ -25,7 +25,7 @@ def _command(cfg, template, **values):
         raise LaunchError("Ansur runs on Windows only; open this page on the Ansur PC.")
     program = cfg.program_path
     if not program or not Path(program).is_file():
-        raise LaunchError("Ansur's program is not set up. Ask the HOD to check the Ansur connection page.")
+        raise LaunchError("Ansur's program is not set up. Check the Ansur connection page (Calibration menu).")
     args = template
     for key, value in values.items():
         args = args.replace("{" + key + "}", str(value))

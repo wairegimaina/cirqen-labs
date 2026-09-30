@@ -1,0 +1,148 @@
+{% extends 'base.html' %}
+{% block title %}Email — {{ site_name }}{% endblock %}
+{% block page_title %}Email{% endblock %}
+{% block extra_css %}
+<style>
+.em-cols { display: grid; gap: 1.25rem; grid-template-columns: minmax(0, 1fr); align-items: start; }
+@media (min-width: 1100px) { .em-cols { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); } }
+.em-fields { display: grid; gap: 1rem; }
+.em-two { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 640px) { .em-two { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); } }
+.em-field { display: grid; gap: .35rem; min-width: 0; }
+.em-field .form-label { margin: 0; }
+.em-errors { color: var(--danger-color); font-size: var(--fs-sm); }
+.em-check { display: flex; gap: .55rem; align-items: flex-start; font-size: var(--fs-sm); }
+.em-check input { width: 1.05rem; height: 1.05rem; margin-top: .15rem; }
+.em-foot { display: flex; gap: .5rem; justify-content: flex-end; flex-wrap: wrap; }
+.em-banner { display: flex; gap: .6rem; align-items: center; padding: .75rem 1rem; border-radius: var(--radius-sm);
+  font-weight: 600; font-size: var(--fs-sm); }
+.em-banner.ok { background: color-mix(in srgb, var(--success-color) 12%, transparent); color: var(--success-color); }
+.em-banner.warn { background: color-mix(in srgb, var(--warning-color) 14%, transparent); color: var(--warning-color); }
+.em-facts { list-style: none; margin: 1rem 0 0; padding: 0; display: grid; gap: .6rem; font-size: var(--fs-sm); }
+.em-facts li { display: flex; justify-content: space-between; gap: 1rem; }
+.em-facts span:first-child { color: var(--text-secondary); }
+.em-error { margin-top: .75rem; font-size: var(--fs-xs); color: var(--danger-color); overflow-wrap: anywhere; }
+.em-test { display: flex; gap: .5rem; flex-wrap: wrap; }
+.em-test .form-control { flex: 1 1 12rem; min-width: 0; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="page-wrap">
+  <div class="page-head"><div>
+    <h1 class="page-title">Email</h1>
+    <p class="page-subtitle">How this PC sends Cirqen's email. Mail is queued and sent in the background, so it still goes out after the PC has been offline (kept for {{ keep_days }} days).</p>
+  </div></div>
+
+  <div class="kpi-grid">
+    <div class="kpi-card {% if server.configured %}kpi-success{% else %}kpi-warning{% endif %}">
+      <div class="kpi-icon"><i class="fas fa-envelope" aria-hidden="true"></i></div>
+      <div class="kpi-num">{% if server.configured %}On{% else %}Off{% endif %}</div>
+      <div class="kpi-label">Outgoing email</div>
+    </div>
+    <a class="kpi-card kpi-info" href="{% url 'notifications:outbox' %}?status=pending" style="text-decoration:none;color:inherit">
+      <div class="kpi-icon"><i class="fas fa-hourglass-half" aria-hidden="true"></i></div>
+      <div class="kpi-num">{{ counts.pending|default:0 }}</div>
+      <div class="kpi-label">Waiting to send</div>
+    </a>
+    <a class="kpi-card kpi-success" href="{% url 'notifications:outbox' %}?status=sent" style="text-decoration:none;color:inherit">
+      <div class="kpi-icon"><i class="fas fa-paper-plane" aria-hidden="true"></i></div>
+      <div class="kpi-num">{{ counts.sent|default:0 }}</div>
+      <div class="kpi-label">Sent</div>
+    </a>
+    <a class="kpi-card kpi-overdue" href="{% url 'notifications:outbox' %}?status=failed" style="text-decoration:none;color:inherit">
+      <div class="kpi-icon"><i class="fas fa-exclamation-triangle" aria-hidden="true"></i></div>
+      <div class="kpi-num">{{ problems }}</div>
+      <div class="kpi-label">Refused or expired</div>
+    </a>
+  </div>
+
+  <div class="em-cols">
+    <section class="section-card">
+      <div class="section-card-head"><div>
+        <h2 class="section-card-title">Mail server</h2>
+        <p class="section-card-sub">The account Cirqen sends from. Saved on this PC only; the password is never shown again.</p>
+      </div></div>
+      <form method="post" novalidate>
+        {% csrf_token %}
+        <div class="section-card-body em-fields">
+          {% if form.non_field_errors %}<div class="alert alert-danger mb-0">{{ form.non_field_errors|join:" " }}</div>{% endif %}
+          <div class="em-two">
+            <div class="em-field">
+              <label class="form-label" for="{{ form.host.id_for_label }}">{{ form.host.label }}</label>
+              <input type="text" class="form-control" name="{{ form.host.html_name }}" id="{{ form.host.id_for_label }}" value="{{ form.host.value|default:'' }}" placeholder="smtp.gmail.com">
+              {% if form.host.errors %}<div class="em-errors">{{ form.host.errors|join:" " }}</div>{% endif %}
+            </div>
+            <div class="em-field">
+              <label class="form-label" for="{{ form.port.id_for_label }}">Port</label>
+              <input type="number" class="form-control" name="{{ form.port.html_name }}" id="{{ form.port.id_for_label }}" value="{{ form.port.value|default:'' }}">
+              {% if form.port.errors %}<div class="em-errors">{{ form.port.errors|join:" " }}</div>{% endif %}
+            </div>
+          </div>
+          <div class="em-field">
+            <label class="form-label" for="{{ form.security.id_for_label }}">Security</label>
+            <select class="form-select" name="{{ form.security.html_name }}" id="{{ form.security.id_for_label }}">
+              {% for value, label in form.fields.security.choices %}<option value="{{ value }}"{% if form.security.value == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="em-two">
+            <div class="em-field">
+              <label class="form-label" for="{{ form.username.id_for_label }}">{{ form.username.label }}</label>
+              <input type="text" class="form-control" name="{{ form.username.html_name }}" id="{{ form.username.id_for_label }}" value="{{ form.username.value|default:'' }}" autocomplete="username" placeholder="cirqen@hospital.org">
+              {% if form.username.errors %}<div class="em-errors">{{ form.username.errors|join:" " }}</div>{% endif %}
+            </div>
+            <div class="em-field">
+              <label class="form-label" for="{{ form.password.id_for_label }}">Password</label>
+              <input type="password" class="form-control" name="{{ form.password.html_name }}" id="{{ form.password.id_for_label }}" autocomplete="new-password" placeholder="{% if row.password %}Saved{% endif %}">
+            </div>
+          </div>
+          <span class="form-text">{{ form.password.help_text }}</span>
+          <div class="em-field">
+            <label class="form-label" for="{{ form.from_email.id_for_label }}">{{ form.from_email.label }}</label>
+            <input type="email" class="form-control" name="{{ form.from_email.html_name }}" id="{{ form.from_email.id_for_label }}" value="{{ form.from_email.value|default:'' }}" placeholder="The account when blank">
+            {% if form.from_email.errors %}<div class="em-errors">{{ form.from_email.errors|join:" " }}</div>{% endif %}
+          </div>
+          <label class="em-check">
+            <input type="checkbox" name="{{ form.is_site_sender.html_name }}"{% if form.is_site_sender.value %} checked{% endif %}>
+            <span><b>{{ form.is_site_sender.label }}</b><br>
+              <span class="form-text">The daily to-do email, the weekly-report reminder and the monthly report. Tick it on one PC per site, the one most often switched on, or everyone gets a copy from each PC.</span></span>
+          </label>
+        </div>
+        <div class="section-card-foot em-foot">
+          <button type="submit" class="btn btn-primary"><i class="fas fa-save" aria-hidden="true"></i> Save</button>
+        </div>
+      </form>
+    </section>
+
+    <div style="display:grid;gap:1.25rem">
+      <section class="section-card">
+        <div class="section-card-head"><h2 class="section-card-title">Status</h2></div>
+        <div class="section-card-body">
+          {% if server.configured %}
+            <div class="em-banner ok"><i class="fas fa-check-circle" aria-hidden="true"></i> Sending as {{ server.from_email }}{% if server.source == 'config' %} (from config.json){% endif %}.</div>
+          {% else %}
+            <div class="em-banner warn"><i class="fas fa-exclamation-triangle" aria-hidden="true"></i> Not set up: no email leaves this PC. Messages wait in the outbox for {{ keep_days }} days.</div>
+          {% endif %}
+          <ul class="em-facts">
+            <li><span>Last email sent</span><span>{% if last_sent %}{{ last_sent|date:"j M Y, H:i" }}{% else %}Never{% endif %}</span></li>
+            <li><span>Scheduled email from this PC</span><span>{% if is_sender %}Yes{% else %}No{% endif %}</span></li>
+          </ul>
+          {% if last_error %}<div class="em-error"><b>Last problem:</b> {{ last_error }}</div>{% endif %}
+          <div style="margin-top:1rem"><a class="btn btn-secondary" href="{% url 'notifications:outbox' %}"><i class="fas fa-inbox" aria-hidden="true"></i> Open the outbox</a></div>
+        </div>
+      </section>
+
+      <section class="section-card">
+        <div class="section-card-head"><h2 class="section-card-title">Send a test email</h2></div>
+        <form method="post" action="{% url 'notifications:send_test_email' %}" class="section-card-body">
+          {% csrf_token %}
+          <div class="em-test">
+            <input type="email" class="form-control" name="to" value="{{ request.user.email }}" placeholder="Send to" aria-label="Send the test to">
+            <button type="submit" class="btn btn-primary"{% if not server.configured %} disabled{% endif %}><i class="fas fa-paper-plane" aria-hidden="true"></i> Send test</button>
+          </div>
+          <p class="form-text" style="margin:.6rem 0 0">Sent straight away, not queued, so any problem shows here.</p>
+        </form>
+      </section>
+    </div>
+  </div>
+</div>
+{% endblock %}

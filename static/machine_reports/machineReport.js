@@ -17,8 +17,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Render chart if Manufacturers tab
       if (tab.dataset.section === 'manufacturers') renderManufacturerChart();
+      // Keep the section in the address, so a reload, a saved form or a
+      // link from another page (e.g. Failure Risk's tabs) opens it again.
+      if (history.replaceState) history.replaceState(null, '', `#${tab.dataset.section}`);
     });
   });
+  const fromHash = window.location.hash.slice(1);
+  const hashTab = fromHash && document.querySelector(`.spa-nav .nav-item[data-section="${CSS.escape(fromHash)}"]`);
+  if (hashTab) hashTab.click();
 
   // 2. Initial Data Load for Equipment Table
   fetchEquipment(1);
