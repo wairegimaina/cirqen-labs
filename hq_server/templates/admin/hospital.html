@@ -178,13 +178,17 @@
 </section>
 <section class="card" id="installers">
   <h2>Installers</h2>
-  <p class="muted">Each installer file lets up to its number of new PCs join this hospital's HQ until it expires. Put
-    the downloaded <code>provisioning.json</code> next to the installer. Nothing has to be set on the HQ for it.</p>
+  <p class="muted">Each installer file lets up to its number of new PCs join this hospital's HQ until it expires or you
+    revoke it. Put the downloaded <code>provisioning.json</code> next to the installer. After the hospital's first PC,
+    each new PC waits until the HOD approves it on their Settings &gt; Computers page.</p>
   {% if tokens %}
   <div class="table-wrap"><table><thead><tr><th>Created</th><th>By</th><th>PCs</th><th>Expires</th><th></th></tr></thead><tbody>
   {% for t in tokens %}<tr><td>{{ t.created_at | eat }}</td><td>{{ t.created_by }}</td><td>up to {{ t.max_uses }}</td>
-    <td>{{ t.expires_at | eat }}{% if t.expires_at < now %} <span class="pill bad">expired</span>{% endif %}</td>
-    <td>{% if admin.role in ('owner', 'support') and t.expires_at >= now %}<a href="/admin/hospitals/{{ h.code }}/installers/{{ t.token_id }}/provisioning.json">Download provisioning.json</a>{% endif %}</td></tr>{% endfor %}
+    <td>{{ t.expires_at | eat }}{% if t.revoked_at %} <span class="pill bad">revoked</span>{% elif t.expires_at < now %} <span class="pill bad">expired</span>{% endif %}</td>
+    <td>{% if admin.role in ('owner', 'support') and t.expires_at >= now and not t.revoked_at %}
+      <a href="/admin/hospitals/{{ h.code }}/installers/{{ t.token_id }}/provisioning.json">Download provisioning.json</a>
+      <form method="post" action="/admin/hospitals/{{ h.code }}/installers/{{ t.token_id }}/revoke" class="inline">
+        <input type="hidden" name="csrf" value="{{ session.csrf }}"><button class="link">Revoke</button></form>{% endif %}</td></tr>{% endfor %}
   </tbody></table></div>
   {% endif %}
   {% if admin.role in ('owner', 'support') %}

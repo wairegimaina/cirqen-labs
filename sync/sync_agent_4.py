@@ -37,6 +37,8 @@ class NetworkLoopsMixin(SmartDeleteMixin):
             # downloaded from it and local work waits in the queue.
             if online and getattr(self, "hospital_code", ""):
                 online = self.hq_identity_confirmed()
+            if online and getattr(self, "hospital_code", ""):
+                self.refresh_device_status()
             # A move adopted from the update server is on probation: sustained
             # failure of the new address reverts it without anyone on site.
             try:
@@ -48,6 +50,31 @@ class NetworkLoopsMixin(SmartDeleteMixin):
             return online
 
     HQ_RECONFIRM_SECONDS = 6 * 3600
+    DEVICE_STATUS_SECONDS = 300
+
+    def refresh_device_status(self):
+            """Ask HQ whether the HOD has approved this PC yet, at most every five
+            minutes, and keep the answer in device_status.json for the app's
+            notice (core/device_status.py). Never raises."""
+            import json as _json
+
+            last = getattr(self, "_device_status_at", 0.0)
+            if time.time() - last < self.DEVICE_STATUS_SECONDS:
+                return
+            self._device_status_at = time.time()
+            try:
+                resp = requests.get(f"{self.api_url}/devices/me", headers=self._http_headers(), timeout=10)
+                if resp.status_code != 200:
+                    return
+                pending = bool(resp.json().get("pending_approval"))
+                path = Path(self.data_path) / "device_status.json"
+                tmp = path.with_suffix(".tmp")
+                tmp.write_text(_json.dumps({"pending_approval": pending, "checked_at": time.time()}))
+                tmp.replace(path)
+                if pending:
+                    LOG.warning("⏳ This PC is waiting for the HOD's approval; syncing starts once approved")
+            except Exception as exc:  # noqa: BLE001
+                LOG.debug("Device status not checked: %s", exc)
 
     def hq_identity_confirmed(self) -> bool:
             """Run the hello handshake (hq_handshake.py) for the current address,

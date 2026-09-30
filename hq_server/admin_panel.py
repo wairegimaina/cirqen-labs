@@ -483,13 +483,29 @@ async def installer_create(request: Request, code: str):
     return RedirectResponse(f"/admin/hospitals/{h['code']}#installers", status_code=303)
 
 
+@router.post("/hospitals/{code}/installers/{token_id}/revoke")
+@guarded
+async def installer_revoke(request: Request, code: str, token_id: str):
+    """Stop an installer file enrolling any more PCs (PCs already in keep working;
+    remove those on the hospital's Computers page)."""
+    session, admin = _current(request, CAN_EDIT)
+    form = dict(await request.form())
+    _check_csrf(session, form.get("csrf", ""))
+    row = cs.enrollment_token(token_id)
+    if row is None or row["hospital"] != code.upper():
+        return Response("Not Found", status_code=404)
+    cs.revoke_enrollment_token(token_id)
+    cs.audit(admin["username"], "installer_revoked", row["hospital"], {"token_id": token_id}, _ip(request))
+    return RedirectResponse(f"/admin/hospitals/{row['hospital']}#installers", status_code=303)
+
+
 @router.get("/hospitals/{code}/installers/{token_id}/provisioning.json")
 @guarded
 def installer_download(request: Request, code: str, token_id: str):
     session, admin = _current(request, CAN_EDIT)
     h = cs.get_hospital(code.upper())
     row = cs.enrollment_token(token_id)
-    if h is None or row is None or row["hospital"] != h["code"]:
+    if h is None or row is None or row["hospital"] != h["code"] or row.get("revoked_at"):
         return Response("Not Found", status_code=404)
     import enrollment
     import hq_certificates

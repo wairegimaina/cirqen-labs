@@ -258,6 +258,7 @@ ADDED_COLUMNS = [
     ("hospitals", "release_version", "TEXT NOT NULL DEFAULT ''"),       # for pin
     ("hospitals", "profile", "TEXT NOT NULL DEFAULT '{}'"),            # modules + labels (profiles.py)
     ("hospitals", "profile_version", "INTEGER NOT NULL DEFAULT 0"),    # 0: no profile published
+    ("enrollment_tokens", "revoked_at", "TEXT"),                      # set: its PCs can no longer join
 ]
 
 
@@ -377,3 +378,9 @@ def enrollment_tokens(hospital: str) -> list[dict]:
 def enrollment_token(token_id: str) -> dict | None:
     row = conn().execute("SELECT * FROM enrollment_tokens WHERE token_id = ?", (token_id,)).fetchone()
     return dict(row) if row else None
+
+
+def revoke_enrollment_token(token_id: str) -> bool:
+    cur = conn().execute("UPDATE enrollment_tokens SET revoked_at = ? WHERE token_id = ? AND revoked_at IS NULL",
+                         (now(), token_id))
+    return bool(getattr(cur, "rowcount", 0) or (enrollment_token(token_id) or {}).get("revoked_at"))

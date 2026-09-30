@@ -260,6 +260,16 @@
           <span class="link-label">Support access</span>
         </a>
       </li>
+      <li class="menu-entry" role="none">
+        <a href="{% url 'core:computers' %}"
+          class="menu-link {% if request.resolver_match.url_name == 'computers' %}active-link{% endif %}"
+          role="menuitem">
+          <div class="link-icon" aria-hidden="true">
+            <i class="fas fa-desktop"></i>
+          </div>
+          <span class="link-label">Computers</span>
+        </a>
+      </li>
       {% if nav.modules.calibration.on %}
       <li class="menu-entry" role="none">
         <a href="{% url 'calibration:ansur_settings' %}"

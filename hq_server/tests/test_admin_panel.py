@@ -557,3 +557,29 @@ def test_a_broken_panel_database_closes_only_the_panel(tmp_path, monkeypatch):
     panel = TestClient(app).get("/admin/login")
     assert panel.status_code == 503 and "secret-pw" not in panel.text
     assert endpoints.build_document()["endpoints"]["sync.api_url"] == "https://hq.example.com/api/sync"
+
+
+def test_revoking_an_installer_is_what_its_hq_is_told(owner, control_key, tmp_path, monkeypatch):
+    client, _ = owner
+    add_hospital(client)
+    token = csrf(client, "/admin/hospitals/CH0001")
+    client.post("/admin/hospitals/CH0001/installers", data={"csrf": token, "max_uses": "5", "days": "14"})
+    token_id = cs.enrollment_tokens("CH0001")[0]["token_id"]
+    monkeypatch.setenv("HQ_PACKAGES_DIR", str(tmp_path / "packages"))
+    import main
+
+    server = TestClient(main.app)
+
+    def status():
+        answer = server.get(f"/api/hq/CH0001/enrollment/{token_id}/status").json()
+        control_key.public_key().verify(base64.b64decode(answer["signature"]),
+                                        b"cirqen-enrollment-status-v1\n" + answer["document"].encode())
+        return json.loads(answer["document"])
+
+    first = status()
+    assert (first["hospital"], first["token_id"], first["revoked"]) == ("CH0001", token_id, False)
+    client.post(f"/admin/hospitals/CH0001/installers/{token_id}/revoke", data={"csrf": token})
+    assert status()["revoked"] is True
+    assert client.get(f"/admin/hospitals/CH0001/installers/{token_id}/provisioning.json").status_code == 404
+    assert server.get(f"/api/hq/CH0002/enrollment/{token_id}/status").status_code == 404   # another hospital
+    assert cs.audit_entries(target="CH0001")[0]["action"] == "installer_revoked"

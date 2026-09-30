@@ -232,6 +232,33 @@ def hospital_licence_document(hospital: str):
     return billing.signed_licence(lic, key)
 
 
+@app.get("/api/hq/{hospital}/enrollment/{token_id}/status")
+def enrollment_status(hospital: str, token_id: str):
+    """Asked by a hospital's HQ before an installer file enrolls a PC: has it
+    been revoked in the admin panel? Signed, and names the hospital and
+    token, so the HQ can trust it (hospital_identity.check_enrollment_not_revoked)."""
+    import base64
+    import json as _json
+
+    import control_store
+    import hq_certificates
+
+    code = hospital.strip().upper()
+    row = control_store.enrollment_token(token_id) if control_store.available() else None
+    if row is None or row["hospital"] != code:
+        raise HTTPException(status_code=404, detail="unknown installer")
+    try:
+        key = hq_certificates._signing_key(None)
+    except SystemExit:
+        raise HTTPException(status_code=503, detail="no signing key") from None
+    document = _json.dumps({"type": "cirqen-enrollment-status", "hospital": code, "token_id": token_id,
+                            "revoked": bool(row.get("revoked_at")),
+                            "issued_at": datetime.now(timezone.utc).isoformat()},
+                           sort_keys=True, separators=(",", ":"))
+    signature = base64.b64encode(key.sign(b"cirqen-enrollment-status-v1\n" + document.encode())).decode()
+    return {"document": document, "signature": signature}
+
+
 # ── M-Pesa (Daraja C2B): payments arriving by themselves (mpesa.py) ───────────
 
 def _caller_ip(request: Request) -> str:

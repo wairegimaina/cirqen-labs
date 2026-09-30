@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import support, views
+from . import computers, support, views
 
 app_name = "core"
 
@@ -12,6 +12,7 @@ urlpatterns = [
     path("site/", views.site_profile, name="site_profile"),
     path("subscription/", views.subscription, name="subscription"),
     path("support/", support.support_access, name="support_access"),
+    path("computers/", computers.computers, name="computers"),
     path("site/logo/", views.site_logo, name="site_logo"),
     path("reports/<slug:name>/start/", views.report_start, name="report_start"),
     path("reports/job/<slug:key>/", views.report_status, name="report_status"),
