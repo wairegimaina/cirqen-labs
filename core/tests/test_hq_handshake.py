@@ -231,3 +231,35 @@ class ControlTests(SimpleTestCase):
 
         key = Ed25519PrivateKey.from_private_bytes(base64.b64decode(values["HQ_IDENTITY_PRIVATE_KEY"]))
         self.assertEqual(_public(key), fields["hq_public_key"])
+
+
+class HospitalCodeCommandTests(EndpointSyncBase):
+    """manage.py hospital_code: saved only when this PC's HQ proves the hospital."""
+
+    def run_command(self, *args, handshake=(True, "")):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        out = StringIO()
+        with mock.patch("core.hq_settings.load_config", self.load_config), \
+                mock.patch.object(hq_handshake, "confirm", return_value=handshake):
+            call_command("hospital_code", *args, stdout=out)
+        return out.getvalue()
+
+    def test_it_saves_the_code_when_the_hq_proves_it(self):
+        self.run_command("ch0001")
+        self.assertEqual(self.load_config().get("sync.hospital_code"), HOSPITAL)
+
+    def test_it_refuses_when_the_hq_cannot(self):
+        from django.core.management import CommandError
+
+        with self.assertRaisesMessage(CommandError, "did not prove it is hospital CH0001"):
+            self.run_command("CH0001", handshake=(False, "HQ has no hospital identity yet"))
+        self.assertFalse(self.load_config().get("sync.hospital_code"))
+
+    def test_force_and_clear(self):
+        self.run_command("CH0001", "--force", handshake=(False, "offline"))
+        self.assertEqual(self.load_config().get("sync.hospital_code"), HOSPITAL)
+        self.run_command("--clear")
+        self.assertFalse(self.load_config().get("sync.hospital_code"))
