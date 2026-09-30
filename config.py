@@ -422,73 +422,6 @@ class CirqenConfig:
                 "migrations": True,
             },
         },
-        # ===== REDPANDA / KAFKA =====
-        "redpanda": {
-            "enabled": True,
-            "bootstrap_servers": ["127.0.0.1:9092"],
-            "consumer_group": "b12tech-sync-service",
-            "worker_count": 3,
-            "sync_max_retries": 5,
-            "enable_dlq": True,
-            "dead_letter_topic": "sync_failures",
-            "topics": [],
-        },
-        # ===== DEBEZIUM =====
-        "debezium": {
-            "table_include_list": [
-                "public.CalSoft_calibrationauditlog",
-                "public.CalSoft_calibrationnotification",
-                "public.CalSoft_calibrationparameter",
-                "public.CalSoft_calibrationprocedure",
-                "public.CalSoft_calibrationreading",
-                "public.CalSoft_calibrationreport",
-                "public.CalSoft_calibrationsession",
-                "public.CalSoft_calibrationworkflow",
-                "public.CalSoft_equipmentcalibrationprocedure",
-                "public.CalSoft_historicalcalibration",
-                "public.CalSoft_parameter",
-                "public.CalSoft_parametercategory",
-                "public.CalSoft_sessionparameterresolution",
-                "public.CalSoft_setvalue",
-                "public.CalSoft_standard",
-                "public.CalSoft_standardparameter",
-                "public.CalSoft_standardtype",
-                "public.CalSoft_subparameter",
-                "public.Inventory_department",
-                "public.Inventory_equipment",
-                "public.Inventory_warranty",
-                "public.Inventory_equipmentdescription",
-                "public.Inventory_manufacturer",
-                "public.calSchedules_calibrationauditlog",
-                "public.calSchedules_calibrationschedule",
-                "public.jobcard_jobcard",
-                "public.jobcard_sparepartused",
-                "public.machineReports_equipmentcategory",
-                "public.machineReports_equipmentstatusreport",
-                "public.machineReports_machinerepairhistory",
-                "public.machineReports_workshopequipmentreport",
-                "public.parts_tools_accessories",
-                "public.parts_tools_accessoryrequest",
-                "public.parts_tools_stockmovement",
-                "public.parts_tools_tools",
-                "public.ppms_auditlog",
-                "public.ppms_ppmschedule",
-                "public.reporthub_report",
-                "public.scheduling_schedulinginterval",
-                "public.scheduling_schedulingplan",
-                "public.scheduling_schedulingrule",
-                "public.users_userprofile",
-                "public.users_usersecuritylog",
-                "public.users_usersignature",
-                "public.workshop_workshop",
-                "public.accounts_customuser",
-                "public.pending_certificates",
-                "public.parts_tools_accessoriesname",
-                "public.parts_tools_accessoriesmanufacturer",
-                "public.parts_tools_toolsmanufacturer",
-                "public.parts_tools_toolname",
-            ],
-        },
         # ===== TABLES TO SYNC =====
         # ORDER MATTERS: parents must come before children (FK dependency order).
         # Violations fixed:
@@ -749,36 +682,10 @@ class CirqenConfig:
                 os.getenv("UPDATE_MIGRATIONS", "true").lower() == "true"
             )
 
-            # redpanda
-            cfg["redpanda"]["enabled"] = os.getenv("REDPANDA_ENABLED", "true").lower() == "true"
-            cfg["redpanda"]["bootstrap_servers"] = os.getenv(
-                "REDPANDA_BOOTSTRAP_SERVERS", "127.0.0.1:9092"
-            ).split(",")
-            cfg["redpanda"]["consumer_group"] = os.getenv(
-                "REDPANDA_CONSUMER_GROUP", cfg["redpanda"]["consumer_group"]
-            )
-            cfg["redpanda"]["worker_count"] = int(
-                os.getenv("REDPANDA_WORKER_COUNT", cfg["redpanda"]["worker_count"])
-            )
-            cfg["redpanda"]["sync_max_retries"] = int(
-                os.getenv("REDPANDA_SYNC_MAX_RETRIES", cfg["redpanda"]["sync_max_retries"])
-            )
-            cfg["redpanda"]["enable_dlq"] = (
-                os.getenv("REDPANDA_ENABLE_DLQ", "true").lower() == "true"
-            )
-            cfg["redpanda"]["dead_letter_topic"] = os.getenv(
-                "REDPANDA_DEAD_LETTER_TOPIC", cfg["redpanda"]["dead_letter_topic"]
-            )
-
             # tables
             _tables = os.getenv("TABLES", "")
             if _tables:
                 cfg["sync_tables"] = [t.strip() for t in _tables.split(",") if t.strip()]
-            _deb = os.getenv("DEBEZIUM_TABLE_INCLUDE_LIST", "")
-            if _deb:
-                cfg["debezium"]["table_include_list"] = [
-                    t.strip() for t in _deb.split(",") if t.strip()
-                ]
 
             # system
             cfg["system"]["database_pool_size"] = int(
@@ -822,6 +729,7 @@ class CirqenConfig:
         first_run = not self.config_file.exists()
         recreated = False
         scrub_hq_db = False
+        scrub_retired: list = []
         if not first_run:
             try:
                 with open(self.config_file, "r") as f:
@@ -832,6 +740,9 @@ class CirqenConfig:
                 # carry its settings, possibly with the password: drop them
                 # and rewrite the file below so the password leaves the disk.
                 scrub_hq_db = stored.pop("hq_db", None) is not None
+                # Kafka/Redpanda and Debezium were never used by the app and
+                # are gone; drop their sections from older files.
+                scrub_retired = [k for k in ("redpanda", "debezium") if stored.pop(k, None) is not None]
                 self._deep_merge(cfg, stored)
                 cfg["sync_tables"] = self._with_default_tables(cfg.get("sync_tables") or [])
                 print(f"✓ Configuration loaded from {self.config_file}")
@@ -861,6 +772,9 @@ class CirqenConfig:
             self._save_json(self._persistable(cfg))
         elif scrub_hq_db:
             print("   Removing the HQ database settings from config.json (no longer used)")
+            self._save_json(self._persistable(cfg))
+        elif scrub_retired:
+            print(f"   Removing unused settings from config.json: {', '.join(scrub_retired)}")
             self._save_json(self._persistable(cfg))
         if scrub_hq_db:
             self._scrub_hq_db_copies()
@@ -1266,20 +1180,8 @@ class CirqenConfig:
             "true" if self.get("update.components.migrations") else "false"
         )
 
-        # redpanda
-        os.environ["REDPANDA_ENABLED"] = "true" if self.get("redpanda.enabled") else "false"
-        os.environ["REDPANDA_BOOTSTRAP_SERVERS"] = ",".join(self.get("redpanda.bootstrap_servers"))
-        os.environ["REDPANDA_CONSUMER_GROUP"] = self.get("redpanda.consumer_group")
-        os.environ["REDPANDA_WORKER_COUNT"] = str(self.get("redpanda.worker_count"))
-        os.environ["REDPANDA_SYNC_MAX_RETRIES"] = str(self.get("redpanda.sync_max_retries"))
-        os.environ["REDPANDA_ENABLE_DLQ"] = "True" if self.get("redpanda.enable_dlq") else "False"
-        os.environ["REDPANDA_DEAD_LETTER_TOPIC"] = self.get("redpanda.dead_letter_topic")
-
         # tables
         os.environ["TABLES"] = ",".join(self.get("sync_tables"))
-        os.environ["DEBEZIUM_TABLE_INCLUDE_LIST"] = ",".join(
-            self.get("debezium.table_include_list")
-        )
 
         # system
         os.environ["DATABASE_POOL_SIZE"] = str(self.get("system.database_pool_size"))
@@ -1325,7 +1227,6 @@ class CirqenConfig:
         print(f"  • Redis     : {self.get('redis.host')}:{self.get('redis.port')}")
         print(f"  • HQ Server : {self.get('update.server_url')}")
         print(f"  • Updates   : every {self.get('update.check_interval_hours')}h")
-        print(f"  • Redpanda  : {'on' if self.get('redpanda.enabled') else 'off'}")
         print(f"  • Tables    : {len(self.get('sync_tables'))} to sync")
         print("=" * 60 + "\n")
 
@@ -1372,8 +1273,6 @@ class CirqenConfig:
                 "signature checks and HQ address changes cannot be followed. Generate "
                 "with `python hq_server/build_package.py --genkeys`."
             )
-        if self.get("redpanda.enabled") and not self.get("redpanda.bootstrap_servers"):
-            errors.append("redpanda.bootstrap_servers required when redpanda.enabled=True")
         if not self.get("sync_tables"):
             errors.append("sync_tables must have at least one entry")
         if self.get("system.database_pool_size") < 1:
@@ -1389,7 +1288,6 @@ class CirqenConfig:
         results = {
             "local_db": False,
             "redis": False,
-            "redpanda": False,
             "update_server": False,
         }
 
@@ -1429,23 +1327,6 @@ class CirqenConfig:
                 print(f"✗ redis: {exc}")
         else:
             results["redis"] = None
-
-        # redpanda
-        if self.get("redpanda.enabled"):
-            try:
-                from kafka import KafkaProducer
-
-                p = KafkaProducer(
-                    bootstrap_servers=self.get("redpanda.bootstrap_servers"),
-                    request_timeout_ms=5000,
-                )
-                p.close()
-                results["redpanda"] = True
-                print("✓ redpanda")
-            except Exception as exc:
-                print(f"✗ redpanda: {exc}")
-        else:
-            results["redpanda"] = None
 
         # update server — hit /health/ with the API key
         if self.get("update.server_url"):
@@ -1502,11 +1383,6 @@ DataDir: {self.data_path}
 ┌─ SYNC AGENT ────────────────────────────────────────────────┐
 │  enabled={self.get('sync.enabled')}  poll={self.get('sync.poll_interval')}s
 │  tables={len(self.get('sync_tables'))}  batch={self.get('sync.upload_batch_size')}
-└─────────────────────────────────────────────────────────────┘
-
-┌─ REDPANDA ──────────────────────────────────────────────────┐
-│  enabled={self.get('redpanda.enabled')}  workers={self.get('redpanda.worker_count')}
-│  servers={', '.join(self.get('redpanda.bootstrap_servers'))}
 └─────────────────────────────────────────────────────────────┘
 
 ┌─ CLIENT ────────────────────────────────────────────────────┐
@@ -1566,18 +1442,8 @@ DataDir: {self.data_path}
             f"MIRROR_ENABLED={'true' if self.get('mirror.enabled') else 'false'}",
             f"MIRROR_INTERVAL_HOURS={self.get('mirror.interval_hours')}",
             "",
-            "# Redpanda",
-            f"REDPANDA_ENABLED={'true' if self.get('redpanda.enabled') else 'false'}",
-            f"REDPANDA_BOOTSTRAP_SERVERS={','.join(self.get('redpanda.bootstrap_servers'))}",
-            f"REDPANDA_CONSUMER_GROUP={self.get('redpanda.consumer_group')}",
-            f"REDPANDA_WORKER_COUNT={self.get('redpanda.worker_count')}",
-            f"REDPANDA_SYNC_MAX_RETRIES={self.get('redpanda.sync_max_retries')}",
-            f"REDPANDA_ENABLE_DLQ={'True' if self.get('redpanda.enable_dlq') else 'False'}",
-            f"REDPANDA_DEAD_LETTER_TOPIC={self.get('redpanda.dead_letter_topic')}",
-            "",
-            "# Sync + Debezium tables",
+            "# Sync tables",
             f"TABLES={','.join(self.get('sync_tables'))}",
-            f"DEBEZIUM_TABLE_INCLUDE_LIST={','.join(self.get('debezium.table_include_list'))}",
             "",
             "# System",
             f"DATABASE_POOL_SIZE={self.get('system.database_pool_size')}",

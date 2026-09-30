@@ -110,7 +110,6 @@ Obligations, met as follows:
 | python-dateutil | 2.9.0.post0 | BSD License; Apache Software License |
 | pytz | 2026.4 | MIT License |
 | cryptography | 50.0.1 | Apache-2.0 OR BSD-3-Clause |
-| kafka-python | 3.0.11 | Apache-2.0 |
 | psutil | 7.2.2 | BSD-3-Clause |
 | networkx | 3.6.1 | BSD-3-Clause |
 | python-dotenv | 1.2.3 | BSD-3-Clause |

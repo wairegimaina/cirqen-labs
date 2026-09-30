@@ -242,9 +242,6 @@ SYNC_CONFIG = {
     "USE_TRANSACTIONS": True,
     "ENABLE_COMPRESSION": True,
     "MAX_QUEUE_SIZE": 10000,
-    "CDC_ENABLED": True,
-    "CDC_SLOT_NAME": "equiper_cdc_slot",
-    "CDC_PUBLICATION": "equiper_publication",
 }
 
 # Online-first write path (core/hq_link.py). Reads stay local; while HQ is
@@ -364,7 +361,7 @@ CACHES = {
 LOGS_DIR = DATA_PATH / "logs"
 LOGS_DIR.mkdir(exist_ok=True)
 
-for log_file in ["auth.log", "sync.log", "errors.log", "redpanda.log", "django.log"]:
+for log_file in ["auth.log", "sync.log", "errors.log", "django.log"]:
     log_path = LOGS_DIR / log_file
     if not log_path.exists():
         log_path.touch()
@@ -414,15 +411,6 @@ LOGGING = {
             "backupCount": 10,
             "encoding": "utf-8",
         },
-        "redpanda_file": {
-            "level": "INFO",
-            "class": "logging.handlers.RotatingFileHandler",
-            "filename": str(LOGS_DIR / "redpanda.log"),
-            "formatter": "json",
-            "maxBytes": 10485760,
-            "backupCount": 10,
-            "encoding": "utf-8",
-        },
         "django_file": {
             "level": "INFO",
             "class": "logging.handlers.RotatingFileHandler",
@@ -453,11 +441,6 @@ LOGGING = {
         },
         "sync": {
             "handlers": ["sync_file"],
-            "level": "INFO",
-            "propagate": False,
-        },
-        "redpanda": {
-            "handlers": ["redpanda_file"],
             "level": "INFO",
             "propagate": False,
         },
@@ -663,7 +646,6 @@ CELERY_RESULT_EXPIRES = 3600
 CELERY_TASK_ROUTES = {
     "core.tasks.run_daily_cleanup": {"queue": "cleanup"},
     "core.tasks.run_annual_cleanup": {"queue": "cleanup"},
-    "core.tasks.monitor_redpanda_sync": {"queue": "sync"},
     "core.tasks.handle_sync_failures": {"queue": "sync"},
     "core.tasks.batch_sync_changes": {"queue": "sync"},
 }
@@ -687,69 +669,6 @@ CHANNEL_LAYERS = {
 }
 
 # ============================================================
-# 📡 REDPANDA & EVENT STREAMING
-# ============================================================
-REDPANDA_CONFIG = {
-    "BOOTSTRAP_SERVERS": config.get("redpanda.bootstrap_servers"),
-    "CLIENT_ID": "cirqen_desktop_client",
-    "GROUP_ID": config.get("redpanda.consumer_group"),
-    "AUTO_OFFSET_RESET": "latest",
-    "ENABLE_AUTO_COMMIT": True,
-    "AUTO_COMMIT_INTERVAL_MS": 5000,
-    "SESSION_TIMEOUT_MS": 30000,
-    "HEARTBEAT_INTERVAL_MS": 10000,
-    "MAX_POLL_RECORDS": 500,
-    "MAX_POLL_INTERVAL_MS": 300000,
-    "FETCH_MIN_BYTES": 1,
-    "FETCH_MAX_WAIT_MS": 500,
-    "REQUEST_TIMEOUT_MS": 30000,
-    "API_VERSION": (2, 5, 0),
-    "PRODUCER_ACKS": "all",
-    "PRODUCER_RETRIES": 3,
-    "PRODUCER_BATCH_SIZE": 16384,
-    "PRODUCER_LINGER_MS": 10,
-    "PRODUCER_COMPRESSION_TYPE": "lz4",
-}
-
-DEBEZIUM_CONFIG = {
-    "CONNECTOR_CLASS": "io.debezium.connector.postgresql.PostgresConnector",
-    "LOCAL_DB": {
-        "HOSTNAME": config.get("local_db.host"),
-        "PORT": str(config.get("local_db.port")),
-        "USER": config.get("local_db.user"),
-        "PASSWORD": config.get("local_db.password"),
-        "DBNAME": config.get("local_db.database"),
-        "SERVER_NAME": "postgres_local",
-    },
-    "SLOT_NAME_LOCAL": "debezium_local_slot",
-    "PUBLICATION_NAME_LOCAL": "debezium_local_publication",
-    "INCLUDE_SCHEMA_CHANGES": False,
-    "SCHEMA_INCLUDE_LIST": "public",
-    "TABLE_INCLUDE_LIST": ",".join(config.get("debezium.table_include_list")),
-    "PLUGIN_NAME": "pgoutput",
-    "SNAPSHOT_MODE": "initial",
-    "TOPIC_PREFIX": "postgres",
-}
-
-SYNC_TOPICS = {
-    "LOCAL_TO_HQ": [
-        "postgres_local_workshop_workshop",
-        "postgres_local_accounts_customuser",
-        "postgres_local_Inventory_equipment",
-        "postgres_local_CalSoft_calibrationsession",
-        "postgres_local_CalSoft_calibrationprocedure",
-        "postgres_local_jobcard_jobcard",
-    ],
-    "HQ_TO_LOCAL": [
-        "postgres_hq_workshop_workshop",
-        "postgres_hq_accounts_customuser",
-        "postgres_hq_Inventory_equipment",
-        "postgres_hq_CalSoft_calibrationprocedure",
-        "postgres_hq_parts_tools_tools",
-    ],
-}
-
-# ============================================================
 # 📊 MONITORING & HEALTH CHECKS
 # ============================================================
 HEALTH_CHECK_CONFIG = {
@@ -759,7 +678,6 @@ HEALTH_CHECK_CONFIG = {
     "CHECKS": [
         "core.health.PostgreSQLHealthCheck",
         "core.health.RedisHealthCheck",
-        "core.health.RedpandaHealthCheck",
         "core.health.SyncServiceHealthCheck",
     ],
 }
@@ -810,9 +728,7 @@ FEATURE_FLAGS = {
     "API_RATE_LIMITING": True,
     "AUDIT_LOGGING": True,
     "DATA_ENCRYPTION": False,
-    "CDC_ENABLED": True,
     "ELASTICSEARCH_ENABLED": False,
-    "REDPANDA_ENABLED": config.get("redpanda.enabled"),
 }
 
 # ============================================================
@@ -824,19 +740,6 @@ DATABASE_POOL_RECYCLE = 3600
 
 TEMPLATE_LOADERS_CACHE = True
 TEMPLATE_DEBUG = DEBUG
-
-# ============================================================
-# 🔧 REDPANDA SYNC SERVICE CONFIGURATION
-# ============================================================
-REDPANDA_SYNC_CONFIG = {
-    "ENABLED": config.get("redpanda.enabled"),
-    "WORKER_THREADS": config.get("redpanda.worker_count"),
-    "MAX_RETRIES": config.get("redpanda.sync_max_retries"),
-    "RETRY_INTERVAL": 30,
-    "STATS_INTERVAL": config.get("system.stats_print_interval"),
-    "DEAD_LETTER_TOPIC": config.get("redpanda.dead_letter_topic"),
-    "ENABLE_DEAD_LETTER_QUEUE": config.get("redpanda.enable_dlq"),
-}
 
 # Make config instance available to other parts of Django
 CIRQEN_CONFIG = config
