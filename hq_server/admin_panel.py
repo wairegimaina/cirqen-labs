@@ -185,6 +185,8 @@ async def fetch_health(hospital: dict) -> dict:
 
 @router.get("/login", response_class=HTMLResponse)
 def login_page(request: Request):
+    if _setup_open():
+        return RedirectResponse("/admin/setup", status_code=303)
     return _page(request, "login.html", {"error": "", "first_run": auth.count_admins() == 0})
 
 
@@ -211,6 +213,51 @@ def logout(request: Request, csrf: str = Form("")):
     resp = RedirectResponse("/admin/login", status_code=303)
     resp.delete_cookie(auth.SESSION_COOKIE, path="/admin")
     return resp
+
+
+# ── first owner, without a server shell ──────────────────────────────────────
+
+def _setup_open() -> bool:
+    """Only while no admin exists, and only if ADMIN_SETUP_TOKEN is set."""
+    return bool(os.getenv("ADMIN_SETUP_TOKEN", "").strip()) and auth.count_admins() == 0
+
+
+@router.get("/setup", response_class=HTMLResponse)
+def setup_page(request: Request):
+    if not _setup_open():
+        return Response("Not Found", status_code=404)
+    return _page(request, "setup.html", {"error": "", "created": None})
+
+
+@router.post("/setup", response_class=HTMLResponse)
+def setup_submit(request: Request, token: str = Form(""), username: str = Form(""), password: str = Form(""),
+                 password2: str = Form("")):
+    """Create the first owner with ADMIN_SETUP_TOKEN (set in Render's
+    Environment tab; no shell needed). Gone once any admin exists."""
+    import hmac
+    import time as _time
+
+    if not _setup_open():
+        return Response("Not Found", status_code=404)
+    ip = _ip(request)
+    if auth._recent_failures("ip", ip) >= auth.MAX_FAILS_PER_USER:
+        return _page(request, "setup.html", {"error": "Too many failed attempts. Try again in 15 minutes.",
+                                             "created": None}, 429)
+    if not hmac.compare_digest(token.strip(), os.getenv("ADMIN_SETUP_TOKEN", "").strip()):
+        cs.conn().execute("INSERT INTO login_attempts (username, ip, at, ok) VALUES (?, ?, ?, 0)",
+                          ("(setup)", ip, _time.time()))
+        cs.audit("(setup)", "setup_failed", ip=ip)
+        return _page(request, "setup.html", {"error": "The setup token is wrong.", "created": None}, 401)
+    if password != password2:
+        return _page(request, "setup.html", {"error": "The passwords differ.", "created": None}, 400)
+    try:
+        secret = auth.create_admin(username, password, "owner")
+    except auth.AuthError as exc:
+        return _page(request, "setup.html", {"error": str(exc), "created": None}, 400)
+    name = username.strip().lower()
+    cs.audit(name, "admin_created", name, {"role": "owner", "via": "setup page"}, ip)
+    return _page(request, "setup.html", {"error": "", "created": {
+        "username": name, "secret": secret, "uri": auth.otpauth_uri(name, secret)}})
 
 
 # ── dashboard and hospitals ──────────────────────────────────────────────────

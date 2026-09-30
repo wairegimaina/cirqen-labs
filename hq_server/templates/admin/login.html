@@ -4,8 +4,8 @@
 <section class="card narrow">
   <h1>Cirqen Control</h1>
   <p class="muted">Sign in with your password and the 6-digit code from your authenticator app.</p>
-  {% if first_run %}<p class="note">No admin exists yet. Create the first owner on the server:
-    <code>python admin_cli.py create-owner &lt;username&gt;</code></p>{% endif %}
+  {% if first_run %}<p class="note">No admin exists yet. Set ADMIN_SETUP_TOKEN on this service
+    (Render &gt; Environment), then open <a href="/admin/setup">/admin/setup</a>.</p>{% endif %}
   {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
   <form method="post" action="/admin/login" class="stack">
     <label>Username <input name="username" autocomplete="username" required autofocus></label>

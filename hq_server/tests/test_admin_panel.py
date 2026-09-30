@@ -480,3 +480,31 @@ def test_recording_a_closed_hospitals_data_deletion(owner, clock):
                 data={"csrf": token, "note": "Export given to HOD 2026-11-02; Render services deleted",
                       "code": auth.totp_now(secret, clock.tick())})
     assert cs.audit_entries(target="CH0001")[0]["action"] == "hospital_data_deleted"
+
+
+# ── first owner without a shell ──────────────────────────────────────────────
+
+def test_setup_page_creates_the_first_owner_once(app, monkeypatch, clock):
+    client = TestClient(app)
+    assert client.get("/admin/setup").status_code == 404                    # no token set: no page
+    monkeypatch.setenv("ADMIN_SETUP_TOKEN", "long-random-setup-token")
+    assert client.get("/admin/login", follow_redirects=False).headers["location"] == "/admin/setup"
+    wrong = client.post("/admin/setup", data={"token": "guess", "username": "moses", "password": PASSWORD,
+                                              "password2": PASSWORD})
+    assert wrong.status_code == 401 and auth.count_admins() == 0
+    done = client.post("/admin/setup", data={"token": "long-random-setup-token", "username": "Moses",
+                                             "password": PASSWORD, "password2": PASSWORD})
+    assert done.status_code == 200 and "Owner moses created" in done.text
+    secret = re.search(r'<p class="key">([A-Z2-7]+)</p>', done.text).group(1)
+    assert client.get("/admin/setup").status_code == 404                    # gone once an admin exists
+    sign_in(app, clock, "moses", secret)
+
+
+def test_setup_attempts_are_limited(app, monkeypatch):
+    monkeypatch.setenv("ADMIN_SETUP_TOKEN", "long-random-setup-token")
+    client = TestClient(app)
+    for _ in range(auth.MAX_FAILS_PER_USER):
+        client.post("/admin/setup", data={"token": "x", "username": "a", "password": "b", "password2": "b"})
+    blocked = client.post("/admin/setup", data={"token": "long-random-setup-token", "username": "moses",
+                                                "password": PASSWORD, "password2": PASSWORD})
+    assert blocked.status_code == 429 and auth.count_admins() == 0
