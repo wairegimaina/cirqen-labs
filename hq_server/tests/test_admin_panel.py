@@ -315,3 +315,39 @@ def test_setting_a_hospitals_release(app, owner, monkeypatch):
     h = cs.get_hospital("CH0001")
     assert (h["release_mode"], h["release_version"]) == ("pin", "1.8.0")
     assert cs.audit_entries(target="CH0001")[0]["action"] == "release_changed"
+
+
+def test_an_installer_file_enrolls_with_the_hospitals_hq(owner, control_key, monkeypatch):
+    """The token in the downloaded provisioning.json is what the HQ accepts
+    (checked with the HQ's own rule, re-implemented here from its format)."""
+    monkeypatch.setenv("HQ_API_KEY", "update-key")
+    client, _ = owner
+    add_hospital(client)
+    token = csrf(client, "/admin/hospitals/CH0001")
+    assert client.post("/admin/hospitals/CH0001/installers",
+                       data={"csrf": token, "max_uses": "5", "days": "14"}).status_code == 200
+    row = cs.enrollment_tokens("CH0001")[0]
+    resp = client.get(f"/admin/hospitals/CH0001/installers/{row['token_id']}/provisioning.json")
+    assert "attachment" in resp.headers["content-disposition"]
+    prov = resp.json()
+    assert prov["sync"]["hospital_code"] == "CH0001" and prov["sync"]["api_url"] == SYNC
+    assert prov["update"]["api_key"] == "update-key"
+
+    tok = prov["sync"]["enrollment_code"]
+    prefix, doc, sig = tok.split(".")
+    raw = base64.urlsafe_b64decode(doc + "=" * (-len(doc) % 4))
+    control_key.public_key().verify(base64.urlsafe_b64decode(sig + "=" * (-len(sig) % 4)),
+                                    b"cirqen-enrollment-v1\n" + raw)
+    fields = json.loads(raw)
+    assert (prefix, fields["hospital"], fields["max_uses"]) == ("cqe1", "CH0001", 5)
+    # the same file downloads again identically (the token is re-derived, not stored)
+    assert client.get(f"/admin/hospitals/CH0001/installers/{row['token_id']}/provisioning.json").json() == prov
+
+
+def test_the_identity_page_includes_controls_public_key(owner, clock, control_key):
+    client, secret = owner
+    add_hospital(client)
+    env = env_values(issue(client, clock, secret, "new").text)
+    expected = base64.b64encode(control_key.public_key().public_bytes(
+        serialization.Encoding.Raw, serialization.PublicFormat.Raw)).decode()
+    assert env["CONTROL_PUBLIC_KEY"] == expected

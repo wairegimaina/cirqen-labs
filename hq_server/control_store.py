@@ -94,6 +94,15 @@ CREATE TABLE IF NOT EXISTS hq_certificates (
     expires_at    TEXT NOT NULL,
     issued_by     TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS enrollment_tokens (
+    token_id    TEXT PRIMARY KEY,
+    hospital    TEXT NOT NULL REFERENCES hospitals(code),
+    document    TEXT NOT NULL,
+    max_uses    INTEGER NOT NULL,
+    expires_at  TEXT NOT NULL,
+    created_by  TEXT NOT NULL,
+    created_at  TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS audit (
     id      INTEGER PRIMARY KEY,
     at      TEXT NOT NULL,
@@ -198,3 +207,24 @@ def latest_certificate(hospital: str) -> dict | None:
     d = dict(row)
     d["urls"] = json.loads(d["urls"])
     return d
+
+
+# ── enrollment tokens (the signed document; the token is re-derived from it) ──
+
+def record_enrollment_token(token_id: str, hospital: str, document: str, max_uses: int, expires_at: str,
+                            created_by: str) -> None:
+    conn().execute(
+        "INSERT INTO enrollment_tokens (token_id, hospital, document, max_uses, expires_at, created_by, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (token_id, hospital, document, max_uses, expires_at, created_by, now()),
+    )
+
+
+def enrollment_tokens(hospital: str) -> list[dict]:
+    return [dict(r) for r in conn().execute(
+        "SELECT * FROM enrollment_tokens WHERE hospital = ? ORDER BY created_at DESC", (hospital,))]
+
+
+def enrollment_token(token_id: str) -> dict | None:
+    row = conn().execute("SELECT * FROM enrollment_tokens WHERE token_id = ?", (token_id,)).fetchone()
+    return dict(row) if row else None

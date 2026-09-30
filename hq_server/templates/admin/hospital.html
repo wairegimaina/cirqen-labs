@@ -67,6 +67,26 @@
     {% endif %}
   </section>
 </div>
+<section class="card" id="installers">
+  <h2>Installers</h2>
+  <p class="muted">Each installer file lets up to its number of new PCs join this hospital's HQ until it expires. Put
+    the downloaded <code>provisioning.json</code> next to the installer. Nothing has to be set on the HQ for it.</p>
+  {% if tokens %}
+  <div class="table-wrap"><table><thead><tr><th>Created</th><th>By</th><th>PCs</th><th>Expires</th><th></th></tr></thead><tbody>
+  {% for t in tokens %}<tr><td>{{ t.created_at | eat }}</td><td>{{ t.created_by }}</td><td>up to {{ t.max_uses }}</td>
+    <td>{{ t.expires_at | eat }}{% if t.expires_at < now %} <span class="pill bad">expired</span>{% endif %}</td>
+    <td>{% if admin.role in ('owner', 'support') and t.expires_at >= now %}<a href="/admin/hospitals/{{ h.code }}/installers/{{ t.token_id }}/provisioning.json">Download provisioning.json</a>{% endif %}</td></tr>{% endfor %}
+  </tbody></table></div>
+  {% endif %}
+  {% if admin.role in ('owner', 'support') %}
+  <form method="post" action="/admin/hospitals/{{ h.code }}/installers" class="grid-form">
+    <input type="hidden" name="csrf" value="{{ session.csrf }}">
+    <label>New PCs it may enroll <input name="max_uses" type="number" min="1" max="500" value="10" required></label>
+    <label>Valid for (days) <input name="days" type="number" min="1" max="90" value="14" required></label>
+    <div class="wide actions"><button class="secondary">New installer file</button></div>
+  </form>
+  {% endif %}
+</section>
 <section class="card">
   <h2>What its desktops are sent</h2>
   {% if document %}<pre>{{ document }}</pre>{% else %}<p class="muted">Nothing: {{ 'the hospital is closed' if h.status == 'closed' else 'no address set' }}.</p>{% endif %}

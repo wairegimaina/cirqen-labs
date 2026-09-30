@@ -264,6 +264,7 @@ async def hospital_page(request: Request, code: str):
         "admin": admin, "session": session, "h": h, "health": await fetch_health(h),
         "cert": cs.latest_certificate(h["code"]), "document": json.dumps(document, indent=2) if document else "",
         "events": cs.audit_entries(50, target=h["code"]), "issued": None, "versions": _versions(),
+        "tokens": cs.enrollment_tokens(h["code"]), "now": datetime.now(timezone.utc).isoformat(),
     })
 
 
@@ -355,7 +356,9 @@ async def hospital_identity(request: Request, code: str):
     return _page(request, "identity_issued.html", {
         "admin": admin, "session": session, "h": h, "action": action,
         "env": [("HOSPITAL_CODE", h["code"]), *([("HQ_IDENTITY_PRIVATE_KEY", private_b64)] if private_b64 else []),
-                ("HQ_CERTIFICATE", certificate), *([("CERT_PREFIX", h["cert_prefix"])] if h["cert_prefix"] else [])],
+                ("HQ_CERTIFICATE", certificate),
+                ("CONTROL_PUBLIC_KEY", hq_certificates._raw_public(signer.public_key())),
+                *([("CERT_PREFIX", h["cert_prefix"])] if h["cert_prefix"] else [])],
         "expires": fields["expires_at"],
     })
 
@@ -381,6 +384,58 @@ async def hospital_release(request: Request, code: str):
              {"from": f"{h['release_mode']} {h['release_version']}".strip(), "to": f"{mode} {version}".strip()},
              _ip(request))
     return RedirectResponse(f"/admin/hospitals/{h['code']}", status_code=303)
+
+
+@router.post("/hospitals/{code}/installers")
+@guarded
+async def installer_create(request: Request, code: str):
+    """A new enrollment token for this hospital's installers (enrollment.py)."""
+    session, admin = _current(request, CAN_EDIT)
+    form = dict(await request.form())
+    _check_csrf(session, form.get("csrf", ""))
+    h = cs.get_hospital(code.upper())
+    if h is None:
+        return RedirectResponse("/admin/", status_code=303)
+    try:
+        max_uses, days = int(form.get("max_uses", "")), int(form.get("days", ""))
+    except ValueError:
+        max_uses = days = 0
+    if not (1 <= max_uses <= 500 and 1 <= days <= 90) or not h["sync_url"]:
+        return _page(request, "error.html", {"admin": admin, "session": session, "back": f"/admin/hospitals/{h['code']}",
+                                             "message": "Set the HQ sync address first; PCs 1-500, days 1-90."}, 400)
+    import enrollment
+    import hq_certificates
+
+    try:
+        hq_certificates._signing_key(None)
+    except SystemExit as exc:
+        return _page(request, "error.html", {"admin": admin, "session": session,
+                                             "message": f"No signing key on this server: {exc}"}, 500)
+    document = enrollment.new_document(h["code"], max_uses, days)
+    fields = json.loads(document)
+    cs.record_enrollment_token(fields["token_id"], h["code"], document, max_uses, fields["expires_at"],
+                               admin["username"])
+    cs.audit(admin["username"], "installer_created", h["code"],
+             {"token_id": fields["token_id"], "max_uses": max_uses, "expires_at": fields["expires_at"]}, _ip(request))
+    return RedirectResponse(f"/admin/hospitals/{h['code']}#installers", status_code=303)
+
+
+@router.get("/hospitals/{code}/installers/{token_id}/provisioning.json")
+@guarded
+def installer_download(request: Request, code: str, token_id: str):
+    session, admin = _current(request, CAN_EDIT)
+    h = cs.get_hospital(code.upper())
+    row = cs.enrollment_token(token_id)
+    if h is None or row is None or row["hospital"] != h["code"]:
+        return Response("Not Found", status_code=404)
+    import enrollment
+    import hq_certificates
+
+    token = enrollment.token_for(hq_certificates._signing_key(None), row["document"])
+    body = json.dumps(enrollment.provisioning(h, token, os.getenv("HQ_API_KEY", "")), indent=2)
+    cs.audit(admin["username"], "installer_downloaded", h["code"], {"token_id": token_id}, _ip(request))
+    return Response(body, media_type="application/json",
+                    headers={"Content-Disposition": f'attachment; filename="provisioning-{h["code"].lower()}.json"'})
 
 
 # ── audit and admins ─────────────────────────────────────────────────────────

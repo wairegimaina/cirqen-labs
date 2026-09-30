@@ -49,6 +49,16 @@ def ensure_client_key(config_manager, hq_base_url, client_id):
     code = config_manager.get("sync.enrollment_code")
     if not code:
         return None
+    hospital = str(config_manager.get("sync.hospital_code") or "").strip().upper()
+    if hospital:
+        # The installer's token goes only to an HQ that proves it is this
+        # PC's hospital (hq_handshake), never to whatever answers the address.
+        import hq_handshake
+
+        ok, why = hq_handshake.confirm(f"{hq_base_url.rstrip('/')}/api/sync", hospital)
+        if not ok:
+            LOG.error("Not enrolling: %s", why)
+            return None
     key = enroll(hq_base_url, client_id, config_manager.get("client.name") or client_id, code)
     if key:
         config_manager.set("sync.auth_token", key)
