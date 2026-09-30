@@ -263,3 +263,37 @@ class HospitalCodeCommandTests(EndpointSyncBase):
         self.assertEqual(self.load_config().get("sync.hospital_code"), HOSPITAL)
         self.run_command("--clear")
         self.assertFalse(self.load_config().get("sync.hospital_code"))
+
+
+class DirectPushTests(SimpleTestCase):
+    """core/hq_link pushes saved rows straight to HQ: with a hospital code it
+    names the hospital and pushes only to an HQ that passed the handshake."""
+
+    def setUp(self):
+        from core import hq_link
+
+        self.hq_link = hq_link
+        hq_link._confirmed.update(url="", at=0.0)
+        config = mock.Mock(get=mock.Mock(return_value="CH0001"))
+        patch = override_settings(CIRQEN_CONFIG=config, HQ_SYNC_API_URL=NEW_SYNC, SYNC_AUTH_TOKEN="k")
+        patch.enable()
+        self.addCleanup(patch.disable)
+
+    def push(self, handshake):
+        ok_response = mock.Mock(status_code=200, json=mock.Mock(return_value={"status": "success"}))
+        with mock.patch.object(self.hq_link, "get_client_id", return_value="pc-1"), \
+                mock.patch.object(hq_handshake, "confirm", return_value=handshake), \
+                mock.patch("requests.post", return_value=ok_response) as post:
+            result = self.hq_link.push_events([{"table": "t", "row_id": "1"}])
+        return result, post
+
+    def test_an_unconfirmed_hq_gets_nothing(self):
+        (ok, why), post = self.push((False, "belongs to CH0002"))
+        self.assertFalse(ok)
+        self.assertIn("will sync later", why)
+        post.assert_not_called()
+
+    def test_a_confirmed_hq_gets_the_hospital_code(self):
+        (ok, _), post = self.push((True, ""))
+        self.assertTrue(ok)
+        self.assertEqual(post.call_args.kwargs["headers"]["X-Cirqen-Hospital"], "CH0001")

@@ -181,6 +181,7 @@ class AgentInitMixin(SmartDeleteMixin):
                 local_pool=self.pool,
                 allowed_tables=self.tables,
                 logger=LOG,
+                hospital_code=self.hospital_code,
             )
             LOG.info("✅ DataCheckerClient ready")
         else:
