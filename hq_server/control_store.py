@@ -106,9 +106,21 @@ CREATE TABLE IF NOT EXISTS audit (
 """
 
 
+# Columns added after the first release of the panel: (table, column, definition).
+ADDED_COLUMNS = [
+    ("hospitals", "release_mode", "TEXT NOT NULL DEFAULT 'follow'"),   # follow | pin | hold
+    ("hospitals", "release_version", "TEXT NOT NULL DEFAULT ''"),       # for pin
+]
+
+
 def init() -> None:
     db_path().parent.mkdir(parents=True, exist_ok=True)
-    conn().executescript(SCHEMA)
+    c = conn()
+    c.executescript(SCHEMA)
+    for table, column, definition in ADDED_COLUMNS:
+        existing = {r["name"] for r in c.execute(f"PRAGMA table_info({table})")}
+        if column not in existing:
+            c.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 
 # ── audit ────────────────────────────────────────────────────────────────────
@@ -131,7 +143,7 @@ def audit_entries(limit: int = 200, target: str | None = None) -> list[dict]:
 # ── hospitals ────────────────────────────────────────────────────────────────
 
 HOSPITAL_FIELDS = ("name", "county", "hod_name", "hod_email", "hod_phone", "sync_url", "fallbacks",
-                   "updates_url", "cert_prefix", "status", "notes")
+                   "updates_url", "cert_prefix", "status", "notes", "release_mode", "release_version")
 
 
 def _hospital(row) -> dict | None:

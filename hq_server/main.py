@@ -44,6 +44,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 import endpoints as fleet_endpoints
+import releases
 import store
 from build_package import build_package_if_needed, build_delta_zip
 
@@ -69,7 +70,8 @@ app = FastAPI(title="Cirqen HQ Update Server", version="1.0.0", docs_url=None, r
 # The admin panel (/admin): hospitals, HQ identities, admins, audit log.
 import admin_panel  # noqa: E402
 
-admin_panel.install(app)
+admin_panel.install(app, versions=lambda: [m["version"] for m in sorted(
+    _all_metas(), key=lambda d: _parse_version(d.get("version", "0.0.0")), reverse=True) if not m.get("yanked")])
 
 
 @app.on_event("startup")
@@ -192,20 +194,22 @@ def hospital_endpoint_document(hospital: str):
 
 @app.get("/api/updates/latest/")
 def check_latest(current_version: str = "0.0.0", machine_id: Optional[str] = None,
-                 x_api_key: Optional[str] = Header(None)):
+                 hospital_code: Optional[str] = None, x_api_key: Optional[str] = Header(None)):
     _require_api_key(x_api_key)
 
     if machine_id:
         store.touch_check(machine_id, current_version)
 
-    latest = _get_latest_package()
-    if not latest:
-        return {"update_available": False, "message": "No packages available yet"}
+    # Each hospital follows the newest release, is pinned to one, or is on
+    # hold (admin panel; releases.py). PCs without a hospital code follow.
+    latest, why = releases.choose(_all_metas(), current_version, releases.policy_for(hospital_code))
+    if latest is None:
+        newest = _get_latest_package()
+        return {"update_available": False, "current_version": current_version,
+                "latest_version": newest["version"] if newest else None,
+                **({"message": why} if why else {})}
 
     latest_version = latest["version"]
-    if _parse_version(latest_version) <= _parse_version(current_version):
-        return {"update_available": False, "current_version": current_version,
-                "latest_version": latest_version}
 
     # #7 — kill switch / staged rollout / minimum-version gating
     if latest.get("yanked"):

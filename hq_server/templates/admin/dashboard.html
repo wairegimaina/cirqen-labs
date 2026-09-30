@@ -10,7 +10,7 @@
 {% else %}
 <div class="table-wrap">
 <table>
-  <thead><tr><th>Code</th><th>Hospital</th><th>Status</th><th>HQ</th><th>Identity</th><th>Certificate expires</th></tr></thead>
+  <thead><tr><th>Code</th><th>Hospital</th><th>Status</th><th>HQ</th><th>Identity</th><th>Release</th><th>Certificate expires</th></tr></thead>
   <tbody>
   {% for r in rows %}
   <tr>
@@ -19,6 +19,7 @@
     <td><span class="pill {{ r.h.status }}">{{ r.h.status }}</span></td>
     <td><span class="pill {{ 'ok' if r.health.state == 'up' else 'bad' }}">{{ r.health.state }}</span></td>
     <td>{% if r.health.identity %}<span class="pill {{ 'ok' if r.health.identity == 'ok' else 'bad' }}">{{ r.health.identity }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+    <td>{{ 'pinned ' ~ r.h.release_version if r.h.release_mode == 'pin' else ('on hold' if r.h.release_mode == 'hold' else 'newest') }}</td>
     <td>{{ r.cert.expires_at | eat if r.cert else '—' }}</td>
   </tr>
   {% endfor %}

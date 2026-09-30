@@ -35,6 +35,8 @@ import zipfile
 
 import requests
 from django.conf import settings
+
+from updates.hospital import latest_params
 from django.contrib.admin.views.decorators import staff_member_required
 from django.http import JsonResponse, StreamingHttpResponse
 from django.shortcuts import render
@@ -125,7 +127,7 @@ def check_updates(request):
     try:
         resp = requests.get(
             f"{cfg['server_url']}/api/updates/latest/",
-            params={"current_version": current, "machine_id": mid},
+            params=latest_params(current, mid),
             headers=_hq_headers(cfg),
             timeout=15,
         )

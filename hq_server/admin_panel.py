@@ -41,6 +41,8 @@ EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 CAN_EDIT = ("owner", "support")
 HEALTH_TTL = 60
 _health_cache: dict[str, tuple[float, dict]] = {}
+# Versions the update server has built, newest first (set by install()).
+_versions = lambda: []  # noqa: E731
 
 
 def admin_hosts() -> set[str]:
@@ -261,7 +263,7 @@ async def hospital_page(request: Request, code: str):
     return _page(request, "hospital.html", {
         "admin": admin, "session": session, "h": h, "health": await fetch_health(h),
         "cert": cs.latest_certificate(h["code"]), "document": json.dumps(document, indent=2) if document else "",
-        "events": cs.audit_entries(50, target=h["code"]), "issued": None,
+        "events": cs.audit_entries(50, target=h["code"]), "issued": None, "versions": _versions(),
     })
 
 
@@ -358,6 +360,29 @@ async def hospital_identity(request: Request, code: str):
     })
 
 
+@router.post("/hospitals/{code}/release")
+@guarded
+async def hospital_release(request: Request, code: str):
+    """Follow the newest release, pin one, or hold (releases.py)."""
+    session, admin = _current(request, CAN_EDIT)
+    form = dict(await request.form())
+    _check_csrf(session, form.get("csrf", ""))
+    h = cs.get_hospital(code.upper())
+    if h is None:
+        return RedirectResponse("/admin/", status_code=303)
+    mode = form.get("mode", "follow")
+    version = (form.get("version") or "").strip() if mode == "pin" else ""
+    if mode not in ("follow", "pin", "hold") or (mode == "pin" and version not in _versions()):
+        return _page(request, "error.html", {"admin": admin, "session": session,
+                                             "message": "Choose follow, hold, or a built version to pin.",
+                                             "back": f"/admin/hospitals/{h['code']}"}, 400)
+    cs.save_hospital(h["code"], {"release_mode": mode, "release_version": version}, create=False)
+    cs.audit(admin["username"], "release_changed", h["code"],
+             {"from": f"{h['release_mode']} {h['release_version']}".strip(), "to": f"{mode} {version}".strip()},
+             _ip(request))
+    return RedirectResponse(f"/admin/hospitals/{h['code']}", status_code=303)
+
+
 # ── audit and admins ─────────────────────────────────────────────────────────
 
 @router.get("/audit", response_class=HTMLResponse)
@@ -417,10 +442,14 @@ async def admin_deactivate(request: Request, admin_id: int):
     return _page(request, "admins.html", context, 400 if context["error"] else 200)
 
 
-def install(app) -> None:
-    """Mount the panel, its stylesheet, the host restriction and headers."""
+def install(app, versions=None) -> None:
+    """Mount the panel, its stylesheet, the host restriction and headers.
+    ``versions``: callable returning the built release versions, newest first."""
+    global _versions
     from fastapi.staticfiles import StaticFiles
 
+    if versions is not None:
+        _versions = versions
     cs.init()
     app.include_router(router)
     app.mount("/admin/static", StaticFiles(directory=str(Path(__file__).parent / "static" / "admin")),

@@ -46,6 +46,26 @@
     </form>
     {% endif %}
   </section>
+  <section class="card">
+    <h2>Release</h2>
+    <p>{% if h.release_mode == 'pin' %}Pinned to <strong>{{ h.release_version }}</strong>{% elif h.release_mode == 'hold' %}<strong>On hold</strong>: its PCs get nothing new{% else %}Follows the newest release{% endif %}</p>
+    {% if admin.role in ('owner', 'support') %}
+    <form method="post" action="/admin/hospitals/{{ h.code }}/release" class="stack">
+      <input type="hidden" name="csrf" value="{{ session.csrf }}">
+      <label>Its PCs get
+        <select name="mode">
+          <option value="follow" {{ 'selected' if h.release_mode == 'follow' }}>the newest release</option>
+          <option value="pin" {{ 'selected' if h.release_mode == 'pin' }}>exactly the version below</option>
+          <option value="hold" {{ 'selected' if h.release_mode == 'hold' }}>nothing new (hold)</option>
+        </select>
+      </label>
+      <label>Version to pin
+        <select name="version">{% for v in versions %}<option {{ 'selected' if v == h.release_version }}>{{ v }}</option>{% else %}<option value="">no packages built</option>{% endfor %}</select>
+      </label>
+      <div class="actions"><button class="secondary">Save release</button></div>
+    </form>
+    {% endif %}
+  </section>
 </div>
 <section class="card">
   <h2>What its desktops are sent</h2>

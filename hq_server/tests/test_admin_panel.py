@@ -300,3 +300,18 @@ def test_the_update_server_serves_the_panel_and_its_addresses(tmp_path, monkeypa
     payload = client.get("/api/endpoints/CH0001/").json()
     assert json.loads(payload["document"])["endpoints"]["sync.api_url"] == SYNC
     assert client.get("/api/endpoints/CH0009/").status_code == 404
+
+
+def test_setting_a_hospitals_release(app, owner, monkeypatch):
+    import admin_panel
+
+    monkeypatch.setattr(admin_panel, "_versions", lambda: ["1.9.0", "1.8.0"])
+    client, _ = owner
+    add_hospital(client)
+    token = csrf(client, "/admin/hospitals/CH0001")
+    assert client.post("/admin/hospitals/CH0001/release", data={"csrf": token, "mode": "pin", "version": "2.0.0"}
+                       ).status_code == 400                      # not a built version
+    client.post("/admin/hospitals/CH0001/release", data={"csrf": token, "mode": "pin", "version": "1.8.0"})
+    h = cs.get_hospital("CH0001")
+    assert (h["release_mode"], h["release_version"]) == ("pin", "1.8.0")
+    assert cs.audit_entries(target="CH0001")[0]["action"] == "release_changed"
