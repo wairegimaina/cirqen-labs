@@ -39,7 +39,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -230,6 +230,57 @@ def hospital_licence_document(hospital: str):
     except SystemExit:
         raise HTTPException(status_code=503, detail="no signing key") from None
     return billing.signed_licence(lic, key)
+
+
+# ── M-Pesa (Daraja C2B): payments arriving by themselves (mpesa.py) ───────────
+
+def _caller_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for", "")
+    return (forwarded.split(",")[-1].strip() if forwarded else "") or (request.client.host if request.client else "")
+
+
+@app.post("/api/pay/mpesa/confirm/{secret}")
+async def mpesa_confirmation(secret: str, request: Request):
+    """Safaricom's confirmation of a Paybill payment. Stored once per receipt
+    number, then matched to an invoice or left for finance. Always answers
+    'accepted' to a genuine call, so Safaricom does not retry forever."""
+    import mpesa
+
+    if not mpesa.secret_ok(secret):
+        raise HTTPException(status_code=404)
+    if not mpesa.ip_ok(_caller_ip(request)):
+        raise HTTPException(status_code=403)
+    try:
+        payload = await request.json()
+        row = mpesa.receive(payload if isinstance(payload, dict) else {})
+        print(f"💰 M-Pesa {row['trans_id']} KES {row['amount_kes']} account {row['bill_ref']}: {row['status']}")
+    except Exception as exc:  # noqa: BLE001 - never make Safaricom retry a payment we cannot read
+        print(f"⚠️  M-Pesa confirmation not stored: {exc}")
+    return {"ResultCode": 0, "ResultDesc": "Accepted"}
+
+
+@app.post("/api/pay/mpesa/validate/{secret}")
+async def mpesa_validation(secret: str, request: Request):
+    """Asked before a payment completes (only if Safaricom enabled external
+    validation for the Paybill). Accepts, unless
+    MPESA_REJECT_UNKNOWN_ACCOUNTS=true and the account is not a hospital code
+    or open invoice."""
+    import mpesa
+
+    if not mpesa.secret_ok(secret):
+        raise HTTPException(status_code=404)
+    if not mpesa.ip_ok(_caller_ip(request)):
+        raise HTTPException(status_code=403)
+    if mpesa.env("MPESA_REJECT_UNKNOWN_ACCOUNTS").lower() == "true":
+        try:
+            payload = await request.json()
+            ref = str((payload or {}).get("BillRefNumber") or "").strip().upper()
+            hospital, _, _ = mpesa._target(ref)
+            if hospital is None and not (ref and mpesa.cs.get_hospital(ref)):
+                return {"ResultCode": "C2B00012", "ResultDesc": "Rejected"}
+        except Exception:  # noqa: BLE001
+            pass
+    return {"ResultCode": "0", "ResultDesc": "Accepted"}
 
 
 @app.get("/api/updates/latest/")

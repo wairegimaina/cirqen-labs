@@ -450,3 +450,20 @@ def test_support_cannot_record_money_and_only_owners_reverse(app, clock, owner, 
                 data={"csrf": token, "reason": "wrong hospital", "code": auth.totp_now(secret, clock.tick())})
     assert [p["amount_kes"] for p in billing.payments("CH0001")] == [-10000, 10000]
     assert client.get("/admin/money").status_code == 200
+
+
+def test_the_mpesa_inbox_page_assigns_a_payment(owner, monkeypatch):
+    import billing
+    import mpesa
+
+    monkeypatch.setenv("MPESA_SHORTCODE", "247247")
+    client, _ = owner
+    add_hospital(client)
+    mpesa.receive({"TransID": "SJK1", "TransAmount": "5000", "BusinessShortCode": "247247",
+                   "BillRefNumber": "WRONG", "TransTime": "20261001093012"})
+    page = client.get("/admin/mpesa")
+    assert page.status_code == 200 and "SJK1" in page.text and "Waiting for a person (1)" in page.text
+    client.post("/admin/mpesa/SJK1/assign", data={"csrf": csrf(client, "/admin/mpesa"), "hospital": "CH0001",
+                                                  "months": "0"})
+    assert mpesa.inbox_row("SJK1")["status"] == "matched"
+    assert billing.payments("CH0001")[0]["reference"] == "SJK1"

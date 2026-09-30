@@ -550,6 +550,10 @@ def install(app, versions=None) -> None:
         _versions = versions
     cs.init()
     import admin_billing  # noqa: F401  (adds the billing pages to the router)
+    import admin_mpesa  # noqa: F401  (the M-Pesa inbox)
+    import mpesa
+
+    mpesa.init()
 
     app.include_router(router)
     app.mount("/admin/static", StaticFiles(directory=str(Path(__file__).parent / "static" / "admin")),

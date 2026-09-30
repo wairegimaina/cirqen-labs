@@ -80,3 +80,4 @@ tfoot th { text-align: left; }
   main { padding: 0; }
   .card { border: 0; padding: 0; }
 }
+.card.inbox { background: var(--bg); }

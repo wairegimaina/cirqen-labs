@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}M-Pesa · Cirqen Control{% endblock %}
+{% block main %}
+<h1>M-Pesa</h1>
+{% if note %}<p class="note" role="status">{{ note }}</p>{% endif %}
+
+<section class="card">
+  <h2>Waiting for a person ({{ unmatched | length }})</h2>
+  <p class="muted">Payments whose account number was not an open invoice or a hospital with an open invoice. Nothing is guessed.</p>
+  {% for r in unmatched %}
+  <div class="card inbox">
+    <p><strong>KES {{ '{:,}'.format(r.amount_kes) }}</strong> · {{ r.trans_id }} · account <strong>{{ r.bill_ref or '(blank)' }}</strong> · {{ r.payer }} · {{ r.received_at | eat }}</p>
+    <p class="muted small">{{ r.reason }}</p>
+    <div class="cards">
+      <form method="post" action="/admin/mpesa/{{ r.trans_id }}/assign" class="stack">
+        <input type="hidden" name="csrf" value="{{ session.csrf }}">
+        <label>Hospital <select name="hospital">{% for h in hospitals %}<option value="{{ h.code }}">{{ h.code }} · {{ h.name }}</option>{% endfor %}</select></label>
+        <label>Invoice <select name="invoice_id"><option value="">none</option>{% for i in open_invoices %}<option value="{{ i.id }}">{{ i.number }} · {{ i.hospital }} · KES {{ '{:,}'.format(i.amount_kes - i.paid_kes) }} due</option>{% endfor %}</select></label>
+        <label>Months (only without an invoice) <input name="months" type="number" min="0" max="36" value="0"></label>
+        <button>Assign</button>
+      </form>
+      <form method="post" action="/admin/mpesa/{{ r.trans_id }}/ignore" class="stack">
+        <input type="hidden" name="csrf" value="{{ session.csrf }}">
+        <label>Set aside, because <input name="reason" required placeholder="refunded / not for us / test"></label>
+        <button class="secondary">Set aside</button>
+      </form>
+    </div>
+  </div>
+  {% else %}<p>None.</p>{% endfor %}
+</section>
+
+<section class="card">
+  <h2>Latest confirmations</h2>
+  <div class="table-wrap"><table><thead><tr><th>Received</th><th>Receipt</th><th>Account</th><th>KES</th><th>Status</th><th></th></tr></thead><tbody>
+  {% for r in recent %}<tr><td>{{ r.received_at | eat }}</td><td>{{ r.trans_id }}</td><td>{{ r.bill_ref }}</td><td>{{ '{:,}'.format(r.amount_kes) }}</td>
+    <td><span class="pill {{ 'ok' if r.status == 'matched' else ('bad' if r.status == 'unmatched' else '') }}">{{ r.status }}</span></td>
+    <td>{% if r.payment_id %}<a href="/admin/payments/{{ r.payment_id }}">receipt</a>{% else %}<span class="muted small">{{ r.reason }}</span>{% endif %}</td></tr>
+  {% else %}<tr><td colspan="6" class="muted">No confirmations yet.</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+
+<section class="card">
+  <h2>Connection to Safaricom ({{ env }})</h2>
+  <dl>{% for k, v in config.items() %}<dt>{{ k }}</dt><dd><span class="pill {{ 'ok' if v else 'bad' }}">{{ 'set' if v else 'missing' }}</span></dd>{% endfor %}</dl>
+  {% if urls %}<p class="muted small break">Confirmation: {{ urls.ConfirmationURL.rsplit('/', 1)[0] }}/…</p>{% endif %}
+  {% if admin.role == 'owner' %}
+  <form method="post" action="/admin/mpesa/register" class="inline spaced">
+    <input type="hidden" name="csrf" value="{{ session.csrf }}">
+    <input name="code" inputmode="numeric" placeholder="code" aria-label="Your authenticator code" required>
+    <button class="secondary">Register our URLs with Safaricom</button>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}
