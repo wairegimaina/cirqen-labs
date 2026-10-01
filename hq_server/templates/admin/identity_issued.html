@@ -3,11 +3,23 @@
 {% block main %}
 <h1>{{ 'New identity' if action == 'new' else 'Renewed certificate' }} for {{ h.code }}</h1>
 <section class="card">
+  {% if on_render %}
+  {% if on_render.errors %}<p class="note"><strong>Not all put on Render:</strong> {{ on_render.errors | join('; ') }}.
+    Copy the values below into the services that failed, then deploy them.</p>
+  {% else %}<p class="note ok"><strong>Done on Render:</strong> set on {{ on_render.done | join(', ') }} and a deploy started.
+    The values are below only in case you need them again.</p>{% endif %}
+  {% endif %}
   <p class="note"><strong>Shown once.</strong> Copy these into the HQ web service of {{ h.name }} on Render
     (Environment), then redeploy it.{% if action == 'new' %} The private key is not kept anywhere else: if you lose it, issue a new identity.{% endif %}</p>
   <dl class="env">
     {% for k, v in env %}<dt>{{ k }}</dt><dd><textarea readonly rows="{{ 4 if k == 'HQ_CERTIFICATE' else 1 }}">{{ v }}</textarea></dd>{% endfor %}
   </dl>
+  {% if identity_env %}
+  <h2>For a self-hosted HQ</h2>
+  <p class="muted">Save this as <code>identity.env</code> on the hospital's server and run the installer with
+    <code>--identity identity.env</code> (or, on a server already installed, run it again to put the new identity in place).</p>
+  <textarea readonly rows="7" class="identity-env">{{ identity_env }}</textarea>
+  {% endif %}
   <p class="muted">Certificate valid until {{ expires | eat }}. After the redeploy, the hospital page should show the HQ answering as {{ h.code }} with identity <em>ok</em>.</p>
   <p><a class="button" href="/admin/hospitals/{{ h.code }}">Done</a></p>
 </section>

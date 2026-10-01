@@ -129,6 +129,7 @@ def clean_hospital(form: dict, *, creating: bool) -> tuple[dict, list[str]]:
         "notes": (form.get("notes") or "").strip(),
         "cert_prefix": (form.get("cert_prefix") or "").strip().upper(),
         "status": (form.get("status") or "active").strip(),
+        "hosting": (form.get("hosting") or "render").strip(),
     }
     if creating:
         values["code"] = (form.get("code") or "").strip().upper()
@@ -140,6 +141,8 @@ def clean_hospital(form: dict, *, creating: bool) -> tuple[dict, list[str]]:
         errors.append("HOD e-mail is not an e-mail address")
     if values["cert_prefix"] and not PREFIX.match(values["cert_prefix"]):
         errors.append("Certificate prefix: 2-8 letters or digits and a dash, e.g. KRH-")
+    if values["hosting"] not in ("render", "self"):
+        errors.append("HQ hosting must be Render or the hospital's own server")
     if values["status"] not in ("active", "suspended", "closed"):
         errors.append("Status must be active, suspended or closed")
     values["sync_url"] = _sync_url(form.get("sync_url"), "HQ sync address", errors)
@@ -171,6 +174,8 @@ async def fetch_health(hospital: dict) -> dict:
             "identity": checks.get("identity"),
             "prefix": checks.get("certificate_prefix"),
             "shared_key": checks.get("shared_sync_key") if isinstance(checks.get("shared_sync_key"), dict) else None,
+            "computers": checks.get("computers") if isinstance(checks.get("computers"), dict) else None,
+            "version": checks.get("hq_version"),
             "sse": (checks.get("sse_clients") or {}).get("active") if isinstance(checks.get("sse_clients"), dict)
             else None,
         }
@@ -313,8 +318,177 @@ async def hospital_page(request: Request, code: str):
         "cert": cs.latest_certificate(h["code"]), "document": json.dumps(document, indent=2) if document else "",
         "events": cs.audit_entries(50, target=h["code"]), "issued": None, "versions": _versions(),
         "tokens": cs.enrollment_tokens(h["code"]), "now": datetime.now(timezone.utc).isoformat(),
-        "modules": _module_rows(h), **_billing_context(h),
+        "modules": _module_rows(h), "render": await _render_context(h), "hq_software": await _hq_software(h),
+        **_billing_context(h),
     })
+
+
+# ── Render: deploy and configure a hospital's HQ (render_api.py) ─────────────
+
+RENDER_TTL = 30
+_render_cache: dict[str, tuple[float, dict]] = {}
+
+
+async def _render_context(h: dict) -> dict:
+    import render_api
+
+    if not render_api.configured():
+        return {"configured": False, "linked": h["render_services"]}
+    linked = []
+    for svc in h["render_services"]:
+        cached = _render_cache.get(svc["id"])
+        if cached and time.time() - cached[0] < RENDER_TTL:
+            deploy = cached[1]
+        else:
+            try:
+                deploy = await asyncio.to_thread(render_api.latest_deploy, svc["id"])
+            except render_api.RenderError as exc:
+                deploy = {"status": "unknown", "error": str(exc)}
+            _render_cache[svc["id"]] = (time.time(), deploy or {})
+        linked.append({**svc, "deploy": deploy or {}})
+    return {"configured": True, "linked": linked}
+
+
+@router.get("/hospitals/{code}/render", response_class=HTMLResponse)
+@guarded
+async def render_link_page(request: Request, code: str):
+    """Choose which Render services are this hospital's HQ (web and worker)."""
+    import render_api
+
+    session, admin = _current(request, CAN_EDIT)
+    h = cs.get_hospital(code.upper())
+    if h is None:
+        return RedirectResponse("/admin/", status_code=303)
+    try:
+        services = await asyncio.to_thread(render_api.services)
+        error = ""
+    except render_api.RenderError as exc:
+        services, error = [], str(exc)
+    linked = {s["id"] for s in h["render_services"]}
+    return _page(request, "render_link.html", {"admin": admin, "session": session, "h": h, "error": error,
+                                               "services": services, "linked": linked})
+
+
+@router.post("/hospitals/{code}/render")
+@guarded
+async def render_link(request: Request, code: str):
+    import render_api
+
+    session, admin = _current(request, CAN_EDIT)
+    form = await request.form()
+    _check_csrf(session, form.get("csrf", ""))
+    h = cs.get_hospital(code.upper())
+    if h is None:
+        return RedirectResponse("/admin/", status_code=303)
+    chosen = set(form.getlist("service"))
+    try:
+        known = {s["id"]: s for s in await asyncio.to_thread(render_api.services)}
+    except render_api.RenderError as exc:
+        return _page(request, "error.html", {"admin": admin, "session": session, "message": str(exc),
+                                             "back": f"/admin/hospitals/{h['code']}"}, 502)
+    linked = [{"id": i, "name": known[i]["name"], "type": known[i]["type"]} for i in sorted(chosen) if i in known]
+    cs.save_hospital(h["code"], {"render_services": linked}, create=False)
+    cs.audit(admin["username"], "render_linked", h["code"], {"services": [s["name"] for s in linked]}, _ip(request))
+    return RedirectResponse(f"/admin/hospitals/{h['code']}#render", status_code=303)
+
+
+@router.post("/hospitals/{code}/render/deploy")
+@guarded
+async def render_deploy(request: Request, code: str):
+    """Deploy the latest commit to this hospital's HQ services, now."""
+    import render_api
+
+    session, admin = _current(request, CAN_EDIT)
+    form = dict(await request.form())
+    _check_csrf(session, form.get("csrf", ""))
+    h = cs.get_hospital(code.upper())
+    if h is None or not h["render_services"]:
+        return RedirectResponse("/admin/", status_code=303)
+    started, errors = await _deploy_all(h)
+    cs.audit(admin["username"], "render_deployed", h["code"], {"started": started, "errors": errors}, _ip(request))
+    if errors:
+        return _page(request, "error.html", {"admin": admin, "session": session, "message": "; ".join(errors),
+                                             "back": f"/admin/hospitals/{h['code']}#render"}, 502)
+    return RedirectResponse(f"/admin/hospitals/{h['code']}#render", status_code=303)
+
+
+async def _deploy_all(h: dict) -> tuple[list[str], list[str]]:
+    import render_api
+
+    started, errors = [], []
+    for svc in h["render_services"]:
+        try:
+            await asyncio.to_thread(render_api.deploy, svc["id"])
+            started.append(svc["name"])
+        except render_api.RenderError as exc:
+            errors.append(f"{svc['name']}: {exc}")
+        _render_cache.pop(svc["id"], None)
+    return started, errors
+
+
+async def _put_on_render(h: dict, env: list[tuple[str, str]]) -> dict:
+    """Set the identity's values on each linked service, then redeploy them."""
+    import render_api
+
+    done, errors = [], []
+    for svc in h["render_services"]:
+        try:
+            for key, value in env:
+                await asyncio.to_thread(render_api.set_env, svc["id"], key, value)
+            done.append(svc["name"])
+        except render_api.RenderError as exc:
+            errors.append(f"{svc['name']}: {exc}")
+    if done and not errors:
+        started, deploy_errors = await _deploy_all(h)
+        errors += deploy_errors
+    return {"done": done, "errors": errors}
+
+
+# ── Self-hosted HQ software (hq_releases.py) ─────────────────────────────────
+
+async def _hq_software(h: dict) -> dict:
+    import hq_releases
+
+    if h.get("hosting") != "self":
+        return {}
+    if not hq_releases.configured():
+        return {"configured": False}
+    try:
+        available = await asyncio.to_thread(hq_releases.tags)
+        error = ""
+    except hq_releases.ReleaseError as exc:
+        available, error = [], str(exc)
+    chosen = "" if error else hq_releases.chosen_version(h) if available or h.get("hq_release_mode") != "follow" else ""
+    return {"configured": True, "tags": available, "chosen": chosen, "error": error}
+
+
+@router.post("/hospitals/{code}/hq-release")
+@guarded
+async def hospital_hq_release(request: Request, code: str):
+    """A self-hosted HQ: follow the newest HQ release, pin one, or hold."""
+    import hq_releases
+
+    session, admin = _current(request, CAN_EDIT)
+    form = dict(await request.form())
+    _check_csrf(session, form.get("csrf", ""))
+    h = cs.get_hospital(code.upper())
+    if h is None:
+        return RedirectResponse("/admin/", status_code=303)
+    mode = form.get("mode", "follow")
+    version = (form.get("version") or "").strip() if mode == "pin" else ""
+    try:
+        known = await asyncio.to_thread(hq_releases.tags) if mode == "pin" else []
+    except hq_releases.ReleaseError:
+        known = []
+    if mode not in ("follow", "pin", "hold") or (mode == "pin" and version not in known):
+        return _page(request, "error.html", {"admin": admin, "session": session,
+                                             "message": "Choose follow, hold, or a published HQ version to pin.",
+                                             "back": f"/admin/hospitals/{h['code']}#hq-software"}, 400)
+    cs.save_hospital(h["code"], {"hq_release_mode": mode, "hq_release_version": version}, create=False)
+    cs.audit(admin["username"], "hq_release_changed", h["code"],
+             {"from": f"{h['hq_release_mode']} {h['hq_release_version']}".strip(), "to": f"{mode} {version}".strip()},
+             _ip(request))
+    return RedirectResponse(f"/admin/hospitals/{h['code']}#hq-software", status_code=303)
 
 
 def _billing_context(h: dict) -> dict:
@@ -417,13 +591,27 @@ async def hospital_identity(request: Request, code: str):
                           admin["username"])
     cs.audit(admin["username"], f"identity_{action}", h["code"],
              {"urls": urls, "expires_at": fields["expires_at"], "public_key": public_b64}, _ip(request))
+    env = [("HOSPITAL_CODE", h["code"]), *([("HQ_IDENTITY_PRIVATE_KEY", private_b64)] if private_b64 else []),
+           ("HQ_CERTIFICATE", certificate),
+           ("CONTROL_PUBLIC_KEY", hq_certificates._raw_public(signer.public_key())),
+           *([("CERT_PREFIX", h["cert_prefix"])] if h["cert_prefix"] else [])]
+    import render_api
+
+    on_render = None
+    if h["render_services"] and render_api.configured() and form.get("put_on_render", "1") == "1":
+        on_render = await _put_on_render(h, env)
+        cs.audit(admin["username"], "identity_put_on_render", h["code"], on_render, _ip(request))
+    identity_env = ""
+    if h.get("hosting") == "self":
+        # For selfhost/install.sh: the certificate as base64, since an
+        # environment file would mangle its JSON.
+        identity_env = "\n".join(
+            f"{k}={base64.b64encode(v.encode()).decode() if k == 'HQ_CERTIFICATE' else v}".replace(
+                "HQ_CERTIFICATE=", "HQ_CERTIFICATE_B64=", 1)
+            for k, v in env) + "\n"
     return _page(request, "identity_issued.html", {
-        "admin": admin, "session": session, "h": h, "action": action,
-        "env": [("HOSPITAL_CODE", h["code"]), *([("HQ_IDENTITY_PRIVATE_KEY", private_b64)] if private_b64 else []),
-                ("HQ_CERTIFICATE", certificate),
-                ("CONTROL_PUBLIC_KEY", hq_certificates._raw_public(signer.public_key())),
-                *([("CERT_PREFIX", h["cert_prefix"])] if h["cert_prefix"] else [])],
-        "expires": fields["expires_at"],
+        "admin": admin, "session": session, "h": h, "action": action, "env": env,
+        "expires": fields["expires_at"], "on_render": on_render, "identity_env": identity_env,
     })
 
 

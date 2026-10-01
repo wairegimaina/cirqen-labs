@@ -618,3 +618,226 @@ def test_finance_cannot_retire_the_shared_key(app, clock, owner):
     other.post("/admin/hospitals/CH0001/shared-key", data={"csrf": csrf(other, "/admin/hospitals/CH0001"),
                                                           "action": "retire"})
     assert cs.get_hospital("CH0001")["shared_key_retired_at"] is None
+
+
+# ── Render (render_api.py) ───────────────────────────────────────────────────
+
+class FakeRender:
+    """Render's API as far as the panel uses it."""
+
+    def __init__(self):
+        self.env, self.deploys, self.fail = {}, [], set()
+        self.services = [{"id": "srv-web", "name": "hq-ch0001-web", "type": "web_service",
+                          "serviceDetails": {"url": "https://ch0001-web.example.com"}},
+                         {"id": "srv-wrk", "name": "hq-ch0001-worker", "type": "background_worker"},
+                         {"id": "srv-other", "name": "website", "type": "static_site"}]
+
+    def handler(self, request):
+        import httpx
+
+        assert request.headers["authorization"] == "Bearer rnd_test"
+        path, method = request.url.path, request.method
+        if path == "/v1/services" and method == "GET":
+            return httpx.Response(200, json=[{"cursor": s["id"], "service": s} for s in self.services])
+        sid = path.split("/")[3]
+        if sid in self.fail:
+            return httpx.Response(403, json={"message": "forbidden"})
+        if path.endswith("/deploys") and method == "POST":
+            self.deploys.append(sid)
+            return httpx.Response(201, json={"id": f"dep-{len(self.deploys)}", "status": "created"})
+        if path.endswith("/deploys") and method == "GET":
+            return httpx.Response(200, json=[{"deploy": {"id": "dep-0", "status": "live",
+                                                         "finishedAt": "2026-10-01T08:00:00Z",
+                                                         "commit": {"id": "abcdef123", "message": "Fix\nmore"}}}])
+        if "/env-vars/" in path and method == "PUT":
+            self.env.setdefault(sid, {})[path.rsplit("/", 1)[1]] = json.loads(request.content)["value"]
+            return httpx.Response(200, json={})
+        return httpx.Response(404, json={"message": "no route"})
+
+
+@pytest.fixture
+def render(monkeypatch):
+    import httpx
+
+    import admin_panel
+    import render_api
+
+    fake = FakeRender()
+    monkeypatch.setenv("RENDER_API_KEY", "rnd_test")
+    real = render_api._client
+    monkeypatch.setattr(render_api, "_client", lambda transport=None: real(httpx.MockTransport(fake.handler)))
+    admin_panel._render_cache.clear()
+    return fake
+
+
+def link(client, *ids):
+    token = csrf(client, "/admin/hospitals/CH0001")
+    return client.post("/admin/hospitals/CH0001/render", data={"csrf": token, "service": list(ids)})
+
+
+def test_without_a_render_key_the_page_says_how_to_connect(owner, monkeypatch):
+    monkeypatch.delenv("RENDER_API_KEY", raising=False)
+    client, _ = owner
+    add_hospital(client)
+    assert "RENDER_API_KEY" in client.get("/admin/hospitals/CH0001").text
+
+
+def test_linking_services_and_deploying(owner, render):
+    client, _ = owner
+    add_hospital(client)
+    assert "hq-ch0001-worker" in client.get("/admin/hospitals/CH0001/render").text
+    link(client, "srv-web", "srv-wrk", "srv-made-up")
+    assert [s["id"] for s in cs.get_hospital("CH0001")["render_services"]] == ["srv-web", "srv-wrk"]
+    page = client.get("/admin/hospitals/CH0001").text
+    assert "live" in page and "abcdef1 Fix" in page
+    client.post("/admin/hospitals/CH0001/render/deploy", data={"csrf": csrf(client, "/admin/hospitals/CH0001")})
+    assert render.deploys == ["srv-web", "srv-wrk"]
+    assert cs.audit_entries(target="CH0001")[0]["action"] == "render_deployed"
+
+
+def test_a_new_identity_goes_straight_onto_render(owner, clock, control_key, render):
+    client, secret = owner
+    add_hospital(client)
+    link(client, "srv-web", "srv-wrk")
+    page = issue(client, clock, secret, "new")
+    assert "Done on Render" in page.text
+    env = env_values(page.text)
+    for sid in ("srv-web", "srv-wrk"):
+        assert render.env[sid]["HQ_IDENTITY_PRIVATE_KEY"] == env["HQ_IDENTITY_PRIVATE_KEY"]
+        assert render.env[sid]["HOSPITAL_CODE"] == "CH0001"
+    assert render.deploys == ["srv-web", "srv-wrk"]
+
+
+def test_if_render_refuses_the_values_are_still_shown_and_nothing_deploys(owner, clock, control_key, render):
+    client, secret = owner
+    add_hospital(client)
+    link(client, "srv-web", "srv-wrk")
+    render.fail.add("srv-wrk")
+    page = issue(client, clock, secret, "new")
+    assert "Not all put on Render" in page.text and "forbidden" in page.text
+    assert env_values(page.text)["HQ_CERTIFICATE"]
+    assert render.deploys == []
+
+
+def test_support_can_deploy_but_finance_cannot(app, clock, owner, render):
+    client, _ = owner
+    add_hospital(client)
+    link(client, "srv-web")
+    books = sign_in(app, clock, "books", make_admin("books", "finance"))
+    books.post("/admin/hospitals/CH0001/render/deploy", data={"csrf": csrf(books, "/admin/hospitals/CH0001")})
+    assert render.deploys == []
+
+
+# ── self-hosted HQ software (hq_releases.py) ─────────────────────────────────
+
+@pytest.fixture
+def github(monkeypatch, tmp_path):
+    import io
+    import tarfile
+
+    import httpx
+
+    import hq_releases
+
+    def tarball(tag):
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+            data = f"version {tag}\n".encode()
+            info = tarfile.TarInfo("wairegimaina-hq_server-abc123/VERSION_NOTE")
+            info.size = len(data)
+            tar.addfile(info, io.BytesIO(data))
+        return buf.getvalue()
+
+    def handler(request):
+        path = request.url.path
+        if path.endswith("/tags"):
+            return httpx.Response(200, json=[{"name": t} for t in ("v1.2.0", "v1.10.0", "nightly", "v1.9.3")])
+        if "/tarball/" in path:
+            return httpx.Response(200, content=tarball(path.rsplit("/", 1)[1]))
+        if path.endswith("/contents/selfhost/install.sh"):
+            return httpx.Response(200, content=b"#!/bin/bash\necho install\n")
+        return httpx.Response(404)
+
+    monkeypatch.setenv("GITHUB_TOKEN", "ghp_test")
+    monkeypatch.setenv("HQ_RELEASE_CACHE", str(tmp_path / "hq-cache"))
+    real = hq_releases._client
+    monkeypatch.setattr(hq_releases, "_client", lambda transport=None: real(httpx.MockTransport(handler)))
+    hq_releases._tags_cache.update(at=0.0, tags=[])
+    return hq_releases
+
+
+def self_hosted(owner, clock):
+    client, secret = owner
+    add_hospital(client, hosting="self")
+    page = issue(client, clock, secret, "new")
+    hq_key = Ed25519PrivateKey.from_private_bytes(base64.b64decode(env_values(page.text)["HQ_IDENTITY_PRIVATE_KEY"]))
+    return client, hq_key
+
+
+def signed_get(server, hq_key, version, code="CH0001", age=0):
+    import time as _time
+
+    import hq_releases
+
+    ts = int(_time.time()) - age
+    sig = base64.b64encode(hq_key.sign(hq_releases.download_message(code, version, ts))).decode()
+    return server.get(f"/api/hq/{code}/hq-release/{version}.tar.gz",
+                      headers={"X-Cirqen-Timestamp": str(ts), "X-Cirqen-Signature": sig})
+
+
+def test_a_self_hosted_hq_is_told_the_newest_release_and_only_it_can_download(
+        owner, clock, control_key, github, tmp_path, monkeypatch):
+    import hashlib
+
+    client, hq_key = self_hosted(owner, clock)
+    monkeypatch.setenv("HQ_PACKAGES_DIR", str(tmp_path / "packages"))
+    import main
+
+    server = TestClient(main.app)
+    answer = server.get("/api/hq/CH0001/hq-release").json()
+    control_key.public_key().verify(base64.b64decode(answer["signature"]),
+                                    b"cirqen-hq-release-v1\n" + answer["document"].encode())
+    doc = json.loads(answer["document"])
+    assert (doc["hospital"], doc["version"]) == ("CH0001", "v1.10.0")       # numeric order, tags only
+    got = signed_get(server, hq_key, "v1.10.0")
+    assert got.status_code == 200 and hashlib.sha256(got.content).hexdigest() == doc["sha256"]
+    stranger = Ed25519PrivateKey.generate()
+    assert signed_get(server, stranger, "v1.10.0").status_code == 403
+    assert signed_get(server, hq_key, "v1.10.0", age=3600).status_code == 403   # replayed
+    assert signed_get(server, hq_key, "v1.2.0").status_code == 404              # not its version
+    assert server.get("/api/hq/selfhost/install.sh").text.startswith("#!/bin/bash")
+    assert server.get("/api/hq/selfhost/secrets.txt").status_code == 404
+
+
+def test_pin_and_hold_from_the_panel(owner, clock, control_key, github, tmp_path, monkeypatch):
+    client, _ = self_hosted(owner, clock)
+    monkeypatch.setenv("HQ_PACKAGES_DIR", str(tmp_path / "packages"))
+    import main
+
+    server = TestClient(main.app)
+
+    def chosen():
+        return json.loads(server.get("/api/hq/CH0001/hq-release").json()["document"])["version"]
+
+    token = csrf(client, "/admin/hospitals/CH0001")
+    page = client.get("/admin/hospitals/CH0001").text
+    assert "HQ software (own server)" in page and "Hosting (Render)" not in page
+    client.post("/admin/hospitals/CH0001/hq-release", data={"csrf": token, "mode": "pin", "version": "v1.9.3"})
+    assert chosen() == "v1.9.3"
+    assert client.post("/admin/hospitals/CH0001/hq-release",
+                       data={"csrf": token, "mode": "pin", "version": "v9.9.9"}).status_code == 400
+    client.post("/admin/hospitals/CH0001/hq-release", data={"csrf": token, "mode": "hold"})
+    assert chosen() == ""
+    assert cs.audit_entries(target="CH0001")[0]["action"] == "hq_release_changed"
+
+
+def test_a_self_hosted_identity_comes_as_an_identity_env_file(owner, clock, control_key):
+    import html
+
+    client, secret = owner
+    add_hospital(client, hosting="self")
+    page = issue(client, clock, secret, "new").text
+    block = html.unescape(re.search(r'class="identity-env">(.*?)</textarea>', page, re.S).group(1))
+    values = dict(line.split("=", 1) for line in block.strip().splitlines())
+    assert values["HOSPITAL_CODE"] == "CH0001" and values["HQ_IDENTITY_PRIVATE_KEY"]
+    assert json.loads(base64.b64decode(values["HQ_CERTIFICATE_B64"]))["document"]

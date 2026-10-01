@@ -40,7 +40,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, Header, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
 import endpoints as fleet_endpoints
@@ -284,6 +284,83 @@ def hq_settings(hospital: str):
                            sort_keys=True, separators=(",", ":"))
     signature = base64.b64encode(key.sign(b"cirqen-hq-settings-v1\n" + document.encode())).decode()
     return {"document": document, "signature": signature}
+
+
+# ── Self-hosted HQs: their software, through Control (hq_releases.py) ────────
+
+@app.get("/api/hq/{hospital}/hq-release")
+def hq_release(hospital: str):
+    """Which HQ version this hospital's own server should run. Signed; an
+    empty version means hold (or none published yet)."""
+    import control_store
+    import hq_certificates
+    import hq_releases
+
+    code = hospital.strip().upper()
+    h = control_store.get_hospital(code) if control_store.available() else None
+    if h is None:
+        raise HTTPException(status_code=404, detail="unknown hospital")
+    try:
+        key = hq_certificates._signing_key(None)
+    except SystemExit:
+        raise HTTPException(status_code=503, detail="no signing key") from None
+    try:
+        version = hq_releases.chosen_version(h)
+        digest = hq_releases.sha256(hq_releases.archive(version)) if version else ""
+    except hq_releases.ReleaseError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from None
+    return hq_releases.signed_release(code, version, digest, key)
+
+
+@app.get("/api/hq/{hospital}/hq-release/{version}.tar.gz")
+def hq_release_download(hospital: str, version: str, request: Request):
+    """The release archive, only for this hospital's own HQ (signed request)
+    and only the version the panel gives it."""
+    import control_store
+    import hq_releases
+
+    code = hospital.strip().upper()
+    h = control_store.get_hospital(code) if control_store.available() else None
+    if h is None:
+        raise HTTPException(status_code=404, detail="unknown hospital")
+    cert = control_store.latest_certificate(code)
+    why = hq_releases.check_download_signature(code, version, request.headers.get("x-cirqen-timestamp"),
+                                               request.headers.get("x-cirqen-signature"),
+                                               cert["public_key"] if cert else None)
+    if why:
+        raise HTTPException(status_code=403, detail=why)
+    try:
+        if version != hq_releases.chosen_version(h):
+            raise HTTPException(status_code=404, detail="not this hospital's version")
+        path = hq_releases.archive(version)
+    except hq_releases.ReleaseError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from None
+    return FileResponse(path, media_type="application/gzip", filename=f"hq_server-{version}.tar.gz")
+
+
+SELFHOST_FILES = {"install.sh": "text/x-shellscript", "cirqen_hq_update.py": "text/x-python"}
+
+
+@app.get("/api/hq/selfhost/{name}")
+def hq_selfhost_file(name: str):
+    """The self-hosted HQ installer and updater, from the newest HQ release
+    (hq_server selfhost/; no secrets in them)."""
+    import hq_releases
+
+    if name not in SELFHOST_FILES:
+        raise HTTPException(status_code=404, detail="no such file")
+    try:
+        available = hq_releases.tags()
+        if not available:
+            raise HTTPException(status_code=404, detail="no HQ release yet")
+        with hq_releases._client() as client:
+            resp = client.get(f"/repos/{hq_releases.repo()}/contents/selfhost/{name}",
+                              params={"ref": available[0]}, headers={"Accept": "application/vnd.github.raw"})
+    except hq_releases.ReleaseError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from None
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail=f"GitHub answered {resp.status_code}")
+    return Response(resp.content, media_type=SELFHOST_FILES[name])
 
 
 # ── M-Pesa (Daraja C2B): payments arriving by themselves (mpesa.py) ───────────

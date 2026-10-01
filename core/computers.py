@@ -29,5 +29,6 @@ def computers(request):
     return render(request, "core/computers.html", {
         "waiting": [d for d in devices if d["pending_approval"]],
         "approved": [d for d in devices if not d["pending_approval"]],
+        "limit": (data or {}).get("licence_limit"),
         "old_key": [{**d, "seen": _eat(d.get("last_used"))} for d in (data or {}).get("on_shared_key", [])],
         "this_pc": hq_link.get_client_id(), "error": error})

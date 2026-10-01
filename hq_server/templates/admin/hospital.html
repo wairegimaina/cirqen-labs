@@ -42,7 +42,11 @@
         {% if cert %}<button name="action" value="renew">Renew certificate (same key)</button>{% endif %}
         <button name="action" value="new" class="{{ 'secondary' if cert }}">Issue new identity</button>
       </div>
-      <p class="muted small">Renew after adding an address, or before it expires. A new identity replaces the HQ's key: set both values on its Render service and redeploy.</p>
+      {% if render.configured and render.linked %}
+      <input type="hidden" name="put_on_render" value="0">
+      <label class="check"><input type="checkbox" name="put_on_render" value="1" checked> Put it on its Render services and redeploy them</label>
+      {% endif %}
+      <p class="muted small">Renew after adding an address, or before it expires. A new identity replaces the HQ's key{% if render.configured and render.linked %}; the panel puts it on Render for you{% else %}: set both values on its Render service and redeploy{% endif %}.</p>
     </form>
     {% endif %}
   </section>
@@ -92,6 +96,11 @@
   {% if licence %}
   <dl>
     <dt>Plan</dt><dd>{{ licence.plan }}, up to {{ licence.devices }} PCs</dd>
+    {% set pcs = health.computers %}
+    <dt>PCs in use</dt><dd>{% if pcs %}{{ pcs.in_use }}{% if pcs.limit %} of {{ pcs.limit }}{% endif %}{% if pcs.waiting %}, {{ pcs.waiting }} waiting for the HOD{% endif %}
+      {% if pcs.limit and pcs.in_use >= pcs.limit %} <span class="pill bad">at the limit</span>{% endif %}
+      {% if pcs.limit and pcs.limit != licence.devices %} <span class="pill bad">HQ has {{ pcs.limit }}, not yet the new limit</span>{% endif %}
+      {% else %}—{% endif %}</dd>
     <dt>Valid</dt><dd>{{ licence.starts_on }} to <strong>{{ licence.ends_on }}</strong> (+{{ licence.grace_days }} days grace)</dd>
     <dt>Its PCs show</dt><dd><span class="pill {{ 'ok' if licence_state == 'active' else ('bad' if 'read-only' in licence_state else 'suspended') }}">{{ licence_state }}</span></dd>
   </dl>
@@ -200,6 +209,62 @@
   </form>
   {% endif %}
 </section>
+{% if h.hosting == 'self' %}
+<section class="card" id="hq-software">
+  <h2>HQ software (own server)</h2>
+  <p class="muted">This hospital's HQ runs on its own server and updates itself: every hour its updater asks for the
+    version chosen here, backs up its database, installs it, and goes back to the previous version if the new one
+    doesn't answer healthy.</p>
+  <dl>
+    <dt>Running</dt><dd>{{ health.version or '—' }}</dd>
+    <dt>Chosen</dt><dd>{% if h.hq_release_mode == 'hold' %}hold (nothing new){% elif h.hq_release_mode == 'pin' %}{{ h.hq_release_version }} (pinned){% else %}newest{% if hq_software.chosen %}: {{ hq_software.chosen }}{% endif %}{% endif %}
+      {% if hq_software.chosen and health.version and hq_software.chosen != health.version %} <span class="pill">update pending</span>{% endif %}</dd>
+  </dl>
+  {% if hq_software.configured == false %}
+  <p class="muted">Not connected to the HQ code: set <code>GITHUB_TOKEN</code> (read-only access to the hq_server
+    repository) once on Cirqen Control. Releases are its git tags, e.g. <code>v1.4.0</code>.</p>
+  {% elif hq_software.error %}<p class="note">{{ hq_software.error }}</p>
+  {% elif admin.role in ('owner', 'support') %}
+  <form method="post" action="/admin/hospitals/{{ h.code }}/hq-release" class="grid-form">
+    <input type="hidden" name="csrf" value="{{ session.csrf }}">
+    <label>Mode <select name="mode">{% for m in ('follow', 'pin', 'hold') %}<option {{ 'selected' if h.hq_release_mode == m }}>{{ m }}</option>{% endfor %}</select></label>
+    <label>Version (for pin) <select name="version"><option value=""></option>{% for t in hq_software.tags %}<option {{ 'selected' if h.hq_release_version == t }}>{{ t }}</option>{% endfor %}</select></label>
+    <div class="wide actions"><button class="secondary">Save</button></div>
+  </form>
+  <p class="muted small">Install on a new server (Ubuntu 22.04 or 24.04), after issuing its identity:
+    <code>curl -fsSL {{ request.base_url }}api/hq/selfhost/install.sh | sudo bash -s -- --code {{ h.code }} --domain &lt;its HQ name&gt; --identity identity.env</code></p>
+  {% endif %}
+</section>
+{% endif %}
+{% if h.hosting != 'self' %}
+<section class="card" id="render">
+  <h2>Hosting (Render)</h2>
+  {% if not render.configured %}
+  <p class="muted">Not connected. To deploy and configure HQs from here, create an API key in Render (Account settings &gt;
+    API keys) and set it once as <code>RENDER_API_KEY</code> on Cirqen Control.</p>
+  {% else %}
+  {% if render.linked %}
+  <div class="table-wrap"><table><thead><tr><th>Service</th><th>Last deploy</th><th>Commit</th></tr></thead><tbody>
+  {% for s in render.linked %}<tr><td>{{ s.name }}<br><span class="muted small">{{ s.type }}</span></td>
+    <td><span class="pill {{ 'ok' if s.deploy.status == 'live' else ('bad' if s.deploy.status in ('build_failed', 'update_failed', 'canceled', 'unknown') else '') }}">{{ s.deploy.status or '—' }}</span>
+      {% if s.deploy.finished_at %}<br><span class="muted small">{{ s.deploy.finished_at | eat }}</span>{% endif %}
+      {% if s.deploy.error %}<br><span class="muted small">{{ s.deploy.error }}</span>{% endif %}</td>
+    <td class="break">{{ s.deploy.commit or '—' }}</td></tr>{% endfor %}
+  </tbody></table></div>
+  {% else %}<p class="muted">No Render services linked to this hospital yet.</p>{% endif %}
+  {% if admin.role in ('owner', 'support') %}
+  <div class="actions spaced">
+    {% if render.linked %}
+    <form method="post" action="/admin/hospitals/{{ h.code }}/render/deploy" class="inline">
+      <input type="hidden" name="csrf" value="{{ session.csrf }}"><button>Deploy latest commit</button></form>
+    {% endif %}
+    <a class="button secondary" href="/admin/hospitals/{{ h.code }}/render">Choose services</a>
+  </div>
+  <p class="muted small">Deploying restarts the HQ for a minute or two; its PCs keep working and catch up after.</p>
+  {% endif %}
+  {% endif %}
+</section>
+{% endif %}
 <section class="card" id="shared-key">
   <h2>Old shared sync key</h2>
   <p class="muted">The pilot's PCs once all used one sync key. Each PC now swaps it for its own key by itself after a

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Render for {{ h.code }} · Cirqen Control{% endblock %}
+{% block main %}
+<h1>{{ h.code }}'s HQ on Render</h1>
+<section class="card">
+  <p class="muted">Tick this hospital's HQ services: its web service and its worker. The panel then shows their last
+    deploy, deploys the latest commit when you ask, and puts a newly issued identity on them.</p>
+  {% if error %}<p class="note">{{ error }}</p>{% endif %}
+  {% if services %}
+  <form method="post" action="/admin/hospitals/{{ h.code }}/render" class="stack">
+    <input type="hidden" name="csrf" value="{{ session.csrf }}">
+    <div class="table-wrap"><table><thead><tr><th></th><th>Service</th><th>Type</th><th>Address</th></tr></thead><tbody>
+    {% for s in services %}<tr>
+      <td><input type="checkbox" name="service" value="{{ s.id }}" id="svc-{{ s.id }}" {{ 'checked' if s.id in linked }}></td>
+      <td><label for="svc-{{ s.id }}">{{ s.name }}</label></td><td>{{ s.type }}</td><td class="break">{{ s.url or '—' }}</td></tr>{% endfor %}
+    </tbody></table></div>
+    <div class="actions"><button>Save</button> <a href="/admin/hospitals/{{ h.code }}#render">Cancel</a></div>
+  </form>
+  {% elif not error %}<p class="muted">No services on this Render account.</p>{% endif %}
+</section>
+{% endblock %}

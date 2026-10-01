@@ -35,8 +35,9 @@ def _call(method, path, **kwargs):
         return None, "HQ could not be reached. Try again when this computer is online."
     if response.status_code != 200:
         try:
-            detail = response.json().get("error", "")
-        except ValueError:
+            body = response.json()
+            detail = body.get("detail") or body.get("error", "")
+        except (ValueError, AttributeError):
             detail = ""
         return None, f"HQ refused ({response.status_code}){': ' + detail if detail else ''}."
     return response.json(), ""

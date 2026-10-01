@@ -69,6 +69,15 @@ class ComputersPageTests(TestCase):
                 self.client.get("/settings/computers/")
         self.assertEqual(req.call_args.kwargs["headers"]["X-API-Key"], "own-key")   # not settings' "k"
 
+    def test_the_licence_limit_is_shown_and_its_refusal_explained(self):
+        listing = {"devices": [], "licence_limit": 3}
+        with mock.patch("requests.request", return_value=reply(listing)):
+            self.assertContains(self.client.get("/settings/computers/"), "of the 3 your licence allows")
+        refusal = reply({"error": "licence_full", "detail": "This hospital's licence allows 3 computers"}, 403)
+        with mock.patch("requests.request", side_effect=[refusal, reply(listing)]):
+            page = self.client.post("/settings/computers/", {"action": "approve", "device_id": "pc-x"}, follow=True)
+        self.assertContains(page, "licence allows 3 computers")
+
 
 class WaitingNoticeTests(TestCase):
     def test_a_waiting_pc_says_so_on_every_page(self):

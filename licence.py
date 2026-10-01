@@ -18,6 +18,13 @@ States (East Africa Time):
 Read-only, never locked out: this is medical-equipment maintenance, and a
 lapsed payment must not stop anyone looking up a device, a certificate or a
 safety alert.
+
+The date used is not simply this PC's clock (licence_clock.json): it never
+goes back past the latest time this PC has seen, and Control's signed time
+(issued_at, on every licence fetch) resets it, so turning the clock back
+doesn't undo an ended licence, and a clock that ran ahead heals once online.
+A PC that had a licence and lost the file is read-only until it fetches the
+licence again.
 """
 from __future__ import annotations
 
@@ -34,6 +41,9 @@ CONTEXT = b"cirqen-licence-v1\n"   # same as hq_server/billing.py
 FILE_NAME = "hospital_licence.json"
 TIMEOUT = 15
 EAT = timezone(timedelta(hours=3))
+
+CLOCK_FILE = "licence_clock.json"
+CLOCK_STEP = timedelta(hours=1)   # the clock file is written at most this often
 
 _cache: dict = {"path": None, "mtime": None, "fields": None}
 
@@ -99,6 +109,65 @@ def state(fields: dict | None, today: date | None = None) -> dict:
     return {**info, "state": "read_only"}
 
 
+def _parse_time(value) -> datetime | None:
+    try:
+        moment = datetime.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return None
+    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
+
+
+def _read_clock(data_path) -> dict:
+    try:
+        data = json.loads((Path(data_path) / CLOCK_FILE).read_text())
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _write_clock(data_path, data: dict) -> None:
+    path = Path(data_path) / CLOCK_FILE
+    try:
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(data))
+        tmp.replace(path)
+    except OSError as exc:
+        LOG.warning("Could not write %s: %s", path, exc)
+
+
+def note_control_time(data_path, issued_at) -> None:
+    """Control's signed time from a licence it just sent: the trusted clock
+    moves to it, back as well as forward (a PC clock that ran ahead heals)."""
+    moment = _parse_time(issued_at)
+    if moment is None:
+        return
+    clock = _read_clock(data_path)
+    clock.update(latest=moment.isoformat(), control_at=moment.isoformat(), seen=True)
+    _write_clock(data_path, clock)
+
+
+def trusted_now(data_path, now: datetime | None = None) -> datetime:
+    """This PC's time, but never earlier than the latest time it has seen."""
+    now = now or datetime.now(timezone.utc)
+    clock = _read_clock(data_path)
+    latest = _parse_time(clock.get("latest"))
+    if latest is None or now >= latest + CLOCK_STEP:
+        clock["latest"] = now.isoformat()
+        _write_clock(data_path, clock)
+        return now
+    return max(now, latest)
+
+
+def current(data_path, now: datetime | None = None) -> dict:
+    """state() for this PC, on the trusted date."""
+    fields = load(data_path)
+    if fields is None:
+        if _read_clock(data_path).get("seen"):
+            return {"state": "read_only", "missing": True}
+        return state(None)
+    return state(fields, today=trusted_now(data_path, now).astimezone(EAT).date())
+
+
 def fetch_and_store(data_path, update_server_url: str, hospital_code: str, session=None) -> str:
     """One poll. Never raises. A newer licence_version replaces the stored one."""
     import requests
@@ -112,6 +181,9 @@ def fetch_and_store(data_path, update_server_url: str, hospital_code: str, sessi
     except Exception as exc:  # noqa: BLE001
         return f"update server unreachable: {str(exc)[:120]}"
     if response.status_code == 404:
+        clock = _read_clock(data_path)
+        if clock.get("seen") and load(data_path) is None:
+            _write_clock(data_path, {**clock, "seen": False})   # Control says there is none any more
         return "no licence for this hospital"
     if response.status_code != 200:
         return f"update server answered HTTP {response.status_code}"
@@ -125,17 +197,21 @@ def fetch_and_store(data_path, update_server_url: str, hospital_code: str, sessi
     if fields is None:
         LOG.error("Refusing licence: %s", why)
         return why
-    current = load(data_path)
-    have = int((current or {}).get("licence_version") or 0)
+    note_control_time(data_path, fields.get("issued_at"))
+    stored = load(data_path)
+    have = int((stored or {}).get("licence_version") or 0)
     offered = int(fields.get("licence_version") or 0)
-    if current and have > offered:
+    if stored and have > offered:
         return "an older licence was offered; keeping the newer one"
-    if current and have == offered:
+    if stored and have == offered:
         return "licence unchanged"
     path = _path(data_path)
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps({"document": payload["document"], "signature": payload["signature"],
                                "fetched_at": time.time()}))
     tmp.replace(path)
+    clock = _read_clock(data_path)
+    if not clock.get("seen"):
+        _write_clock(data_path, {**clock, "seen": True})
     LOG.info("🧾 Licence for %s v%s saved (ends %s)", code, offered, fields.get("ends_on"))
     return "saved"
