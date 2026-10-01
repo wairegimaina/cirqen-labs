@@ -618,3 +618,111 @@ def test_finance_cannot_retire_the_shared_key(app, clock, owner):
     other.post("/admin/hospitals/CH0001/shared-key", data={"csrf": csrf(other, "/admin/hospitals/CH0001"),
                                                           "action": "retire"})
     assert cs.get_hospital("CH0001")["shared_key_retired_at"] is None
+
+
+# ── Render (render_api.py) ───────────────────────────────────────────────────
+
+class FakeRender:
+    """Render's API as far as the panel uses it."""
+
+    def __init__(self):
+        self.env, self.deploys, self.fail = {}, [], set()
+        self.services = [{"id": "srv-web", "name": "hq-ch0001-web", "type": "web_service",
+                          "serviceDetails": {"url": "https://hq-ch0001.onrender.com"}},
+                         {"id": "srv-wrk", "name": "hq-ch0001-worker", "type": "background_worker"},
+                         {"id": "srv-other", "name": "website", "type": "static_site"}]
+
+    def handler(self, request):
+        import httpx
+
+        assert request.headers["authorization"] == "Bearer rnd_test"
+        path, method = request.url.path, request.method
+        if path == "/v1/services" and method == "GET":
+            return httpx.Response(200, json=[{"cursor": s["id"], "service": s} for s in self.services])
+        sid = path.split("/")[3]
+        if sid in self.fail:
+            return httpx.Response(403, json={"message": "forbidden"})
+        if path.endswith("/deploys") and method == "POST":
+            self.deploys.append(sid)
+            return httpx.Response(201, json={"id": f"dep-{len(self.deploys)}", "status": "created"})
+        if path.endswith("/deploys") and method == "GET":
+            return httpx.Response(200, json=[{"deploy": {"id": "dep-0", "status": "live",
+                                                         "finishedAt": "2026-10-01T08:00:00Z",
+                                                         "commit": {"id": "abcdef123", "message": "Fix\nmore"}}}])
+        if "/env-vars/" in path and method == "PUT":
+            self.env.setdefault(sid, {})[path.rsplit("/", 1)[1]] = json.loads(request.content)["value"]
+            return httpx.Response(200, json={})
+        return httpx.Response(404, json={"message": "no route"})
+
+
+@pytest.fixture
+def render(monkeypatch):
+    import httpx
+
+    import admin_panel
+    import render_api
+
+    fake = FakeRender()
+    monkeypatch.setenv("RENDER_API_KEY", "rnd_test")
+    real = render_api._client
+    monkeypatch.setattr(render_api, "_client", lambda transport=None: real(httpx.MockTransport(fake.handler)))
+    admin_panel._render_cache.clear()
+    return fake
+
+
+def link(client, *ids):
+    token = csrf(client, "/admin/hospitals/CH0001")
+    return client.post("/admin/hospitals/CH0001/render", data={"csrf": token, "service": list(ids)})
+
+
+def test_without_a_render_key_the_page_says_how_to_connect(owner, monkeypatch):
+    monkeypatch.delenv("RENDER_API_KEY", raising=False)
+    client, _ = owner
+    add_hospital(client)
+    assert "RENDER_API_KEY" in client.get("/admin/hospitals/CH0001").text
+
+
+def test_linking_services_and_deploying(owner, render):
+    client, _ = owner
+    add_hospital(client)
+    assert "hq-ch0001-worker" in client.get("/admin/hospitals/CH0001/render").text
+    link(client, "srv-web", "srv-wrk", "srv-made-up")
+    assert [s["id"] for s in cs.get_hospital("CH0001")["render_services"]] == ["srv-web", "srv-wrk"]
+    page = client.get("/admin/hospitals/CH0001").text
+    assert "live" in page and "abcdef1 Fix" in page
+    client.post("/admin/hospitals/CH0001/render/deploy", data={"csrf": csrf(client, "/admin/hospitals/CH0001")})
+    assert render.deploys == ["srv-web", "srv-wrk"]
+    assert cs.audit_entries(target="CH0001")[0]["action"] == "render_deployed"
+
+
+def test_a_new_identity_goes_straight_onto_render(owner, clock, control_key, render):
+    client, secret = owner
+    add_hospital(client)
+    link(client, "srv-web", "srv-wrk")
+    page = issue(client, clock, secret, "new")
+    assert "Done on Render" in page.text
+    env = env_values(page.text)
+    for sid in ("srv-web", "srv-wrk"):
+        assert render.env[sid]["HQ_IDENTITY_PRIVATE_KEY"] == env["HQ_IDENTITY_PRIVATE_KEY"]
+        assert render.env[sid]["HOSPITAL_CODE"] == "CH0001"
+    assert render.deploys == ["srv-web", "srv-wrk"]
+
+
+def test_if_render_refuses_the_values_are_still_shown_and_nothing_deploys(owner, clock, control_key, render):
+    client, secret = owner
+    add_hospital(client)
+    link(client, "srv-web", "srv-wrk")
+    render.fail.add("srv-wrk")
+    page = issue(client, clock, secret, "new")
+    assert "Not all put on Render" in page.text and "forbidden" in page.text
+    assert env_values(page.text)["HQ_CERTIFICATE"]
+    assert render.deploys == []
+
+
+def test_support_can_deploy_but_finance_cannot(app, clock, owner, render):
+    client, _ = owner
+    add_hospital(client)
+    link(client, "srv-web")
+    books = sign_in(app, clock, "books", make_admin("books", "finance"))
+    books.post("/admin/hospitals/CH0001/render/deploy", data={"csrf": csrf(books, "/admin/hospitals/CH0001")})
+    assert render.deploys == []

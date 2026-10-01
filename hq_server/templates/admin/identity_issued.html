@@ -3,6 +3,12 @@
 {% block main %}
 <h1>{{ 'New identity' if action == 'new' else 'Renewed certificate' }} for {{ h.code }}</h1>
 <section class="card">
+  {% if on_render %}
+  {% if on_render.errors %}<p class="note"><strong>Not all put on Render:</strong> {{ on_render.errors | join('; ') }}.
+    Copy the values below into the services that failed, then deploy them.</p>
+  {% else %}<p class="note ok"><strong>Done on Render:</strong> set on {{ on_render.done | join(', ') }} and a deploy started.
+    The values are below only in case you need them again.</p>{% endif %}
+  {% endif %}
   <p class="note"><strong>Shown once.</strong> Copy these into the HQ web service of {{ h.name }} on Render
     (Environment), then redeploy it.{% if action == 'new' %} The private key is not kept anywhere else: if you lose it, issue a new identity.{% endif %}</p>
   <dl class="env">

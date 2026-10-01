@@ -260,6 +260,7 @@ ADDED_COLUMNS = [
     ("hospitals", "profile_version", "INTEGER NOT NULL DEFAULT 0"),    # 0: no profile published
     ("enrollment_tokens", "revoked_at", "TEXT"),                      # set: its PCs can no longer join
     ("hospitals", "shared_key_retired_at", "TEXT"),                    # set: its HQ refuses the old shared sync key
+    ("hospitals", "render_services", "TEXT NOT NULL DEFAULT '[]'"),    # its HQ's Render services (render_api.py)
 ]
 
 
@@ -300,7 +301,7 @@ def audit_entries(limit: int = 200, target: str | None = None) -> list[dict]:
 
 HOSPITAL_FIELDS = ("name", "county", "hod_name", "hod_email", "hod_phone", "sync_url", "fallbacks",
                    "updates_url", "cert_prefix", "status", "notes", "release_mode", "release_version",
-                   "profile", "profile_version", "shared_key_retired_at")
+                   "profile", "profile_version", "shared_key_retired_at", "render_services")
 
 
 def _hospital(row) -> dict | None:
@@ -309,6 +310,7 @@ def _hospital(row) -> dict | None:
     d = dict(row)
     d["fallbacks"] = json.loads(d["fallbacks"] or "[]")
     d["profile"] = json.loads(d.get("profile") or "{}")
+    d["render_services"] = json.loads(d.get("render_services") or "[]")
     return d
 
 
@@ -326,6 +328,8 @@ def save_hospital(code: str, values: dict, *, create: bool) -> None:
         fields["fallbacks"] = json.dumps(list(fields["fallbacks"]))
     if "profile" in fields:
         fields["profile"] = json.dumps(fields["profile"], sort_keys=True)
+    if "render_services" in fields:
+        fields["render_services"] = json.dumps(list(fields["render_services"]), sort_keys=True)
     stamp = now()
     if create:
         cols = ["code", *fields, "created_at", "updated_at"]

@@ -42,7 +42,11 @@
         {% if cert %}<button name="action" value="renew">Renew certificate (same key)</button>{% endif %}
         <button name="action" value="new" class="{{ 'secondary' if cert }}">Issue new identity</button>
       </div>
-      <p class="muted small">Renew after adding an address, or before it expires. A new identity replaces the HQ's key: set both values on its Render service and redeploy.</p>
+      {% if render.configured and render.linked %}
+      <input type="hidden" name="put_on_render" value="0">
+      <label class="check"><input type="checkbox" name="put_on_render" value="1" checked> Put it on its Render services and redeploy them</label>
+      {% endif %}
+      <p class="muted small">Renew after adding an address, or before it expires. A new identity replaces the HQ's key{% if render.configured and render.linked %}; the panel puts it on Render for you{% else %}: set both values on its Render service and redeploy{% endif %}.</p>
     </form>
     {% endif %}
   </section>
@@ -203,6 +207,33 @@
     <label>Valid for (days) <input name="days" type="number" min="1" max="90" value="14" required></label>
     <div class="wide actions"><button class="secondary">New installer file</button></div>
   </form>
+  {% endif %}
+</section>
+<section class="card" id="render">
+  <h2>Hosting (Render)</h2>
+  {% if not render.configured %}
+  <p class="muted">Not connected. To deploy and configure HQs from here, create an API key in Render (Account settings &gt;
+    API keys) and set it once as <code>RENDER_API_KEY</code> on Cirqen Control.</p>
+  {% else %}
+  {% if render.linked %}
+  <div class="table-wrap"><table><thead><tr><th>Service</th><th>Last deploy</th><th>Commit</th></tr></thead><tbody>
+  {% for s in render.linked %}<tr><td>{{ s.name }}<br><span class="muted small">{{ s.type }}</span></td>
+    <td><span class="pill {{ 'ok' if s.deploy.status == 'live' else ('bad' if s.deploy.status in ('build_failed', 'update_failed', 'canceled', 'unknown') else '') }}">{{ s.deploy.status or '—' }}</span>
+      {% if s.deploy.finished_at %}<br><span class="muted small">{{ s.deploy.finished_at | eat }}</span>{% endif %}
+      {% if s.deploy.error %}<br><span class="muted small">{{ s.deploy.error }}</span>{% endif %}</td>
+    <td class="break">{{ s.deploy.commit or '—' }}</td></tr>{% endfor %}
+  </tbody></table></div>
+  {% else %}<p class="muted">No Render services linked to this hospital yet.</p>{% endif %}
+  {% if admin.role in ('owner', 'support') %}
+  <div class="actions spaced">
+    {% if render.linked %}
+    <form method="post" action="/admin/hospitals/{{ h.code }}/render/deploy" class="inline">
+      <input type="hidden" name="csrf" value="{{ session.csrf }}"><button>Deploy latest commit</button></form>
+    {% endif %}
+    <a class="button secondary" href="/admin/hospitals/{{ h.code }}/render">Choose services</a>
+  </div>
+  <p class="muted small">Deploying restarts the HQ for a minute or two; its PCs keep working and catch up after.</p>
+  {% endif %}
   {% endif %}
 </section>
 <section class="card" id="shared-key">
