@@ -9,7 +9,15 @@ def _themed_dialog(kind: str, title: str, body: str, detail: str = "") -> None:
     """
     Show a frameless on-theme modal.
     kind: "info" | "warn" | "error"
+
+    With CIRQEN_UNATTENDED=1 (automated tests, IT installing many PCs) the
+    message is only logged: nobody is there to click OK.
     """
+    import os as _os
+
+    if _os.environ.get("CIRQEN_UNATTENDED") == "1":
+        print(f"[{kind}] {title}: {body} {detail}".strip(), flush=True)
+        return
     from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton
     from PySide6.QtCore import Qt
     from PySide6.QtGui import QFont
