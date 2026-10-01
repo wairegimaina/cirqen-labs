@@ -26,12 +26,12 @@ def _call(method, path, **kwargs):
     from django.conf import settings
 
     headers = {"X-Client-ID": client_id, "X-Device-ID": client_id,
-               "X-API-Key": getattr(settings, "SYNC_AUTH_TOKEN", "") or ""}
+               "X-API-Key": hq_link.sync_key()}
     if code:
         headers["X-Cirqen-Hospital"] = code
     try:
         response = requests.request(method, f"{api_url}{path}", headers=headers, timeout=TIMEOUT, **kwargs)
-    except requests.RequestException:
+    except (requests.RequestException, OSError):
         return None, "HQ could not be reached. Try again when this computer is online."
     if response.status_code != 200:
         try:

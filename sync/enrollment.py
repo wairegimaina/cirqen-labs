@@ -63,15 +63,89 @@ def ensure_client_key(config_manager, hq_base_url, client_id):
     if key:
         config_manager.set("sync.auth_token", key)
         config_manager.set("sync.enrollment_code", "")
+        config_manager.set("sync.key_own", True)      # enrolled: never the shared key
         LOG.info("Enrolled with HQ as %s; key saved to config.json", client_id)
         forget_token_in_provisioning(getattr(config_manager, "data_path", None), code)
     return key
+
+
+def rekey(hq_base_url, client_id, client_name, shared_key, hospital_code="", session=None):
+    """Swap the old shared sync key for this PC's own (HQ's /api/sync/rekey).
+
+    Returns (key, done): key is the new key or None; done is True when there
+    is nothing more to do (swapped, or HQ says this PC already has its own).
+    """
+    http = session or requests
+    headers = {"X-API-Key": shared_key, "X-Client-ID": client_id,
+               "User-Agent": f"CMMS-Sync-Agent/rekey (Client-ID: {client_id})"}
+    if hospital_code:
+        headers["X-Cirqen-Hospital"] = hospital_code
+    try:
+        response = http.post(f"{hq_base_url.rstrip('/')}/api/sync/rekey",
+                             json={"client_id": client_id, "client_name": client_name},
+                             headers=headers, timeout=ENROLL_TIMEOUT)
+    except requests.RequestException as exc:
+        LOG.warning("Key swap deferred, HQ unreachable: %s", exc)
+        return None, False
+    if response.status_code == 200:
+        return response.json().get("api_key"), True
+    if response.status_code == 400:
+        return None, True            # this key is already this PC's own
+    if response.status_code == 404:
+        LOG.info("HQ cannot swap keys yet (older HQ); will try again next start")
+    elif response.status_code == 409:
+        LOG.error("HQ already has a key for %s but this PC holds the old shared key; "
+                  "ask Cirqen support to re-issue its key.", client_id)
+    else:
+        LOG.warning("Key swap refused by HQ (%s): %s", response.status_code, response.text[:200])
+    return None, False
+
+
+def ensure_own_key(config_manager, hq_base_url, client_id):
+    """A PC installed with the old shared sync key swaps it for its own, once.
+
+    Runs at every agent start until done; afterwards sync.key_own is set and
+    nothing is sent. Returns the new key, or None if nothing changed.
+    """
+    if config_manager.get("sync.key_own"):
+        return None
+    current = config_manager.get("sync.auth_token")
+    if not current:
+        return None
+    hospital = str(config_manager.get("sync.hospital_code") or "").strip().upper()
+    key, done = rekey(hq_base_url, client_id, config_manager.get("client.name") or client_id, current, hospital)
+    if key:
+        replace = getattr(config_manager, "replace_secret", None)
+        (replace or config_manager.set)("sync.auth_token", key)
+        LOG.info("Swapped the old shared sync key for this PC's own key; saved to config.json")
+        forget_shared_key_in_provisioning(getattr(config_manager, "data_path", None), current)
+    if done:
+        config_manager.set("sync.key_own", True)
+    return key
+
+
+def ensure_own_key_for_data_path(data_path, hq_base_url, client_id):
+    try:
+        from config import load_config
+    except ImportError:
+        from .config import load_config
+    config_manager = load_config(Path(data_path) if data_path else Path.home() / ".cmms")
+    return ensure_own_key(config_manager, hq_base_url, client_id)
+
+
+def forget_shared_key_in_provisioning(data_path, shared_key):
+    """Remove the old shared key from the provisioning.json files this PC reads."""
+    _scrub_provisioning(data_path, "auth_token", shared_key)
 
 
 def forget_token_in_provisioning(data_path, code):
     """Remove the used enrollment token from every provisioning.json this PC
     reads, so a copy of this PC's files cannot enroll another computer. The
     rest of the file (hospital code, addresses) stays."""
+    _scrub_provisioning(data_path, "enrollment_code", code)
+
+
+def _scrub_provisioning(data_path, field, value):
     import json
 
     try:
@@ -84,17 +158,16 @@ def forget_token_in_provisioning(data_path, code):
         except (OSError, ValueError):
             continue
         sync = data.get("sync") if isinstance(data, dict) else None
-        if not isinstance(sync, dict) or sync.get("enrollment_code") != code:
+        if not isinstance(sync, dict) or not value or sync.get(field) != value:
             continue
-        sync["enrollment_code"] = ""
+        sync[field] = ""
         try:
             tmp = path.with_suffix(".tmp")
             tmp.write_text(json.dumps(data, indent=2))
             tmp.replace(path)
-            LOG.info("Removed the used enrollment token from %s", path)
+            LOG.info("Removed sync.%s from %s", field, path)
         except OSError as exc:
-            LOG.warning("Could not remove the used enrollment token from %s (%s); delete that file by hand",
-                        path, exc)
+            LOG.warning("Could not remove sync.%s from %s (%s); delete that file by hand", field, path, exc)
 
 
 def ensure_client_key_for_data_path(data_path, hq_base_url, client_id):

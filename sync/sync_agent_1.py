@@ -153,6 +153,19 @@ class AgentInitMixin(SmartDeleteMixin):
             self.auth_token = ensure_client_key_for_data_path(
                 data_path, self.hq_base_url, self.client_id
             ) or None
+        else:
+            # Installed with the old shared sync key: swap it for this PC's
+            # own, so the hospital can retire the shared one (sync/enrollment.py).
+            try:
+                from .enrollment import ensure_own_key_for_data_path
+            except ImportError:
+                from enrollment import ensure_own_key_for_data_path
+            try:
+                self.auth_token = ensure_own_key_for_data_path(
+                    data_path, self.hq_base_url, self.client_id
+                ) or self.auth_token
+            except Exception as exc:  # never stop the agent over this
+                LOG.warning("Key swap skipped: %s", exc)
 
         # Thread management
         self.stop_event = threading.Event()

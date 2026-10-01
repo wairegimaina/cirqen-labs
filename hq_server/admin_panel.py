@@ -170,6 +170,7 @@ async def fetch_health(hospital: dict) -> dict:
             "hospital": checks.get("hospital"),
             "identity": checks.get("identity"),
             "prefix": checks.get("certificate_prefix"),
+            "shared_key": checks.get("shared_sync_key") if isinstance(checks.get("shared_sync_key"), dict) else None,
             "sse": (checks.get("sse_clients") or {}).get("active") if isinstance(checks.get("sse_clients"), dict)
             else None,
         }
@@ -497,6 +498,26 @@ async def installer_revoke(request: Request, code: str, token_id: str):
     cs.revoke_enrollment_token(token_id)
     cs.audit(admin["username"], "installer_revoked", row["hospital"], {"token_id": token_id}, _ip(request))
     return RedirectResponse(f"/admin/hospitals/{row['hospital']}#installers", status_code=303)
+
+
+@router.post("/hospitals/{code}/shared-key")
+@guarded
+async def hospital_shared_key(request: Request, code: str):
+    """Retire (or accept again) the old sync key every pilot PC shared. Its HQ
+    reads this from /api/hq/{code}/settings within minutes; PCs that swapped
+    it for their own key keep syncing, any copy of the shared key stops."""
+    session, admin = _current(request, CAN_EDIT)
+    form = dict(await request.form())
+    _check_csrf(session, form.get("csrf", ""))
+    h = cs.get_hospital(code.upper())
+    if h is None:
+        return RedirectResponse("/admin/", status_code=303)
+    retire = form.get("action") == "retire"
+    cs.save_hospital(h["code"], {"shared_key_retired_at": cs.now() if retire else None}, create=False)
+    cs.audit(admin["username"], "shared_key_retired" if retire else "shared_key_accepted", h["code"], {},
+             _ip(request))
+    _health_cache.clear()
+    return RedirectResponse(f"/admin/hospitals/{h['code']}#shared-key", status_code=303)
 
 
 @router.get("/hospitals/{code}/installers/{token_id}/provisioning.json")

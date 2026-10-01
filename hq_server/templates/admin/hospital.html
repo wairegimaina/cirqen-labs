@@ -200,6 +200,24 @@
   </form>
   {% endif %}
 </section>
+<section class="card" id="shared-key">
+  <h2>Old shared sync key</h2>
+  <p class="muted">The pilot's PCs once all used one sync key. Each PC now swaps it for its own key by itself after a
+    desktop update. When none is left on it, retire it: the HQ then refuses that key, so a copy of it is useless.</p>
+  <dl>
+    <dt>This panel says</dt><dd><span class="pill {{ 'ok' if h.shared_key_retired_at else 'bad' }}">{{ 'retired ' ~ (h.shared_key_retired_at | eat) if h.shared_key_retired_at else 'still accepted' }}</span></dd>
+    {% set sk = health.shared_key %}
+    <dt>The HQ reports</dt><dd>{% if sk %}{{ sk.state }} · {{ sk.pcs_still_on_it }} PC{{ '' if sk.pcs_still_on_it == 1 else 's' }} still on it{% else %}—{% endif %}</dd>
+  </dl>
+  {% if sk and sk.pcs %}<p class="muted">Still on it: {{ sk.pcs | join(', ') }}</p>{% endif %}
+  {% if admin.role in ('owner', 'support') %}
+  <form method="post" action="/admin/hospitals/{{ h.code }}/shared-key" class="inline">
+    <input type="hidden" name="csrf" value="{{ session.csrf }}">
+    {% if h.shared_key_retired_at %}<input type="hidden" name="action" value="accept"><button class="secondary">Accept it again</button>
+    {% else %}<input type="hidden" name="action" value="retire"><button class="secondary">Retire the shared key</button>{% endif %}
+  </form>
+  {% endif %}
+</section>
 <section class="card">
   <h2>What its desktops are sent</h2>
   {% if document %}<pre>{{ document }}</pre>{% else %}<p class="muted">Nothing: {{ 'the hospital is closed' if h.status == 'closed' else 'no address set' }}.</p>{% endif %}
