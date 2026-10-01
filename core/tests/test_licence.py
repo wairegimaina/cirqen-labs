@@ -3,7 +3,7 @@ out; nothing enforced until a licence is published."""
 import base64
 import json
 import tempfile
-from datetime import date
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from unittest import mock
 
@@ -111,3 +111,58 @@ class FetchTests(TestCase):
         other, _ = make_keypair()
         self.assertIn("not signed", self.fetch(signed(other, version=4)))
         self.assertEqual(licence.load(self.data)["licence_version"], 2)
+
+
+class ClockTests(TestCase):
+    """The date a PC judges its licence by can't be wound back."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.data = Path(tmp.name)
+        self.key, public = make_keypair()
+        trust = override_settings(UPDATE_SYSTEM={"public_key": public})
+        trust.enable()
+        self.addCleanup(trust.disable)
+
+    def at(self, day):
+        return datetime.fromisoformat(f"{day}T09:00:00+03:00")
+
+    def fetch(self, payload, status=200):
+        reply = mock.Mock(status_code=status, json=mock.Mock(return_value=payload))
+        return licence.fetch_and_store(self.data, "https://u.example", "CH0001",
+                                       session=mock.Mock(get=mock.Mock(return_value=reply)))
+
+    def with_issued_at(self, when, **kwargs):
+        doc = json.loads(signed(self.key, **kwargs)["document"])
+        doc["issued_at"] = when.isoformat()
+        raw = json.dumps(doc, sort_keys=True)
+        return {"document": raw, "signature": base64.b64encode(self.key.sign(licence.CONTEXT + raw.encode())).decode()}
+
+    def test_turning_the_clock_back_does_not_undo_an_ended_licence(self):
+        self.fetch(signed(self.key, ends_on="2026-10-31", grace_days=0))
+        self.assertEqual(licence.current(self.data, now=self.at("2026-11-02"))["state"], "read_only")
+        self.assertEqual(licence.current(self.data, now=self.at("2026-10-01"))["state"], "read_only")
+
+    def test_control_time_heals_a_clock_that_ran_ahead(self):
+        self.fetch(signed(self.key, ends_on="2026-10-31", grace_days=0))
+        self.assertEqual(licence.current(self.data, now=self.at("2030-01-01"))["state"], "read_only")
+        control_now = self.at("2026-10-01")
+        self.fetch(self.with_issued_at(control_now, ends_on="2026-10-31", grace_days=0))   # unchanged version
+        self.assertEqual(licence.current(self.data, now=control_now + timedelta(minutes=5))["state"], "active")
+
+    def test_a_deleted_licence_file_means_read_only_until_fetched_again(self):
+        self.fetch(signed(self.key, ends_on="2099-01-01"))
+        (self.data / licence.FILE_NAME).unlink()
+        self.assertEqual(licence.current(self.data), {"state": "read_only", "missing": True})
+        self.fetch(signed(self.key, ends_on="2099-01-01"))
+        self.assertEqual(licence.current(self.data)["state"], "active")
+
+    def test_if_control_has_no_licence_any_more_nothing_is_enforced(self):
+        self.fetch(signed(self.key, ends_on="2099-01-01"))
+        (self.data / licence.FILE_NAME).unlink()
+        self.fetch({}, status=404)
+        self.assertEqual(licence.current(self.data)["state"], "none")
+
+    def test_a_pc_that_never_had_a_licence_is_not_affected(self):
+        self.assertEqual(licence.current(self.data)["state"], "none")

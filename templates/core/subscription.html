@@ -32,6 +32,7 @@
     {% if licence.state == 'active' %}Active
     {% elif licence.state == 'due' %}Renewal due: ends in {{ licence.days_left }} day{{ licence.days_left|pluralize }}
     {% elif licence.state == 'grace' %}Ended; read-only from {{ licence.read_only_from|date:"j M Y" }} unless renewed
+    {% elif licence.missing %}Licence file missing on this computer: read-only until Check now succeeds
     {% elif licence.suspended %}Suspended: read-only
     {% else %}Ended: read-only{% endif %}
   </dd></div>

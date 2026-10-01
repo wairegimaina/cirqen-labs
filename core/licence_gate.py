@@ -17,7 +17,7 @@ ALWAYS_ALLOWED = ("/login/", "/settings/subscription/", "/health/")
 
 
 def current() -> dict:
-    return licence.state(licence.load(settings.DATA_PATH))
+    return licence.current(settings.DATA_PATH)
 
 
 class LicenceGateMiddleware:
