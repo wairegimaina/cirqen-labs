@@ -31,6 +31,12 @@ def _quiet_terminal():
     os.dup2(fd, 1)
     os.dup2(fd, 2)
     os.close(fd)
+    # A windowed Windows .exe starts with no sys.stdout/stderr at all: give
+    # Python's own output the same file, or print() and tracebacks vanish.
+    if sys.stdout is None:
+        sys.stdout = open(1, 'w', buffering=1, encoding='utf-8', errors='replace', closefd=False)
+    if sys.stderr is None:
+        sys.stderr = open(2, 'w', buffering=1, encoding='utf-8', errors='replace', closefd=False)
     for stream in (sys.stdout, sys.stderr):
         if stream:
             stream.reconfigure(line_buffering=True)
