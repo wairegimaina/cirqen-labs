@@ -39,11 +39,14 @@ class PgCtlServer:
         quoted = " ".join(f'"{o}"' if " " in o else o for o in options)
         # Without -w pg_ctl returns once the server is launched; callers wait
         # for it to accept connections themselves, as with postgres directly.
+        # No pipes: the server pg_ctl starts inherits them and keeps them open
+        # while it runs, so reading pg_ctl's output (even with a timeout) never
+        # returns on Windows. The server's own messages go to log_path (-l).
         result = subprocess.run([self.pg_ctl, "start", "-D", self.data_dir, "-o", quoted, "-l", str(log_path)],
-                                capture_output=True, text=True, env=env, timeout=60)
+                                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL, env=env)
         if result.returncode != 0:
             self.returncode = result.returncode
-            Path(log_path).open("a").write(f"pg_ctl start failed: {result.stdout}{result.stderr}\n")
 
     @property
     def pid(self) -> int:
