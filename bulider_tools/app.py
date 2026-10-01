@@ -226,6 +226,17 @@ def main():
                 main_window.web_view.setUrl(QUrl(django_url))
                 main_window.refresh_btn.setEnabled(True)
                 main_window.status_label.setText("🟢 System Online")
+                # A full-app install waits for this before it keeps the new
+                # app (bulider_tools/full_update.py); otherwise it goes back.
+                try:
+                    from bulider_tools import full_update
+
+                    version_file = APPLICATION_PATH / "_internal" / "version.txt"
+                    if not version_file.is_file():
+                        version_file = APPLICATION_PATH / "version.txt"
+                    full_update.confirm_started(DATA_PATH, version_file.read_text().strip())
+                except Exception as confirm_error:
+                    logger.warning(f"Could not confirm startup for a full update: {confirm_error}")
                 # Wire AppUpdateService signals now that both window and
                 # service exist.  update_status_timer kept for compat but
                 # not started — signals drive updates instead.

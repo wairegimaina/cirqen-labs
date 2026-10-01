@@ -70,7 +70,7 @@ DEV_ONLY_DIRS = {'data', 'venv', '.venv', 'build_logs', 'build', 'dist', 'runtim
 # they are kept as plain .py files in the build (see app_source_modules), so
 # an in-app update that replaces them takes effect. hq_server/build_package.py
 # ships the same list in update packages.
-APP_TOP_LEVEL_MODULES = ('config', 'licence', 'endpoint_sync', 'hospital_profile', 'hq_handshake')
+APP_TOP_LEVEL_MODULES = ('config', 'licence', 'endpoint_sync', 'hospital_profile', 'hq_handshake', 'runtime_id')
 
 
 def app_source_modules() -> dict:
@@ -943,6 +943,16 @@ def check_requirements():
     logger.info(f"Python version: {sys.version}")
     if sys.version_info < (3, 8):
         logger.error("❌ Python 3.8+ required")
+        return False
+    # The interpreter goes into the build: it must be the one runtime.json
+    # declares, or PCs would get a different Python under the same runtime id.
+    import runtime_id
+
+    wanted = str(runtime_id.declared(PROJECT_ROOT).get("python", ""))
+    have = f"{sys.version_info.major}.{sys.version_info.minor}"
+    if wanted and wanted != have:
+        logger.error(f"❌ runtime.json says Python {wanted}; this build runs {have}. "
+                     "Use that Python, or change runtime.json (PCs then get the full app).")
         return False
     logger.info(f"✅ Python version OK: {sys.version.split()[0]}")
 
@@ -3231,6 +3241,65 @@ That's it! 🎉
 
     return True
 
+def stamp_runtime_id():
+    """Write this build's runtime id into the app (runtime_id.py), so the PC
+    can tell Control which runtime it has."""
+    import runtime_id
+
+    value = runtime_id.fingerprint(PROJECT_ROOT)
+    target = DIST_DIR / "Cirqen" / "_internal" / runtime_id.STAMP_FILE
+    if not target.parent.is_dir():
+        print(f"❌ {target.parent} not found; build the executable first")
+        return False
+    target.write_text(value + "\n")
+    print(f"✅ Runtime id {value} stamped ({target.relative_to(DIST_DIR)})")
+    return True
+
+
+DESKTOP_REPO = os.getenv("CIRQEN_DESKTOP_REPO", "wairegimaina/cirqen-labs")
+
+
+def publish_full_release():
+    """Upload the neutral full app to the GitHub release desktop-v<version>,
+    with a small JSON describing it. Control offers it to PCs whose runtime
+    differs from this version's (hq_server/desktop_releases.py)."""
+    import hashlib
+    import runtime_id
+
+    print_banner("Publishing the full app")
+    version = read_build_version()
+    plat = "windows" if IS_WINDOWS else "linux"
+    archive = DIST_DIR / f"Cirqen_{plat}_v{version}{'.zip' if IS_WINDOWS else '.tar.gz'}"
+    stamp = DIST_DIR / "Cirqen" / "_internal" / runtime_id.STAMP_FILE
+    if not archive.is_file() or not stamp.is_file():
+        print(f"❌ {archive.name} or its runtime id is missing; run the full build first")
+        return False
+    if (DIST_DIR / "Cirqen" / "provisioning.json").exists():
+        print("❌ dist/Cirqen holds a provisioning.json; a published app must be neutral")
+        return False
+    if not shutil.which("gh"):
+        print("❌ The GitHub CLI (gh) is needed to publish: https://cli.github.com, then gh auth login")
+        return False
+    digest = hashlib.sha256()
+    with open(archive, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            digest.update(chunk)
+    meta = {"version": version, "platform": plat, "runtime_id": stamp.read_text().strip(),
+            "file": archive.name, "sha256": digest.hexdigest(), "size": archive.stat().st_size}
+    meta_path = DIST_DIR / f"Cirqen_{plat}_v{version}.json"
+    meta_path.write_text(json.dumps(meta, indent=2))
+    tag = f"desktop-v{version}"
+    if subprocess.run(["gh", "release", "view", tag, "--repo", DESKTOP_REPO],
+                      capture_output=True).returncode != 0:
+        subprocess.run(["gh", "release", "create", tag, "--repo", DESKTOP_REPO, "--title", f"Cirqen {version}",
+                        "--notes", "Full app for PCs whose runtime changed (runtime.json). Neutral: no "
+                                   "hospital files inside."], check=True)
+    subprocess.run(["gh", "release", "upload", tag, str(archive), str(meta_path), "--clobber",
+                    "--repo", DESKTOP_REPO], check=True)
+    print(f"✅ Published {archive.name} (runtime {meta['runtime_id']}) to {DESKTOP_REPO} {tag}")
+    return True
+
+
 # Set by main() from --provisioning: the hospital's installer file from the
 # admin panel (Hospital page -> Installers -> Download provisioning.json).
 PROVISIONING_FILE = None
@@ -4132,7 +4201,13 @@ def main():
                              "packages the build for that hospital")
     parser.add_argument("--package-only", action="store_true",
                         help="skip the build and only package the existing dist/Cirqen")
+    parser.add_argument("--publish", action="store_true",
+                        help="after a full build, publish the neutral app for PCs that need the full "
+                             "app (a runtime change: runtime.json, requirements.txt, main.py)")
     args = parser.parse_args()
+    if args.publish and (args.provisioning or args.package_only):
+        print("❌ --publish is for the neutral full build only (no --provisioning, no --package-only)")
+        return 1
 
     global PROVISIONING_FILE
     if args.provisioning:
@@ -4182,8 +4257,11 @@ def main():
         ("Verify Build", verify_build),
         ("Create Documentation", create_readme),
         ("Create Build Info", create_build_info),
+        ("Stamp Runtime Id", stamp_runtime_id),
         ("Package Distribution", package_distribution),
     ]
+    if args.publish:
+        steps.append(("Publish Full App", publish_full_release))
 
     total = len(steps)
 

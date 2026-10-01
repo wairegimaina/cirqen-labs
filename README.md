@@ -133,9 +133,21 @@ suites against PostgreSQL on every push.
    That gives `Cirqen_linux_v<version>_CH0002.tar.gz` with the file inside.
    It holds an enrollment token: hand it over privately. Files with a shared
    `sync.auth_token` are refused.
-4. For in-app updates, publish the package through HQ (`hq_server/build_package.py`);
-   clients check, snapshot their database, apply, health-check and roll back
-   automatically on failure.
+4. Push to `main`. Control builds the code update package
+   (`hq_server/build_package.py`); PCs check, snapshot their database, apply,
+   health-check and roll back automatically on failure. Cirqen's own code is
+   kept as loose `.py` files in the build, so these updates change the code.
+5. **When the runtime changes** (`runtime.json`: Python, PostgreSQL, Redis;
+   `requirements.txt`; `main.py`), a code update can't carry it. Run
+   `python build.py --publish` after bumping the version: it builds the full
+   app, stamps its runtime id and uploads it to the GitHub release
+   `desktop-v<version>`. PCs on the older runtime get the full app from
+   Control instead of the code package: they download and check it, unpack
+   it next to the app, and on Restart swap folders; if the new app doesn't
+   start within 5 minutes the old one comes back. Until it is published,
+   such PCs are told and keep their version. Needs `gh` (logged in) here and
+   `GITHUB_TOKEN` on Control with read access to this repository. Linux PCs
+   swap by themselves; on other systems install the full app by hand.
 
 The full release checklist (staged rollout, validation, licences) is in
 `RELEASES.md`.
