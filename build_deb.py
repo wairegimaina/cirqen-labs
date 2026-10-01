@@ -5,6 +5,8 @@
     python build_deb.py --provisioning FILE    # a hospital's .deb (its installer file from the panel)
     python build_deb.py --test                 # then install and start it in clean 24.04 and 26.04
     python build_deb.py --from-dist            # just package the existing dist/Cirqen
+    python build_deb.py --from-deb dist/cirqen_1.6.2_amd64.deb --provisioning FILE
+                                               # a hospital's .deb from a tested one, no rebuild
 
 Install on a PC:   sudo apt install ./cirqen_1.6.2_amd64.deb
 Remove:            sudo apt remove cirqen      (users' records and settings stay)
@@ -307,13 +309,19 @@ missing=$(echo "$missing" | grep -v -e "libtiff.so.5" -e "\.libs/" | grep . || t
 if [ -n "$missing" ]; then echo "MISSING LIBRARIES:"; echo "$missing" | head -30; fi
 test -f /usr/share/applications/cirqen.desktop && echo "menu entry: ok"
 useradd -m tester
-su tester -c 'cd ~ && xvfb-run -a -s "-screen 0 1280x800x24" bash -c "cirqen >/tmp/cirqen.out 2>&1 & for i in \$(seq 1 $WAIT); do sleep 2; xdotool key Return 2>/dev/null; [ -s ~/.local/share/cirqen/full_update_ok ] && { for j in \$(seq 1 30); do grep -q \" ready\\.\" ~/.local/share/cirqen/logs/celery.log 2>/dev/null && break; sleep 2; done; exit 0; }; done; exit 1"'
+# Is the Celery worker (background tasks) answering? Ask it, through the app.
+cat > /usr/local/bin/ping_worker <<'PING'
+#!/bin/bash
+cd ~/.local/share/cirqen-app/Cirqen && CELERY_BROKER_URL=redis://127.0.0.1:7788/2 \
+  CELERY_RESULT_BACKEND=redis://127.0.0.1:7788/2 timeout 40 ./Cirqen celery -A Equiper.celery:app inspect ping -t 10 | grep -q pong
+PING
+chmod 755 /usr/local/bin/ping_worker
+su tester -c 'cd ~ && xvfb-run -a -s "-screen 0 1280x800x24" bash -c "cirqen >/tmp/cirqen.out 2>&1 & for i in \$(seq 1 $WAIT); do sleep 2; xdotool key Return 2>/dev/null; [ -s ~/.local/share/cirqen/full_update_ok ] && { for j in \$(seq 1 20); do ping_worker && echo pong > /tmp/ping && break; sleep 3; done; exit 0; }; done; exit 1"'
 status=$?
 L=/home/tester/.local/share/cirqen/logs
 if [ $status -eq 0 ]; then
-  for i in $(seq 1 30); do grep -q " ready\." $L/celery.log 2>/dev/null && break; sleep 2; done
-  if grep -q " ready\." $L/celery.log 2>/dev/null; then echo "background tasks: ok"
-  else echo "BACKGROUND TASKS DID NOT START"; tail -15 $L/celery.log 2>/dev/null; status=3; fi
+  if grep -q pong /tmp/ping 2>/dev/null; then echo "background tasks: ok (the worker answered a ping)"
+  else echo "BACKGROUND TASKS DID NOT ANSWER"; grep -v "^  \. " $L/celery.log | tail -15; status=3; fi
 fi
 if [ $status -eq 0 ]; then echo "STARTED: Cirqen $(cat /home/tester/.local/share/cirqen/full_update_ok) opened its window"
 elif [ $status -eq 3 ]; then :
@@ -337,6 +345,30 @@ def test_deb(deb: Path, images=TEST_IMAGES, wait_steps: int = 150) -> bool:
     return ok
 
 
+def hospital_deb_from(neutral: Path, provisioning: Path, out_dir: Path) -> Path:
+    """A hospital's .deb from a tested neutral one: the same app, plus the
+    hospital's installer file in /etc/cirqen. No rebuild."""
+    code = check_provisioning(provisioning)
+    with tempfile.TemporaryDirectory(dir=out_dir) as tmp:
+        root = Path(tmp) / "pkg"
+        subprocess.run(["dpkg-deb", "-R", str(neutral), str(root)], check=True)
+        if (root / "etc" / PACKAGE / "provisioning.json").exists():
+            raise SystemExit(f"❌ {neutral.name} already belongs to a hospital")
+        etc = root / "etc" / PACKAGE
+        etc.mkdir(parents=True)
+        shutil.copy2(provisioning, etc / "provisioning.json")
+        (etc / "provisioning.json").chmod(0o644)
+        etc.chmod(0o755)
+        (root / "DEBIAN" / "conffiles").write_text(f"/etc/{PACKAGE}/provisioning.json\n")
+        out = out_dir / neutral.name.replace("_amd64.deb", f"_amd64_{code}.deb")
+        subprocess.run(["dpkg-deb", "--root-owner-group", "-Zxz", "--build", str(root), str(out)], check=True,
+                       stdout=subprocess.DEVNULL)
+    out.chmod(0o600)
+    print(f"✅ {out} ({out.stat().st_size / 1e6:.0f} MB)")
+    print("🔒 This .deb holds the hospital's enrollment token: hand it over privately")
+    return out
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0],
                                      formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
@@ -345,9 +377,16 @@ def main() -> int:
     parser.add_argument("--out", type=Path, default=OUT_DIR, help="where to put the .deb")
     parser.add_argument("--test", action="store_true", help="install and start it on clean Ubuntu releases")
     parser.add_argument("--test-only", type=Path, metavar="DEB", help="only test an existing .deb")
+    parser.add_argument("--from-deb", type=Path, metavar="DEB",
+                        help="with --provisioning: make the hospital's .deb from this tested neutral one")
     args = parser.parse_args()
     if args.test_only:
         return 0 if test_deb(args.test_only.resolve()) else 1
+    if args.from_deb:
+        if not args.provisioning:
+            raise SystemExit("❌ --from-deb needs --provisioning")
+        hospital_deb_from(args.from_deb.resolve(), args.provisioning, args.out)
+        return 0
     if args.provisioning:
         check_provisioning(args.provisioning)
     if args.from_dist:
