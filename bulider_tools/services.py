@@ -864,12 +864,15 @@ class ServiceManager(QObject):
                 logger.error(f"Redis binary not found: {redis_bin}")
                 return False
 
+            # No paths in the config: Redis starts in its data folder (dir .)
+            # and logs to its output, which goes to redis.log. The Windows
+            # build (MSYS2) reads "C:\\..." as "/C:\\..." and can't open it.
             redis_conf = redis_data / 'redis.conf'
             redis_conf.write_text(f"""
-dir {redis_data}
+dir .
 port {port}
 bind 127.0.0.1
-logfile {redis_log}
+logfile ""
 daemonize no
 """)
 
@@ -878,15 +881,27 @@ daemonize no
             rotate_log_if_large(redis_log)
             log_file = open(redis_log, 'a')
             process = subprocess.Popen(
-                [str(redis_bin), str(redis_conf)],
+                [str(redis_bin), 'redis.conf'],
+                cwd=str(redis_data),
                 stdout=log_file,
                 stderr=log_file
             )
             self.processes.append(('redis', process, log_file))
 
-            time.sleep(1)
-            logger.info(f"✅ Redis started on port {port}")
-            return True
+            # Started is not running: wait until it accepts connections.
+            import socket as _socket
+            for _ in range(40):
+                if process.poll() is not None:
+                    logger.error(f"Redis exited (code {process.returncode}); see {redis_log}")
+                    return False
+                try:
+                    with _socket.create_connection(('127.0.0.1', port), timeout=0.5):
+                        logger.info(f"✅ Redis started on port {port}")
+                        return True
+                except OSError:
+                    time.sleep(0.25)
+            logger.error(f"Redis did not accept connections on port {port}; see {redis_log}")
+            return False
 
         except Exception as e:
             logger.error(f"Redis error: {e}")
