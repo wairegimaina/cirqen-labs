@@ -584,7 +584,7 @@ class MainWindow(QMainWindow):
             self._set_update_label(
                 f"✅ v{version} ready",
                 "#22c55e",
-                f"Update v{version} downloaded. Click Restart to apply.",
+                f"{'Full app' if change_type == 'full' else 'Update'} v{version} downloaded. Click Restart to apply.",
             )
             self.restart_update_btn.setVisible(True)
             self.apply_frontend_btn.setVisible(False)
@@ -710,6 +710,13 @@ class MainWindow(QMainWindow):
             dlg.setInformativeText(
                 "This is a UI / database update and can be applied instantly "
                 "without restarting the application.\n\nApply now?"
+            )
+        elif change_type == "full":
+            dlg.setInformativeText(
+                "This version replaces the whole app, including its Python and libraries. "
+                "Cirqen closes and the new version starts by itself in about a minute. "
+                "Your records and settings stay as they are; if the new version doesn't "
+                "start, the current one comes back.\n\nSave any work before continuing."
             )
         else:
             dlg.setInformativeText(

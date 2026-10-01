@@ -167,6 +167,7 @@ INCLUDE_FILES = [
     "endpoint_sync.py",
     "hospital_profile.py",
     "hq_handshake.py",
+    "runtime_id.py",
 ]
 
 INCLUDE_EXTENSIONS = {
@@ -258,6 +259,7 @@ def build_package_if_needed(
         "built_at": datetime.now(timezone.utc).isoformat(),
         "changes": _read_changelog(repo_root, version),
         "critical": False,
+        "runtime_id": _runtime_id(repo_root),  # PCs on another runtime get the full app (runtime_id.py)
         "min_version": "0.0.0",           # #7 clients older than this can't jump here
         "rollout_percent": 100,           # #7 staged rollout (edit the .json to canary)
         "yanked": False,                  # #7 kill switch — set true to pull a bad release
@@ -274,6 +276,19 @@ def build_package_if_needed(
 
 
 # ── File collection ───────────────────────────────────────────────────────────
+
+def _runtime_id(repo_root: Path) -> str:
+    """The runtime id of the code in this package (repo's runtime_id.py)."""
+    import importlib.util
+
+    path = Path(repo_root) / "runtime_id.py"
+    if not path.is_file() or not (Path(repo_root) / "runtime.json").is_file():
+        return ""
+    spec = importlib.util.spec_from_file_location("_cirqen_runtime_id", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.fingerprint(repo_root)
+
 
 def _should_exclude(path: Path, repo_root: Path) -> bool:
     relative = str(path.relative_to(repo_root))

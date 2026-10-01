@@ -278,6 +278,10 @@ class AppUpdateService(QObject):
         frontend_applied (no restart).  For everything else: applies files,
         runs migrations, writes the sentinel, and quits Qt.
         """
+        if self._status.get("change_type") == "full" and self._status.get("new_version") == version:
+            self._apply_full_app(version, Path(self._status.get("staged_path") or ""))
+            return
+
         staged_zip = self._staging / f"cirqen_update_v{version}.zip"
 
         # Also check status for an explicit staged_path
@@ -505,9 +509,15 @@ class AppUpdateService(QObject):
 
         # Step 1 — version check
         try:
+            import runtime_id
+
+            params = {"current_version": current_version, "platform": runtime_id.platform_name()}
+            installed_runtime = runtime_id.installed(self._app_path)
+            if installed_runtime:
+                params["runtime_id"] = installed_runtime
             resp = requests.get(
                 f"{self._hq_url}/api/updates/latest/",
-                params={"current_version": current_version},
+                params=params,
                 headers=self._headers(),
                 timeout=REQUEST_TIMEOUT_SECS,
             )
@@ -523,6 +533,10 @@ class AppUpdateService(QObject):
         if not data.get("update_available"):
             self._write_status(checking=False, server_available=True,
                                update_available=False)
+            return
+
+        if data.get("full_required"):
+            self._prepare_full_app(data)
             return
 
         new_version  = data["version"]
@@ -624,6 +638,92 @@ class AppUpdateService(QObject):
                            new_version=new_version, changes=changes,
                            change_type=change_type, staged_path=str(staged_zip))
         self.update_ready.emit(new_version, str(staged_zip), change_type)
+
+    # ------------------------------------------------------------------
+    # Full app (a release on another runtime: bulider_tools/full_update.py)
+    # ------------------------------------------------------------------
+
+    def _prepare_full_app(self, data: dict):
+        from bulider_tools import full_update
+
+        version, offer = data["version"], data.get("full_package")
+        changes, critical = data.get("changes", ""), data.get("critical", False)
+        if not offer:
+            msg = data.get("message") or f"Cirqen {version} needs the full app, which isn't available yet."
+            self._write_status(checking=False, server_available=True, update_available=True,
+                               update_ready=False, new_version=version, change_type="full", error=msg)
+            return
+        failed = self._read_failed()
+        if failed.get("version") == version:
+            self._write_status(checking=False, server_available=True, update_available=True,
+                               update_ready=False, new_version=version, change_type="full",
+                               error=f"The full app {version} failed to start here: {failed.get('error', '')}")
+            return
+        new_dir = full_update.new_dir_for(self._app_path)
+        if (new_dir / "_internal" / "version.txt").is_file() and \
+                (new_dir / "_internal" / "version.txt").read_text().strip() == version:
+            self._full_ready(version, new_dir, changes)
+            return
+        if not full_update.supported():
+            self._write_status(checking=False, server_available=True, update_available=True, update_ready=False,
+                               new_version=version, change_type="full",
+                               error=f"Cirqen {version} needs the full app: install it from Cirqen by hand.")
+            return
+        self._write_status(checking=False, server_available=True, update_available=True, downloading=True,
+                           new_version=version, change_type="full", download_progress=0)
+        self.update_available.emit(version, changes, critical)
+
+        def download(url, dest, progress):
+            with requests.get(url, headers=self._headers(), stream=True, timeout=DOWNLOAD_TIMEOUT_SECS) as r:
+                r.raise_for_status()
+                total, received = int(r.headers.get("Content-Length", 0)), 0
+                with open(dest, "wb") as fh:
+                    for chunk in r.iter_content(chunk_size=1 << 20):
+                        if self._stop_event.is_set():
+                            raise full_update.FullUpdateError("stopped")
+                        fh.write(chunk)
+                        received += len(chunk)
+                        if total:
+                            self._write_status(downloading=True, new_version=version,
+                                               download_progress=int(received / total * 100))
+
+        try:
+            from endpoint_sync import _public_key
+
+            package = full_update.prepare(offer, app_path=self._app_path, staging=self._staging,
+                                          public_key=_public_key(), download=download)
+        except Exception as exc:  # noqa: BLE001 - try again next cycle
+            msg = f"Full app {version} not ready: {exc}"
+            logger.warning("AppUpdateService: %s", msg)
+            self._write_status(downloading=False, new_version=version, change_type="full", error=msg)
+            self.error_occurred.emit(msg)
+            return
+        self._full_ready(version, Path(package["new_dir"]), changes)
+
+    def _full_ready(self, version: str, new_dir: Path, changes: str):
+        logger.info("AppUpdateService: full app %s ready at %s", version, new_dir)
+        self._write_status(update_available=True, update_ready=True, downloading=False, new_version=version,
+                           changes=changes, change_type="full", staged_path=str(new_dir), error=None)
+        self.update_ready.emit(version, str(new_dir), "full")
+
+    def _apply_full_app(self, version: str, new_dir: Path):
+        """Start the swap script and quit; it starts the new app (full_update.py)."""
+        from bulider_tools import full_update
+
+        try:
+            full_update.start_swap(app_path=self._app_path, new_dir=new_dir, version=version,
+                                   data_path=self._data_path)
+        except full_update.FullUpdateError as exc:
+            logger.error("AppUpdateService: full app %s not installed: %s", version, exc)
+            self.error_occurred.emit(str(exc))
+            return
+        self._write_status(update_available=False, update_ready=False, new_version=None, staged_path=None)
+        from PySide6.QtCore import QTimer
+        from PySide6.QtWidgets import QApplication
+
+        app = QApplication.instance()
+        if app is not None:
+            QTimer.singleShot(500, app.quit)
 
     # ------------------------------------------------------------------
     # Helpers

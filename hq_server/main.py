@@ -416,7 +416,8 @@ async def mpesa_validation(secret: str, request: Request):
 
 @app.get("/api/updates/latest/")
 def check_latest(current_version: str = "0.0.0", machine_id: Optional[str] = None,
-                 hospital_code: Optional[str] = None, x_api_key: Optional[str] = Header(None)):
+                 hospital_code: Optional[str] = None, runtime_id: Optional[str] = None,
+                 platform: str = "linux", x_api_key: Optional[str] = Header(None)):
     _require_api_key(x_api_key)
 
     if machine_id:
@@ -443,6 +444,14 @@ def check_latest(current_version: str = "0.0.0", machine_id: Optional[str] = Non
         return {"update_available": False, "message": "Not yet in rollout window"}
 
     base_url = os.environ.get("RENDER_EXTERNAL_URL", "http://localhost:8000").rstrip("/")
+
+    # A PC on another runtime (Python, libraries, embedded databases) can't
+    # run this version's code on what it has: offer the full app instead
+    # (desktop_releases.py). PCs that don't say their runtime get code updates.
+    needed = latest.get("runtime_id") or ""
+    if runtime_id and needed and runtime_id != needed:
+        return _full_app_offer(latest, platform, base_url)
+
     dl = f"{base_url}/api/updates/download/{latest_version}/"
     if current_version and current_version != "0.0.0":
         dl += f"?from_version={current_version}"  # #6 request a delta
@@ -459,6 +468,46 @@ def check_latest(current_version: str = "0.0.0", machine_id: Optional[str] = Non
         "tree_hash": latest.get("tree_hash", ""),  # #10
         "built_at": latest.get("built_at", ""),
     }
+
+
+def _full_app_offer(latest: dict, platform: str, base_url: str) -> dict:
+    import build_package
+    import desktop_releases
+    import hq_releases
+
+    version = latest["version"]
+    common = {"update_available": True, "version": version, "full_required": True,
+              "changes": latest.get("changes", ""), "critical": latest.get("critical", False)}
+    try:
+        package = desktop_releases.full_package(version, platform)
+    except hq_releases.ReleaseError as exc:
+        return {**common, "full_package": None, "message": f"The full app can't be checked right now: {exc}"}
+    if package is None or package["runtime_id"] != latest.get("runtime_id"):
+        return {**common, "full_package": None,
+                "message": f"Cirqen {version} needs the full app, which isn't published yet."}
+    offer = desktop_releases.signed_offer(package, f"{base_url}/api/updates/full/{version}/{platform}/",
+                                          build_package._sign_bytes)
+    if not offer["signature"]:
+        return {**common, "full_package": None, "message": "Control has no update signing key."}
+    return {**common, "full_package": offer}
+
+
+@app.get("/api/updates/full/{version}/{platform}/")
+def download_full_app(version: str, platform: str, x_api_key: Optional[str] = Header(None)):
+    """The full app (desktop_releases.py), streamed from its GitHub release."""
+    from fastapi.responses import StreamingResponse
+
+    import desktop_releases
+    import hq_releases
+
+    _require_api_key(x_api_key)
+    try:
+        chunks, size, name = desktop_releases.stream(version, platform)
+    except hq_releases.ReleaseError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+    return StreamingResponse(chunks, media_type="application/octet-stream",
+                             headers={"Content-Length": str(size),
+                                      "Content-Disposition": f'attachment; filename="{name}"'})
 
 
 # ── Download package (full or delta) ──────────────────────────────────────────
