@@ -1,5 +1,4 @@
 """jobcard.views — job-card creation entry point and pending-PPM lookup."""
-from locale import D_T_FMT
 from uuid import UUID
 import zipfile
 from django.utils.timezone import localdate, now
