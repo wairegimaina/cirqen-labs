@@ -533,14 +533,17 @@ class SchemaAndChangeDetectionMixin(SmartDeleteMixin):
                 has_pending_delete = schema_info.get("has_pending_delete", False)
                 has_active_status = schema_info.get("has_active_status", False)
                 has_deleted_at = schema_info.get("has_deleted_at", False)
+                # Not every synced table has created_at (e.g. a history table
+                # with only a timestamp); the poller needs only updated_at.
+                has_created_at = "created_at" in schema_info.get("columns", {"created_at"})
 
                 # ⚡ OPTIMIZED QUERY with index hints
                 query = f"""
                         SELECT
                             id,
                             to_jsonb(t.*) || jsonb_build_object('source_updated_at', t.updated_at) as row_data,
-                            updated_at,
-                            created_at
+                            updated_at
+                            {', created_at' if has_created_at else ''}
                             {', pending_delete' if has_pending_delete else ''}
                             {', active_status' if has_active_status else ''}
                             {', deleted_at' if has_deleted_at else ''}

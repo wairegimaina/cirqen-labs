@@ -306,3 +306,19 @@ def test_a_second_deletion_of_the_same_row_is_sent_again(net_agent, monkeypatch)
     _set(net_agent.pool, table, 1, "2026-09-26T00:14:41+03:00", active=False)
     again = net_agent.fetch_recent_changes_for_table(table, net_agent.EPOCH)
     assert [e["operation"] for e in again] == ["deactivate"]
+
+
+def test_a_table_without_created_at_still_syncs(net_agent, jobcard_table):
+    # parts_tools_accessoryrequesthistory has only a timestamp column: selecting
+    # created_at failed every poll ("column created_at does not exist").
+    conn = net_agent.pool.getconn()
+    with conn.cursor() as cur:
+        cur.execute("ALTER TABLE public.jobcard_jobcard DROP COLUMN IF EXISTS created_at")
+        cur.execute("INSERT INTO public.jobcard_jobcard (id, status, updated_at) "
+                    "VALUES (1, 'open', '2026-09-25T10:00:00+03:00')")
+    conn.commit()
+    net_agent.pool.putconn(conn)
+    for cache in ("_schema_cache", "_table_schema_cache"):
+        getattr(net_agent, cache, {}).clear()
+    events = net_agent.fetch_recent_changes_for_table("public.jobcard_jobcard", net_agent.EPOCH, limit=5)
+    assert [e["row_id"] for e in events] == ["1"]
