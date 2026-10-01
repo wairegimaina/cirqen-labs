@@ -65,8 +65,17 @@ class PgCtlServer:
         return self.returncode
 
     def _stop(self, mode: str) -> None:
-        subprocess.run([self.pg_ctl, "stop", "-D", self.data_dir, "-m", mode, "-w", "-t", "30"],
-                       capture_output=True, env=self.env)
+        result = subprocess.run([self.pg_ctl, "stop", "-D", self.data_dir, "-m", mode, "-w", "-t", "30"],
+                                capture_output=True, text=True, env=self.env)
+        if result.returncode != 0 and self._running():
+            # pg_ctl couldn't stop it: end the server process itself.
+            try:
+                import psutil
+
+                if self.pid:
+                    psutil.Process(self.pid).kill()
+            except Exception:  # noqa: BLE001
+                pass
         self.returncode = 0
 
     def terminate(self) -> None:
@@ -76,9 +85,11 @@ class PgCtlServer:
         self._stop("immediate")
 
     def wait(self, timeout=None):
-        deadline = None if timeout is None else time.monotonic() + timeout
+        # Never wait forever on a server that won't stop (callers expect wait()
+        # to return after terminate()/kill()).
+        deadline = time.monotonic() + (60 if timeout is None else timeout)
         while self._running():
-            if deadline is not None and time.monotonic() > deadline:
+            if time.monotonic() > deadline:
                 raise subprocess.TimeoutExpired(self.pg_ctl, timeout)
             time.sleep(0.5)
         self.returncode = 0 if self.returncode is None else self.returncode

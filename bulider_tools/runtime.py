@@ -480,8 +480,10 @@ DATA_PATH.mkdir(parents=True, exist_ok=True)
 # Each log: 5 MB max, 3 backups kept (~20 MB cap per service)
 from logging.handlers import RotatingFileHandler as _RotFH
 LOG_FILE = DATA_PATH / 'logs' / 'cirqen_app.log'
+# CIRQEN_LOG_LEVEL=INFO (or DEBUG) for the full story when supporting a PC.
+_LOG_LEVEL = getattr(logging, os.environ.get('CIRQEN_LOG_LEVEL', 'WARNING').upper(), logging.WARNING)
 logging.basicConfig(
-    level=logging.WARNING,
+    level=_LOG_LEVEL,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[_RotFH(LOG_FILE, maxBytes=5*1024*1024, backupCount=3)]
 )
@@ -492,6 +494,13 @@ logging.getLogger().handlers = [
 ]
 logger = logging.getLogger('Cirqen')
 logger.propagate = False
+# It doesn't propagate, so it needs its own handler: without one its messages
+# went only to Python's last-resort stderr (warnings and up), and the setup
+# and service steps were never in cirqen_app.log.
+if not logger.handlers:
+    logger.addHandler(logging.getLogger().handlers[0] if logging.getLogger().handlers
+                      else _RotFH(LOG_FILE, maxBytes=5*1024*1024, backupCount=3))
+logger.setLevel(_LOG_LEVEL)
 
 def own_postgres_port():
     """Port of the postgres running on this install's own data dir, or None."""
