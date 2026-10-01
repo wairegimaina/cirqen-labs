@@ -261,6 +261,9 @@ ADDED_COLUMNS = [
     ("enrollment_tokens", "revoked_at", "TEXT"),                      # set: its PCs can no longer join
     ("hospitals", "shared_key_retired_at", "TEXT"),                    # set: its HQ refuses the old shared sync key
     ("hospitals", "render_services", "TEXT NOT NULL DEFAULT '[]'"),    # its HQ's Render services (render_api.py)
+    ("hospitals", "hosting", "TEXT NOT NULL DEFAULT 'render'"),        # render | self (hq_releases.py)
+    ("hospitals", "hq_release_mode", "TEXT NOT NULL DEFAULT 'follow'"),  # self-hosted HQ: follow | pin | hold
+    ("hospitals", "hq_release_version", "TEXT NOT NULL DEFAULT ''"),    # for pin
 ]
 
 
@@ -301,7 +304,8 @@ def audit_entries(limit: int = 200, target: str | None = None) -> list[dict]:
 
 HOSPITAL_FIELDS = ("name", "county", "hod_name", "hod_email", "hod_phone", "sync_url", "fallbacks",
                    "updates_url", "cert_prefix", "status", "notes", "release_mode", "release_version",
-                   "profile", "profile_version", "shared_key_retired_at", "render_services")
+                   "profile", "profile_version", "shared_key_retired_at", "render_services",
+                   "hosting", "hq_release_mode", "hq_release_version")
 
 
 def _hospital(row) -> dict | None:

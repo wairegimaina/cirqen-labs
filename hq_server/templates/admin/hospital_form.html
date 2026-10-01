@@ -11,6 +11,10 @@
   <label>Status
     <select name="status">{% for s in ('active', 'suspended', 'closed') %}<option {{ 'selected' if h.status == s }}>{{ s }}</option>{% endfor %}</select>
   </label>
+  <label>HQ hosted on
+    <select name="hosting"><option value="render" {{ 'selected' if (h.hosting or 'render') == 'render' }}>Render (Cirqen deploys it)</option>
+      <option value="self" {{ 'selected' if h.hosting == 'self' }}>The hospital's own server (updates itself)</option></select>
+  </label>
   <label>HOD name <input name="hod_name" value="{{ h.hod_name or '' }}"></label>
   <label>HOD e-mail <input name="hod_email" type="email" value="{{ h.hod_email or '' }}"></label>
   <label>HOD phone <input name="hod_phone" value="{{ h.hod_phone or '' }}"></label>

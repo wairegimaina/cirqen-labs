@@ -726,3 +726,105 @@ def test_support_can_deploy_but_finance_cannot(app, clock, owner, render):
     books = sign_in(app, clock, "books", make_admin("books", "finance"))
     books.post("/admin/hospitals/CH0001/render/deploy", data={"csrf": csrf(books, "/admin/hospitals/CH0001")})
     assert render.deploys == []
+
+
+# ── self-hosted HQ software (hq_releases.py) ─────────────────────────────────
+
+@pytest.fixture
+def github(monkeypatch, tmp_path):
+    import io
+    import tarfile
+
+    import httpx
+
+    import hq_releases
+
+    def tarball(tag):
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+            data = f"version {tag}\n".encode()
+            info = tarfile.TarInfo("wairegimaina-hq_server-abc123/VERSION_NOTE")
+            info.size = len(data)
+            tar.addfile(info, io.BytesIO(data))
+        return buf.getvalue()
+
+    def handler(request):
+        path = request.url.path
+        if path.endswith("/tags"):
+            return httpx.Response(200, json=[{"name": t} for t in ("v1.2.0", "v1.10.0", "nightly", "v1.9.3")])
+        if "/tarball/" in path:
+            return httpx.Response(200, content=tarball(path.rsplit("/", 1)[1]))
+        if path.endswith("/contents/selfhost/install.sh"):
+            return httpx.Response(200, content=b"#!/bin/bash\necho install\n")
+        return httpx.Response(404)
+
+    monkeypatch.setenv("GITHUB_TOKEN", "ghp_test")
+    monkeypatch.setenv("HQ_RELEASE_CACHE", str(tmp_path / "hq-cache"))
+    real = hq_releases._client
+    monkeypatch.setattr(hq_releases, "_client", lambda transport=None: real(httpx.MockTransport(handler)))
+    hq_releases._tags_cache.update(at=0.0, tags=[])
+    return hq_releases
+
+
+def self_hosted(owner, clock):
+    client, secret = owner
+    add_hospital(client, hosting="self")
+    page = issue(client, clock, secret, "new")
+    hq_key = Ed25519PrivateKey.from_private_bytes(base64.b64decode(env_values(page.text)["HQ_IDENTITY_PRIVATE_KEY"]))
+    return client, hq_key
+
+
+def signed_get(server, hq_key, version, code="CH0001", age=0):
+    import time as _time
+
+    import hq_releases
+
+    ts = int(_time.time()) - age
+    sig = base64.b64encode(hq_key.sign(hq_releases.download_message(code, version, ts))).decode()
+    return server.get(f"/api/hq/{code}/hq-release/{version}.tar.gz",
+                      headers={"X-Cirqen-Timestamp": str(ts), "X-Cirqen-Signature": sig})
+
+
+def test_a_self_hosted_hq_is_told_the_newest_release_and_only_it_can_download(
+        owner, clock, control_key, github, tmp_path, monkeypatch):
+    import hashlib
+
+    client, hq_key = self_hosted(owner, clock)
+    monkeypatch.setenv("HQ_PACKAGES_DIR", str(tmp_path / "packages"))
+    import main
+
+    server = TestClient(main.app)
+    answer = server.get("/api/hq/CH0001/hq-release").json()
+    control_key.public_key().verify(base64.b64decode(answer["signature"]),
+                                    b"cirqen-hq-release-v1\n" + answer["document"].encode())
+    doc = json.loads(answer["document"])
+    assert (doc["hospital"], doc["version"]) == ("CH0001", "v1.10.0")       # numeric order, tags only
+    got = signed_get(server, hq_key, "v1.10.0")
+    assert got.status_code == 200 and hashlib.sha256(got.content).hexdigest() == doc["sha256"]
+    stranger = Ed25519PrivateKey.generate()
+    assert signed_get(server, stranger, "v1.10.0").status_code == 403
+    assert signed_get(server, hq_key, "v1.10.0", age=3600).status_code == 403   # replayed
+    assert signed_get(server, hq_key, "v1.2.0").status_code == 404              # not its version
+    assert server.get("/api/hq/selfhost/install.sh").text.startswith("#!/bin/bash")
+
+
+def test_pin_and_hold_from_the_panel(owner, clock, control_key, github, tmp_path, monkeypatch):
+    client, _ = self_hosted(owner, clock)
+    monkeypatch.setenv("HQ_PACKAGES_DIR", str(tmp_path / "packages"))
+    import main
+
+    server = TestClient(main.app)
+
+    def chosen():
+        return json.loads(server.get("/api/hq/CH0001/hq-release").json()["document"])["version"]
+
+    token = csrf(client, "/admin/hospitals/CH0001")
+    page = client.get("/admin/hospitals/CH0001").text
+    assert "HQ software (own server)" in page and "Hosting (Render)" not in page
+    client.post("/admin/hospitals/CH0001/hq-release", data={"csrf": token, "mode": "pin", "version": "v1.9.3"})
+    assert chosen() == "v1.9.3"
+    assert client.post("/admin/hospitals/CH0001/hq-release",
+                       data={"csrf": token, "mode": "pin", "version": "v9.9.9"}).status_code == 400
+    client.post("/admin/hospitals/CH0001/hq-release", data={"csrf": token, "mode": "hold"})
+    assert chosen() == ""
+    assert cs.audit_entries(target="CH0001")[0]["action"] == "hq_release_changed"

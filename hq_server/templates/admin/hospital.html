@@ -209,6 +209,34 @@
   </form>
   {% endif %}
 </section>
+{% if h.hosting == 'self' %}
+<section class="card" id="hq-software">
+  <h2>HQ software (own server)</h2>
+  <p class="muted">This hospital's HQ runs on its own server and updates itself: every hour its updater asks for the
+    version chosen here, backs up its database, installs it, and goes back to the previous version if the new one
+    doesn't answer healthy.</p>
+  <dl>
+    <dt>Running</dt><dd>{{ health.version or '—' }}</dd>
+    <dt>Chosen</dt><dd>{% if h.hq_release_mode == 'hold' %}hold (nothing new){% elif h.hq_release_mode == 'pin' %}{{ h.hq_release_version }} (pinned){% else %}newest{% if hq_software.chosen %}: {{ hq_software.chosen }}{% endif %}{% endif %}
+      {% if hq_software.chosen and health.version and hq_software.chosen != health.version %} <span class="pill">update pending</span>{% endif %}</dd>
+  </dl>
+  {% if hq_software.configured == false %}
+  <p class="muted">Not connected to the HQ code: set <code>GITHUB_TOKEN</code> (read-only access to the hq_server
+    repository) once on Cirqen Control. Releases are its git tags, e.g. <code>v1.4.0</code>.</p>
+  {% elif hq_software.error %}<p class="note">{{ hq_software.error }}</p>
+  {% elif admin.role in ('owner', 'support') %}
+  <form method="post" action="/admin/hospitals/{{ h.code }}/hq-release" class="grid-form">
+    <input type="hidden" name="csrf" value="{{ session.csrf }}">
+    <label>Mode <select name="mode">{% for m in ('follow', 'pin', 'hold') %}<option {{ 'selected' if h.hq_release_mode == m }}>{{ m }}</option>{% endfor %}</select></label>
+    <label>Version (for pin) <select name="version"><option value=""></option>{% for t in hq_software.tags %}<option {{ 'selected' if h.hq_release_version == t }}>{{ t }}</option>{% endfor %}</select></label>
+    <div class="wide actions"><button class="secondary">Save</button></div>
+  </form>
+  <p class="muted small">Install on a new server (Ubuntu 22.04 or 24.04), after issuing its identity:
+    <code>curl -fsSL {{ request.base_url }}api/hq/selfhost/install.sh | sudo bash -s -- --code {{ h.code }} --domain &lt;its HQ name&gt; --identity identity.env</code></p>
+  {% endif %}
+</section>
+{% endif %}
+{% if h.hosting != 'self' %}
 <section class="card" id="render">
   <h2>Hosting (Render)</h2>
   {% if not render.configured %}
@@ -236,6 +264,7 @@
   {% endif %}
   {% endif %}
 </section>
+{% endif %}
 <section class="card" id="shared-key">
   <h2>Old shared sync key</h2>
   <p class="muted">The pilot's PCs once all used one sync key. Each PC now swaps it for its own key by itself after a

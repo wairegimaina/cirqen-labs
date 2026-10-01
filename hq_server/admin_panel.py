@@ -129,6 +129,7 @@ def clean_hospital(form: dict, *, creating: bool) -> tuple[dict, list[str]]:
         "notes": (form.get("notes") or "").strip(),
         "cert_prefix": (form.get("cert_prefix") or "").strip().upper(),
         "status": (form.get("status") or "active").strip(),
+        "hosting": (form.get("hosting") or "render").strip(),
     }
     if creating:
         values["code"] = (form.get("code") or "").strip().upper()
@@ -140,6 +141,8 @@ def clean_hospital(form: dict, *, creating: bool) -> tuple[dict, list[str]]:
         errors.append("HOD e-mail is not an e-mail address")
     if values["cert_prefix"] and not PREFIX.match(values["cert_prefix"]):
         errors.append("Certificate prefix: 2-8 letters or digits and a dash, e.g. KRH-")
+    if values["hosting"] not in ("render", "self"):
+        errors.append("HQ hosting must be Render or the hospital's own server")
     if values["status"] not in ("active", "suspended", "closed"):
         errors.append("Status must be active, suspended or closed")
     values["sync_url"] = _sync_url(form.get("sync_url"), "HQ sync address", errors)
@@ -172,6 +175,7 @@ async def fetch_health(hospital: dict) -> dict:
             "prefix": checks.get("certificate_prefix"),
             "shared_key": checks.get("shared_sync_key") if isinstance(checks.get("shared_sync_key"), dict) else None,
             "computers": checks.get("computers") if isinstance(checks.get("computers"), dict) else None,
+            "version": checks.get("hq_version"),
             "sse": (checks.get("sse_clients") or {}).get("active") if isinstance(checks.get("sse_clients"), dict)
             else None,
         }
@@ -314,7 +318,8 @@ async def hospital_page(request: Request, code: str):
         "cert": cs.latest_certificate(h["code"]), "document": json.dumps(document, indent=2) if document else "",
         "events": cs.audit_entries(50, target=h["code"]), "issued": None, "versions": _versions(),
         "tokens": cs.enrollment_tokens(h["code"]), "now": datetime.now(timezone.utc).isoformat(),
-        "modules": _module_rows(h), "render": await _render_context(h), **_billing_context(h),
+        "modules": _module_rows(h), "render": await _render_context(h), "hq_software": await _hq_software(h),
+        **_billing_context(h),
     })
 
 
@@ -437,6 +442,53 @@ async def _put_on_render(h: dict, env: list[tuple[str, str]]) -> dict:
         started, deploy_errors = await _deploy_all(h)
         errors += deploy_errors
     return {"done": done, "errors": errors}
+
+
+# ── Self-hosted HQ software (hq_releases.py) ─────────────────────────────────
+
+async def _hq_software(h: dict) -> dict:
+    import hq_releases
+
+    if h.get("hosting") != "self":
+        return {}
+    if not hq_releases.configured():
+        return {"configured": False}
+    try:
+        available = await asyncio.to_thread(hq_releases.tags)
+        error = ""
+    except hq_releases.ReleaseError as exc:
+        available, error = [], str(exc)
+    chosen = "" if error else hq_releases.chosen_version(h) if available or h.get("hq_release_mode") != "follow" else ""
+    return {"configured": True, "tags": available, "chosen": chosen, "error": error}
+
+
+@router.post("/hospitals/{code}/hq-release")
+@guarded
+async def hospital_hq_release(request: Request, code: str):
+    """A self-hosted HQ: follow the newest HQ release, pin one, or hold."""
+    import hq_releases
+
+    session, admin = _current(request, CAN_EDIT)
+    form = dict(await request.form())
+    _check_csrf(session, form.get("csrf", ""))
+    h = cs.get_hospital(code.upper())
+    if h is None:
+        return RedirectResponse("/admin/", status_code=303)
+    mode = form.get("mode", "follow")
+    version = (form.get("version") or "").strip() if mode == "pin" else ""
+    try:
+        known = await asyncio.to_thread(hq_releases.tags) if mode == "pin" else []
+    except hq_releases.ReleaseError:
+        known = []
+    if mode not in ("follow", "pin", "hold") or (mode == "pin" and version not in known):
+        return _page(request, "error.html", {"admin": admin, "session": session,
+                                             "message": "Choose follow, hold, or a published HQ version to pin.",
+                                             "back": f"/admin/hospitals/{h['code']}#hq-software"}, 400)
+    cs.save_hospital(h["code"], {"hq_release_mode": mode, "hq_release_version": version}, create=False)
+    cs.audit(admin["username"], "hq_release_changed", h["code"],
+             {"from": f"{h['hq_release_mode']} {h['hq_release_version']}".strip(), "to": f"{mode} {version}".strip()},
+             _ip(request))
+    return RedirectResponse(f"/admin/hospitals/{h['code']}#hq-software", status_code=303)
 
 
 def _billing_context(h: dict) -> dict:
