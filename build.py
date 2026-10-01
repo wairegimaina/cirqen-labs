@@ -2831,7 +2831,10 @@ pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 exe = EXE(
     pyz,
     a.scripts,
-    [],
+    # Python's UTF-8 mode: on Windows files and pipes otherwise default to
+    # cp1252, which can't hold the ✅/❌ in Cirqen's messages (lost log lines,
+    # UnicodeEncodeError). Linux is UTF-8 already.
+    [('X utf8_mode=1', None, 'OPTION')],
     exclude_binaries=True,
     name='Cirqen',
     debug=False,

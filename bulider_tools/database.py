@@ -656,23 +656,34 @@ class FirstRunSetup(QObject):
         logger.info("=" * 60)
         logger.info("RUNNING MIGRATIONS — local database")
         logger.info("=" * 60)
+        # Output to a file, not pipes: anything the child starts would inherit
+        # the pipes and keep them open, and reading them then never ends (on
+        # Windows the timeout can't end it either). logs/migrations.log keeps it.
+        migrations_log = self.pg_logs / 'migrations.log'
+
+        def _tail():
+            try:
+                return migrations_log.read_text(encoding='utf-8', errors='replace')[-3000:]
+            except OSError:
+                return ''
+
         try:
-            result = subprocess.run(
-                [sys.executable, str(manage_py), 'migrate', '--noinput'],
-                capture_output=True, text=True,
-                cwd=str(APPLICATION_PATH), env=base_env,
-                check=True, timeout=300,
-            )
+            with open(migrations_log, 'w', encoding='utf-8') as out:
+                subprocess.run(
+                    [sys.executable, str(manage_py), 'migrate', '--noinput'],
+                    stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT,
+                    cwd=str(APPLICATION_PATH), env=base_env,
+                    check=True, timeout=300,
+                )
             logger.info("Local migrations completed")
-            if result.stdout:
-                logger.debug(f"Output:\n{result.stdout}")
+            logger.debug(f"Output:\n{_tail()}")
         except subprocess.CalledProcessError as e:
             logger.error(f"Local migration failed (exit {e.returncode})")
-            logger.error(f"stdout:\n{e.stdout}")
-            logger.error(f"stderr:\n{e.stderr}")
+            logger.error(f"Output:\n{_tail()}")
             return False
         except subprocess.TimeoutExpired:
             logger.error("Local migration timeout (>5 min)")
+            logger.error(f"Output so far:\n{_tail()}")
             return False
         except Exception as e:
             logger.error(f"Local migration error: {e}")
