@@ -42,6 +42,7 @@ MANIFEST
 *.msi
 *.nsi
 *.iss
+!installer/cirqen.iss
 
 # ── Runtime & cache ────────────────────────────────────────────────────────────
 runtime/
