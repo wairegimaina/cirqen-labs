@@ -231,10 +231,17 @@ def main():
                 try:
                     from bulider_tools import full_update
 
-                    version_file = APPLICATION_PATH / "_internal" / "version.txt"
-                    if not version_file.is_file():
-                        version_file = APPLICATION_PATH / "version.txt"
-                    full_update.confirm_started(DATA_PATH, version_file.read_text().strip())
+                    version = ""
+                    for version_file in (APPLICATION_PATH / "_internal" / "version.txt",
+                                         APPLICATION_PATH / "version.txt"):
+                        if version_file.is_file():
+                            version = version_file.read_text().strip()
+                            break
+                    if not version:
+                        from django.conf import settings as django_settings
+
+                        version = str(getattr(django_settings, "APP_VERSION", "") or "")
+                    full_update.confirm_started(DATA_PATH, version)
                 except Exception as confirm_error:
                     logger.warning(f"Could not confirm startup for a full update: {confirm_error}")
                 # Wire AppUpdateService signals now that both window and
