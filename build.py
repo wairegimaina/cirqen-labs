@@ -66,6 +66,28 @@ PROJECT_ROOT = Path(__file__).parent.resolve()
 # Machine-local folders that must never be bundled: data/ is the dev instance's
 # live database, logs and config.json (HQ credentials, tokens, secret.key).
 DEV_ONLY_DIRS = {'data', 'venv', '.venv', 'build_logs', 'build', 'dist', 'runtime', '__pycache__'}
+# Cirqen's own top-level modules (outside any package). Like the app packages,
+# they are kept as plain .py files in the build (see app_source_modules), so
+# an in-app update that replaces them takes effect. hq_server/build_package.py
+# ships the same list in update packages.
+APP_TOP_LEVEL_MODULES = ('config', 'licence', 'endpoint_sync', 'hospital_profile', 'hq_handshake')
+
+
+def app_source_modules() -> dict:
+    """module_collection_mode for the spec: every Cirqen package and top-level
+    module collected as source, not frozen into the executable's archive.
+
+    A frozen module always wins over a file on disk, so without this an
+    in-app update wrote new .py files that the running app never imported:
+    templates changed, code didn't.
+    """
+    packages = sorted(p.name for p in PROJECT_ROOT.iterdir()
+                      if p.is_dir() and (p / '__init__.py').is_file()
+                      and p.name not in DEV_ONLY_DIRS | {'hq_server', 'e2e', 'review', 'helper_scripts', 'hooks'}
+                      and not p.name.startswith('.'))
+    return {name: 'py' for name in (*packages, *APP_TOP_LEVEL_MODULES)}
+
+
 RUNTIME_DIR = PROJECT_ROOT / "runtime"
 BUILD_DIR = PROJECT_ROOT / "build"
 DIST_DIR = PROJECT_ROOT / "dist"
@@ -2601,6 +2623,10 @@ datas = {repr(datas_collected)}
 
 hiddenimports = {repr(hidden_imports)}
 
+# Cirqen's own code stays as .py files next to the executable, so in-app
+# updates (which replace those files) take effect. See app_source_modules().
+module_collection_mode = {repr(app_source_modules())}
+
 # ============================================================================
 # PYINSTALLER CONFIGURATION
 # ============================================================================
@@ -2611,6 +2637,7 @@ a = Analysis(
     binaries=[],
     datas=datas,
     hiddenimports=hiddenimports,
+    module_collection_mode=module_collection_mode,
     hookspath=[],
     hooksconfig={{}},
     runtime_hooks=[],

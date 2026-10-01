@@ -127,12 +127,15 @@ def _tree_hash(files: list[dict]) -> str:
 
 
 # ── Which directories to scan ─────────────────────────────────────────────────
-# Add any new Django app here so it gets included in update packages.
+# Add any new Django app here so it gets included in update packages
+# (core/tests/test_update_package_contents.py fails if one is missing).
 
 INCLUDE_DIRS = [
     "accounts",
     "Archives",
+    "assets",
     "audit_log",
+    "bulider_tools",
     "CalSoft",
     "calSchedules",
     "core",
@@ -141,14 +144,15 @@ INCLUDE_DIRS = [
     "Inventory",
     "jobcard",
     "machineReports",
+    "notifications",
     "parts_tools",
     "ppms",
     "reporthub",
+    "scheduling",
     "sync",
     "templates",
     "static",
     "updates",
-    "UserProfile",
     "users",
     "workshop",
 ]
@@ -157,6 +161,12 @@ INCLUDE_FILES = [
     "manage.py",
     "requirements.txt",
     "version.txt",
+    # Top-level modules (build.py APP_TOP_LEVEL_MODULES).
+    "config.py",
+    "licence.py",
+    "endpoint_sync.py",
+    "hospital_profile.py",
+    "hq_handshake.py",
 ]
 
 INCLUDE_EXTENSIONS = {
