@@ -3,6 +3,29 @@ from PySide6.QtCore import QObject, QThread, QTimer, Signal
 
 from .runtime import *
 
+def _superuser_candidates(app_user: str) -> list:
+    """Who may be the local cluster's superuser, most likely first: the OS user
+    who ran initdb (bulider_tools/database.py), found without os.getlogin(),
+    which fails with no login terminal (started from the desktop menu)."""
+    names = []
+    try:
+        import pwd
+        names.append(pwd.getpwuid(os.getuid()).pw_name)
+    except (ImportError, KeyError):
+        pass
+    try:
+        import getpass
+        names.append(getpass.getuser())
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        names.append(os.getlogin())
+    except OSError:
+        pass
+    names += ['postgres', app_user]
+    return list(dict.fromkeys(n for n in names if n))
+
+
 class SetupThread(QThread):
     """Thread for first-run setup"""
 
@@ -688,11 +711,12 @@ class ServiceManager(QObject):
         # ------------------------------------------------------------------
         postgres_ready   = False
         superuser_name   = None
-        candidate_users  = ['postgres', self.db_config['user']]
-        try:
-            candidate_users.insert(1, os.getlogin())
-        except OSError:
-            pass
+        # The cluster's superuser is the OS user who ran initdb (database.py),
+        # trusted locally. os.getlogin() fails without a login terminal (an
+        # app started from the desktop menu, a service), so ask the user
+        # database first; otherwise only password users are left and this
+        # waits out its whole timeout on a server that is up.
+        candidate_users = _superuser_candidates(self.db_config['user'])
 
         for attempt in range(240):          # 240 x 0.5 s = 120 s max
             if process.poll() is not None:
@@ -741,11 +765,7 @@ class ServiceManager(QObject):
         import psycopg2
         from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
-        candidate_superusers = ['postgres', self.db_config['user']]
-        try:
-            candidate_superusers.insert(1, os.getlogin())
-        except OSError:
-            pass
+        candidate_superusers = _superuser_candidates(self.db_config['user'])
 
         # --- connect as any superuser ---
         conn = None
@@ -1236,14 +1256,9 @@ daemonize no
             log_file.write(f"{'='*70}\n\n")
             log_file.flush()
 
-            # Find Python executable
-            python_exe = self._find_python_executable()
-            logger.info(f"Using Python: {python_exe}")
-
             # Celery worker command
             celery_cmd = [
-                python_exe,
-                '-m', 'celery',
+                *self._celery_command(),
                 '-A', 'Equiper.celery:app',
                 'worker',
                 '--loglevel=INFO',
@@ -1355,13 +1370,9 @@ daemonize no
             log_file.flush()
 
             # Find Python executable
-            python_exe = self._find_python_executable()
-            logger.info(f"Using Python: {python_exe}")
-
             # Celery Beat command
             celery_beat_cmd = [
-                python_exe,
-                '-m', 'celery',
+                *self._celery_command(),
                 '-A', 'Equiper.celery:app',
                 'beat',
                 '--loglevel=INFO',
@@ -1425,6 +1436,18 @@ daemonize no
             logger.error(traceback.format_exc())
             return False
 
+
+    def _celery_command(self) -> list:
+        """How to run Celery: the installed app runs it inside its own
+        executable (main.py's `celery` entry); from source, `python -m celery`.
+        The installed app has no other Python with Celery in it, so the old
+        `python3 -m celery` never started there (no background tasks)."""
+        if getattr(sys, 'frozen', False):
+            logger.info(f"Using Celery inside {sys.executable}")
+            return [sys.executable, 'celery']
+        python_exe = self._find_python_executable()
+        logger.info(f"Using Python: {python_exe}")
+        return [python_exe, '-m', 'celery']
 
     def _find_python_executable(self):
         """

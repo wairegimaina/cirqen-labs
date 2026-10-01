@@ -307,11 +307,19 @@ missing=$(echo "$missing" | grep -v -e "libtiff.so.5" -e "\.libs/" | grep . || t
 if [ -n "$missing" ]; then echo "MISSING LIBRARIES:"; echo "$missing" | head -30; fi
 test -f /usr/share/applications/cirqen.desktop && echo "menu entry: ok"
 useradd -m tester
-su tester -c 'cd ~ && xvfb-run -a -s "-screen 0 1280x800x24" bash -c "cirqen >/tmp/cirqen.out 2>&1 & for i in \$(seq 1 $WAIT); do sleep 2; xdotool key Return 2>/dev/null; [ -s ~/.local/share/cirqen/full_update_ok ] && exit 0; done; exit 1"'
+su tester -c 'cd ~ && xvfb-run -a -s "-screen 0 1280x800x24" bash -c "cirqen >/tmp/cirqen.out 2>&1 & for i in \$(seq 1 $WAIT); do sleep 2; xdotool key Return 2>/dev/null; [ -s ~/.local/share/cirqen/full_update_ok ] && { for j in \$(seq 1 30); do grep -q \" ready\\.\" ~/.local/share/cirqen/logs/celery.log 2>/dev/null && break; sleep 2; done; exit 0; }; done; exit 1"'
 status=$?
+L=/home/tester/.local/share/cirqen/logs
+if [ $status -eq 0 ]; then
+  for i in $(seq 1 30); do grep -q " ready\." $L/celery.log 2>/dev/null && break; sleep 2; done
+  if grep -q " ready\." $L/celery.log 2>/dev/null; then echo "background tasks: ok"
+  else echo "BACKGROUND TASKS DID NOT START"; tail -15 $L/celery.log 2>/dev/null; status=3; fi
+fi
 if [ $status -eq 0 ]; then echo "STARTED: Cirqen $(cat /home/tester/.local/share/cirqen/full_update_ok) opened its window"
+elif [ $status -eq 3 ]; then :
 else echo "DID NOT START within $((WAIT*2))s"; echo "--- output"; tail -30 /tmp/cirqen.out
-  for f in /home/tester/.local/share/cirqen/logs/launcher.log /home/tester/.local/share/cirqen/logs/django.log; do
+  for f in /home/tester/.local/share/cirqen/logs/launcher.log /home/tester/.local/share/cirqen/logs/django.log \
+           /home/tester/.local/share/cirqen/logs/postgres.log; do
     [ -f "$f" ] && { echo "--- $f"; grep -v "^\s*$" "$f" | tail -30; }; done
   ls -la /home/tester/.local/share/cirqen /home/tester/.local/share/cirqen-app 2>&1 | head -30; fi
 exit $status

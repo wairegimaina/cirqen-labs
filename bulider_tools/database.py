@@ -256,9 +256,13 @@ class FirstRunSetup(QObject):
 
             # Get current username
             try:
-                current_user = os.getlogin()
+                import pwd
+                current_user = pwd.getpwuid(os.getuid()).pw_name
             except Exception:
-                current_user = os.getenv('USER', 'postgres')
+                try:
+                    current_user = os.getlogin()
+                except Exception:
+                    current_user = os.getenv('USER', 'postgres')
 
             logger.info(f"Using superuser: {current_user}")
 

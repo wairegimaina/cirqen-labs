@@ -2719,6 +2719,19 @@ def generate_spec():
             f'{app}.admin',
         ])
 
+    # Celery loads its worker/beat/broker parts by name at run time; collect
+    # them all, or the installed app's background tasks can't start.
+    try:
+        from PyInstaller.utils.hooks import collect_submodules
+
+        for package in ('celery', 'kombu', 'django_celery_beat', 'django_celery_results'):
+            try:
+                hidden_imports.extend(collect_submodules(package))
+            except Exception:  # noqa: BLE001 - optional packages
+                pass
+    except ImportError:
+        logger.warning("⚠️  PyInstaller hooks unavailable; Celery submodules not collected")
+
     # Add main package
     if main_package:
         hidden_imports.extend([
