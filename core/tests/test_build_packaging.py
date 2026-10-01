@@ -98,3 +98,25 @@ class PackagingTests(unittest.TestCase):
         self.assertEqual((internal / "version.txt").read_text(), "1.6.0")
         self.assertEqual((self.dist / "Cirqen" / "version.txt").read_text(), "1.6.0")
         self.assertEqual(len((internal / "runtime_id.txt").read_text().strip()), 16)
+
+    def test_an_ubuntu_postgresql_is_laid_out_to_find_its_own_files(self):
+        if build.IS_WINDOWS:
+            self.skipTest("Linux layout")
+        pg = self.root / "runtime" / "postgresql"
+        (pg / "bin").mkdir(parents=True)
+        (pg / "lib").mkdir()
+        (pg / "share" / "extension").mkdir(parents=True)
+        (pg / "share" / "postgres.bki").write_text("bki")
+        (pg / "lib" / "plpgsql.so").write_text("so")
+        config = pg / "bin" / "pg_config"
+        config.write_text("#!/bin/sh\necho /usr/share/postgresql/18\n")
+        config.chmod(0o755)
+        with mock.patch.object(build, "RUNTIME_DIR", self.root / "runtime"):
+            self.assertTrue(build.relocatable_postgres_layout(pg))
+            self.assertTrue(build.relocatable_postgres_layout(pg))          # again: nothing changes
+        self.assertTrue((pg / "bin").is_symlink())
+        self.assertTrue((pg / "bin" / "pg_config").is_file())            # what the app calls still works
+        self.assertTrue((pg / "lib" / "postgresql" / "18" / "bin" / "pg_config").is_file())
+        self.assertTrue((pg / "lib" / "postgresql" / "18" / "lib" / "plpgsql.so").is_file())
+        self.assertTrue((pg / "share" / "postgresql" / "18" / "postgres.bki").is_file())
+        self.assertTrue((pg / "share" / "postgresql" / "18" / "extension").is_dir())

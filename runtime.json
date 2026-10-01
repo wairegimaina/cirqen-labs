@@ -1,7 +1,7 @@
 {
   "_comment": "What a code update can't change on an installed PC. Changing any of these, requirements.txt or main.py gives a new runtime id (runtime_id.py), and PCs then get the full app (build.py --publish) instead of a code package. Bump 'build' to force that for any other reason.",
   "python": "3.14",
-  "postgres": "16.1",
-  "redis": "7.2.3",
+  "postgres": "18",
+  "redis": "8",
   "build": 1
 }

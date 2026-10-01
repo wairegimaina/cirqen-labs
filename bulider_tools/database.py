@@ -531,6 +531,9 @@ class FirstRunSetup(QObject):
 
         except Exception as e:
             logger.error(f"âŒ Database initialization failed: {e}")
+            detail = (getattr(e, "stderr", "") or getattr(e, "stdout", "") or "").strip()
+            if detail:
+                logger.error(f"   PostgreSQL said: {detail[-1500:]}")
             import traceback
             logger.error(traceback.format_exc())
             return False

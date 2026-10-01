@@ -453,12 +453,18 @@ def copy_system_postgresql():
     # STEP 2: DETERMINE POSTGRESQL VERSION
     # ========================================================================
     if system_pg.name == "postgresql":
-        # Debian/Ubuntu style: /usr/lib/postgresql/14/
-        pg_versions = sorted([d for d in system_pg.iterdir() if d.is_dir()], reverse=True)
-        if not pg_versions:
-            logger.error(f"❌ No PostgreSQL versions found in {system_pg}")
+        # Debian/Ubuntu style: /usr/lib/postgresql/<major>/. The major must be
+        # the one runtime.json declares: PCs' databases were created with it,
+        # and another major can't open them.
+        import runtime_id
+
+        major = str(runtime_id.declared(PROJECT_ROOT).get("postgres", "")).split(".")[0]
+        latest_pg = system_pg / major if major else None
+        if latest_pg is None or not latest_pg.is_dir():
+            found = sorted(d.name for d in system_pg.iterdir() if d.is_dir())
+            logger.error(f"❌ PostgreSQL {major} is needed (runtime.json); found: {', '.join(found) or 'none'}. "
+                         f"Install postgresql-{major} (apt.postgresql.org has it for every Ubuntu).")
             return False
-        latest_pg = pg_versions[0]
         pg_version = latest_pg.name
     else:
         # RHEL/CentOS style: /usr/pgsql-16/
@@ -934,6 +940,130 @@ def setup_redis():
     logger.warning("⚠️ Redis setup incomplete")
     logger.warning("The application may have caching issues")
     return True  # Don't fail build
+
+# glibc and the C++ runtime come from the PC: they are backward compatible and
+# must match its kernel/loader. Everything else the bundled databases link to
+# is shipped with them (bundle_native_libs).
+SYSTEM_LIBS = ("linux-vdso", "ld-linux", "libc.so", "libm.so", "libdl.so", "libpthread.so", "librt.so",
+               "libresolv.so", "libutil.so", "libanl.so", "libnsl.so", "libstdc++.so", "libgcc_s.so")
+
+
+def _elf_files(paths):
+    for path in paths:
+        try:
+            with open(path, "rb") as fh:
+                if fh.read(4) == b"\x7fELF":
+                    yield path
+        except OSError:
+            continue
+
+
+def relocatable_postgres_layout(pg: Path) -> bool:
+    """Arrange a Debian/Ubuntu PostgreSQL so it finds its own files.
+
+    Ubuntu's build has its share dir compiled in as /usr/share/postgresql/<N>.
+    PostgreSQL only finds share files relative to itself when its binaries sit
+    under the same tail as compiled (lib/postgresql/<N>/bin, share next to
+    lib); otherwise it reads the system's, and a PC without PostgreSQL
+    installed can't even create its database ("postgres.bki does not
+    exist"). So:
+        runtime/postgresql/lib/postgresql/<N>/{bin,lib}
+        runtime/postgresql/share/postgresql/<N>/...
+        runtime/postgresql/bin -> lib/postgresql/<N>/bin   (what the app calls)
+    Safe to run again; other builds (no Debian paths) are left as they are.
+    """
+    bin_dir = pg / "bin"
+    if not IS_LINUX or bin_dir.is_symlink() or not (bin_dir / "pg_config").is_file():
+        return True
+    out = subprocess.run([str(bin_dir / "pg_config"), "--sharedir"], capture_output=True, text=True,
+                         env={**os.environ, "LD_LIBRARY_PATH": str(RUNTIME_DIR / "native-libs")})
+    sharedir = out.stdout.strip()
+    if not sharedir.startswith("/usr/share/postgresql/"):
+        return True
+    major = Path(sharedir).name
+    real = pg / "lib" / "postgresql" / major
+    (real / "lib").mkdir(parents=True, exist_ok=True)
+    shutil.move(str(bin_dir), str(real / "bin"))
+    for item in list((pg / "lib").iterdir()):
+        if item.name != "postgresql":
+            shutil.move(str(item), str(real / "lib" / item.name))
+    share = pg / "share"
+    target_share = share / "postgresql" / major
+    target_share.mkdir(parents=True, exist_ok=True)
+    for item in list(share.iterdir()):
+        if item.name != "postgresql":
+            shutil.move(str(item), str(target_share / item.name))
+    bin_dir.symlink_to(Path("lib") / "postgresql" / major / "bin")
+    logger.info(f"✅ PostgreSQL {major} laid out to find its own files (share: {target_share.relative_to(pg)})")
+    return True
+
+
+def bundle_native_libs():
+    """Ship the shared libraries the embedded PostgreSQL and Redis link to
+    (ICU, OpenSSL, Kerberos, LDAP, systemd...) inside runtime/native-libs, and
+    point the binaries at them (patchelf RUNPATH). Otherwise they load the
+    build machine's versions from the PC, which a different Ubuntu doesn't
+    have (e.g. ICU 78 on 26.04, 74 on 24.04) and PostgreSQL won't start."""
+    if not IS_LINUX:
+        return True
+    print_banner("Bundling native libraries for PostgreSQL and Redis")
+    if not relocatable_postgres_layout(RUNTIME_DIR / "postgresql"):
+        return False
+    if not shutil.which("patchelf"):
+        if os.getenv("CIRQEN_REQUIRE_NATIVE_BUNDLE") == "1":
+            logger.error("❌ patchelf is needed (sudo apt install patchelf)")
+            return False
+        logger.warning("⚠️  patchelf not installed: PostgreSQL/Redis keep using this machine's libraries, so "
+                       "this build runs only on this Ubuntu release. build_deb.py builds the portable one.")
+        return True
+    native = RUNTIME_DIR / "native-libs"
+    native.mkdir(parents=True, exist_ok=True)
+    pg = RUNTIME_DIR / "postgresql"
+
+    def runpath(path: Path) -> str:
+        # Every bundled binary and plugin finds the libraries next to it and
+        # in runtime/native-libs, wherever the app is installed.
+        return f"$ORIGIN:$ORIGIN/{os.path.relpath(native, path.parent)}"
+
+    files = [p for p in pg.rglob("*") if p.is_file() and not p.is_symlink()]
+    targets = {path: runpath(path) for path in _elf_files(sorted(files))}
+    for path in _elf_files([RUNTIME_DIR / "redis" / "redis-server"]):
+        targets[path] = runpath(path)
+    if not targets:
+        logger.warning("⚠️  No PostgreSQL/Redis binaries to bundle libraries for")
+        return True
+    pg_libs = ":".join(sorted({str(p.parent) for p in targets if ".so" in p.name}))
+    env = {**os.environ, "LD_LIBRARY_PATH": f"{pg_libs}:{native}"}
+    copied = set()
+    for path in targets:
+        out = subprocess.run(["ldd", str(path)], capture_output=True, text=True, env=env).stdout
+        for line in out.splitlines():
+            parts = line.split("=>")
+            if len(parts) != 2 or "not found" in parts[1]:
+                if "not found" in line:
+                    logger.error(f"❌ {path.name}: {line.strip()}")
+                    return False
+                continue
+            name, resolved = parts[0].strip(), parts[1].split("(")[0].strip()
+            if not resolved or any(name.startswith(prefix) for prefix in SYSTEM_LIBS):
+                continue
+            src = Path(resolved)
+            if src.parent == native or pg in src.parents or name in copied:
+                continue
+            shutil.copy2(src.resolve(), native / name)
+            copied.add(name)
+    for lib in _elf_files(sorted(native.glob("*.so*"))):
+        lib.chmod(0o755)
+        subprocess.run(["patchelf", "--set-rpath", "$ORIGIN", str(lib)], check=True)
+    for path, rpath in targets.items():
+        mode = path.stat().st_mode
+        path.chmod(mode | 0o200)
+        subprocess.run(["patchelf", "--set-rpath", rpath, str(path)], check=True)
+        path.chmod(mode)
+    logger.info(f"✅ {len(copied)} libraries bundled in runtime/native-libs; "
+                f"{len(targets)} binaries point at them")
+    return True
+
 
 def check_requirements():
     """Check requirements with detailed logging"""
@@ -2787,7 +2917,9 @@ def copy_runtime_to_dist():
             shutil.rmtree(dest_pg)
 
         logger.info("  Copying files...")
-        shutil.copytree(src_pg, dest_pg, symlinks=False)
+        # symlinks=True: runtime/postgresql/bin is a link into the relocatable
+        # layout (relocatable_postgres_layout); copying through it would undo that.
+        shutil.copytree(src_pg, dest_pg, symlinks=True)
 
         # Count files
         file_count = sum(1 for _ in dest_pg.rglob('*') if _.is_file())
@@ -2842,6 +2974,17 @@ def copy_runtime_to_dist():
     else:
         logger.warning("⚠️ Redis source directory not found!")
         logger.warning("  Caching may not work properly!")
+
+    # The libraries the databases link to (bundle_native_libs); their RUNPATH
+    # points at runtime/native-libs, so it must sit next to them.
+    src_native = RUNTIME_DIR / "native-libs"
+    if src_native.is_dir():
+        dest_native = dist_runtime / "native-libs"
+        shutil.rmtree(dest_native, ignore_errors=True)
+        shutil.copytree(src_native, dest_native, symlinks=False)
+        count = sum(1 for _ in dest_native.iterdir())
+        logger.info(f"  ✅ Copied {count} bundled native libraries")
+        copied_items.append(f"Native libraries ({count})")
 
     # Verify
     print("\n📋 Runtime Copy Summary:")
@@ -4249,6 +4392,7 @@ def main():
         ("Create Resources", create_resources),
         ("Setup PostgreSQL", setup_postgresql),
         ("Setup Redis", setup_redis),
+        ("Bundle Native Libraries", bundle_native_libs),
         ("Install Dependencies", install_dependencies),
         ("Verify Installation", verify_requirements),
         ("Collect Static Files", collect_static),

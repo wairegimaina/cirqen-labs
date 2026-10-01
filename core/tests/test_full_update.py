@@ -58,11 +58,10 @@ class RuntimeIdTests(TestCase):
             (root / "_internal" / runtime_id.STAMP_FILE).write_text("abc\n")
             self.assertEqual(runtime_id.installed(root), "abc")
 
-    def test_the_repo_declares_the_python_and_databases_build_py_bundles(self):
+    def test_the_repo_declares_the_databases_the_pcs_run(self):
+        # Pilot PCs' databases are PostgreSQL 18; another major can't open them.
         declared = runtime_id.declared(ROOT)
-        build_source = (ROOT / "build.py").read_text()
-        self.assertIn(f"postgresql-{declared['postgres']}", build_source)
-        self.assertIn(f"redis-{declared['redis']}", build_source)
+        self.assertEqual((declared["postgres"], declared["redis"]), ("18", "8"))
 
 
 class PrepareTests(TestCase):
