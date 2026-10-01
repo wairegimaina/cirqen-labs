@@ -43,7 +43,7 @@
   </section>
 
   <section class="pc-card">
-    <h2>Approved ({{ approved|length }})</h2>
+    <h2>Approved ({{ approved|length }}{% if limit %} of the {{ limit }} your licence allows{% endif %})</h2>
     <table class="pc-table"><thead><tr><th>Computer</th><th>Joined</th><th></th></tr></thead><tbody>
       {% for d in approved %}<tr><td>{{ d.device_name|default:d.device_id }}{% if d.device_id == this_pc %} <span class="pc-this">(this computer)</span>{% endif %}</td>
         <td>{{ d.joined }}</td>

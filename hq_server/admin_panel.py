@@ -171,6 +171,7 @@ async def fetch_health(hospital: dict) -> dict:
             "identity": checks.get("identity"),
             "prefix": checks.get("certificate_prefix"),
             "shared_key": checks.get("shared_sync_key") if isinstance(checks.get("shared_sync_key"), dict) else None,
+            "computers": checks.get("computers") if isinstance(checks.get("computers"), dict) else None,
             "sse": (checks.get("sse_clients") or {}).get("active") if isinstance(checks.get("sse_clients"), dict)
             else None,
         }

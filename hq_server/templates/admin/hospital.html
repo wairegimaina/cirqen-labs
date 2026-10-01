@@ -92,6 +92,11 @@
   {% if licence %}
   <dl>
     <dt>Plan</dt><dd>{{ licence.plan }}, up to {{ licence.devices }} PCs</dd>
+    {% set pcs = health.computers %}
+    <dt>PCs in use</dt><dd>{% if pcs %}{{ pcs.in_use }}{% if pcs.limit %} of {{ pcs.limit }}{% endif %}{% if pcs.waiting %}, {{ pcs.waiting }} waiting for the HOD{% endif %}
+      {% if pcs.limit and pcs.in_use >= pcs.limit %} <span class="pill bad">at the limit</span>{% endif %}
+      {% if pcs.limit and pcs.limit != licence.devices %} <span class="pill bad">HQ has {{ pcs.limit }}, not yet the new limit</span>{% endif %}
+      {% else %}—{% endif %}</dd>
     <dt>Valid</dt><dd>{{ licence.starts_on }} to <strong>{{ licence.ends_on }}</strong> (+{{ licence.grace_days }} days grace)</dd>
     <dt>Its PCs show</dt><dd><span class="pill {{ 'ok' if licence_state == 'active' else ('bad' if 'read-only' in licence_state else 'suspended') }}">{{ licence_state }}</span></dd>
   </dl>
