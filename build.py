@@ -3253,6 +3253,12 @@ def stamp_runtime_id():
         return False
     target.write_text(value + "\n")
     print(f"✅ Runtime id {value} stamped ({target.relative_to(DIST_DIR)})")
+    # stamp_version_txt runs before PyInstaller, which empties dist/Cirqen:
+    # put the version back, where the updater and the full-app check read it.
+    version = read_build_version()
+    for path in (DIST_DIR / "Cirqen" / "version.txt", target.parent / "version.txt"):
+        path.write_text(version)
+    print(f"✅ version.txt {version} in the app")
     return True
 
 

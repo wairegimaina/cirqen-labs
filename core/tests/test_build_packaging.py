@@ -88,3 +88,13 @@ class PackagingTests(unittest.TestCase):
         path.write_text("{not json")
         with self.assertRaisesRegex(ValueError, "cannot read"):
             build.load_panel_provisioning(path)
+
+    def test_the_stamp_step_puts_the_runtime_id_and_version_into_the_app(self):
+        (self.dist / "Cirqen" / "_internal").mkdir()
+        (self.root / "runtime.json").write_text('{"python": "3.14"}')
+        (self.root / "requirements.txt").write_text("django\n")
+        self.assertTrue(build.stamp_runtime_id())
+        internal = self.dist / "Cirqen" / "_internal"
+        self.assertEqual((internal / "version.txt").read_text(), "1.6.0")
+        self.assertEqual((self.dist / "Cirqen" / "version.txt").read_text(), "1.6.0")
+        self.assertEqual(len((internal / "runtime_id.txt").read_text().strip()), 16)
