@@ -372,7 +372,7 @@ class FirstRunSetup(QObject):
             # ====================================================================
             logger.info("Starting PostgreSQL temporarily to create users...")
 
-            log_file = open(self.pg_logs / 'postgres_init.log', 'w')
+            (self.pg_logs / 'postgres_init.log').write_text('')
 
             # Set up environment
             env = os.environ.copy()
@@ -380,12 +380,12 @@ class FirstRunSetup(QObject):
                 current_ld = env.get('LD_LIBRARY_PATH', '')
                 env['LD_LIBRARY_PATH'] = f"{pg_lib}:{current_ld}" if current_ld else str(pg_lib)
 
-            pg_process = subprocess.Popen(
-                [str(postgres_bin), '-D', str(self.pg_data), '-k', str(self.pg_data)],
-                stdout=log_file,
-                stderr=log_file,
-                env=env
-            )
+            # pg_process.start: on Windows with admin rights, through pg_ctl.
+            from .pg_process import start as start_pg_server
+
+            pg_process, log_file = start_pg_server(
+                postgres_bin, self.pg_data, ['-k', str(self.pg_data)],
+                self.pg_logs / 'postgres_init.log', env)
 
             # Wait for PostgreSQL to be ready
             logger.info("Waiting for PostgreSQL to start...")
@@ -415,7 +415,8 @@ class FirstRunSetup(QObject):
                 logger.error("âŒ PostgreSQL failed to start for user creation")
                 pg_process.terminate()
                 pg_process.wait()
-                log_file.close()
+                if log_file:
+                    log_file.close()
 
                 # Show log
                 try:
@@ -473,7 +474,8 @@ class FirstRunSetup(QObject):
                 logger.error(f"Failed to create user: {e}")
                 pg_process.terminate()
                 pg_process.wait()
-                log_file.close()
+                if log_file:
+                    log_file.close()
                 return False
 
             # ====================================================================
@@ -527,7 +529,8 @@ class FirstRunSetup(QObject):
                 pg_process.kill()
                 pg_process.wait()
 
-            log_file.close()
+            if log_file:
+                log_file.close()
             time.sleep(2)
 
             logger.info("âœ… Database initialization complete")
@@ -550,14 +553,12 @@ class FirstRunSetup(QObject):
             else:
                 pg_bin = self.pg_dir / 'bin' / 'postgres'
 
-            log_file = open(self.pg_logs / 'postgres_setup.log', 'a')
             port = self.db_config['port']
+            from .pg_process import start as start_pg_server
 
-            process = subprocess.Popen(
-                [str(pg_bin), '-D', str(self.pg_data), '-p', str(port), '-k', str(self.pg_data)],
-                stdout=log_file,
-                stderr=log_file
-            )
+            process, _log = start_pg_server(
+                pg_bin, self.pg_data, ['-p', str(port), '-k', str(self.pg_data)],
+                self.pg_logs / 'postgres_setup.log')
 
             # Wait for ready
             for i in range(40):

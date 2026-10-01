@@ -698,11 +698,11 @@ class ServiceManager(QObject):
             env['LD_LIBRARY_PATH'] = f"{pg_lib}:{ld}" if ld else str(pg_lib)
 
         rotate_log_if_large(pg_log)
-        log_fh = open(pg_log, 'a')
-        process = subprocess.Popen(
-            [str(pg_bin), '-D', str(pg_data), '-p', str(port), '-k', str(pg_data)],
-            stdout=log_fh, stderr=log_fh, env=env
-        )
+        # On Windows with admin rights postgres.exe refuses to run; pg_ctl
+        # starts it with a restricted token (pg_process.py).
+        from .pg_process import start as start_pg_server
+
+        process, log_fh = start_pg_server(pg_bin, pg_data, ['-p', str(port), '-k', str(pg_data)], pg_log, env)
         self.processes.append(('postgres_local', process, log_fh))
         logger.info(f"[PG] Process started (PID {process.pid}), waiting for ready...")
 
