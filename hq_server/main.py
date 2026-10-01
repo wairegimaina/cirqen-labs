@@ -259,6 +259,33 @@ def enrollment_status(hospital: str, token_id: str):
     return {"document": document, "signature": signature}
 
 
+@app.get("/api/hq/{hospital}/settings")
+def hq_settings(hospital: str):
+    """Settings a hospital's HQ takes from the admin panel instead of from its
+    Render environment. Signed and naming the hospital, so the HQ can trust it
+    (hospital_identity.fetch_hq_settings on the HQ)."""
+    import base64
+    import json as _json
+
+    import control_store
+    import hq_certificates
+
+    code = hospital.strip().upper()
+    h = control_store.get_hospital(code) if control_store.available() else None
+    if h is None:
+        raise HTTPException(status_code=404, detail="unknown hospital")
+    try:
+        key = hq_certificates._signing_key(None)
+    except SystemExit:
+        raise HTTPException(status_code=503, detail="no signing key") from None
+    document = _json.dumps({"type": "cirqen-hq-settings", "hospital": code,
+                            "shared_sync_key": "retired" if h.get("shared_key_retired_at") else "accepted",
+                            "issued_at": datetime.now(timezone.utc).isoformat()},
+                           sort_keys=True, separators=(",", ":"))
+    signature = base64.b64encode(key.sign(b"cirqen-hq-settings-v1\n" + document.encode())).decode()
+    return {"document": document, "signature": signature}
+
+
 # ── M-Pesa (Daraja C2B): payments arriving by themselves (mpesa.py) ───────────
 
 def _caller_ip(request: Request) -> str:

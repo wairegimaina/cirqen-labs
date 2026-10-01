@@ -52,6 +52,23 @@ class ComputersPageTests(TestCase):
         self.assertTrue(call.args[1].endswith("/devices/approve"))
         self.assertEqual(call.kwargs["json"]["device_id"], "pc-ward")
 
+    def test_pcs_still_on_the_old_shared_key_are_listed(self):
+        devices = {"devices": [], "on_shared_key": [{"client_id": "pc-lab", "last_used": "2026-10-01T07:00:00+00:00"}]}
+        with mock.patch("requests.request", return_value=reply(devices)):
+            page = self.client.get("/settings/computers/")
+        self.assertContains(page, "Still on the old shared key (1)")
+        self.assertContains(page, "pc-lab")
+
+    def test_a_key_swapped_by_the_sync_agent_is_used_without_a_restart(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config_file = Path(tmp) / "config.json"
+            config_file.write_text(json.dumps({"sync": {"auth_token": "own-key"}}))
+            config = mock.Mock(get=mock.Mock(return_value="CH0001"), config_file=config_file)
+            with override_settings(CIRQEN_CONFIG=config), \
+                    mock.patch("requests.request", return_value=reply({"devices": []})) as req:
+                self.client.get("/settings/computers/")
+        self.assertEqual(req.call_args.kwargs["headers"]["X-API-Key"], "own-key")   # not settings' "k"
+
 
 class WaitingNoticeTests(TestCase):
     def test_a_waiting_pc_says_so_on_every_page(self):

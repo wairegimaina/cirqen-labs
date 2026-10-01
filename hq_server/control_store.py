@@ -259,6 +259,7 @@ ADDED_COLUMNS = [
     ("hospitals", "profile", "TEXT NOT NULL DEFAULT '{}'"),            # modules + labels (profiles.py)
     ("hospitals", "profile_version", "INTEGER NOT NULL DEFAULT 0"),    # 0: no profile published
     ("enrollment_tokens", "revoked_at", "TEXT"),                      # set: its PCs can no longer join
+    ("hospitals", "shared_key_retired_at", "TEXT"),                    # set: its HQ refuses the old shared sync key
 ]
 
 
@@ -299,7 +300,7 @@ def audit_entries(limit: int = 200, target: str | None = None) -> list[dict]:
 
 HOSPITAL_FIELDS = ("name", "county", "hod_name", "hod_email", "hod_phone", "sync_url", "fallbacks",
                    "updates_url", "cert_prefix", "status", "notes", "release_mode", "release_version",
-                   "profile", "profile_version")
+                   "profile", "profile_version", "shared_key_retired_at")
 
 
 def _hospital(row) -> dict | None:

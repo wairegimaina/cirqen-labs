@@ -53,5 +53,15 @@
     </tbody></table>
     <p class="pc-help">A removed computer stops syncing at once. Its own copy of the records stays on it until it is uninstalled.</p>
   </section>
+
+  {% if old_key %}
+  <section class="pc-card">
+    <h2>Still on the old shared key ({{ old_key|length }})</h2>
+    <table class="pc-table"><thead><tr><th>Computer</th><th>Last seen</th></tr></thead><tbody>
+      {% for d in old_key %}<tr><td>{{ d.client_id }}</td><td>{{ d.seen }}</td></tr>{% endfor %}
+    </tbody></table>
+    <p class="pc-help">These computers were installed before each one had its own key. Each swaps to its own key by itself the next time Cirqen starts on it after an update. Open Cirqen on each one, so Cirqen can stop accepting the old key.</p>
+  </section>
+  {% endif %}
 </div>
 {% endblock %}

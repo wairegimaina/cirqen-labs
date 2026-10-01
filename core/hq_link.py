@@ -75,6 +75,24 @@ def _hospital_code():
         return ""
 
 
+def sync_key():
+    """This PC's sync key. If the sync agent swapped the old shared key for
+    this PC's own after the app started (sync/enrollment.py), config.json
+    holds the new one: use it without waiting for a restart."""
+    startup = getattr(settings, "SYNC_AUTH_TOKEN", "") or ""
+    config = getattr(settings, "CIRQEN_CONFIG", None)
+    path = getattr(config, "config_file", None)
+    if isinstance(path, (str, Path)):
+        try:
+            with open(path) as fh:
+                on_disk = str(((json.load(fh) or {}).get("sync") or {}).get("auth_token") or "").strip()
+            if on_disk and on_disk != (config.get("sync.auth_token") or ""):
+                return on_disk
+        except (OSError, ValueError, AttributeError):
+            pass
+    return startup
+
+
 def _hq_confirmed(api_url, code):
     """With a hospital code, push only to an HQ that passed the hospital
     handshake (hq_handshake.py) in the last few hours, as the agent does."""
@@ -242,7 +260,7 @@ def push_events(events):
     }
     if code:
         headers["X-Cirqen-Hospital"] = code   # HQ refuses (409) if it is another hospital's
-    token = getattr(settings, "SYNC_AUTH_TOKEN", None)
+    token = sync_key()
     if token:
         headers["X-API-Key"] = token
 

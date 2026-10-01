@@ -1059,6 +1059,16 @@ class CirqenConfig:
                 return default
         return value
 
+    def replace_secret(self, dotted: str, value: str):
+        """Store a new secret in config.json even if the environment supplied
+        the old one (e.g. the sync key swapped by sync/enrollment.rekey), and
+        put it in this process's environment so child processes get it too."""
+        getattr(self, "_env_secret_keys", set()).discard(dotted)
+        env_name = self.SECRET_ENV.get(dotted)
+        if env_name:
+            os.environ[env_name] = value
+        self.set(dotted, value)
+
     def set(self, key_path: str, value):
         """Write a value using dot notation and persist to config.json."""
         if key_path in HQ_ENDPOINT_DEFAULTS:

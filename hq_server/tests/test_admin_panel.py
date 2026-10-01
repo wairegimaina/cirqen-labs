@@ -583,3 +583,38 @@ def test_revoking_an_installer_is_what_its_hq_is_told(owner, control_key, tmp_pa
     assert client.get(f"/admin/hospitals/CH0001/installers/{token_id}/provisioning.json").status_code == 404
     assert server.get(f"/api/hq/CH0002/enrollment/{token_id}/status").status_code == 404   # another hospital
     assert cs.audit_entries(target="CH0001")[0]["action"] == "installer_revoked"
+
+
+def test_retiring_the_shared_key_is_what_its_hq_is_told(owner, control_key, tmp_path, monkeypatch):
+    client, _ = owner
+    add_hospital(client)
+    monkeypatch.setenv("HQ_PACKAGES_DIR", str(tmp_path / "packages"))
+    import main
+
+    server = TestClient(main.app)
+
+    def settings(code="CH0001"):
+        answer = server.get(f"/api/hq/{code}/settings").json()
+        control_key.public_key().verify(base64.b64decode(answer["signature"]),
+                                        b"cirqen-hq-settings-v1\n" + answer["document"].encode())
+        return json.loads(answer["document"])
+
+    first = settings()
+    assert (first["type"], first["hospital"], first["shared_sync_key"]) == ("cirqen-hq-settings", "CH0001", "accepted")
+    token = csrf(client, "/admin/hospitals/CH0001")
+    client.post("/admin/hospitals/CH0001/shared-key", data={"csrf": token, "action": "retire"})
+    assert settings()["shared_sync_key"] == "retired"
+    assert "retired" in client.get("/admin/hospitals/CH0001").text
+    client.post("/admin/hospitals/CH0001/shared-key", data={"csrf": token, "action": "accept"})
+    assert settings()["shared_sync_key"] == "accepted"
+    assert [e["action"] for e in cs.audit_entries(target="CH0001")[:2]] == ["shared_key_accepted", "shared_key_retired"]
+    assert server.get("/api/hq/CH0002/settings").status_code == 404
+
+
+def test_finance_cannot_retire_the_shared_key(app, clock, owner):
+    client, _ = owner
+    add_hospital(client)
+    other = sign_in(app, clock, "fin", make_admin("fin", "finance"))
+    other.post("/admin/hospitals/CH0001/shared-key", data={"csrf": csrf(other, "/admin/hospitals/CH0001"),
+                                                          "action": "retire"})
+    assert cs.get_hospital("CH0001")["shared_key_retired_at"] is None
