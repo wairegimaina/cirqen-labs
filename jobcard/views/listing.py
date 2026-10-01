@@ -1,5 +1,4 @@
 """jobcard.views — waiting/approved/declined and HOD job-card list views."""
-from locale import D_T_FMT
 from uuid import UUID
 import zipfile
 from django.utils.timezone import now

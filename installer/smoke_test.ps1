@@ -13,6 +13,7 @@ $shortcut = Join-Path ([Environment]::GetFolderPath("Programs")) "Cirqen.lnk"
 Write-Host "Start menu shortcut: $(Test-Path $shortcut)"
 
 $env:CIRQEN_UNATTENDED = "1"          # no one is here to click OK
+$env:CIRQEN_LOG_LEVEL = "INFO"         # the full story in cirqen_app.log if it fails
 $proc = Start-Process $app -WorkingDirectory (Split-Path $app) -PassThru
 $started = $false
 for ($i = 0; $i -lt 180; $i++) {
@@ -37,7 +38,7 @@ if ($started) {
 }
 
 if (-not ($started -and $pong)) {
-    foreach ($log in "launcher.log", "cirqen_app.log", "django.log", "postgres.log", "postgres_init.log", "redis.log", "celery.log") {
+    foreach ($log in "launcher.log", "cirqen_app.log", "postgres_setup.log", "django.log", "postgres.log", "postgres_init.log", "redis.log", "celery.log") {
         $path = Join-Path $data "logs\$log"
         if (Test-Path $path) { Write-Host "--- $log"; Get-Content $path -Tail 40 }
     }

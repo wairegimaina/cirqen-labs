@@ -1,5 +1,4 @@
 """jobcard.views — single and bulk docx/pdf downloads."""
-from locale import D_T_FMT
 from uuid import UUID
 import zipfile
 from django.utils.timezone import now

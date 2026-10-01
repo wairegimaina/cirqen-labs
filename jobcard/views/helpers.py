@@ -1,5 +1,4 @@
 """jobcard.views — shared context, signature, docx, filtering and stock helpers."""
-from locale import D_T_FMT
 from uuid import UUID
 import zipfile
 from django.utils.timezone import now

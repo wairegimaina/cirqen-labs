@@ -39,11 +39,14 @@ class PgCtlServer:
         quoted = " ".join(f'"{o}"' if " " in o else o for o in options)
         # Without -w pg_ctl returns once the server is launched; callers wait
         # for it to accept connections themselves, as with postgres directly.
+        # No pipes: the server pg_ctl starts inherits them and keeps them open
+        # while it runs, so reading pg_ctl's output (even with a timeout) never
+        # returns on Windows. The server's own messages go to log_path (-l).
         result = subprocess.run([self.pg_ctl, "start", "-D", self.data_dir, "-o", quoted, "-l", str(log_path)],
-                                capture_output=True, text=True, env=env, timeout=60)
+                                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL, env=env)
         if result.returncode != 0:
             self.returncode = result.returncode
-            Path(log_path).open("a").write(f"pg_ctl start failed: {result.stdout}{result.stderr}\n")
 
     @property
     def pid(self) -> int:
@@ -65,8 +68,17 @@ class PgCtlServer:
         return self.returncode
 
     def _stop(self, mode: str) -> None:
-        subprocess.run([self.pg_ctl, "stop", "-D", self.data_dir, "-m", mode, "-w", "-t", "30"],
-                       capture_output=True, env=self.env)
+        result = subprocess.run([self.pg_ctl, "stop", "-D", self.data_dir, "-m", mode, "-w", "-t", "30"],
+                                capture_output=True, text=True, env=self.env)
+        if result.returncode != 0 and self._running():
+            # pg_ctl couldn't stop it: end the server process itself.
+            try:
+                import psutil
+
+                if self.pid:
+                    psutil.Process(self.pid).kill()
+            except Exception:  # noqa: BLE001
+                pass
         self.returncode = 0
 
     def terminate(self) -> None:
@@ -76,9 +88,11 @@ class PgCtlServer:
         self._stop("immediate")
 
     def wait(self, timeout=None):
-        deadline = None if timeout is None else time.monotonic() + timeout
+        # Never wait forever on a server that won't stop (callers expect wait()
+        # to return after terminate()/kill()).
+        deadline = time.monotonic() + (60 if timeout is None else timeout)
         while self._running():
-            if deadline is not None and time.monotonic() > deadline:
+            if time.monotonic() > deadline:
                 raise subprocess.TimeoutExpired(self.pg_ctl, timeout)
             time.sleep(0.5)
         self.returncode = 0 if self.returncode is None else self.returncode

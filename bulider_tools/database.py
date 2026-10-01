@@ -100,23 +100,30 @@ class FirstRunSetup(QObject):
                 self.setup_complete.emit(False, "Failed to create HOD user")
                 return
 
-            # Step 8: Install systemd service (first-run, built-in)
-            self.progress_update.emit("Installing PostgreSQL service...", 88)
-            self.log_message.emit("Installing persistent systemd service...")
-            try:
-                _pgd = self.runtime_dir / 'postgresql'
-                _svc = PostgresSystemdManager(
-                    port      = self.port_manager.get_port('postgresql_local'),
-                    pg_binary = _pgd / 'bin' / 'postgres',
-                    pg_data   = self.pg_data,
-                    pg_lib    = _pgd / 'lib',
-                )
-                if _svc.install():
-                    self.log_message.emit("systemd service installed. PostgreSQL will persist after app close.")
-                else:
-                    self.log_message.emit("systemd service skipped (no root). Stale PID cleanup runs on each start.")
-            except Exception as _e:
-                logger.warning(f"systemd install non-fatal: {_e}")
+            # Step 8: a system service for PostgreSQL, only when asked for
+            # (CIRQEN_SYSTEMD_POSTGRES=1). By default Cirqen runs its own
+            # PostgreSQL: a root-installed unit pointing into the user's app
+            # copy breaks when updates replace that copy, then crash-loops,
+            # holds port 2215 and leaves root-owned logs Cirqen can't write.
+            if os.environ.get('CIRQEN_SYSTEMD_POSTGRES') != '1':
+                logger.info("PostgreSQL system service not installed (Cirqen runs its own)")
+            else:
+                self.progress_update.emit("Installing PostgreSQL service...", 88)
+                self.log_message.emit("Installing persistent systemd service...")
+                try:
+                    _pgd = self.runtime_dir / 'postgresql'
+                    _svc = PostgresSystemdManager(
+                        port      = self.port_manager.get_port('postgresql_local'),
+                        pg_binary = _pgd / 'bin' / 'postgres',
+                        pg_data   = self.pg_data,
+                        pg_lib    = _pgd / 'lib',
+                    )
+                    if _svc.install():
+                        self.log_message.emit("systemd service installed. PostgreSQL will persist after app close.")
+                    else:
+                        self.log_message.emit("systemd service skipped (no root). Stale PID cleanup runs on each start.")
+                except Exception as _e:
+                    logger.warning(f"systemd install non-fatal: {_e}")
 
             # Step 9: Stop direct PostgreSQL (systemd takes over)
             self.progress_update.emit("Finalizing setup...", 95)
@@ -656,23 +663,34 @@ class FirstRunSetup(QObject):
         logger.info("=" * 60)
         logger.info("RUNNING MIGRATIONS — local database")
         logger.info("=" * 60)
+        # Output to a file, not pipes: anything the child starts would inherit
+        # the pipes and keep them open, and reading them then never ends (on
+        # Windows the timeout can't end it either). logs/migrations.log keeps it.
+        migrations_log = self.pg_logs / 'migrations.log'
+
+        def _tail():
+            try:
+                return migrations_log.read_text(encoding='utf-8', errors='replace')[-3000:]
+            except OSError:
+                return ''
+
         try:
-            result = subprocess.run(
-                [sys.executable, str(manage_py), 'migrate', '--noinput'],
-                capture_output=True, text=True,
-                cwd=str(APPLICATION_PATH), env=base_env,
-                check=True, timeout=300,
-            )
+            with open(migrations_log, 'w', encoding='utf-8') as out:
+                subprocess.run(
+                    [sys.executable, str(manage_py), 'migrate', '--noinput'],
+                    stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT,
+                    cwd=str(APPLICATION_PATH), env=base_env,
+                    check=True, timeout=300,
+                )
             logger.info("Local migrations completed")
-            if result.stdout:
-                logger.debug(f"Output:\n{result.stdout}")
+            logger.debug(f"Output:\n{_tail()}")
         except subprocess.CalledProcessError as e:
             logger.error(f"Local migration failed (exit {e.returncode})")
-            logger.error(f"stdout:\n{e.stdout}")
-            logger.error(f"stderr:\n{e.stderr}")
+            logger.error(f"Output:\n{_tail()}")
             return False
         except subprocess.TimeoutExpired:
             logger.error("Local migration timeout (>5 min)")
+            logger.error(f"Output so far:\n{_tail()}")
             return False
         except Exception as e:
             logger.error(f"Local migration error: {e}")
