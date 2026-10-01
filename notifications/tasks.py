@@ -86,3 +86,14 @@ def stock_sweep():
     from .stock import alert_all_missing
 
     return alert_all_missing()
+
+
+@shared_task(name="notifications.tasks.overdue_approval_reminders", ignore_result=True)
+def overdue_approval_reminders():
+    """Hourly on the site sender PC: remind each department's In-Charge of
+    work orders waiting more than 48 hours for review (once a day)."""
+    if not is_site_sender():
+        return 0
+    from .approvals import remind_overdue_approvals
+
+    return remind_overdue_approvals()

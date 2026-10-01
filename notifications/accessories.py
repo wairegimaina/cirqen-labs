@@ -1,8 +1,8 @@
 """Emails about accessory requests (Parts & tools).
 
-    requested            -> the HOD (Deputy HOD copied)
+    requested            -> the HOD
     approved / declined  -> the requester (HOD copied, not the HOD who decided)
-    received             -> the HOD (Deputy HOD copied)
+    received             -> the HOD
 
 Called from the views where each step is taken, after the transaction
 commits, so a step recorded while offline is queued on that PC and sent when

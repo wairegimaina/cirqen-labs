@@ -18,3 +18,14 @@ print('Done')
 python3 manage.py migrate --database=hq
  tail -f ~/.local/share/cirqen/logs/errors.log
 /home/cirqen/.local/share/cirqen/config.json
+check the port "ps -p 55209 -o args="c
+
+
+cd ~/Desktop/cirqen-labs
+export HQ_DATABASE_URL='postgresql://postgres.nwlwaeeyduxroykrgksi@aws-0-eu-north-1.pooler.supabase.com:5432/postgres?sslmode=require'
+venv/bin/python manage.py migrate_hq            # plan only, changes nothing
+3. Check the plan. If any line says STOP, send it to me before going further. If the plan only has apply and fake lines, run:
+venv/bin/python manage.py migrate_hq --apply
+unset HQ_DATABASE_URL
+rnd_syzJwdrPDxIQWZlhlSEF6o88i1Ov
+rnd_LelMg4CWyveBbNP25H0aDbcWUTcU-hq/pai

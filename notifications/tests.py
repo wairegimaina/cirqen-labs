@@ -52,13 +52,13 @@ class CopyRuleTests(Base):
         self.assertEqual(cc_for(self.tech), [self.hod])
         self.assertEqual(cc_for(self.nic), [self.hod])
 
-    def test_hod_mail_copies_the_deputy(self):
-        self.assertEqual(cc_for(self.hod), [self.deputy])
+    def test_hod_mail_copies_nobody(self):
+        self.assertEqual(cc_for(self.hod), [])
 
     def test_nobody_is_both_recipient_and_copy(self):
         to, cc = addresses([self.tech, self.hod])
         self.assertEqual(to, ["n_tech@hospital.test", "n_hod@hospital.test"])
-        self.assertEqual(cc, ["n_deputy@hospital.test"])
+        self.assertEqual(cc, [])
 
     def test_users_without_email_are_skipped(self):
         self.hod.email = ""
@@ -108,10 +108,10 @@ class WorkOrderEventTests(Base):
 @override_settings(**EMAIL)
 class SendingTests(Base):
     def test_sends_with_cc(self):
-        queue("t", "k1", [self.hod], "Hello", "work_order_decided", {"wo": None})
+        queue("t", "k1", [self.tech], "Hello", "work_order_decided", {"wo": None})
         self.assertEqual(send_pending(), (1, 0))
-        self.assertEqual(mail.outbox[0].to, ["n_hod@hospital.test"])
-        self.assertEqual(mail.outbox[0].cc, ["n_deputy@hospital.test"])
+        self.assertEqual(mail.outbox[0].to, ["n_tech@hospital.test"])
+        self.assertEqual(mail.outbox[0].cc, ["n_hod@hospital.test"])
         self.assertEqual(EmailOutbox.objects.get(dedupe_key="k1").status, "sent")
 
     def test_offline_backs_off_and_keeps_the_message(self):
@@ -176,7 +176,7 @@ class DigestTests(Base):
         send_daily_digests()
         digests = EmailOutbox.objects.filter(kind="daily_digest")
         hod_mail = digests.get(to="n_hod@hospital.test")
-        self.assertEqual(hod_mail.cc_list(), ["n_deputy@hospital.test"])
+        self.assertEqual(hod_mail.cc_list(), [])
         self.assertEqual(digests.filter(to="n_tech@hospital.test").count(), 1)
 
 

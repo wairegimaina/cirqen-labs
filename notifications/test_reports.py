@@ -43,13 +43,13 @@ class ReportSubmittedTests(Base):
         self.assertEqual(mime, "application/pdf")
         self.assertTrue(content.startswith(b"%PDF"))
 
-    def test_the_hods_deputy_is_copied_when_someone_else_submits(self):
+    def test_nobody_is_copied_on_the_hods_report(self):
         from notifications.reports import _report_submitted
 
         report = Report.objects.create(workshop=self.workshop, period_type="weekly", period_start=LAST_MONDAY,
                                        remarks="ok", submitted_by=self.tech)
         msg = _report_submitted(report.pk, actor=self.tech)
-        self.assertEqual((msg.to, msg.cc), ("n_hod@hospital.test", "n_deputy@hospital.test"))
+        self.assertEqual((msg.to, msg.cc), ("n_hod@hospital.test", ""))
 
     def test_it_is_sent_once(self):
         from notifications.reports import _report_submitted

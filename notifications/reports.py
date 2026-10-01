@@ -1,6 +1,6 @@
 """Report Hub reports by email.
 
-    submitted  -> the HOD (Deputy HOD copied): one line and the report as a PDF
+    submitted  -> the HOD: one line and the report as a PDF
     Monday     -> the Engineer In-charge, if last week's report is not in yet
 
 This is how the HOD hears about work orders: per-work-order email is off

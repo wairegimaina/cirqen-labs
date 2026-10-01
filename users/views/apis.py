@@ -93,10 +93,6 @@ def api_update_user(request, user_id):
             if data.get("phone"):
                 profile.phone_number = data["phone"]
 
-            # Only an HOD designates the deputy (copied on the HOD's email).
-            if current_profile.role == "HOD" and "isDeputyHod" in data:
-                profile.is_deputy_hod = str(data["isDeputyHod"]).lower() in ("true", "1", "on")
-
             # Reset role-specific fields when role changes
             new_role = profile.role
 
@@ -370,8 +366,7 @@ def api_get_users(request):
                 'createdBy': user_profile.created_by.username if user_profile.created_by else None,
                 'needsSetup': user_profile.needs_first_login_setup(),
                 'hasSignature': user_profile.has_uploaded_signature,
-                'isDeputyHod': user_profile.is_deputy_hod,
-            }
+                }
             users_data.append(user_data)
 
         return JsonResponse({

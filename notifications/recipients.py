@@ -1,8 +1,7 @@
 """Who receives, and who is copied on, each email.
 
-The copy rule (requested by the hospital):
-  * mail to anyone in a workshop or department (Tech, In-Charge) → copy the HOD
-  * mail to the HOD → copy the Deputy HOD (UserProfile.is_deputy_hod)
+The copy rule (requested by the hospital): mail to anyone in a workshop or
+department (Tech, In-Charge) copies the HOD. Mail to the HOD copies nobody.
 """
 from django.contrib.auth import get_user_model
 
@@ -27,10 +26,6 @@ def hods():
     return [p.user for p in _reachable(UserProfile.objects.filter(role='HOD'))]
 
 
-def deputy_hods():
-    return [p.user for p in _reachable(UserProfile.objects.filter(is_deputy_hod=True))]
-
-
 def workshop_staff(workshop):
     """Everyone working in ``workshop`` (with an email address)."""
     return [p.user for p in _reachable(UserProfile.objects.filter(workshop=workshop).exclude(role='HOD'))]
@@ -43,10 +38,9 @@ def department_in_charges(department):
 def cc_for(user):
     """Users to copy on mail addressed to ``user``."""
     profile = getattr(user, 'userprofile', None)
-    if profile is None:
+    if profile is None or profile.role == 'HOD':
         return []
-    copies = deputy_hods() if profile.role == 'HOD' else hods()
-    return [u for u in copies if u.pk != user.pk]
+    return [u for u in hods() if u.pk != user.pk]
 
 
 def addresses(to_users, copy_rule=True, exclude=()):

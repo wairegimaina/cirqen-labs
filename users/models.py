@@ -90,8 +90,8 @@ class UserProfile(models.Model):
         max_length=50, choices=LEVEL_CHOICES, null=True, blank=True,
         help_text="Required for all Tech roles"
     )
-    # Deputy HOD is a designation, not a role: permissions stay with the role.
-    # It decides who is copied on email sent to the HOD (notifications.recipients).
+    # No longer used: nobody is copied on the HOD's email. The column stays
+    # because the table is synced to every desktop.
     is_deputy_hod = models.BooleanField(
         default=False, help_text="Copied on emails sent to the Head of Department"
     )

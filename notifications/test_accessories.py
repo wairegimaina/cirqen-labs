@@ -40,10 +40,10 @@ class AccessoryRequestMailTests(Base):
         with self.captureOnCommitCallbacks(execute=True):
             self.client.post(reverse("partstools:accept_accessory_request", args=[req.pk]))
 
-    def test_a_request_emails_the_hod_copying_the_deputy(self):
+    def test_a_request_emails_the_hod(self):
         req = self._request()
         msg = EmailOutbox.objects.get(kind="accessory_requested")
-        self.assertEqual((msg.to, msg.cc), ("n_hod@hospital.test", "n_deputy@hospital.test"))
+        self.assertEqual((msg.to, msg.cc), ("n_hod@hospital.test", ""))
         self.assertIn("4 × Flow sensor", msg.subject)
         self.assertIn("Two broken", msg.body_text)
         self.assertNotIn("https://cirqen.hospital.test/", msg.body_text)  # no link in request emails

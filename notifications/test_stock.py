@@ -245,7 +245,7 @@ class StockSweepTests(Base):
         self._part(label="Spare Fuse", workshop=None)
         alert_all_missing()
         msg = EmailOutbox.objects.get(kind="stock_low")
-        self.assertEqual((msg.to, msg.cc), ("n_hod@hospital.test", "n_deputy@hospital.test"))
+        self.assertEqual((msg.to, msg.cc), ("n_hod@hospital.test", ""))
         self.assertIn("(no workshop)", msg.subject)
 
     def test_a_workshop_nobody_can_be_emailed_in_goes_to_the_hod(self):

@@ -75,6 +75,13 @@ app.conf.beat_schedule = {
         "schedule": crontab(minute=20),
         "options": {"expires": 3000},
     },
+    # Work orders waiting 48+ hours for the In-Charge's review: one reminder
+    # per department per day (hourly so a PC switched on late still sends it).
+    "notifications-overdue-approval-reminders": {
+        "task": "notifications.tasks.overdue_approval_reminders",
+        "schedule": crontab(minute=25),
+        "options": {"expires": 3000},
+    },
     # Stock ledger: each part's count is the total of its movements, which
     # arrive from other PCs through sync (parts_tools.stock).
     "parts-reconcile-stock": {

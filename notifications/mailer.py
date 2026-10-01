@@ -93,8 +93,8 @@ def queue(kind, dedupe_key, to_users, subject, template, context, in_app_message
 
     ``template`` names ``notifications/<template>.txt`` (required) and
     ``.html`` (optional). ``attachment`` is ``(file name, bytes, mime type)``.
-    ``copy_rule`` applies the hospital's copy rule (staff mail copies the HOD,
-    HOD mail the Deputy HOD). Users in ``exclude`` (usually whoever did the
+    ``copy_rule`` applies the hospital's copy rule (staff mail copies the
+    HOD). Users in ``exclude`` (usually whoever did the
     thing) get neither mail nor bell. Returns the EmailOutbox row, or None
     when nothing was queued (disabled, no addresses, or already queued).
     """
