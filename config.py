@@ -36,7 +36,7 @@ from typing import Dict, Any, Optional
 # describe_endpoints() / resolve_endpoints() report which layer supplied each.
 HQ_ENDPOINT_DEFAULTS = {
     # Sync API and certificate authority (~/Desktop/hq_server, Flask).
-    "sync.api_url": "https://hq-server-dgs6.onrender.com/api/sync",
+    "sync.api_url": "https://hq-server-atu3.onrender.com/api/sync",
     # Update server (cirqen-labs/hq_server, FastAPI). A different service.
     "update.server_url": "https://cirqen-hq.onrender.com",
     # There is no HQ database entry: clients reach HQ through these two

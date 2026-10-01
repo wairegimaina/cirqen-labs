@@ -121,11 +121,18 @@ suites against PostgreSQL on every push.
 ## Releases
 
 1. Bump `version.txt` and `APP_VERSION` in `Equiper/settings.py`.
-2. On the build machine, make sure the secrets / enrollment code are in the
-   environment or `.env` (the build refuses to run without them, or with
-   DEBUG on).
-3. `python build.py` — produces `dist/Cirqen/` and an archive, including the
-   git-ignored `provisioning.json`. Treat the archive as containing credentials.
+2. On the build machine, make sure the update key and local database password
+   are in the environment or `.env` (the build refuses to run without them, or
+   with DEBUG on). No sync key: each PC enrolls and gets its own.
+3. `python build.py` — produces `dist/Cirqen/` and a neutral archive
+   (`Cirqen_linux_v<version>.tar.gz`), the same for every hospital, with no
+   installer file inside.
+   For a hospital: admin panel → its page → Installers → download its
+   `provisioning.json`, then
+   `python build.py --package-only --provisioning provisioning-ch0002.json`.
+   That gives `Cirqen_linux_v<version>_CH0002.tar.gz` with the file inside.
+   It holds an enrollment token: hand it over privately. Files with a shared
+   `sync.auth_token` are refused.
 4. For in-app updates, publish the package through HQ (`hq_server/build_package.py`);
    clients check, snapshot their database, apply, health-check and roll back
    automatically on failure.

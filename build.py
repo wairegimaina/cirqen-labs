@@ -1052,7 +1052,9 @@ def setup_config():
 
         # Hard stops (IMPROVEMENT_PLAN.md 3.3 / 3.4): an installer without its
         # secrets cannot sync, and one with DEBUG on leaks stack traces.
-        missing = config.missing_secrets()
+        # The sync key is not a build secret: each PC enrolls with the
+        # hospital's installer file from the admin panel and gets its own key.
+        missing = [m for m in config.missing_secrets() if not m.startswith("sync.")]
         if missing:
             print("❌ Refusing to build: missing secrets " + ", ".join(missing))
             print("   Provide them via environment variables or the git-ignored .env file.")
@@ -1069,10 +1071,9 @@ def setup_config():
         config.export_to_env_file(env_path)
         print(f"✅ Configuration exported to {env_path}")
 
-        # Secrets travel with the installer in provisioning.json (git-ignored,
-        # copied into dist/Cirqen by package_distribution), never in source.
-        config.export_provisioning(PROJECT_ROOT / 'provisioning.json')
-        print("✅ provisioning.json written (git-ignored)")
+        # No provisioning.json is written here any more: the old one carried a
+        # sync key shared by every PC. Hospital packages get the panel's file
+        # (package_distribution, --provisioning).
 
         # Clean up temp data
         shutil.rmtree(temp_data, ignore_errors=True)
@@ -3203,40 +3204,105 @@ That's it! 🎉
 
     return True
 
+# Set by main() from --provisioning: the hospital's installer file from the
+# admin panel (Hospital page -> Installers -> Download provisioning.json).
+PROVISIONING_FILE = None
+
+
+def load_panel_provisioning(path):
+    """Read and check an installer file from the admin panel.
+
+    Returns (data, hospital_code). Refuses the old build-made format: a
+    sync.auth_token in the file is one key shared by every PC, so a leaked
+    package would be a working key for the whole hospital.
+    """
+    path = Path(path).expanduser()
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, ValueError) as e:
+        raise ValueError(f"cannot read {path}: {e}")
+    sync = data.get("sync") if isinstance(data, dict) else None
+    if not isinstance(sync, dict):
+        raise ValueError(f"{path} has no 'sync' section; download it from the admin panel")
+    if sync.get("auth_token"):
+        raise ValueError(f"{path} contains a shared sync key (sync.auth_token); "
+                         "use an installer file from the admin panel instead")
+    code = str(sync.get("hospital_code") or "").strip()
+    if not code:
+        raise ValueError(f"{path} has no sync.hospital_code")
+    if not sync.get("enrollment_code"):
+        raise ValueError(f"{path} has no sync.enrollment_code (its PCs could not enroll)")
+    return data, code
+
+
+def read_build_version():
+    try:
+        return (PROJECT_ROOT / "version.txt").read_text().strip() or "0.0.0"
+    except OSError:
+        return "0.0.0"
+
+
+def _make_archive(archive_name):
+    fmt, ext = ("zip", ".zip") if IS_WINDOWS else ("gztar", ".tar.gz")
+    shutil.make_archive(str(DIST_DIR / archive_name), fmt, DIST_DIR, "Cirqen")
+    archive_file = DIST_DIR / f"{archive_name}{ext}"
+    print(f"✅ Created: {archive_file.name} ({archive_file.stat().st_size / (1024*1024):.1f} MB)")
+    return archive_file
+
+
 def package_distribution():
-    """Create distribution archive"""
+    """Create the distribution archive.
+
+    Without --provisioning: one neutral archive, the same for every hospital,
+    with no installer file inside. With --provisioning: that hospital's
+    archive, named after its code, carrying its panel file. dist/Cirqen itself
+    is left without a provisioning.json either way, so the next hospital's
+    package can't pick up the previous one's token.
+    """
     print_banner("Packaging Distribution")
 
     dist_dir = DIST_DIR / "Cirqen"
+    if not dist_dir.is_dir():
+        print(f"❌ {dist_dir} not found; run the full build first")
+        return False
 
-    provisioning = PROJECT_ROOT / 'provisioning.json'
-    if provisioning.exists():
-        shutil.copy2(provisioning, dist_dir / 'provisioning.json')
-        print("✅ provisioning.json included in the distribution")
-    else:
-        print("⚠️ provisioning.json not found; clients will need secrets supplied separately")
+    stale = dist_dir / "provisioning.json"
+    if stale.exists():
+        stale.unlink()
+        print("🧹 Removed an old provisioning.json from dist/Cirqen")
 
-    # Calculate size
     total_size = sum(f.stat().st_size for f in dist_dir.rglob('*') if f.is_file())
     print(f"📊 Total size: {total_size / (1024*1024):.1f} MB")
 
-    # Create archive
     platform_name = "windows" if IS_WINDOWS else "linux"
-    archive_name = f"Cirqen_{platform_name}_v1.0.0"
+    archive_name = f"Cirqen_{platform_name}_v{read_build_version()}"
 
-    print(f"📦 Creating archive: {archive_name}...")
+    if not PROVISIONING_FILE:
+        print("ℹ️  No --provisioning file: neutral package, PCs need a hospital's installer file")
+        _make_archive(archive_name)
+        return True
 
-    if IS_WINDOWS:
-        shutil.make_archive(str(DIST_DIR / archive_name), 'zip', DIST_DIR, 'Cirqen')
-        archive_file = DIST_DIR / f"{archive_name}.zip"
-    else:
-        shutil.make_archive(str(DIST_DIR / archive_name), 'gztar', DIST_DIR, 'Cirqen')
-        archive_file = DIST_DIR / f"{archive_name}.tar.gz"
+    try:
+        data, code = load_panel_provisioning(PROVISIONING_FILE)
+    except ValueError as e:
+        print(f"❌ {e}")
+        return False
 
-    archive_size = archive_file.stat().st_size / (1024*1024)
-    print(f"✅ Created: {archive_file.name}")
-    print(f"📊 Archive size: {archive_size:.1f} MB")
-
+    try:
+        stale.write_text(json.dumps(data, indent=2))
+        try:
+            stale.chmod(0o600)
+        except OSError:
+            pass
+        print(f"✅ Installer file for {code} included")
+        archive = _make_archive(f"{archive_name}_{code}")
+    finally:
+        stale.unlink(missing_ok=True)
+    try:
+        archive.chmod(0o600)
+    except OSError:
+        pass
+    print("🔒 This archive holds an enrollment token: hand it over privately")
     return True
 
 def create_build_info():
@@ -4029,9 +4095,31 @@ def main():
     # build_backup.py if a glibc-compatible container build is reinstated.
     parser = argparse.ArgumentParser(
         description="Cirqen Desktop Build System",
-        epilog="Usage: python build.py",
+        epilog=("Usage: python build.py                      neutral build for all hospitals\n"
+                "       python build.py --package-only --provisioning provisioning-ch0002.json\n"
+                "                                            CH0002's package from the existing build"),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.parse_args()
+    parser.add_argument("--provisioning", metavar="FILE",
+                        help="a hospital's installer file from the admin panel; "
+                             "packages the build for that hospital")
+    parser.add_argument("--package-only", action="store_true",
+                        help="skip the build and only package the existing dist/Cirqen")
+    args = parser.parse_args()
+
+    global PROVISIONING_FILE
+    if args.provisioning:
+        # Check before a long build, not after it.
+        try:
+            _, code = load_panel_provisioning(args.provisioning)
+        except ValueError as e:
+            print(f"❌ {e}")
+            return 1
+        PROVISIONING_FILE = args.provisioning
+        print(f"🏥 Packaging for {code}")
+
+    if args.package_only:
+        return 0 if package_distribution() else 1
 
     # ------------------------------------------------------------------ #
     # Native path (original behaviour)                                   #
