@@ -1,0 +1,61 @@
+# Cirqen for Windows: build the app on GitHub's Windows machine, make
+# Cirqen-Setup-<version>.exe (Inno Setup), install it on that clean Windows
+# and check it starts. The installer is attached to the run (Artifacts).
+#
+# Run it: GitHub > Actions > "Windows build" > Run workflow, or
+#   gh workflow run windows-build.yml
+# It also runs when a desktop-v* tag is pushed.
+name: Windows build
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["desktop-v*"]
+
+jobs:
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 120
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: "utf-8"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Install Python packages
+        run: python -m pip install -r requirements.txt pyinstaller==6.20.0
+
+      - name: Build the app (PyInstaller, PostgreSQL 18, Redis 8)
+        run: python build.py
+
+      - name: Make the installer
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          $env:CIRQEN_VERSION = (Get-Content version.txt -Raw).Trim()
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer\cirqen.iss
+          Get-ChildItem dist\Cirqen-Setup-*.exe | Format-Table Name, Length
+
+      - name: Install it and start it
+        shell: pwsh
+        run: ./installer/smoke_test.ps1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Cirqen-Setup-windows
+          path: dist/Cirqen-Setup-*.exe
+          retention-days: 30
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: build-logs
+          path: |
+            build_logs/
+            dist/app-logs/
+          retention-days: 7

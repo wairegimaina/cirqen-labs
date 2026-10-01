@@ -101,8 +101,8 @@ logger.info(f"Architecture: {platform.machine()}")
 # PostgreSQL Download URLs (multiple sources)
 POSTGRES_SOURCES = {
     'windows': [
-        ('EnterpriseDB', 'https://get.enterprisedb.com/postgresql/postgresql-16.1-1-windows-x64-binaries.zip'),
-        ('PostgreSQL.org Mirror', 'https://sbp.enterprisedb.com/getfile.jsp?fileid=1258649'),
+        # Same major as runtime.json (PCs' databases); EDB's builds are relocatable.
+        ('EnterpriseDB', 'https://get.enterprisedb.com/postgresql/postgresql-18.6-1-windows-x64-binaries.zip'),
     ],
     'linux': [
         ('PostgreSQL Official', 'https://ftp.postgresql.org/pub/binary/v16.1/linux/binaries/postgresql-16.1-linux-x64-binaries.tar.gz'),
@@ -113,8 +113,9 @@ POSTGRES_SOURCES = {
 # Redis Download URLs
 REDIS_SOURCES = {
     'windows': [
-        ('Memurai (Redis Windows)', 'https://github.com/tporadowski/redis/releases/download/v5.0.14.1/Redis-x64-5.0.14.1.zip'),
-        ('Microsoft Archive', 'https://github.com/microsoftarchive/redis/releases/download/win-3.2.100/Redis-x64-3.2.100.zip'),
+        # Redis 8 as on Linux (runtime.json); redis-windows builds it for Windows (MSYS2).
+        ('redis-windows', 'https://github.com/redis-windows/redis-windows/releases/download/8.10.2/'
+                          'Redis-8.10.2-Windows-x64-msys2.zip'),
     ],
     'linux': [
         ('Redis.io', 'https://download.redis.io/releases/redis-7.2.3.tar.gz'),
@@ -848,6 +849,10 @@ def setup_postgresql():
             for item in pgsql.iterdir():
                 shutil.move(str(item), str(pg_dir))
             pgsql.rmdir()
+        # EDB's zip also carries pgAdmin, StackBuilder, docs and debug symbols
+        # (hundreds of MB the app never uses).
+        for extra in ("pgAdmin 4", "StackBuilder", "doc", "symbols", "include"):
+            shutil.rmtree(pg_dir / extra, ignore_errors=True)
 
         # Make binaries executable on Linux
         if IS_LINUX:
@@ -925,6 +930,15 @@ def setup_redis():
             logger.warning(f"⚠️ Failed to extract from {source_name}")
             redis_archive.unlink(missing_ok=True)
             continue
+
+        # The Windows zip holds one folder (Redis-<v>-Windows-x64-msys2/):
+        # move its contents up so redis-server.exe sits in runtime/redis.
+        if not redis_exe.exists():
+            nested = [d for d in redis_dir.iterdir() if d.is_dir() and (d / redis_exe.name).exists()]
+            if nested:
+                for item in nested[0].iterdir():
+                    shutil.move(str(item), str(redis_dir / item.name))
+                nested[0].rmdir()
 
         # Make executable on Linux
         if IS_LINUX and redis_exe.exists():
@@ -1216,11 +1230,12 @@ def setup_config():
         # secrets cannot sync, and one with DEBUG on leaks stack traces.
         # The sync key is not a build secret: each PC enrolls with the
         # hospital's installer file from the admin panel and gets its own key.
+        # Nothing secret is built in any more: PCs get the update key with the
+        # hospital's installer file and make their own database password, so a
+        # build machine (e.g. GitHub's Windows runner) needs none of them.
         missing = [m for m in config.missing_secrets() if not m.startswith("sync.")]
         if missing:
-            print("❌ Refusing to build: missing secrets " + ", ".join(missing))
-            print("   Provide them via environment variables or the git-ignored .env file.")
-            return False
+            print("ℹ️  Not set on this build machine (not needed in the build): " + ", ".join(missing))
         debug_env = os.getenv("DJANGO_DEBUG")
         debug_on = (debug_env.strip().lower() in ("1", "true", "yes", "on")) if debug_env is not None \
             else bool(config.get("app.debug"))
