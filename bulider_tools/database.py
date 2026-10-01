@@ -100,23 +100,30 @@ class FirstRunSetup(QObject):
                 self.setup_complete.emit(False, "Failed to create HOD user")
                 return
 
-            # Step 8: Install systemd service (first-run, built-in)
-            self.progress_update.emit("Installing PostgreSQL service...", 88)
-            self.log_message.emit("Installing persistent systemd service...")
-            try:
-                _pgd = self.runtime_dir / 'postgresql'
-                _svc = PostgresSystemdManager(
-                    port      = self.port_manager.get_port('postgresql_local'),
-                    pg_binary = _pgd / 'bin' / 'postgres',
-                    pg_data   = self.pg_data,
-                    pg_lib    = _pgd / 'lib',
-                )
-                if _svc.install():
-                    self.log_message.emit("systemd service installed. PostgreSQL will persist after app close.")
-                else:
-                    self.log_message.emit("systemd service skipped (no root). Stale PID cleanup runs on each start.")
-            except Exception as _e:
-                logger.warning(f"systemd install non-fatal: {_e}")
+            # Step 8: a system service for PostgreSQL, only when asked for
+            # (CIRQEN_SYSTEMD_POSTGRES=1). By default Cirqen runs its own
+            # PostgreSQL: a root-installed unit pointing into the user's app
+            # copy breaks when updates replace that copy, then crash-loops,
+            # holds port 2215 and leaves root-owned logs Cirqen can't write.
+            if os.environ.get('CIRQEN_SYSTEMD_POSTGRES') != '1':
+                logger.info("PostgreSQL system service not installed (Cirqen runs its own)")
+            else:
+                self.progress_update.emit("Installing PostgreSQL service...", 88)
+                self.log_message.emit("Installing persistent systemd service...")
+                try:
+                    _pgd = self.runtime_dir / 'postgresql'
+                    _svc = PostgresSystemdManager(
+                        port      = self.port_manager.get_port('postgresql_local'),
+                        pg_binary = _pgd / 'bin' / 'postgres',
+                        pg_data   = self.pg_data,
+                        pg_lib    = _pgd / 'lib',
+                    )
+                    if _svc.install():
+                        self.log_message.emit("systemd service installed. PostgreSQL will persist after app close.")
+                    else:
+                        self.log_message.emit("systemd service skipped (no root). Stale PID cleanup runs on each start.")
+                except Exception as _e:
+                    logger.warning(f"systemd install non-fatal: {_e}")
 
             # Step 9: Stop direct PostgreSQL (systemd takes over)
             self.progress_update.emit("Finalizing setup...", 95)
