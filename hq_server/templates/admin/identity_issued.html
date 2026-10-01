@@ -14,6 +14,12 @@
   <dl class="env">
     {% for k, v in env %}<dt>{{ k }}</dt><dd><textarea readonly rows="{{ 4 if k == 'HQ_CERTIFICATE' else 1 }}">{{ v }}</textarea></dd>{% endfor %}
   </dl>
+  {% if identity_env %}
+  <h2>For a self-hosted HQ</h2>
+  <p class="muted">Save this as <code>identity.env</code> on the hospital's server and run the installer with
+    <code>--identity identity.env</code> (or, on a server already installed, run it again to put the new identity in place).</p>
+  <textarea readonly rows="7" class="identity-env">{{ identity_env }}</textarea>
+  {% endif %}
   <p class="muted">Certificate valid until {{ expires | eat }}. After the redeploy, the hospital page should show the HQ answering as {{ h.code }} with identity <em>ok</em>.</p>
   <p><a class="button" href="/admin/hospitals/{{ h.code }}">Done</a></p>
 </section>

@@ -601,9 +601,17 @@ async def hospital_identity(request: Request, code: str):
     if h["render_services"] and render_api.configured() and form.get("put_on_render", "1") == "1":
         on_render = await _put_on_render(h, env)
         cs.audit(admin["username"], "identity_put_on_render", h["code"], on_render, _ip(request))
+    identity_env = ""
+    if h.get("hosting") == "self":
+        # For selfhost/install.sh: the certificate as base64, since an
+        # environment file would mangle its JSON.
+        identity_env = "\n".join(
+            f"{k}={base64.b64encode(v.encode()).decode() if k == 'HQ_CERTIFICATE' else v}".replace(
+                "HQ_CERTIFICATE=", "HQ_CERTIFICATE_B64=", 1)
+            for k, v in env) + "\n"
     return _page(request, "identity_issued.html", {
         "admin": admin, "session": session, "h": h, "action": action, "env": env,
-        "expires": fields["expires_at"], "on_render": on_render,
+        "expires": fields["expires_at"], "on_render": on_render, "identity_env": identity_env,
     })
 
 

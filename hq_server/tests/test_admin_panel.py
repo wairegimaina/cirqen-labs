@@ -628,7 +628,7 @@ class FakeRender:
     def __init__(self):
         self.env, self.deploys, self.fail = {}, [], set()
         self.services = [{"id": "srv-web", "name": "hq-ch0001-web", "type": "web_service",
-                          "serviceDetails": {"url": "https://hq-ch0001.onrender.com"}},
+                          "serviceDetails": {"url": "https://ch0001-web.example.com"}},
                          {"id": "srv-wrk", "name": "hq-ch0001-worker", "type": "background_worker"},
                          {"id": "srv-other", "name": "website", "type": "static_site"}]
 
@@ -806,6 +806,7 @@ def test_a_self_hosted_hq_is_told_the_newest_release_and_only_it_can_download(
     assert signed_get(server, hq_key, "v1.10.0", age=3600).status_code == 403   # replayed
     assert signed_get(server, hq_key, "v1.2.0").status_code == 404              # not its version
     assert server.get("/api/hq/selfhost/install.sh").text.startswith("#!/bin/bash")
+    assert server.get("/api/hq/selfhost/secrets.txt").status_code == 404
 
 
 def test_pin_and_hold_from_the_panel(owner, clock, control_key, github, tmp_path, monkeypatch):
@@ -828,3 +829,15 @@ def test_pin_and_hold_from_the_panel(owner, clock, control_key, github, tmp_path
     client.post("/admin/hospitals/CH0001/hq-release", data={"csrf": token, "mode": "hold"})
     assert chosen() == ""
     assert cs.audit_entries(target="CH0001")[0]["action"] == "hq_release_changed"
+
+
+def test_a_self_hosted_identity_comes_as_an_identity_env_file(owner, clock, control_key):
+    import html
+
+    client, secret = owner
+    add_hospital(client, hosting="self")
+    page = issue(client, clock, secret, "new").text
+    block = html.unescape(re.search(r'class="identity-env">(.*?)</textarea>', page, re.S).group(1))
+    values = dict(line.split("=", 1) for line in block.strip().splitlines())
+    assert values["HOSPITAL_CODE"] == "CH0001" and values["HQ_IDENTITY_PRIVATE_KEY"]
+    assert json.loads(base64.b64decode(values["HQ_CERTIFICATE_B64"]))["document"]

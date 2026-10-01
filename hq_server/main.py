@@ -338,23 +338,29 @@ def hq_release_download(hospital: str, version: str, request: Request):
     return FileResponse(path, media_type="application/gzip", filename=f"hq_server-{version}.tar.gz")
 
 
-@app.get("/api/hq/selfhost/install.sh")
-def hq_selfhost_installer():
-    """The self-hosted HQ installer, from the newest HQ release (no secrets in it)."""
+SELFHOST_FILES = {"install.sh": "text/x-shellscript", "cirqen_hq_update.py": "text/x-python"}
+
+
+@app.get("/api/hq/selfhost/{name}")
+def hq_selfhost_file(name: str):
+    """The self-hosted HQ installer and updater, from the newest HQ release
+    (hq_server selfhost/; no secrets in them)."""
     import hq_releases
 
+    if name not in SELFHOST_FILES:
+        raise HTTPException(status_code=404, detail="no such file")
     try:
         available = hq_releases.tags()
         if not available:
             raise HTTPException(status_code=404, detail="no HQ release yet")
         with hq_releases._client() as client:
-            resp = client.get(f"/repos/{hq_releases.repo()}/contents/selfhost/install.sh",
+            resp = client.get(f"/repos/{hq_releases.repo()}/contents/selfhost/{name}",
                               params={"ref": available[0]}, headers={"Accept": "application/vnd.github.raw"})
     except hq_releases.ReleaseError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from None
     if resp.status_code != 200:
         raise HTTPException(status_code=502, detail=f"GitHub answered {resp.status_code}")
-    return Response(resp.content, media_type="text/x-shellscript")
+    return Response(resp.content, media_type=SELFHOST_FILES[name])
 
 
 # ── M-Pesa (Daraja C2B): payments arriving by themselves (mpesa.py) ───────────
