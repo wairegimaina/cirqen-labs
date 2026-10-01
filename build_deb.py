@@ -1,877 +1,401 @@
 #!/usr/bin/env python3
+"""Build cirqen_<version>_amd64.deb: Cirqen as a real Ubuntu app.
+
+    python build_deb.py                        # build in Ubuntu 24.04 (Docker), then make the .deb
+    python build_deb.py --provisioning FILE    # a hospital's .deb (its installer file from the panel)
+    python build_deb.py --test                 # then install and start it in clean 24.04 and 26.04
+    python build_deb.py --from-dist            # just package the existing dist/Cirqen
+    python build_deb.py --from-deb dist/cirqen_1.6.2_amd64.deb --provisioning FILE
+                                               # a hospital's .deb from a tested one, no rebuild
+
+Install on a PC:   sudo apt install ./cirqen_1.6.2_amd64.deb
+Remove:            sudo apt remove cirqen      (users' records and settings stay)
+
+Runs on Ubuntu 24.04 and every newer release. A PyInstaller app runs only on
+the glibc it was built against or newer, so the app is built inside an Ubuntu
+24.04 container (Python 3.14 from uv, PostgreSQL 18 from apt.postgresql.org,
+Redis 8 from packages.redis.io); the databases' own libraries go into the
+app (build.py bundle_native_libs). --from-dist skips that: the .deb then runs
+only on this machine's Ubuntu release and newer.
+
+What it installs:
+  /opt/cirqen/                 the app, as installed (root-owned)
+  /usr/bin/cirqen              the launcher (the menu entry and the command)
+  /usr/share/applications/     menu entry, with the icon
+  /etc/cirqen/provisioning.json  only in a hospital's .deb
+
+Each user runs their own copy (~/.local/share/cirqen-app/Cirqen), made from
+/opt/cirqen on first start and again whenever apt installs a newer .deb.
+That copy belongs to the user, so Cirqen's own updates (code packages and
+full-app swaps) work without admin rights. Records and settings stay in
+~/.local/share/cirqen, as with the portable build.
 """
-=====================================================================
-  CIRQEN DESKTOP - Debian Package (.deb) Builder
-  Wraps the PyInstaller dist into a proper dpkg-installable .deb
+from __future__ import annotations
 
-USAGE:
-    # AppImage already built:
-    python build_deb.py
-
-    # Full build from scratch (runs build.py first):
-    python build_deb.py --full-build
-
-    # Custom dist path or version:
-    python build_deb.py --dist-path /path/to/dist/Cirqen --version 1.0.1
-
-OUTPUT:
-    cirqen_1.0.0_amd64.deb  (in project root)
-
-INSTALL THE .deb:
-    sudo dpkg -i cirqen_1.0.0_amd64.deb
-    sudo apt-get install -f        # fix any missing deps
-
-UNINSTALL:
-    sudo dpkg -r cirqen
-
-REQUIREMENTS:
-    - Linux x86_64
-    - dpkg-deb  (comes with dpkg, pre-installed on Ubuntu/Debian)
-    - Python 3.10+
-=====================================================================
-"""
-
-import os
-import sys
-import stat
-import shutil
-import logging
 import argparse
-import platform
+import json
+import os
+import shutil
 import subprocess
+import sys
+import tarfile
+import tempfile
 from pathlib import Path
-from datetime import datetime
-from textwrap import dedent
 
-# ──────────────────────────────────────────────────────────────────
-# Logging
-# ──────────────────────────────────────────────────────────────────
-LOG_DIR = Path(__file__).parent / "build_logs"
-LOG_DIR.mkdir(exist_ok=True)
-LOG_FILE = LOG_DIR / f"deb_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+PROJECT_ROOT = Path(__file__).resolve().parent
+DIST_APP = PROJECT_ROOT / "dist" / "Cirqen"
+OUT_DIR = PROJECT_ROOT / "dist"
+BUILD_IMAGE = "ubuntu:24.04"
+TEST_IMAGES = ("ubuntu:24.04", "ubuntu:26.04")
+PYINSTALLER = "6.20.0"
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.FileHandler(LOG_FILE),
-        logging.StreamHandler(sys.stdout),
-    ],
-)
-logger = logging.getLogger("CirqenDebBuilder")
+PACKAGE = "cirqen"
+MAINTAINER = "Cirqen Labs <support@cirqenlabs.com>"
+HOMEPAGE = "https://cirqenlabs.com"
+SUMMARY = "Calibration and maintenance management for hospitals"
+DESCRIPTION = (" Cirqen keeps a hospital's medical equipment, calibrations, planned\n"
+               " maintenance, job cards and certificates, and syncs them with the\n"
+               " hospital's Cirqen HQ.")
+# What the app needs from the system (the rest is inside it). Qt 6 / QtWebEngine
+# and the bundled databases; t64 names are Ubuntu 24.04+, the alternatives older.
+DEPENDS = [
+    "libc6 (>= 2.39)", "libgl1", "libegl1", "libopengl0", "libfontconfig1", "libfreetype6", "libdbus-1-3",
+    "libglib2.0-0t64 | libglib2.0-0", "libnss3", "libnspr4", "libxkbcommon0", "libxkbcommon-x11-0",
+    "libxcb-cursor0", "libxcb-icccm4", "libxcb-image0", "libxcb-keysyms1", "libxcb-randr0",
+    "libxcb-render-util0", "libxcb-shape0", "libxcb-xinerama0", "libxcb-xkb1", "libx11-xcb1",
+    "libxcomposite1", "libxdamage1", "libxrandr2", "libxtst6", "libxshmfence1", "libgbm1", "libdrm2",
+    "libasound2t64 | libasound2", "libcups2t64 | libcups2", "libxkbfile1", "libsm6", "libice6",
+    "libxfixes3", "libxrender1", "libxext6", "libxi6", "libwayland-client0", "libwayland-cursor0",
+    "libwayland-egl1", "libwayland-server0", "libpulse0", "libgtk-3-0t64 | libgtk-3-0",
+    "tzdata",                      # Africa/Nairobi for EAT dates (zoneinfo reads the system's)
+]
+# Qt plugins that may stay unloadable: an old TIFF reader newer Ubuntus no longer ship.
+OPTIONAL_MISSING = ("libtiff.so.5",)
 
-# ──────────────────────────────────────────────────────────────────
-# Config — edit these when you bump a release
-# ──────────────────────────────────────────────────────────────────
-APP_NAME      = "cirqen"            # must be lowercase for dpkg
-APP_PRETTY    = "Cirqen"            # display name
-APP_VERSION   = "1.0.0"
-APP_ARCH      = "amd64"
-MAINTAINER    = "Cirqen Technologies <support@cirqen.com>"
-DESCRIPTION   = "Cirqen Desktop - Business Management System"
-LONG_DESC     = (
-    "Cirqen Desktop is a full-featured business management platform\n"
-    " for hospitals, schools, and enterprises across East Africa.\n"
-    " Built Smarter. Scale Faster."
-)
-HOMEPAGE      = "https://cirqen.com"
-# Runtime deps that must exist on the target machine.
-# Qt/WebEngine needs these; add more if your app needs them.
-DEPENDS = ", ".join([
-    "libc6 (>= 2.17)",
-    "libstdc++6",
-    "libglib2.0-0",
-    "libgl1",
-    "libx11-6",
-    "libxcb1",
-    "libxext6",
-    "libxi6",
-    "libxrender1",
-    "libxrandr2",
-    "libxfixes3",
-    "libxcursor1",
-    "libxinerama1",
-    "libasound2",
-    "libdbus-1-3",
-    "libfontconfig1",
-    "libfreetype6",
-    "libpulse0",
-    "libnss3",
-    "libnspr4",
-    "libatk1.0-0",
-    "libatk-bridge2.0-0",
-    "libcups2",
-    "libdrm2",
-    "libxkbcommon0",
-    "libxcomposite1",
-    "libxdamage1",
-])
+LAUNCHER = r"""#!/bin/bash
+# Cirqen (installed from the .deb). /opt/cirqen is the installed copy; each
+# user runs their own copy so Cirqen can update itself without admin rights.
+BASE=/opt/cirqen
+SHARE="${XDG_DATA_HOME:-$HOME/.local/share}"
+APP="$SHARE/cirqen-app/Cirqen"
+DATA="$SHARE/cirqen"
+version() { cat "$1/_internal/version.txt" 2>/dev/null || cat "$1/version.txt" 2>/dev/null || echo 0; }
+mkdir -p "$SHARE/cirqen-app" "$DATA" || exit 1
+if [ ! -x "$APP/Cirqen" ] || dpkg --compare-versions "$(version "$BASE")" gt "$(version "$APP")"; then
+  rm -rf "$APP.copying"
+  if ! cp -a "$BASE" "$APP.copying"; then
+    rm -rf "$APP.copying"
+    notify-send "Cirqen" "Not enough disk space to start Cirqen." 2>/dev/null
+    echo "Cirqen: could not copy $BASE to $APP" >&2; exit 1
+  fi
+  rm -rf "$APP.previous"
+  [ -d "$APP" ] && mv "$APP" "$APP.previous"
+  mv "$APP.copying" "$APP"
+fi
+# A hospital's .deb carries its installer file: give it to this user's first start.
+if [ -f /etc/cirqen/provisioning.json ] && [ ! -f "$DATA/config.json" ] && [ ! -f "$DATA/provisioning.json" ]; then
+  install -m 600 /etc/cirqen/provisioning.json "$DATA/provisioning.json"
+fi
+exec "$APP/start_cirqen.sh" "$@"
+"""
 
-# ──────────────────────────────────────────────────────────────────
-# Paths
-# ──────────────────────────────────────────────────────────────────
-PROJECT_ROOT = Path(__file__).parent.resolve()
-DIST_DIR     = PROJECT_ROOT / "dist"
-DIST_APP_DIR = DIST_DIR / "Cirqen"
-BUILD_DIR    = PROJECT_ROOT / "build"
-PKG_ROOT     = BUILD_DIR / f"{APP_NAME}_{APP_VERSION}_{APP_ARCH}"  # staging
-
-# Standard Linux install locations inside the package
-PKG_OPT      = PKG_ROOT / "opt" / APP_NAME          # binary lives here
-PKG_APPS     = PKG_ROOT / "usr/share/applications"  # .desktop
-PKG_ICONS_HI = PKG_ROOT / "usr/share/icons/hicolor/256x256/apps"
-PKG_ICONS_SC = PKG_ROOT / "usr/share/icons/hicolor/scalable/apps"
-PKG_DOC      = PKG_ROOT / f"usr/share/doc/{APP_NAME}"
-PKG_DEBIAN   = PKG_ROOT / "DEBIAN"                  # control files
-
-# ── Process supervision (closes the "nobody restarted the app / it was
-# never running" gap — see the incident where two sessions sat unsynced
-# for ~11h because launch_cirqen.py was started manually and nothing
-# relaunched it). Two independent, complementary mechanisms:
-#   1. XDG autostart .desktop entry — guarantees the app launches on every
-#      login with zero manual steps and zero systemd feature dependency.
-#      This alone would have prevented the specific incident above.
-#   2. systemd --user unit with Restart=on-failure — additionally respawns
-#      the app if it crashes or gets OOM-killed while the session stays up,
-#      the same Restart=on-failure/RestartSec pattern PostgresSystemdManager
-#      already uses for cirqen-postgres (bulider_tools/runtime.py).
-PKG_AUTOSTART     = PKG_ROOT / "etc/xdg/autostart"
-PKG_SYSTEMD_USER  = PKG_ROOT / "usr/lib/systemd/user"
-
-
-# ──────────────────────────────────────────────────────────────────
-# Helpers
-# ──────────────────────────────────────────────────────────────────
-
-def banner(text):
-    logger.info("\n" + "=" * 70)
-    logger.info(f"  {text}")
-    logger.info("=" * 70)
-
-
-def run(cmd, cwd=None, timeout=3600):
-    logger.info("CMD: " + " ".join(str(c) for c in cmd))
-    subprocess.run(
-        [str(c) for c in cmd],
-        cwd=str(cwd) if cwd else None,
-        timeout=timeout,
-        check=True,
-    )
-
-
-def make_exec(path: Path):
-    path.chmod(path.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
-
-
-def write(path: Path, content: str, mode=0o644):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(dedent(content).lstrip())
-    path.chmod(mode)
-
-
-# ──────────────────────────────────────────────────────────────────
-# Step 0 — Platform & tool check
-# ──────────────────────────────────────────────────────────────────
-
-def check_platform():
-    banner("Platform & Tool Check")
-    if platform.system() != "Linux":
-        logger.error("❌ .deb packages can only be built on Linux.")
-        return False
-    logger.info(f"✅ Linux: {platform.release()}")
-
-    if not shutil.which("dpkg-deb"):
-        logger.error("❌ dpkg-deb not found. Install with:  sudo apt install dpkg")
-        return False
-    logger.info("✅ dpkg-deb found")
-    return True
-
-
-# ──────────────────────────────────────────────────────────────────
-# Step 1 — Optional PyInstaller build
-# ──────────────────────────────────────────────────────────────────
-
-def run_pyinstaller():
-    banner("PyInstaller Build (build.py)")
-    script = PROJECT_ROOT / "build.py"
-    if not script.exists():
-        logger.error(f"❌ {script} not found")
-        return False
-    try:
-        run([sys.executable, str(script)], cwd=PROJECT_ROOT)
-        logger.info("✅ PyInstaller build done")
-        return True
-    except subprocess.CalledProcessError:
-        logger.error("❌ PyInstaller build failed")
-        return False
-
-
-# ──────────────────────────────────────────────────────────────────
-# Step 1b — Docker-based PyInstaller build  (--docker-build)
-# ──────────────────────────────────────────────────────────────────
-
-def run_docker_build():
-    banner("Docker PyInstaller Build")
-
-    if not shutil.which("docker"):
-        logger.error("❌ docker not found — install Docker and ensure the daemon is running")
-        return False
-
-    image = "python:3.11-slim"
-    container_name = f"cirqen_build_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-
-    cmd = [
-        "docker", "run", "--rm",
-        "--name", container_name,
-        "-v", f"{PROJECT_ROOT}:/app",
-        "-w", "/app",
-        image,
-        "bash", "-c",
-        (
-            "pip install --quiet pyinstaller && "
-            f"python build.py"
-        ),
-    ]
-
-    logger.info(f"Docker image : {image}")
-    logger.info(f"Mount        : {PROJECT_ROOT} → /app")
-    try:
-        run(cmd, cwd=PROJECT_ROOT)
-        logger.info("✅ Docker PyInstaller build done")
-        return True
-    except subprocess.CalledProcessError:
-        logger.error("❌ Docker build failed — check the log above")
-        return False
-
-
-# ──────────────────────────────────────────────────────────────────
-# Step 2 — Verify dist
-# ──────────────────────────────────────────────────────────────────
-
-def verify_dist(dist_path: Path):
-    banner(f"Verify dist: {dist_path}")
-    if not dist_path.exists():
-        logger.error(f"❌ Not found: {dist_path}")
-        logger.info("   Run with --full-build or check --dist-path")
-        return False
-    exe = dist_path / "Cirqen"
-    if not exe.exists():
-        # try lowercase
-        exe = dist_path / "cirqen"
-    if not exe.exists():
-        logger.error("❌ Main executable not found in dist folder")
-        return False
-    logger.info(f"✅ Executable: {exe}")
-    return True
-
-
-# ──────────────────────────────────────────────────────────────────
-# Step 3 — Build package directory tree
-# ──────────────────────────────────────────────────────────────────
-
-DESKTOP_ENTRY = f"""\
-[Desktop Entry]
+DESKTOP_ENTRY = """[Desktop Entry]
 Type=Application
-Name={APP_PRETTY}
-GenericName=Business Management System
-Comment=Build Smarter. Scale Faster.
-Exec=/opt/{APP_NAME}/Cirqen --no-sandbox
-Icon={APP_NAME}
-Categories=Office;ProjectManagement;Finance;
+Name=Cirqen
+GenericName=Equipment maintenance
+Comment={summary}
+Exec=cirqen
+Icon=cirqen
 Terminal=false
-StartupNotify=true
+Categories=Office;Database;MedicalSoftware;
+Keywords=calibration;maintenance;hospital;biomedical;
 StartupWMClass=Cirqen
-Keywords=cirqen;hospital;equipment;management;erp;
 """
 
-AUTOSTART_ENTRY = f"""\
-[Desktop Entry]
-Type=Application
-Name={APP_PRETTY}
-Comment=Build Smarter. Scale Faster.
-Exec=/opt/{APP_NAME}/Cirqen --no-sandbox
-Icon={APP_NAME}
-Terminal=false
-StartupNotify=false
-X-GNOME-Autostart-enabled=true
-Hidden=false
-X-GNOME-Autostart-Delay=5
-"""
-
-SYSTEMD_USER_UNIT = f"""\
-[Unit]
-Description=Cirqen Desktop Application
-After=graphical-session.target network-online.target
-Wants=network-online.target
-PartOf=graphical-session.target
-
-[Service]
-Type=simple
-ExecStart=/opt/{APP_NAME}/Cirqen --no-sandbox
-Restart=on-failure
-RestartSec=10
-StartLimitIntervalSec=300
-StartLimitBurst=5
-TimeoutStopSec=30
-
-[Install]
-WantedBy=default.target
-"""
-
-FALLBACK_SVG = """\
-<?xml version="1.0" encoding="UTF-8"?>
-<svg width="256" height="256" viewBox="0 0 256 256"
-     xmlns="http://www.w3.org/2000/svg">
-  <rect width="256" height="256" rx="40" fill="#1A7F5A"/>
-  <text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle"
-        font-family="sans-serif" font-size="160" font-weight="bold"
-        fill="white">C</text>
-</svg>
-"""
-
-# postinst — runs after dpkg unpacks the files
-# NOTE: use a raw f-string (rf"...") so that \; inside the bash find
-# command is passed through literally without triggering Python's
-# DeprecationWarning about invalid escape sequences in f-strings.
-POSTINST = rf"""#!/bin/bash
+POSTINST = """#!/bin/sh
 set -e
-
-# Make the main binary executable
-chmod +x /opt/{APP_NAME}/Cirqen 2>/dev/null || true
-
-# Symlink for terminal use
-ln -sf /opt/{APP_NAME}/Cirqen /usr/local/bin/{APP_NAME} 2>/dev/null || true
-
-# Create media / upload directory and ensure correct ownership
-MEDIA_DIR="/var/lib/{APP_NAME}/media"
-mkdir -p "$MEDIA_DIR"
-# Recursively set ownership to root (no setuid risk) and make writable
-find "$MEDIA_DIR" -maxdepth 0 -type d -exec chmod 0755 {{}} \;
-
-# Refresh icon & desktop caches
-gtk-update-icon-cache /usr/share/icons/hicolor/ 2>/dev/null || true
-update-desktop-database /usr/share/applications/        2>/dev/null || true
-
-# ── Process supervision ─────────────────────────────────────────────
-# The XDG autostart entry (etc/xdg/autostart/{APP_NAME}-autostart.desktop)
-# needs no activation step — every standard desktop environment picks it
-# up automatically at next login. That alone guarantees the app is
-# actually running after a reboot without anyone opening a terminal.
-#
-# The systemd --user unit additionally respawns the app if it crashes
-# mid-session. Enabling a --user unit from a root postinst has to reach
-# into each real user's session — best-effort only; a failure here must
-# never break the package install, and the autostart entry above already
-# covers the primary failure mode this exists for.
-for uid_line in $(loginctl list-users --no-legend 2>/dev/null | awk '{{print $1}}'); do
-    target_user="$(id -nu "$uid_line" 2>/dev/null || true)"
-    [ -z "$target_user" ] && continue
-    runtime_dir="/run/user/$uid_line"
-    [ -d "$runtime_dir" ] || continue
-    sudo -u "$target_user" XDG_RUNTIME_DIR="$runtime_dir" \
-        systemctl --user daemon-reload 2>/dev/null || true
-    sudo -u "$target_user" XDG_RUNTIME_DIR="$runtime_dir" \
-        systemctl --user enable --now {APP_NAME}-desktop.service 2>/dev/null || true
-done
-
-echo "✅ Cirqen installed. Will launch automatically at next login."
-echo "   (Or run now: {APP_NAME})"
+if [ "$1" = "configure" ]; then
+  update-desktop-database -q /usr/share/applications 2>/dev/null || true
+  gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor 2>/dev/null || true
+fi
 exit 0
 """
 
-# prerm — runs before dpkg removes the package
-PRERM = f"""\
-#!/bin/bash
+POSTRM = """#!/bin/sh
 set -e
-
-# Disable the per-user supervision unit before the binary it points at
-# disappears, so systemd --user doesn't keep trying to respawn a missing
-# executable after removal.
-for uid_line in $(loginctl list-users --no-legend 2>/dev/null | awk '{{print $1}}'); do
-    target_user="$(id -nu "$uid_line" 2>/dev/null || true)"
-    [ -z "$target_user" ] && continue
-    runtime_dir="/run/user/$uid_line"
-    [ -d "$runtime_dir" ] || continue
-    sudo -u "$target_user" XDG_RUNTIME_DIR="$runtime_dir" systemctl --user disable --now {APP_NAME}-desktop.service 2>/dev/null || true
-done
-
-# Kill any running instance
-pkill -f "Cirqen" 2>/dev/null || true
-sleep 1
-
-# Remove symlink
-rm -f /usr/local/bin/{APP_NAME}
-
-exit 0
-"""
-
-# postrm — runs after dpkg removes files
-POSTRM = f"""\
-#!/bin/bash
-set -e
-
-# Refresh caches after removal
-gtk-update-icon-cache /usr/share/icons/hicolor/ 2>/dev/null || true
-update-desktop-database /usr/share/applications/        2>/dev/null || true
-
+update-desktop-database -q /usr/share/applications 2>/dev/null || true
+gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor 2>/dev/null || true
+if [ "$1" = "purge" ]; then rm -rf /etc/cirqen; fi
 exit 0
 """
 
 
-def build_package_tree(dist_path: Path):
-    banner("Build Package Directory Tree")
-
-    # Clean slate — PKG_ROOT may be root-owned from a previous
-    # dpkg-deb --root-owner-group run, so shutil.rmtree can fail with
-    # PermissionError.  Fall back to `sudo rm -rf` in that case.
-    if PKG_ROOT.exists():
-        try:
-            shutil.rmtree(PKG_ROOT)
-        except PermissionError:
-            logger.warning(
-                f"\u26a0\ufe0f  {PKG_ROOT} is root-owned (leftover from dpkg-deb). "
-                "Re-running removal with sudo \u2026"
-            )
-            try:
-                subprocess.run(
-                    ["sudo", "rm", "-rf", str(PKG_ROOT)],
-                    check=True, timeout=60,
-                )
-            except subprocess.CalledProcessError:
-                logger.error(
-                    f"\u274c Could not remove {PKG_ROOT}. "
-                    "Run:  sudo rm -rf build/  and retry."
-                )
-                return False
-
-    # ── 3a. Copy PyInstaller output → /opt/cirqen/ ──────────────────
-    logger.info(f"Copying dist → {PKG_OPT} …")
-    shutil.copytree(dist_path, PKG_OPT, symlinks=True)
-
-    # Make sure the main executable is +x
-    main_exe = PKG_OPT / "Cirqen"
-    if main_exe.exists():
-        make_exec(main_exe)
-    logger.info("✅ App files copied")
-
-    # ── 3b. .desktop entry ──────────────────────────────────────────
-    write(PKG_APPS / f"{APP_NAME}.desktop", DESKTOP_ENTRY)
-    logger.info("✅ .desktop entry written")
-
-    # ── 3b-ii. Process supervision: autostart entry + systemd --user unit ──
-    write(PKG_AUTOSTART / f"{APP_NAME}-autostart.desktop", AUTOSTART_ENTRY)
-    logger.info("✅ XDG autostart entry written")
-    write(PKG_SYSTEMD_USER / f"{APP_NAME}-desktop.service", SYSTEMD_USER_UNIT)
-    logger.info("✅ systemd --user unit written")
-
-    # ── 3c. Icons — map pre-generated sizes from static/images/ ────────
-    #
-    # Expected files in PROJECT_ROOT/static/images/:
-    #   logo-16x16.png, logo-32x32.png, logo-48x48.png, logo-57x57.png,
-    #   logo-60x60.png, logo-72x72.png, logo-96x96.png, logo-114x114.png,
-    #   logo-120x120.png, logo-128x128.png, logo-144x144.png, logo-152x152.png,
-    #   logo-180x180.png, logo-192x192.png, logo-256x256.png, logo-310x310.png,
-    #   logo-512x512.png, logo-1024x1024.png
-    #
-    # hicolor standard sizes we care about and their source filename:
-    ICON_MAP = {
-        16:   "logo-16x16.png",
-        32:   "logo-32x32.png",
-        48:   "logo-48x48.png",
-        64:   "logo-64x64.png",       # fallback to 72 if missing
-        72:   "logo-72x72.png",
-        96:   "logo-96x96.png",
-        114:  "logo-114x114.png",
-        120:  "logo-120x120.png",
-        128:  "logo-128x128.png",
-        144:  "logo-144x144.png",
-        152:  "logo-152x152.png",
-        180:  "logo-180x180.png",
-        192:  "logo-192x192.png",
-        256:  "logo-256x256.png",
-        310:  "logo-310x310.png",
-        512:  "logo-512x512.png",
-    }
-
-    # hicolor standard sizes that desktops actually use
-    HICOLOR_SIZES = [16, 24, 32, 48, 64, 96, 128, 256, 512]
-
-    STATIC_IMAGES = PROJECT_ROOT / "static" / "images"
-
-    def find_icon(size: int) -> Path:
-        """Find best matching pre-generated icon for a given size."""
-        # Exact match first
-        exact = ICON_MAP.get(size)
-        if exact:
-            p = STATIC_IMAGES / exact
-            if p.exists():
-                return p
-        # Nearest larger size as fallback
-        for s in sorted(ICON_MAP.keys()):
-            if s >= size:
-                p = STATIC_IMAGES / ICON_MAP[s]
-                if p.exists():
-                    return p
-        return None
-
-    installed_count = 0
-    for size in HICOLOR_SIZES:
-        src = find_icon(size)
-        if src:
-            icon_dir = PKG_ROOT / f"usr/share/icons/hicolor/{size}x{size}/apps"
-            icon_dir.mkdir(parents=True, exist_ok=True)
-            dest = icon_dir / f"{APP_NAME}.png"
-            if src.stat().st_size > 0 and size not in [s for s in ICON_MAP if ICON_MAP[s] == src.name]:
-                # Size doesn't have exact match — resize with Pillow
-                try:
-                    from PIL import Image
-                    Image.open(src).convert("RGBA").resize(
-                        (size, size), Image.LANCZOS
-                    ).save(dest)
-                except ImportError:
-                    shutil.copy2(src, dest)
-            else:
-                shutil.copy2(src, dest)
-            installed_count += 1
-            logger.info(f"  ✅ {size}x{size} ← {src.name}")
-        else:
-            logger.warning(f"  ⚠️  No icon found for {size}x{size} — skipping")
-
-    # Scalable slot — use the largest available
-    scalable = PKG_ROOT / "usr/share/icons/hicolor/scalable/apps"
-    scalable.mkdir(parents=True, exist_ok=True)
-    # Prefer SVG if present, else 1024 PNG, else 512 PNG
-    for svg_name in ["white.svg", "dark.svg"]:
-        svg_src = STATIC_IMAGES / svg_name
-        if svg_src.exists():
-            shutil.copy2(svg_src, scalable / f"{APP_NAME}.svg")
-            logger.info(f"  ✅ scalable ← {svg_name}")
-            break
-    else:
-        for fallback in ["logo-1024x1024.png", "logo-512x512.png"]:
-            p = STATIC_IMAGES / fallback
-            if p.exists():
-                shutil.copy2(p, scalable / f"{APP_NAME}.png")
-                logger.info(f"  ✅ scalable ← {fallback}")
-                break
-        else:
-            (PKG_ICONS_SC.parent / "scalable" / "apps").mkdir(parents=True, exist_ok=True)
-            (scalable / f"{APP_NAME}.svg").write_text(FALLBACK_SVG)
-            logger.warning("  ⚠️  No scalable icon found — using SVG placeholder")
-
-    if installed_count == 0:
-        logger.error("❌ No icons installed — check static/images/ path and filenames")
-        return False
-    logger.info(f"✅ {installed_count} icon sizes installed from static/images/")
-
-    # ── 3d. Docs / changelog ────────────────────────────────────────
-    PKG_DOC.mkdir(parents=True, exist_ok=True)
-    changelog = f"""\
-{APP_NAME} ({APP_VERSION}) stable; urgency=low
-
-  * Initial release.
-
- -- {MAINTAINER}  {datetime.now().strftime('%a, %d %b %Y %H:%M:%S +0300')}
-"""
-    (PKG_DOC / "changelog.Debian").write_text(changelog)
-    run(["gzip", "--best", "--force", str(PKG_DOC / "changelog.Debian")])
-
-    copyright_txt = f"""\
-Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-Upstream-Name: {APP_PRETTY}
-Upstream-Contact: {MAINTAINER}
-Source: {HOMEPAGE}
-
-Files: *
-Copyright: {datetime.now().year} Cirqen Technologies
-License: Proprietary
- All rights reserved. Unauthorised copying, redistribution or modification
- of this software is strictly prohibited.
-"""
-    (PKG_DOC / "copyright").write_text(copyright_txt)
-    logger.info("✅ Docs written")
-
-    # ── 3e. DEBIAN control files ────────────────────────────────────
-    PKG_DEBIAN.mkdir(parents=True, exist_ok=True)
-
-    # Calculate installed size (in KB) for the control file
-    total_bytes = sum(
-        f.stat().st_size for f in PKG_ROOT.rglob("*") if f.is_file()
-    )
-    installed_size_kb = max(1, total_bytes // 1024)
-
-    # IMPORTANT: control file must have NO leading spaces on any line
-    control_lines = [
-        f"Package: {APP_NAME}",
-        f"Version: {APP_VERSION}",
-        f"Architecture: {APP_ARCH}",
-        f"Maintainer: {MAINTAINER}",
-        f"Installed-Size: {installed_size_kb}",
-        f"Depends: {DEPENDS}",
-        f"Section: misc",
-        f"Priority: optional",
-        f"Homepage: {HOMEPAGE}",
-        f"Description: {DESCRIPTION}",
-    ]
-    # Long description: first line of each continuation must start with " " (one space)
-    for line in LONG_DESC.splitlines():
-        control_lines.append(f" {line}")
-    control_lines.append("")  # trailing newline required
-    control = "\n".join(control_lines)
-    (PKG_DEBIAN / "control").write_text(control)
-    (PKG_DEBIAN / "control").chmod(0o644)
-
-    write(PKG_DEBIAN / "postinst", POSTINST, mode=0o755)
-    write(PKG_DEBIAN / "prerm",    PRERM,    mode=0o755)
-    write(PKG_DEBIAN / "postrm",   POSTRM,   mode=0o755)
-
-    logger.info("✅ DEBIAN control files written")
-
-    # ── 3f. Static assets & project images → /opt/cirqen/static/ ───
-    #
-    # Copies the entire static/ tree (CSS, JS, fonts, images, etc.) so
-    # the installed app can serve or reference its bundled assets at
-    # /opt/cirqen/static/.  Project-level images (e.g. sample logos,
-    # report headers) stored under project_images/ are placed alongside.
-    #
-    STATIC_SRC = PROJECT_ROOT / "static"
-    if STATIC_SRC.exists():
-        static_dest = PKG_OPT / "static"
-        shutil.copytree(STATIC_SRC, static_dest, symlinks=True,
-                        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
-        n_static = sum(1 for _ in static_dest.rglob("*") if _.is_file())
-        logger.info(f"✅ static/ copied → {static_dest}  ({n_static} files)")
-    else:
-        logger.warning("⚠️  static/ not found — skipping static asset copy")
-
-    PROJECT_IMAGES_SRC = PROJECT_ROOT / "project_images"
-    if PROJECT_IMAGES_SRC.exists():
-        images_dest = PKG_OPT / "project_images"
-        shutil.copytree(PROJECT_IMAGES_SRC, images_dest, symlinks=True)
-        n_imgs = sum(1 for _ in images_dest.rglob("*") if _.is_file())
-        logger.info(f"✅ project_images/ copied → {images_dest}  ({n_imgs} files)")
-    else:
-        logger.info("ℹ️  project_images/ not found — nothing to copy")
-
-    return True
+def say(message: str) -> None:
+    print(f"▶ {message}", flush=True)
 
 
-# ──────────────────────────────────────────────────────────────────
-# Step 4 — Fix permissions (dpkg-deb is strict)
-# ──────────────────────────────────────────────────────────────────
+def app_version(app: Path) -> str:
+    for path in (app / "_internal" / "version.txt", app / "version.txt"):
+        if path.is_file() and path.read_text().strip():
+            return path.read_text().strip()
+    raise SystemExit(f"❌ {app} has no version.txt; build it with build.py first")
 
-def fix_permissions():
-    banner("Fix Permissions")
 
-    # All dirs 755, all files 644 by default
-    for path in PKG_ROOT.rglob("*"):
-        if path.is_dir():
-            path.chmod(0o755)
-        elif path.is_file():
-            # Keep exec bit on scripts and the app binary
-            if path.suffix in (".sh", ".py", "") and path.stat().st_mode & 0o100:
+def check_provisioning(path: Path) -> str:
+    sys.path.insert(0, str(PROJECT_ROOT))
+    import build
+
+    try:
+        _, code = build.load_panel_provisioning(path)
+    except ValueError as exc:
+        raise SystemExit(f"❌ {exc}") from None
+    return code
+
+
+# ── the .deb ────────────────────────────────────────────────────────────────
+
+def make_deb(app: Path, out_dir: Path, provisioning: Path | None = None) -> Path:
+    if not shutil.which("dpkg-deb"):
+        raise SystemExit("❌ dpkg-deb not found (it comes with dpkg on Ubuntu)")
+    if (app / "provisioning.json").exists():
+        raise SystemExit(f"❌ {app} holds a provisioning.json; the .deb's app must be neutral")
+    version = app_version(app)
+    code = check_provisioning(provisioning) if provisioning else ""
+    name = f"{PACKAGE}_{version}_amd64" + (f"_{code}" if code else "")
+    with tempfile.TemporaryDirectory(dir=out_dir) as tmp:
+        root = Path(tmp) / name
+        say(f"Laying out {name}")
+        shutil.copytree(app, root / "opt" / PACKAGE, symlinks=True)
+        (root / "usr" / "bin").mkdir(parents=True)
+        launcher = root / "usr" / "bin" / PACKAGE
+        launcher.write_text(LAUNCHER)
+        launcher.chmod(0o755)
+        apps = root / "usr" / "share" / "applications"
+        apps.mkdir(parents=True)
+        (apps / f"{PACKAGE}.desktop").write_text(DESKTOP_ENTRY.format(summary=SUMMARY))
+        icon = next((p for p in (PROJECT_ROOT / "resources" / "icon.png", app / "resources" / "icon.png",
+                                 app / "_internal" / "resources" / "icon.png") if p.is_file()), None)
+        if icon:
+            icons = root / "usr" / "share" / "icons" / "hicolor" / "256x256" / "apps"
+            icons.mkdir(parents=True)
+            shutil.copy2(icon, icons / f"{PACKAGE}.png")
+        if provisioning:
+            etc = root / "etc" / PACKAGE
+            etc.mkdir(parents=True)
+            shutil.copy2(provisioning, etc / "provisioning.json")
+            (etc / "provisioning.json").chmod(0o644)
+        doc = root / "usr" / "share" / "doc" / PACKAGE
+        doc.mkdir(parents=True)
+        (doc / "copyright").write_text("Copyright Cirqen Labs. All rights reserved.\n")
+
+        debian = root / "DEBIAN"
+        debian.mkdir()
+        size_kb = sum(f.stat().st_size for f in root.rglob("*") if f.is_file() and not f.is_symlink()) // 1024
+        control = [f"Package: {PACKAGE}", f"Version: {version}", "Architecture: amd64",
+                   f"Maintainer: {MAINTAINER}", f"Installed-Size: {size_kb}", "Section: misc",
+                   "Priority: optional", f"Homepage: {HOMEPAGE}", f"Depends: {', '.join(DEPENDS)}",
+                   f"Description: {SUMMARY}", DESCRIPTION]
+        (debian / "control").write_text("\n".join(control) + "\n")
+        if provisioning:
+            (debian / "conffiles").write_text(f"/etc/{PACKAGE}/provisioning.json\n")
+        for script, body in (("postinst", POSTINST), ("postrm", POSTRM)):
+            (debian / script).write_text(body)
+            (debian / script).chmod(0o755)
+        for path in root.rglob("*"):                     # dpkg wants 0755 dirs, no group/world write
+            if path.is_dir():
                 path.chmod(0o755)
-            else:
-                path.chmod(0o644)
-
-    # DEBIAN scripts must be 755
-    for script in ["postinst", "prerm", "postrm", "preinst"]:
-        s = PKG_DEBIAN / script
-        if s.exists():
-            s.chmod(0o755)
-
-    # Main executable must be 755
-    exe = PKG_OPT / "Cirqen"
-    if exe.exists():
-        exe.chmod(0o755)
-
-    logger.info("✅ Permissions fixed")
-    return True
+            elif not path.is_symlink():
+                path.chmod(path.stat().st_mode & ~0o022)
+        out = out_dir / f"{name}.deb"
+        say(f"dpkg-deb → {out.name}")
+        subprocess.run(["dpkg-deb", "--root-owner-group", "-Zxz", "--build", str(root), str(out)], check=True,
+                       stdout=subprocess.DEVNULL)
+    if code:
+        out.chmod(0o600)
+        print("🔒 This .deb holds the hospital's enrollment token: hand it over privately")
+    print(f"✅ {out} ({out.stat().st_size / 1e6:.0f} MB)")
+    return out
 
 
-# ──────────────────────────────────────────────────────────────────
-# Step 5 — Run dpkg-deb
-# ──────────────────────────────────────────────────────────────────
+# ── building in Ubuntu 24.04 ────────────────────────────────────────────────
 
-def run_dpkg_deb():
-    banner("Run dpkg-deb")
+CONTAINER_SCRIPT = r"""
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq
+apt-get install -y -qq curl ca-certificates gnupg build-essential patchelf binutils file dpkg-dev git \
+  libgl1 libegl1 libopengl0 libxkbcommon0 libxkbcommon-x11-0 libfontconfig1 libdbus-1-3 libnss3 \
+  libglib2.0-0t64 libxcb-cursor0 libasound2t64 libxcomposite1 libxdamage1 libxrandr2 libxtst6 libgbm1 >/dev/null
+install -d /usr/share/postgresql-common/pgdg
+curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt noble-pgdg main" > /etc/apt/sources.list.d/pgdg.list
+curl -fsSL https://packages.redis.io/gpg | gpg --dearmor --yes -o /usr/share/keyrings/redis-archive-keyring.gpg
+echo "deb [signed-by=/usr/share/keyrings/redis-archive-keyring.gpg] https://packages.redis.io/deb noble main" > /etc/apt/sources.list.d/redis.list
+apt-get update -qq
+apt-get install -y -qq "postgresql-$PG_MAJOR" redis-server >/dev/null
+/usr/lib/postgresql/$PG_MAJOR/bin/postgres --version; redis-server --version | cut -c1-40
+command -v uv >/dev/null || curl -LsSf https://astral.sh/uv/install.sh | sh >/dev/null
+export PATH="$HOME/.local/bin:$PATH"
+uv python install "$PYTHON" >/dev/null
+uv venv --seed -q /venv --python "$PYTHON"
+mkdir -p /work && tar xf /stage/src.tar -C /work && cd /work
+uv pip install -q --python /venv/bin/python -r requirements.txt "pyinstaller==$PYINSTALLER"
+CIRQEN_REQUIRE_NATIVE_BUNDLE=1 /venv/bin/python build.py
+/venv/bin/python build_deb.py --from-dist --out /out $PROVISIONING_ARG
+chown -R "$HOST_UID:$HOST_GID" /out
+"""
 
-    deb_name  = f"{APP_NAME}_{APP_VERSION}_{APP_ARCH}.deb"
-    deb_path  = PROJECT_ROOT / deb_name
-
-    if deb_path.exists():
-        deb_path.unlink()
-
-    try:
-        run([
-            "dpkg-deb",
-            "--build",
-            "--root-owner-group",   # avoids needing root to build
-            str(PKG_ROOT),
-            str(deb_path),
-        ])
-    except subprocess.CalledProcessError:
-        logger.error("❌ dpkg-deb failed")
-        return False, None
-
-    if not deb_path.exists():
-        logger.error(f"❌ Expected output not found: {deb_path}")
-        return False, None
-
-    size_mb = deb_path.stat().st_size / (1024 * 1024)
-    logger.info(f"✅ .deb built: {deb_path}  ({size_mb:.1f} MB)")
-    return True, deb_path
+EXCLUDE = {"venv", ".venv", "dist", "build", "data", "runtime", "build_logs", ".git", "__pycache__",
+           "node_modules", "build_temp_data", "e2e", "review"}
 
 
-# ──────────────────────────────────────────────────────────────────
-# Step 6 — Verify with dpkg-deb --info
-# ──────────────────────────────────────────────────────────────────
-
-def verify_deb(deb_path: Path):
-    banner("Verify .deb Package")
-    try:
-        result = subprocess.run(
-            ["dpkg-deb", "--info", str(deb_path)],
-            capture_output=True, text=True, check=True
-        )
-        logger.info(result.stdout)
-
-        result2 = subprocess.run(
-            ["dpkg-deb", "--contents", str(deb_path)],
-            capture_output=True, text=True, check=True
-        )
-        # Just show first 30 lines so log isn't huge
-        lines = result2.stdout.splitlines()
-        logger.info("\n".join(lines[:30]))
-        if len(lines) > 30:
-            logger.info(f"  ... and {len(lines)-30} more files")
-
-        logger.info("✅ Package verified")
-        return True
-    except subprocess.CalledProcessError as e:
-        logger.warning(f"⚠️  Verification warning: {e}")
-        return True   # non-fatal
+def stage_source(dest: Path) -> None:
+    say("Copying the source for the container")
+    with tarfile.open(dest, "w") as tar:
+        for path in sorted(PROJECT_ROOT.iterdir()):
+            if path.name in EXCLUDE or path.name.endswith((".deb", ".tar.gz")):
+                continue
+            tar.add(path, arcname=path.name,
+                    filter=lambda info: None if "__pycache__" in info.name else info)
 
 
-# ──────────────────────────────────────────────────────────────────
-# Main
-# ──────────────────────────────────────────────────────────────────
+def build_in_container(provisioning: Path | None) -> Path:
+    if not shutil.which("docker"):
+        raise SystemExit("❌ Docker is needed to build for Ubuntu 24.04 (or use --from-dist)")
+    sys.path.insert(0, str(PROJECT_ROOT))
+    import runtime_id
 
-def main():
-    global APP_VERSION, PKG_ROOT, PKG_OPT, PKG_APPS
-    global PKG_ICONS_HI, PKG_ICONS_SC, PKG_DOC, PKG_DEBIAN
+    declared = runtime_id.declared(PROJECT_ROOT)
+    out = OUT_DIR / "deb-out"
+    shutil.rmtree(out, ignore_errors=True)
+    out.mkdir(parents=True)
+    with tempfile.TemporaryDirectory() as stage:
+        stage_dir = Path(stage)
+        stage_source(stage_dir / "src.tar")
+        args = ""
+        if provisioning:
+            shutil.copy2(provisioning, stage_dir / "provisioning.json")
+            args = "--provisioning /stage/provisioning.json"
+        say(f"Building in {BUILD_IMAGE} (Python {declared['python']}, PostgreSQL {declared['postgres']}, "
+            f"Redis {declared['redis']}); the first time takes a while")
+        subprocess.run([
+            "docker", "run", "--rm", "-v", f"{stage_dir}:/stage:ro", "-v", f"{out}:/out",
+            "-v", "cirqen-deb-cache:/root/.cache",
+            "-e", f"PG_MAJOR={str(declared['postgres']).split('.')[0]}", "-e", f"PYTHON={declared['python']}",
+            "-e", f"PYINSTALLER={PYINSTALLER}", "-e", f"PROVISIONING_ARG={args}",
+            "-e", f"HOST_UID={os.getuid()}", "-e", f"HOST_GID={os.getgid()}",
+            BUILD_IMAGE, "bash", "-c", CONTAINER_SCRIPT], check=True)
+    debs = sorted(out.glob("*.deb"))
+    if not debs:
+        raise SystemExit("❌ the container build made no .deb")
+    final = OUT_DIR / debs[-1].name
+    shutil.move(str(debs[-1]), final)
+    shutil.rmtree(out, ignore_errors=True)
+    print(f"✅ {final}")
+    return final
 
-    parser = argparse.ArgumentParser(
-        description="Build Cirqen Desktop .deb package"
-    )
-    parser.add_argument(
-        "--full-build", action="store_true",
-        help="Run build.py (PyInstaller) before packaging"
-    )
-    parser.add_argument(
-        "--docker-build", action="store_true",
-        help="Run the PyInstaller build inside Docker for a clean, reproducible environment"
-    )
-    parser.add_argument(
-        "--dist-path", default=str(DIST_APP_DIR),
-        help=f"Path to PyInstaller dist folder (default: {DIST_APP_DIR})"
-    )
-    parser.add_argument(
-        "--version", default=APP_VERSION,
-        help=f"Package version (default: {APP_VERSION})"
-    )
+
+# ── testing on clean Ubuntu releases ────────────────────────────────────────
+
+TEST_SCRIPT = r"""
+set -uo pipefail
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq >/dev/null
+apt-get install -y -qq /deb/$DEB xvfb xauth xdotool dbus-x11 file >/dev/null 2>/tmp/apt.err || { cat /tmp/apt.err; exit 2; }
+echo "installed: $(dpkg-query -W -f='${Version}' cirqen) on $(. /etc/os-release; echo $PRETTY_NAME)"
+missing=$(find /opt/cirqen -type f \( -name '*.so*' -o -perm -u+x \) -exec sh -c 'file -b "$1" | grep -q ELF && LD_LIBRARY_PATH= ldd "$1" 2>/dev/null | grep "not found" | sed "s|^|$1: |"' _ {} \; | sort -u)
+# *.libs/: libraries vendored inside Python wheels, which find each other at run time.
+missing=$(echo "$missing" | grep -v -e "libtiff.so.5" -e "\.libs/" | grep . || true)
+if [ -n "$missing" ]; then echo "MISSING LIBRARIES:"; echo "$missing" | head -30; fi
+test -f /usr/share/applications/cirqen.desktop && echo "menu entry: ok"
+useradd -m tester
+# Is the Celery worker (background tasks) answering? Ask it, through the app.
+cat > /usr/local/bin/ping_worker <<'PING'
+#!/bin/bash
+cd ~/.local/share/cirqen-app/Cirqen && CELERY_BROKER_URL=redis://127.0.0.1:7788/2 \
+  CELERY_RESULT_BACKEND=redis://127.0.0.1:7788/2 timeout 40 ./Cirqen celery -A Equiper.celery:app inspect ping -t 10 | grep -q pong
+PING
+chmod 755 /usr/local/bin/ping_worker
+su tester -c 'cd ~ && xvfb-run -a -s "-screen 0 1280x800x24" bash -c "cirqen >/tmp/cirqen.out 2>&1 & for i in \$(seq 1 $WAIT); do sleep 2; xdotool key Return 2>/dev/null; [ -s ~/.local/share/cirqen/full_update_ok ] && { for j in \$(seq 1 20); do ping_worker && echo pong > /tmp/ping && break; sleep 3; done; exit 0; }; done; exit 1"'
+status=$?
+L=/home/tester/.local/share/cirqen/logs
+if [ $status -eq 0 ]; then
+  if grep -q pong /tmp/ping 2>/dev/null; then echo "background tasks: ok (the worker answered a ping)"
+  else echo "BACKGROUND TASKS DID NOT ANSWER"; grep -v "^  \. " $L/celery.log | tail -15; status=3; fi
+fi
+if [ $status -eq 0 ]; then echo "STARTED: Cirqen $(cat /home/tester/.local/share/cirqen/full_update_ok) opened its window"
+elif [ $status -eq 3 ]; then :
+else echo "DID NOT START within $((WAIT*2))s"; echo "--- output"; tail -30 /tmp/cirqen.out
+  for f in /home/tester/.local/share/cirqen/logs/launcher.log /home/tester/.local/share/cirqen/logs/django.log \
+           /home/tester/.local/share/cirqen/logs/postgres.log; do
+    [ -f "$f" ] && { echo "--- $f"; grep -v "^\s*$" "$f" | tail -30; }; done
+  ls -la /home/tester/.local/share/cirqen /home/tester/.local/share/cirqen-app 2>&1 | head -30; fi
+exit $status
+"""
+
+
+def test_deb(deb: Path, images=TEST_IMAGES, wait_steps: int = 150) -> bool:
+    ok = True
+    for image in images:
+        say(f"Installing and starting {deb.name} on a clean {image}")
+        result = subprocess.run(["docker", "run", "--rm", "-v", f"{deb.parent}:/deb:ro", "-e", f"DEB={deb.name}",
+                                 "-e", f"WAIT={wait_steps}", "--shm-size=1g", image, "bash", "-c", TEST_SCRIPT])
+        ok = ok and result.returncode == 0
+        print(("✅ " if result.returncode == 0 else "❌ ") + image)
+    return ok
+
+
+def hospital_deb_from(neutral: Path, provisioning: Path, out_dir: Path) -> Path:
+    """A hospital's .deb from a tested neutral one: the same app, plus the
+    hospital's installer file in /etc/cirqen. No rebuild."""
+    code = check_provisioning(provisioning)
+    with tempfile.TemporaryDirectory(dir=out_dir) as tmp:
+        root = Path(tmp) / "pkg"
+        subprocess.run(["dpkg-deb", "-R", str(neutral), str(root)], check=True)
+        if (root / "etc" / PACKAGE / "provisioning.json").exists():
+            raise SystemExit(f"❌ {neutral.name} already belongs to a hospital")
+        etc = root / "etc" / PACKAGE
+        etc.mkdir(parents=True)
+        shutil.copy2(provisioning, etc / "provisioning.json")
+        (etc / "provisioning.json").chmod(0o644)
+        etc.chmod(0o755)
+        (root / "DEBIAN" / "conffiles").write_text(f"/etc/{PACKAGE}/provisioning.json\n")
+        out = out_dir / neutral.name.replace("_amd64.deb", f"_amd64_{code}.deb")
+        subprocess.run(["dpkg-deb", "--root-owner-group", "-Zxz", "--build", str(root), str(out)], check=True,
+                       stdout=subprocess.DEVNULL)
+    out.chmod(0o600)
+    print(f"✅ {out} ({out.stat().st_size / 1e6:.0f} MB)")
+    print("🔒 This .deb holds the hospital's enrollment token: hand it over privately")
+    return out
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0],
+                                     formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
+    parser.add_argument("--provisioning", type=Path, help="a hospital's installer file from the admin panel")
+    parser.add_argument("--from-dist", action="store_true", help="package the existing dist/Cirqen as it is")
+    parser.add_argument("--out", type=Path, default=OUT_DIR, help="where to put the .deb")
+    parser.add_argument("--test", action="store_true", help="install and start it on clean Ubuntu releases")
+    parser.add_argument("--test-only", type=Path, metavar="DEB", help="only test an existing .deb")
+    parser.add_argument("--from-deb", type=Path, metavar="DEB",
+                        help="with --provisioning: make the hospital's .deb from this tested neutral one")
     args = parser.parse_args()
-
-    APP_VERSION  = args.version
-    dist_path    = Path(args.dist_path)
-
-    # Recompute paths if version changed
-    PKG_ROOT     = BUILD_DIR / f"{APP_NAME}_{APP_VERSION}_{APP_ARCH}"
-    PKG_OPT      = PKG_ROOT / "opt" / APP_NAME
-    PKG_APPS     = PKG_ROOT / "usr/share/applications"
-    PKG_ICONS_HI = PKG_ROOT / "usr/share/icons/hicolor/256x256/apps"
-    PKG_ICONS_SC = PKG_ROOT / "usr/share/icons/hicolor/scalable/apps"
-    PKG_DOC      = PKG_ROOT / f"usr/share/doc/{APP_NAME}"
-    PKG_DEBIAN   = PKG_ROOT / "DEBIAN"
-
-    # Determine active build mode for the header
-    if args.docker_build:
-        build_mode = "Docker build (reproducible)"
-    elif args.full_build:
-        build_mode = "Full build (local PyInstaller)"
+    if args.test_only:
+        return 0 if test_deb(args.test_only.resolve()) else 1
+    if args.from_deb:
+        if not args.provisioning:
+            raise SystemExit("❌ --from-deb needs --provisioning")
+        hospital_deb_from(args.from_deb.resolve(), args.provisioning, args.out)
+        return 0
+    if args.provisioning:
+        check_provisioning(args.provisioning)
+    if args.from_dist:
+        args.out.mkdir(parents=True, exist_ok=True)
+        deb = make_deb(DIST_APP, args.out, args.provisioning)
     else:
-        build_mode = "Package only (use existing dist)"
-
-    print("\n" + "=" * 70)
-    print("  CIRQEN DESKTOP — Debian Package Builder")
-    print(f"  Version : {APP_VERSION}")
-    print(f"  Arch    : {APP_ARCH}")
-    print(f"  Mode    : {build_mode}")
-    print(f"  Dist    : {dist_path}")
-    print(f"  Log     : {LOG_FILE}")
-    print("=" * 70 + "\n")
-
-    steps = [
-        ("Platform & tool check",   check_platform),
-    ]
-
-    if args.docker_build:
-        steps.append(("Docker PyInstaller build", run_docker_build))
-    elif args.full_build:
-        steps.append(("PyInstaller build", run_pyinstaller))
-
-    steps += [
-        ("Verify dist",             lambda: verify_dist(dist_path)),
-        ("Build package tree",      lambda: build_package_tree(dist_path)),
-        ("Fix permissions",         fix_permissions),
-        ("Run dpkg-deb",            run_dpkg_deb),
-    ]
-
-    deb_path = None
-
-    for name, fn in steps:
-        logger.info(f"\n▶  {name} …")
-        result = fn()
-
-        if isinstance(result, tuple):
-            ok, deb_path = result
-        else:
-            ok = result
-
-        if not ok:
-            print(f"\n❌  BUILD FAILED at: {name}")
-            print(f"    See log: {LOG_FILE}")
-            return 1
-
-    if deb_path:
-        verify_deb(deb_path)
-
-    deb_name = deb_path.name if deb_path else f"{APP_NAME}_{APP_VERSION}_{APP_ARCH}.deb"
-
-    print("\n" + "=" * 70)
-    print("  🎉  .deb build SUCCESSFUL!")
-    print("=" * 70)
-    print(f"""
-  Package : {deb_path}
-  Size    : {deb_path.stat().st_size / (1024*1024):.1f} MB
-
-  ── INSTALL ──────────────────────────────────────────────────
-  sudo dpkg -i {deb_name}
-  sudo apt-get install -f          # pull in any missing deps
-
-  ── VERIFY install ───────────────────────────────────────────
-  dpkg -l | grep cirqen
-  dpkg -L cirqen                   # list installed files
-
-  ── LAUNCH ───────────────────────────────────────────────────
-  cirqen                           # terminal
-  # or open Applications menu and search "Cirqen"
-
-  ── UNINSTALL ────────────────────────────────────────────────
-  sudo dpkg -r cirqen              # remove (keep config)
-  sudo dpkg -P cirqen              # purge (remove everything)
-""")
-    print("=" * 70)
+        deb = build_in_container(args.provisioning)
+    if args.test:
+        return 0 if test_deb(deb) else 1
     return 0
 
 

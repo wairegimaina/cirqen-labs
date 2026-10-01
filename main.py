@@ -55,6 +55,15 @@ if __name__ == '__main__':
         execute_from_command_line([sys.argv[0], *sys.argv[2:]])
         sys.exit(0)
 
+    # The installed app has no separate Python with Celery in it: the
+    # services start the worker and beat as `<this binary> celery ...`
+    # (bulider_tools/services.py _celery_command).
+    if len(sys.argv) > 1 and sys.argv[1] == 'celery':
+        os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'Equiper.settings')
+        from celery.bin.celery import main as celery_main
+        sys.argv = ['celery', *sys.argv[2:]]
+        sys.exit(celery_main())
+
     if multiprocessing.current_process().name == 'MainProcess' and not SKIP_GUI_IMPORTS:
         _quiet_terminal()
         from bulider_tools.app import main
