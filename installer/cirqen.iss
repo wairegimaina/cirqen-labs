@@ -6,6 +6,12 @@
 ; Cirqen's own updates can replace files in it. Records and settings live in
 ; %APPDATA%\cirqen and are kept on uninstall.
 ;
+; The database is a Windows service, CirqenPostgreSQL (NetworkService,
+; automatic start), set up once with admin rights by `Cirqen.exe
+; system-postgres` (a UAC prompt): PostgreSQL in Program Files\Cirqen, its
+; data and connection settings in %ProgramData%\Cirqen. Both stay on
+; uninstall, like the records. See bulider_tools/system_pg.py.
+;
 ; A hospital's installer: set CIRQEN_PROVISIONING to its installer file from
 ; the admin panel; it is installed next to Cirqen.exe and read on first start.
 
@@ -62,4 +68,5 @@ Name: "{autoprograms}\Cirqen"; Filename: "{app}\Cirqen.exe"; WorkingDir: "{app}"
 Name: "{autodesktop}\Cirqen"; Filename: "{app}\Cirqen.exe"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
+Filename: "{app}\Cirqen.exe"; Parameters: "system-postgres"; Verb: "runas"; Flags: shellexec waituntilterminated runhidden; StatusMsg: "Setting up the Cirqen database service..."
 Filename: "{app}\Cirqen.exe"; Description: "Start Cirqen"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent

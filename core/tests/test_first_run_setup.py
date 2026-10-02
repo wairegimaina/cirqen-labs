@@ -4,6 +4,7 @@ Uses this machine's PostgreSQL (bulider_tools/database.py, services.py)."""
 import os
 import socket
 import tempfile
+import time
 import types
 from pathlib import Path
 from types import SimpleNamespace
@@ -69,6 +70,9 @@ class FirstRunSetupTests(TestCase):
             patcher = mock.patch.object(module, "DATA_PATH", self.data)
             patcher.start()
             self.addCleanup(patcher.stop)
+        patcher = mock.patch.object(database, "uses_system_db", return_value=False)   # running from source
+        patcher.start()
+        self.addCleanup(patcher.stop)
         with mock.patch.object(database, "setup_environment", return_value=dict(self.config)), \
                 mock.patch.object(database, "RUNTIME_DIR", self.data / "runtime"):
             self.setup = database.FirstRunSetup(ports)
@@ -135,3 +139,151 @@ class FirstRunSetupTests(TestCase):
         rules = [line for line in (self.data / "postgres" / "pg_hba.conf").read_text().splitlines()
                  if line.strip() and not line.startswith("#")]
         self.assertFalse([r for r in rules if "trust" in r], rules)
+
+
+@skipUnless(PG_BIN and (PG_BIN / "initdb").exists(), "needs a PostgreSQL install")
+class SystemDatabaseTests(TestCase):
+    """The installed app: PostgreSQL is a system service (system_pg.py)."""
+
+    def setUp(self):
+        try:
+            from bulider_tools import database, system_pg
+        except Exception as exc:  # PySide6 missing on this machine
+            self.skipTest(f"desktop setup module unavailable: {exc}")
+        self.database, self.system_pg = database, system_pg
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.tmp = Path(tmp.name)
+        self.system = self._system_cluster()
+
+    def _system_cluster(self):
+        """Like Ubuntu's: superuser postgres; cirqen1 an ordinary role owning its database."""
+        import subprocess
+
+        data, port = self.tmp / "system", free_port()
+        subprocess.run([str(PG_BIN / "initdb"), "-D", str(data), "-U", "postgres", "-A", "trust", "--locale=C"],
+                       check=True, capture_output=True)
+        server = subprocess.Popen([str(PG_BIN / "postgres"), "-D", str(data), "-p", str(port), "-k", "",
+                                   "-c", "listen_addresses=127.0.0.1"],
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.addCleanup(lambda: (server.terminate(), server.wait(30)))
+        import psycopg2
+
+        for _ in range(60):
+            try:
+                conn = psycopg2.connect(host="127.0.0.1", port=port, dbname="postgres", user="postgres")
+                break
+            except psycopg2.OperationalError:
+                time.sleep(0.5)
+        conn.autocommit = True
+        with conn.cursor() as cur:
+            cur.execute("CREATE ROLE cirqen1 LOGIN CREATEDB PASSWORD 'sys-pass'")
+            cur.execute("CREATE DATABASE cirqen1 OWNER cirqen1 TEMPLATE template0 ENCODING 'UTF8'")
+        conn.close()
+        return {"host": "127.0.0.1", "port": port, "database": "cirqen1", "user": "cirqen1",
+                "password": "sys-pass"}
+
+    def _old_bundled_database(self):
+        """A PC's old database, made by the old first-run setup, with records in it."""
+        data = self.tmp / "data"
+        (data / "logs").mkdir(parents=True)
+        cfg = {"host": "127.0.0.1", "port": free_port(), "database": "cirqen1", "user": "cirqen1",
+               "password": "old-pass"}
+        ports = SimpleNamespace(get_port=lambda name: cfg["port"])
+        with mock.patch.object(self.database, "DATA_PATH", data), \
+                mock.patch.object(self.database, "setup_environment", return_value=dict(cfg)), \
+                mock.patch.object(self.database, "uses_system_db", return_value=False), \
+                mock.patch.object(self.database.FirstRunSetup, "_run_migrations", return_value=None):
+            setup = self.database.FirstRunSetup(ports)
+            setup.pg_dir = PG_BIN.parent
+            setup.run_setup()
+            server, log = setup._start()
+            self.assertTrue(setup._wait_ready(server))
+            conn = setup._connect("cirqen1")
+            conn.autocommit = True
+            with conn.cursor() as cur:
+                cur.execute("CREATE TABLE equipment (id serial PRIMARY KEY, name text NOT NULL)")
+                cur.execute("INSERT INTO equipment (name) VALUES ('Infusion pump'), ('Defibrillator')")
+            conn.close()
+            setup._stop(server)
+            if log:
+                log.close()
+        return data, cfg
+
+    def rows(self, cfg):
+        conn = self.system_pg.connect(cfg)
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT name FROM equipment ORDER BY id")
+                return [r[0] for r in cur.fetchall()]
+        finally:
+            conn.close()
+
+    def test_load_reads_local_db_json(self):
+        path = self.tmp / "local_db.json"
+        with mock.patch.object(self.system_pg, "config_path", return_value=path):
+            self.assertIsNone(self.system_pg.load())
+            path.write_text('{"port": 5433, "password": "x"}')
+            self.assertEqual(self.system_pg.load(), {"host": "127.0.0.1", "port": 5433, "database": "cirqen1",
+                                                     "user": "cirqen1", "password": "x"})
+
+    def test_newer_dump_settings_are_dropped(self):
+        self.assertFalse(self.system_pg.strip_unsupported("SET transaction_timeout = 0;\n"))
+        self.assertTrue(self.system_pg.strip_unsupported("SET statement_timeout = 0;\n"))
+
+    def test_old_records_are_copied_and_old_folder_kept(self):
+        data, old = self._old_bundled_database()
+        error = self.system_pg.copy_bundled_data(data / "postgres", old, self.system, PG_BIN.parent,
+                                                 data / "backups")
+        self.assertIsNone(error)
+        self.assertEqual(self.rows(self.system), ["Infusion pump", "Defibrillator"])
+        self.assertFalse((data / "postgres").exists())
+        self.assertTrue((data / "postgres.copied-to-system" / "PG_VERSION").exists())
+        self.assertEqual(len(list((data / "backups").glob("before-system-postgres-*.sql"))), 1)
+        self.assertEqual(list((data / "backups").glob("*.restore.sql")), [])
+
+    def test_a_database_already_in_use_is_not_overwritten(self):
+        data, old = self._old_bundled_database()
+        conn = self.system_pg.connect(self.system)
+        conn.autocommit = True
+        with conn.cursor() as cur:
+            cur.execute("CREATE TABLE equipment (id serial PRIMARY KEY, name text)")
+            cur.execute("INSERT INTO equipment (name) VALUES ('Already here')")
+        conn.close()
+        self.assertIsNone(self.system_pg.copy_bundled_data(data / "postgres", old, self.system, PG_BIN.parent,
+                                                           data / "backups"))
+        self.assertEqual(self.rows(self.system), ["Already here"])
+        self.assertTrue((data / "postgres" / "PG_VERSION").exists())
+
+    def test_first_run_with_the_system_database(self):
+        data, old = self._old_bundled_database()
+        ports = SimpleNamespace(get_port=lambda name: 2215)
+        with mock.patch.object(self.database, "DATA_PATH", data), \
+                mock.patch.object(self.database, "SYSTEM_DB_READY", data / "system_db_ready"), \
+                mock.patch.object(self.system_pg, "load", return_value=dict(self.system)), \
+                mock.patch.object(self.database, "setup_environment", return_value=dict(self.system)), \
+                mock.patch.object(self.database.FirstRunSetup, "_run_migrations", return_value=None):
+            (data / "config.json").write_text('{"local_db": {"user": "cirqen1", "password": "old-pass"}}')
+            setup = self.database.FirstRunSetup(ports)
+            setup.pg_data, setup.pg_dir = data / "postgres", PG_BIN.parent
+            results = []
+            setup.setup_complete.connect(lambda ok, msg: results.append((ok, msg)))
+            self.assertTrue(setup.is_first_run())
+            setup.run_setup()
+            self.assertTrue(results[-1][0], results)
+            self.assertFalse(setup.is_first_run())
+        self.assertEqual(self.rows(self.system), ["Infusion pump", "Defibrillator"])
+
+    def test_no_system_database_says_how_to_fix(self):
+        ports = SimpleNamespace(get_port=lambda name: 2215)
+        with mock.patch.object(self.database, "DATA_PATH", self.tmp), \
+                mock.patch.object(self.database, "SYSTEM_DB_READY", self.tmp / "system_db_ready"), \
+                mock.patch.object(self.system_pg, "load", return_value=None), \
+                mock.patch.object(self.database, "uses_system_db", return_value=True), \
+                mock.patch.object(self.database, "setup_environment", return_value=dict(self.system)):
+            setup = self.database.FirstRunSetup(ports)
+            results = []
+            setup.setup_complete.connect(lambda ok, msg: results.append((ok, msg)))
+            setup.run_setup()
+        self.assertFalse(results[-1][0])
+        self.assertIn("setup-database" if os.name == "posix" else "installer", results[-1][1])

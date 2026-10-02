@@ -1,12 +1,24 @@
-# First run on a PC: create the local PostgreSQL cluster and database, and
-# apply the migrations. Nothing else: user accounts come down from HQ through
-# sync (`manage.py create_hod` exists for a PC that has to start without HQ).
+# First run on a PC: get the local database ready and apply the migrations.
+# Nothing else: user accounts come down from HQ through sync
+# (`manage.py create_hod` exists for a PC that has to start without HQ).
+#
+# The installed app uses PostgreSQL installed in the system (system_pg.py).
+# Running from source without that, Cirqen still makes and runs its own
+# cluster in the data folder (the "bundled" path below).
+import json
 import shutil
 
 from PySide6.QtCore import QObject, Signal
 
+from . import system_pg
 from .pg_process import fix_data_dir_mode, pg_env, server_options, start as start_pg_server, tool
 from .runtime import *
+
+SYSTEM_DB_READY = DATA_PATH / 'system_db_ready'
+
+
+def uses_system_db() -> bool:
+    return bool(getattr(sys, 'frozen', False)) or system_pg.load() is not None
 
 
 class FirstRunSetup(QObject):
@@ -32,7 +44,10 @@ class FirstRunSetup(QObject):
         self.db_config = setup_environment(port_manager)
 
     def is_first_run(self):
-        is_first = not (self.pg_data / 'PG_VERSION').exists()
+        if uses_system_db():
+            is_first = not SYSTEM_DB_READY.exists()
+        else:
+            is_first = not (self.pg_data / 'PG_VERSION').exists()
         logger.info(f"First run check: {is_first}")
         return is_first
 
@@ -45,6 +60,8 @@ class FirstRunSetup(QObject):
         if not self.is_first_run():
             self.setup_complete.emit(True, "Already configured")
             return
+        if uses_system_db():
+            return self._run_system_setup()
         server = log_handle = None
         try:
             self._step("Checking the installation...", 5)
@@ -92,6 +109,55 @@ class FirstRunSetup(QObject):
                 self._stop(server)
             if log_handle:
                 log_handle.close()
+
+    # ── the system PostgreSQL ───────────────────────────────────────────────
+    def _run_system_setup(self):
+        try:
+            cfg = system_pg.load()
+            if cfg is None and sys.platform == 'win32':
+                self._step("Setting up the database service (Windows will ask for permission)...", 10)
+                system_pg.run_elevated_setup()
+                cfg = system_pg.load()
+            if cfg is None:
+                return self._fail("The Cirqen database isn't set up on this PC.\n" + system_pg.fix_hint())
+            self.db_config = setup_environment(self.port_manager)
+
+            self._step("Connecting to the database...", 25)
+            error = system_pg.wait_until_up(cfg, 90)
+            if error:
+                return self._fail(f"Cirqen could not connect to its database (port {cfg['port']}):\n"
+                                  f"{error}\n\n{system_pg.fix_hint()}")
+
+            if (self.pg_data / 'PG_VERSION').exists():
+                self._step("Copying your existing records into the new database...", 40)
+                error = system_pg.copy_bundled_data(self.pg_data, self._old_local_db(), cfg, self.pg_dir,
+                                                    DATA_PATH / 'backups')
+                if error:
+                    return self._fail(error)
+
+            self._step("Applying database migrations (this can take a few minutes)...", 70)
+            error = self._run_migrations()
+            if error:
+                return self._fail(error)
+
+            SYSTEM_DB_READY.write_text(json.dumps({'port': cfg['port'], 'at': time.strftime('%Y-%m-%d %H:%M:%S')}))
+            self._step("Setup complete", 100)
+            self.setup_complete.emit(True, (
+                "The database is ready.\n\n"
+                "Sign in with the account your hospital gave you; accounts come from HQ."))
+        except Exception as e:
+            import traceback
+            logger.error(f"Setup error: {traceback.format_exc()}")
+            self._fail(f"{type(e).__name__}: {e}")
+
+    def _old_local_db(self):
+        """How this PC logged in to the database Cirqen used to run itself."""
+        try:
+            local = json.loads((DATA_PATH / 'config.json').read_text(encoding='utf-8')).get('local_db') or {}
+        except (OSError, ValueError):
+            local = {}
+        return {'user': local.get('user') or 'cirqen1', 'database': local.get('database') or 'cirqen1',
+                'password': local.get('password') or ''}
 
     def _fail(self, message):
         logger.error(f"[setup] failed: {message}")

@@ -12,6 +12,12 @@ if (-not (Test-Path $app)) { throw "Cirqen.exe not installed at $app" }
 $shortcut = Join-Path ([Environment]::GetFolderPath("Programs")) "Cirqen.lnk"
 Write-Host "Start menu shortcut: $(Test-Path $shortcut)"
 
+# The installer's elevated step: the CirqenPostgreSQL service (system_pg.py).
+$programData = Join-Path $env:ProgramData "Cirqen"
+$service = Get-Service CirqenPostgreSQL -ErrorAction SilentlyContinue
+$dbReady = $service -and $service.Status -eq "Running" -and (Test-Path (Join-Path $programData "local_db.json"))
+if ($service) { Write-Host "database service: $($service.Status) ($($service.StartType))" } else { Write-Host "database service: MISSING" }
+
 $env:CIRQEN_UNATTENDED = "1"          # no one is here to click OK
 $env:CIRQEN_LOG_LEVEL = "INFO"         # the full story in cirqen_app.log if it fails
 $proc = Start-Process $app -WorkingDirectory (Split-Path $app) -PassThru
@@ -37,7 +43,10 @@ if ($started) {
     Write-Host "DID NOT START within 360s"
 }
 
-if (-not ($started -and $pong)) {
+if (-not ($started -and $pong -and $dbReady)) {
+    foreach ($log in (Join-Path $programData "setup.log"), (Get-ChildItem (Join-Path $programData "postgres\log") -ErrorAction SilentlyContinue | Sort-Object LastWriteTime | Select-Object -Last 1 -ExpandProperty FullName)) {
+        if ($log -and (Test-Path $log)) { Write-Host "--- $log"; Get-Content $log -Tail 60 }
+    }
     foreach ($log in "launcher.log", "cirqen_app.log", "postgres_setup.log", "django.log", "postgres.log", "postgres_init.log", "redis.log", "celery.log") {
         $path = Join-Path $data "logs\$log"
         if (Test-Path $path) { Write-Host "--- $log"; Get-Content $path -Tail 40 }
@@ -47,4 +56,4 @@ if (-not ($started -and $pong)) {
     Copy-Item (Join-Path $data "logs\*") dist\app-logs -ErrorAction SilentlyContinue
 }
 Get-Process Cirqen -ErrorAction SilentlyContinue | Stop-Process -Force
-if (-not ($started -and $pong)) { exit 1 }
+if (-not ($started -and $pong -and $dbReady)) { exit 1 }

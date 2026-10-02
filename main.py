@@ -61,6 +61,12 @@ if __name__ == '__main__':
         execute_from_command_line([sys.argv[0], *sys.argv[2:]])
         sys.exit(0)
 
+    # Windows installer, with admin rights: install or repair the
+    # CirqenPostgreSQL service (bulider_tools/system_pg.py).
+    if len(sys.argv) > 1 and sys.argv[1] == 'system-postgres':
+        from bulider_tools.system_pg import main as system_postgres
+        sys.exit(system_postgres())
+
     # The installed app has no separate Python with Celery in it: the
     # services start the worker and beat as `<this binary> celery ...`
     # (bulider_tools/services.py _celery_command).

@@ -18,8 +18,15 @@ Redis 8 from packages.redis.io); the databases' own libraries go into the
 app (build.py bundle_native_libs). --from-dist skips that: the .deb then runs
 only on this machine's Ubuntu release and newer.
 
+The database is Ubuntu's own PostgreSQL (a dependency, so apt installs it
+when missing), run by the system. During install /usr/lib/cirqen/setup-database
+creates the cirqen1 role and database in the newest cluster and writes
+/etc/cirqen/local_db.json, which Cirqen reads (bulider_tools/system_pg.py).
+Run it again with sudo to repair the database setup.
+
 What it installs:
   /opt/cirqen/                 the app, as installed (root-owned)
+  /usr/lib/cirqen/setup-database  creates the database (run by postinst)
   /usr/bin/cirqen              the launcher (the menu entry and the command)
   /usr/share/applications/     menu entry, with the icon
   /etc/cirqen/provisioning.json  only in a hospital's .deb
@@ -68,6 +75,7 @@ DEPENDS = [
     "libxfixes3", "libxrender1", "libxext6", "libxi6", "libwayland-client0", "libwayland-cursor0",
     "libwayland-egl1", "libwayland-server0", "libpulse0", "libgtk-3-0t64 | libgtk-3-0",
     "tzdata",                      # Africa/Nairobi for EAT dates (zoneinfo reads the system's)
+    "postgresql (>= 16) | postgresql-18 | postgresql-17 | postgresql-16",   # the database (system_pg.py)
 ]
 # Qt plugins that may stay unloadable: an old TIFF reader newer Ubuntus no longer ship.
 OPTIONAL_MISSING = ("libtiff.so.5",)
@@ -112,11 +120,69 @@ Keywords=calibration;maintenance;hospital;biomedical;
 StartupWMClass=Cirqen
 """
 
+SETUP_DATABASE = r"""#!/bin/sh
+# Cirqen's database in the system PostgreSQL: the cirqen1 role and database
+# in the newest cluster (made if there is none, started if it is down), and
+# /etc/cirqen/local_db.json for Cirqen to connect with. Safe to run again:
+#   sudo /usr/lib/cirqen/setup-database
+set -u
+CONF=/etc/cirqen/local_db.json
+ROLE=cirqen1
+DB=cirqen1
+
+fail() { echo "Cirqen database: $*" >&2; exit 1; }
+[ "$(id -u)" = 0 ] || fail "run it with sudo"
+command -v pg_lsclusters >/dev/null 2>&1 || fail "PostgreSQL is not installed (sudo apt install postgresql)"
+
+line=$(pg_lsclusters -h 2>/dev/null | sort -V | tail -n 1)
+if [ -z "$line" ]; then
+  ver=$(ls /usr/lib/postgresql 2>/dev/null | sort -V | tail -n 1)
+  [ -n "$ver" ] || fail "no PostgreSQL server found in /usr/lib/postgresql"
+  pg_createcluster "$ver" main >/dev/null || fail "could not create a PostgreSQL $ver cluster"
+  line=$(pg_lsclusters -h | sort -V | tail -n 1)
+fi
+set -- $line
+ver=$1; name=$2; port=$3; status=$4
+case "$status" in
+  online*) ;;
+  *) pg_ctlcluster "$ver" "$name" start || fail "PostgreSQL $ver/$name did not start (see /var/log/postgresql)";;
+esac
+
+psql_root() { runuser -u postgres -- psql -X -p "$port" -v ON_ERROR_STOP=1 -qAt "$@"; }
+i=0
+until psql_root -c "SELECT 1" >/dev/null 2>&1; do
+  i=$((i + 1)); [ $i -gt 60 ] && fail "PostgreSQL $ver/$name on port $port does not answer"; sleep 1
+done
+
+password=""
+[ -f "$CONF" ] && password=$(sed -n 's/.*"password": *"\([A-Za-z0-9]*\)".*/\1/p' "$CONF")
+[ -n "$password" ] || password=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)
+
+psql_root >/dev/null <<SQL || fail "could not create the $ROLE role"
+DO \$\$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '$ROLE') THEN CREATE ROLE $ROLE LOGIN; END IF;
+END \$\$;
+ALTER ROLE $ROLE WITH LOGIN CREATEDB PASSWORD '$password';
+SQL
+if [ -z "$(psql_root -c "SELECT 1 FROM pg_database WHERE datname = '$DB'")" ]; then
+  runuser -u postgres -- createdb -p "$port" -O "$ROLE" -E UTF8 -T template0 --locale=C "$DB" \
+    || fail "could not create the $DB database"
+fi
+
+mkdir -p /etc/cirqen
+umask 022
+printf '{\n  "host": "127.0.0.1",\n  "port": %s,\n  "database": "%s",\n  "user": "%s",\n  "password": "%s",\n  "cluster": "%s/%s"\n}\n' \
+  "$port" "$DB" "$ROLE" "$password" "$ver" "$name" > "$CONF.new" && chmod 644 "$CONF.new" && mv "$CONF.new" "$CONF" \
+  || fail "could not write $CONF"
+echo "Cirqen database: ready ($DB on PostgreSQL $ver/$name, port $port)"
+"""
+
 POSTINST = """#!/bin/sh
 set -e
 if [ "$1" = "configure" ]; then
   update-desktop-database -q /usr/share/applications 2>/dev/null || true
   gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor 2>/dev/null || true
+  /usr/lib/cirqen/setup-database || echo "Cirqen: fix the problem above, then run: sudo /usr/lib/cirqen/setup-database" >&2
 fi
 exit 0
 """
@@ -170,6 +236,10 @@ def make_deb(app: Path, out_dir: Path, provisioning: Path | None = None) -> Path
         launcher = root / "usr" / "bin" / PACKAGE
         launcher.write_text(LAUNCHER)
         launcher.chmod(0o755)
+        (root / "usr" / "lib" / PACKAGE).mkdir(parents=True)
+        setup_db = root / "usr" / "lib" / PACKAGE / "setup-database"
+        setup_db.write_text(SETUP_DATABASE)
+        setup_db.chmod(0o755)
         apps = root / "usr" / "share" / "applications"
         apps.mkdir(parents=True)
         (apps / f"{PACKAGE}.desktop").write_text(DESKTOP_ENTRY.format(summary=SUMMARY))
@@ -308,6 +378,8 @@ missing=$(find /opt/cirqen -type f \( -name '*.so*' -o -perm -u+x \) -exec sh -c
 missing=$(echo "$missing" | grep -v -e "libtiff.so.5" -e "\.libs/" | grep . || true)
 if [ -n "$missing" ]; then echo "MISSING LIBRARIES:"; echo "$missing" | head -30; fi
 test -f /usr/share/applications/cirqen.desktop && echo "menu entry: ok"
+if [ -f /etc/cirqen/local_db.json ]; then echo "database: $(pg_lsclusters -h | tr -s ' ' | cut -d' ' -f1-4)"
+else echo "DATABASE NOT SET UP"; exit 4; fi
 useradd -m tester
 # Is the Celery worker (background tasks) answering? Ask it, through the app.
 cat > /usr/local/bin/ping_worker <<'PING'

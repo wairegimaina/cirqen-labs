@@ -1056,6 +1056,12 @@ def setup_environment(port_manager: PortManager):
             'password': os.getenv('POSTGRES_LOCAL_PASSWORD', ''),
         }
 
+    # ── The system PostgreSQL (system_pg.py), when this PC has it ────────────
+    from .system_pg import load as _load_system_db
+    _system = _load_system_db()
+    if _system:
+        DB_CONFIG = _system
+
     # ── Publish env-vars for Django settings / subprocesses ───────────────────
     for key, value in DB_CONFIG.items():
         os.environ[f'POSTGRES_LOCAL_{key.upper()}'] = str(value)

@@ -643,6 +643,23 @@ class ServiceManager(QObject):
         pg_log  = DATA_PATH / 'logs' / 'postgres.log'
         port    = self.port_manager.get_port('postgresql_local')
 
+        # The installed app: PostgreSQL is a system service (system_pg.py);
+        # Cirqen only connects to it.
+        from . import system_pg
+        from .database import uses_system_db
+        if uses_system_db():
+            cfg = system_pg.load()
+            if cfg is None:
+                logger.error(f"[PG] The system database isn't set up. {system_pg.fix_hint()}")
+                return False
+            error = system_pg.wait_until_up(cfg, 90)
+            if error:
+                logger.error(f"[PG] Cannot reach the system database on port {cfg['port']}: {error}. "
+                             f"{system_pg.fix_hint()}")
+                return False
+            logger.info(f"[PG] System PostgreSQL ready on port {cfg['port']}.")
+            return True
+
         logger.info(f"[PG] Starting PostgreSQL local on port {port}...")
 
         # ------------------------------------------------------------------
