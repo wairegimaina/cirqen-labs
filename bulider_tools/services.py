@@ -2,6 +2,14 @@
 from PySide6.QtCore import QObject, QThread, QTimer, Signal
 
 from .runtime import *
+from .pg_process import fix_data_dir_mode, pg_env, server_options, start as start_pg_server, tool
+
+
+def _log_tail(path, chars=1500):
+    try:
+        return Path(path).read_text(encoding='utf-8', errors='replace')[-chars:]
+    except OSError:
+        return ''
 
 def _superuser_candidates(app_user: str) -> list:
     """Who may be the local cluster's superuser, most likely first: the OS user
@@ -629,8 +637,6 @@ class ServiceManager(QObject):
         exist, then return True.  Any failure returns False.
         """
         import time as _time
-        import psycopg2
-        from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
         pg_dir  = self.runtime_dir / 'postgresql'
         pg_data = DATA_PATH / 'postgres'
@@ -690,162 +696,152 @@ class ServiceManager(QObject):
                 except Exception:
                     pass
 
-        # Build environment with correct library path
-        env = os.environ.copy()
-        pg_lib = pg_dir / 'lib'
-        if pg_lib.exists() and sys.platform != 'win32':
-            ld = env.get('LD_LIBRARY_PATH', '')
-            env['LD_LIBRARY_PATH'] = f"{pg_lib}:{ld}" if ld else str(pg_lib)
+        env = pg_env(pg_dir)
+        fix_data_dir_mode(pg_data)
 
         rotate_log_if_large(pg_log)
         # On Windows with admin rights postgres.exe refuses to run; pg_ctl
         # starts it with a restricted token (pg_process.py).
-        from .pg_process import start as start_pg_server
-
-        process, log_fh = start_pg_server(pg_bin, pg_data, ['-p', str(port), '-k', str(pg_data)], pg_log, env)
+        process, log_fh = start_pg_server(pg_bin, pg_data, server_options(port), pg_log, env)
         self.processes.append(('postgres_local', process, log_fh))
         logger.info(f"[PG] Process started (PID {process.pid}), waiting for ready...")
 
-        # ------------------------------------------------------------------
-        # Wait up to 45 s for postgres to accept connections
-        # ------------------------------------------------------------------
-        postgres_ready   = False
-        superuser_name   = None
-        # The cluster's superuser is the OS user who ran initdb (database.py),
-        # trusted locally. os.getlogin() fails without a login terminal (an
-        # app started from the desktop menu, a service), so ask the user
-        # database first; otherwise only password users are left and this
-        # waits out its whole timeout on a server that is up.
-        candidate_users = _superuser_candidates(self.db_config['user'])
-
-        for attempt in range(240):          # 240 x 0.5 s = 120 s max
+        # Up when it answers at all: a refused login still means it's up.
+        import psycopg2
+        for _attempt in range(240):          # 240 x 0.5 s = 120 s max
             if process.poll() is not None:
-                logger.error(f"[PG] Process died (exit {process.poll()}). Check {pg_log}")
+                logger.error(f"[PG] Process died (exit {process.poll()}). Last log lines:\n"
+                             f"{_log_tail(pg_log)}")
                 return False
-
-            for uname in candidate_users:
-                try:
-                    conn = psycopg2.connect(
-                        host='127.0.0.1', port=port,
-                        database='postgres', user=uname,
-                        connect_timeout=3
-                    )
-                    conn.close()
-                    superuser_name = uname
-                    postgres_ready = True
-                    break
-                except psycopg2.OperationalError as exc:
-                    err = str(exc)
-                    if 'does not exist' in err or 'authentication failed' in err:
-                        # Server is up, just wrong user — still counts
-                        superuser_name = uname
-                        postgres_ready = True
-                        break
-                    # else: still starting up
-            if postgres_ready:
+            try:
+                psycopg2.connect(host='127.0.0.1', port=port, dbname='postgres',
+                                 user=self.db_config['user'], password=self.db_config['password'],
+                                 connect_timeout=3).close()
                 break
+            except psycopg2.OperationalError as exc:
+                err = str(exc)
+                if 'does not exist' in err or 'authentication failed' in err or 'pg_hba' in err:
+                    break
             _time.sleep(0.5)
-
-        if not postgres_ready:
+        else:
             logger.error(f"[PG] Timed out waiting for PostgreSQL on port {port}. Check {pg_log}")
             return False
 
-        logger.info(f"[PG] Ready on port {port} (connected as '{superuser_name}')")
+        logger.info(f"[PG] Ready on port {port}")
         return self._ensure_pg_user_and_db_safe(port, pg_dir)
 
     def _ensure_pg_user_and_db_safe(self, port: int, pg_dir):
-        """
-        Idempotently create the app user and database if they don't exist.
+        """The app role can log in and its database exists; True when so.
 
-        FIX: success log/return is now INSIDE the try block so a
-        psycopg2 error in the finally (cur/conn close) can never
-        swallow a True result.  cur is initialised to None before the
-        try so the finally never hits NameError.
+        New clusters (database.py) have the app role as their superuser. PCs
+        set up before have a superuser named after the OS user, trusted
+        locally, and the app role made beside it. When the app role's
+        password doesn't work (config.json was recreated and got a new one),
+        it is reset through a trust rule for 127.0.0.1 that lasts one reload.
         """
         import psycopg2
-        from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+        from psycopg2 import sql
 
-        candidate_superusers = _superuser_candidates(self.db_config['user'])
+        user, password = self.db_config['user'], self.db_config['password']
 
-        # --- connect as any superuser ---
+        def connect(as_user, with_password=None):
+            return psycopg2.connect(host='127.0.0.1', port=port, dbname='postgres', user=as_user,
+                                    password=with_password, connect_timeout=5)
+
+        def set_app_role(conn):
+            """Create the app role, or set its password, as a superuser."""
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (user,))
+                verb = 'ALTER' if cur.fetchone() else 'CREATE'
+                cur.execute(sql.SQL(verb + " ROLE {} WITH LOGIN SUPERUSER PASSWORD %s")
+                            .format(sql.Identifier(user)), (password,))
+                logger.info(f"[PG] {verb.title()}d role '{user}' with the password from config.json.")
+
         conn = None
-        for uname in candidate_superusers:
-            try:
-                conn = psycopg2.connect(
-                    host='127.0.0.1', port=port,
-                    database='postgres', user=uname,
-                    connect_timeout=5
-                )
-                logger.info(f"[PG] Superuser connection established as '{uname}'.")
-                break
-            except psycopg2.OperationalError as exc:
-                logger.debug(f"[PG] Could not connect as '{uname}': {exc}")
-                continue
+        try:
+            conn = connect(user, password)
+        except psycopg2.OperationalError as exc:
+            logger.warning(f"[PG] '{user}' could not log in ({str(exc).strip()}); repairing the role.")
 
         if conn is None:
-            logger.error("[PG] Could not connect as any superuser to verify user/db.")
+            # Earlier PCs: the OS user's superuser, trusted locally.
+            for uname in _superuser_candidates(user):
+                if uname == user:
+                    continue
+                try:
+                    su = connect(uname)
+                    try:
+                        su.autocommit = True
+                        set_app_role(su)
+                    finally:
+                        su.close()
+                    conn = connect(user, password)
+                    break
+                except psycopg2.Error as exc:
+                    logger.debug(f"[PG] Not as '{uname}': {exc}")
+
+        if conn is None and self._repair_app_password(port, pg_dir, connect, set_app_role):
+            try:
+                conn = connect(user, password)
+            except psycopg2.OperationalError as exc:
+                logger.error(f"[PG] Still cannot log in as '{user}' after repair: {exc}")
+
+        if conn is None:
+            logger.error(f"[PG] Cannot log in to PostgreSQL as '{user}'.")
             return False
 
-        # --- cur is None-initialised so the finally never hits NameError ---
-        cur = None
-        success = False
         try:
-            conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
-            cur = conn.cursor()
-
-            # Ensure app user exists
-            cur.execute(
-                "SELECT 1 FROM pg_roles WHERE rolname = %s",
-                (self.db_config['user'],)
-            )
-            if not cur.fetchone():
-                logger.info(f"[PG] Creating user '{self.db_config['user']}'...")
-                cur.execute(
-                    f"CREATE ROLE {self.db_config['user']} "
-                    f"WITH LOGIN PASSWORD %s CREATEDB CREATEROLE SUPERUSER",
-                    (self.db_config['password'],)
-                )
-                logger.info(f"[PG] User '{self.db_config['user']}' created.")
-            else:
-                logger.info(f"[PG] User '{self.db_config['user']}' exists.")
-
-            # Ensure app database exists
-            cur.execute(
-                "SELECT 1 FROM pg_database WHERE datname = %s",
-                (self.db_config['database'],)
-            )
-            if not cur.fetchone():
-                logger.info(f"[PG] Creating database '{self.db_config['database']}'...")
-                cur.execute(
-                    f"CREATE DATABASE {self.db_config['database']} "
-                    f"ENCODING 'UTF8' LC_COLLATE 'C' LC_CTYPE 'C' TEMPLATE template0"
-                )
-                logger.info(f"[PG] Database '{self.db_config['database']}' created.")
-            else:
-                logger.info(f"[PG] Database '{self.db_config['database']}' exists.")
-
-            # Mark success BEFORE the finally block closes resources
+            conn.autocommit = True
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (self.db_config['database'],))
+                if not cur.fetchone():
+                    logger.info(f"[PG] Creating database '{self.db_config['database']}'...")
+                    cur.execute(sql.SQL("CREATE DATABASE {} ENCODING 'UTF8' LC_COLLATE 'C' "
+                                        "LC_CTYPE 'C' TEMPLATE template0")
+                                .format(sql.Identifier(self.db_config['database'])))
             logger.info(f"[PG] PostgreSQL local is ready on port {port}.")
-            success = True
-
+            return True
         except Exception as exc:
-            logger.error(f"[PG] Error during user/db verification: {exc}")
-            success = False
-
+            logger.error(f"[PG] Error checking the database: {exc}")
+            return False
         finally:
-            # Safely close cursor and connection — never let these raise
-            if cur is not None:
-                try:
-                    cur.close()
-                except Exception:
-                    pass
-            if conn is not None:
-                try:
-                    conn.close()
-                except Exception:
-                    pass
+            try:
+                conn.close()
+            except Exception:
+                pass
 
-        return success
+    def _repair_app_password(self, port, pg_dir, connect, set_app_role) -> bool:
+        """Let the app role in without a password for one moment (127.0.0.1
+        only), set config.json's password on it, then put pg_hba.conf back."""
+        hba = DATA_PATH / 'postgres' / 'pg_hba.conf'
+        if not hba.exists():
+            return False
+        pg_ctl = tool(pg_dir, 'pg_ctl')
+        env = pg_env(pg_dir)
+        user = self.db_config['user']
+
+        def reload():
+            subprocess.run([str(pg_ctl), 'reload', '-D', str(hba.parent)], stdin=subprocess.DEVNULL,
+                           capture_output=True, env=env, timeout=30)
+            time.sleep(1)
+
+        original = hba.read_text(encoding='utf-8')
+        try:
+            hba.write_text(f'host all "{user}" 127.0.0.1/32 trust\n' + original, encoding='utf-8')
+            reload()
+            su = connect(user)
+            try:
+                su.autocommit = True
+                set_app_role(su)
+            finally:
+                su.close()
+            return True
+        except Exception as exc:
+            logger.error(f"[PG] Password repair failed: {exc}")
+            return False
+        finally:
+            hba.write_text(original, encoding='utf-8')
+            reload()
 
     def start_redis(self):
         """Start Redis"""

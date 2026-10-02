@@ -3271,13 +3271,11 @@ Built: Auto-configured with all Django apps
   1. {start_instruction}
   2. Wait for services to start (~10-15 seconds)
   3. Application window opens automatically
-  4. Login with HOD credentials
+  4. Sign in with the account your hospital gave you
 
 🔐 FIRST LOGIN:
-  The setup screen shows the head of department's username (hod) and a
-  one-time password made for this installation. It is also saved in
-  first_login.txt in the data folder. You choose your own password and
-  draw your signature at first login; delete first_login.txt afterwards.
+  First run only creates the local database. Accounts come from HQ:
+  sign in with the account your hospital set up for you.
 
 ══════════════════════════════════════════════════════════════════════
 
@@ -3388,9 +3386,8 @@ For help, contact:
    You'll see a splash screen with progress
 
 3️⃣  LOGIN
-   First run creates the head of department account (username: hod)
-   with a one-time password shown on screen and saved in first_login.txt.
-   You choose your own password at first login.
+   Sign in with the account your hospital set up for you (accounts come
+   from HQ).
 
 4️⃣  WORK
    Application works online or offline

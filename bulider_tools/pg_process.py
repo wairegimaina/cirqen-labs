@@ -99,9 +99,88 @@ class PgCtlServer:
         return self.returncode
 
 
+def tool(pg_dir: Path, name: str) -> Path:
+    """Path of a bundled PostgreSQL program (initdb, postgres, pg_ctl, ...)."""
+    return Path(pg_dir) / "bin" / (f"{name}.exe" if sys.platform == "win32" else name)
+
+
+def pg_env(pg_dir: Path) -> dict:
+    """Environment for the bundled programs: their own lib folder first."""
+    import os
+
+    env = os.environ.copy()
+    lib = Path(pg_dir) / "lib"
+    if sys.platform != "win32" and lib.is_dir():
+        current = env.get("LD_LIBRARY_PATH", "")
+        env["LD_LIBRARY_PATH"] = f"{lib}:{current}" if current else str(lib)
+    return env
+
+
+def server_options(port: int) -> list[str]:
+    """postgres arguments after -D. TCP on 127.0.0.1 only and no Unix socket:
+    everything connects over TCP, and a socket file brings its own failures
+    (folder not writable, path longer than 107 characters, stale lock files)."""
+    return ["-p", str(port), "-c", "listen_addresses=127.0.0.1", "-c", "unix_socket_directories="]
+
+
+def fix_data_dir_mode(data_dir: Path) -> None:
+    """PostgreSQL refuses a data folder others can read or write ("data
+    directory has invalid permissions"), which a copy or restore can leave."""
+    if sys.platform == "win32":
+        return
+    import os
+
+    data_dir = Path(data_dir)
+    try:
+        if data_dir.is_dir() and data_dir.stat().st_uid == os.getuid() and data_dir.stat().st_mode & 0o077:
+            data_dir.chmod(0o700)
+    except OSError:
+        pass
+
+
+def data_folder_problem(data_path: Path) -> str | None:
+    """Why Cirqen can't use its data folder, or None. Running Cirqen once with
+    sudo leaves root-owned files (database, logs) behind, and from then on
+    PostgreSQL and the logs fail with "Permission denied" for the real user."""
+    import os
+
+    data_path = Path(data_path)
+    if sys.platform == "win32":
+        probe = data_path / ".write_test"
+        try:
+            probe.write_text("ok")
+            probe.unlink()
+        except OSError as exc:
+            return f"Cirqen cannot write to its data folder {data_path}: {exc}"
+        return None
+
+    if os.geteuid() == 0:
+        return ("Cirqen is running as root (sudo). Start it as your normal user: "
+                "PostgreSQL will not run as root, and files made now would be locked to root.")
+    uid, foreign = os.getuid(), []
+    for root, dirs, files in os.walk(data_path):
+        for name in [*dirs, *files]:
+            path = Path(root) / name
+            try:
+                if path.lstat().st_uid != uid:
+                    foreign.append(path)
+            except OSError:
+                continue
+            if len(foreign) >= 5:
+                break
+        if len(foreign) >= 5:
+            break
+    if not foreign:
+        return None
+    listed = "\n".join(f"  {p}" for p in foreign)
+    return (f"Some files in {data_path} belong to another user (often from running Cirqen with sudo):\n"
+            f"{listed}\nFix them once in a terminal, then start Cirqen again:\n"
+            f"  sudo chown -R $USER: {data_path}")
+
+
 def start(pg_bin: Path, data_dir: Path, options: list[str], log_path: Path, env=None):
     """(process, log_handle) for the server at data_dir. options: postgres
-    arguments after -D (e.g. ["-p", "2215", "-k", data_dir]). log_handle is
+    arguments after -D (server_options(port)). log_handle is
     an open file the caller closes, or None when pg_ctl writes the log."""
     pg_bin = Path(pg_bin)
     pg_ctl = pg_bin.with_name("pg_ctl.exe")

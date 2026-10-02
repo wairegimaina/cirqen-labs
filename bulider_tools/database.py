@@ -1,13 +1,23 @@
-# Auto-generated refactor of the original Cirqen main.py first-run database setup layer.
+# First run on a PC: create the local PostgreSQL cluster and database, and
+# apply the migrations. Nothing else: user accounts come down from HQ through
+# sync (`manage.py create_hod` exists for a PC that has to start without HQ).
+import shutil
+
 from PySide6.QtCore import QObject, Signal
 
+from .pg_process import fix_data_dir_mode, pg_env, server_options, start as start_pg_server, tool
 from .runtime import *
 
-# ============================
-# First Run Setup
-# ============================
+
 class FirstRunSetup(QObject):
-    """Handles first-run database setup and HOD creation"""
+    """Creates the local database the first time Cirqen starts on a PC.
+
+    The cluster's superuser is the app's own role (config.json local_db.user,
+    normally cirqen1) with config.json's password, set by initdb itself. So
+    there is no second role to create, no trust stage and no pg_hba.conf
+    rewriting, and the OS login name (spaces, capitals, no login terminal)
+    never matters.
+    """
 
     progress_update = Signal(str, int)
     setup_complete = Signal(bool, str)
@@ -18,764 +28,195 @@ class FirstRunSetup(QObject):
         self.port_manager = port_manager
         self.pg_data = DATA_PATH / 'postgres'
         self.pg_logs = DATA_PATH / 'logs'
-        self.runtime_dir = RUNTIME_DIR
-        self.pg_dir = self.runtime_dir / 'postgresql'
+        self.pg_dir = RUNTIME_DIR / 'postgresql'
         self.db_config = setup_environment(port_manager)
 
     def is_first_run(self):
-        """Check if this is the first run"""
         is_first = not (self.pg_data / 'PG_VERSION').exists()
         logger.info(f"First run check: {is_first}")
         return is_first
 
+    def _step(self, text, percent):
+        logger.info(f"[setup] {text}")
+        self.progress_update.emit(text, percent)
+        self.log_message.emit(text)
+
     def run_setup(self):
-        """Execute first-run setup"""
+        if not self.is_first_run():
+            self.setup_complete.emit(True, "Already configured")
+            return
+        server = log_handle = None
         try:
-            if not self.is_first_run():
-                logger.info("Database already initialized")
-                self.setup_complete.emit(True, "Already configured")
-                return
+            self._step("Checking the installation...", 5)
+            if not self.db_config.get('password'):
+                return self._fail(f"config.json in {DATA_PATH} has no local database password "
+                                  "(local_db.password). Delete config.json and start Cirqen again.")
+            missing = [tool(self.pg_dir, n) for n in ('initdb', 'postgres', 'pg_ctl')
+                       if not tool(self.pg_dir, n).exists()]
+            if missing:
+                return self._fail("PostgreSQL is missing from this installation:\n"
+                                  + "\n".join(f"  {p}" for p in missing)
+                                  + "\nReinstall Cirqen.")
 
-            logger.info("Starting first-run setup...")
+            self._step("Creating the database cluster...", 20)
+            error = self._initdb()
+            if error:
+                return self._fail(error)
 
-            # Step 1: Check PostgreSQL binaries
-            self.progress_update.emit("Checking PostgreSQL binaries...", 10)
-            self.log_message.emit("ðŸ“¦ Verifying PostgreSQL installation...")
+            self._step("Starting PostgreSQL...", 45)
+            server, log_handle = self._start()
+            if not self._wait_ready(server):
+                return self._fail("PostgreSQL did not start.\n" + self._log_tail('postgres_setup.log'))
 
-            if not self._check_postgres_binaries():
-                error_msg = self._generate_binary_error_report()
-                logger.error(f"PostgreSQL binaries not found:\n{error_msg}")
-                self.setup_complete.emit(False, error_msg)
-                return
+            self._step("Creating the Cirqen database...", 60)
+            self._create_database()
 
-            # Step 2: Initialize database
-            self.progress_update.emit("Initializing database cluster...", 25)
-            self.log_message.emit("ðŸ”§ Creating database cluster...")
+            self._step("Applying database migrations (this can take a few minutes)...", 70)
+            error = self._run_migrations()
+            if error:
+                return self._fail(error)
 
-            if not self._initialize_database():
-                self.setup_complete.emit(False, "Database initialization failed. Check logs for details.")
-                return
-
-            # Step 3: Configure PostgreSQL
-            self.progress_update.emit("Configuring PostgreSQL...", 40)
-            self.log_message.emit("âš™ï¸ Configuring database security...")
-            self._configure_postgres()
-
-            # Step 4: Start PostgreSQL
-            self.progress_update.emit("Starting PostgreSQL...", 55)
-            port = self.port_manager.get_port('postgresql_local')
-            self.log_message.emit(f"ðŸš€ Starting PostgreSQL on port {port}...")
-
-            pg_process = self._start_postgres()
-            if not pg_process:
-                self.setup_complete.emit(False, "Failed to start PostgreSQL server")
-                return
-
-            time.sleep(3)
-
-            # Step 5: Create database
-            self.progress_update.emit("Creating application database...", 70)
-            self.log_message.emit("ðŸ’¾ Creating application database...")
-
-            if not self._create_database():
-                self._stop_postgres(pg_process)
-                self.setup_complete.emit(False, "Failed to create application database")
-                return
-
-            # Step 6: Run migrations
-            self.progress_update.emit("Setting up database schema...", 80)
-            self.log_message.emit("ðŸ“Š Running database migrations...")
-
-            if not self._run_migrations():
-                self._stop_postgres(pg_process)
-                self.setup_complete.emit(False, "Failed to run database migrations")
-                return
-
-            # Step 7: Create HOD user
-            self.progress_update.emit("Creating HOD user...", 90)
-            self.log_message.emit("ðŸ‘¤ Creating administrator account...")
-
-            if not self._create_hod_user():
-                self._stop_postgres(pg_process)
-                self.setup_complete.emit(False, "Failed to create HOD user")
-                return
-
-            # Step 8: a system service for PostgreSQL, only when asked for
-            # (CIRQEN_SYSTEMD_POSTGRES=1). By default Cirqen runs its own
-            # PostgreSQL: a root-installed unit pointing into the user's app
-            # copy breaks when updates replace that copy, then crash-loops,
-            # holds port 2215 and leaves root-owned logs Cirqen can't write.
-            if os.environ.get('CIRQEN_SYSTEMD_POSTGRES') != '1':
-                logger.info("PostgreSQL system service not installed (Cirqen runs its own)")
-            else:
-                self.progress_update.emit("Installing PostgreSQL service...", 88)
-                self.log_message.emit("Installing persistent systemd service...")
-                try:
-                    _pgd = self.runtime_dir / 'postgresql'
-                    _svc = PostgresSystemdManager(
-                        port      = self.port_manager.get_port('postgresql_local'),
-                        pg_binary = _pgd / 'bin' / 'postgres',
-                        pg_data   = self.pg_data,
-                        pg_lib    = _pgd / 'lib',
-                    )
-                    if _svc.install():
-                        self.log_message.emit("systemd service installed. PostgreSQL will persist after app close.")
-                    else:
-                        self.log_message.emit("systemd service skipped (no root). Stale PID cleanup runs on each start.")
-                except Exception as _e:
-                    logger.warning(f"systemd install non-fatal: {_e}")
-
-            # Step 9: Stop direct PostgreSQL (systemd takes over)
-            self.progress_update.emit("Finalizing setup...", 95)
-            self.log_message.emit("âœ… Finalizing configuration...")
-            self._stop_postgres(pg_process)
-
-            self.progress_update.emit("Setup complete!", 100)
-
-            login = getattr(self, 'first_login', None)
-            login_text = (
-                "Head of department account:\n"
-                f"- Username: {login['username']}\n"
-                f"- One-time password: {login['password']}\n"
-                f"  (also saved in {DATA_PATH / 'first_login.txt'})\n"
-                "You will choose your own password at first login.\n\n"
-            ) if login else ""
-            success_msg = (
-                "First-run setup completed successfully!\n\n"
-                + login_text
-                + "Allocated Ports:\n"
-                f"- PostgreSQL Local: {self.port_manager.get_port('postgresql_local')}\n"
-                f"- Redis: {self.port_manager.get_port('redis')}\n"
-                f"- Django: {self.port_manager.get_port('django')}"
-            )
-            logger.info("First-run setup completed successfully")
-            self.setup_complete.emit(True, success_msg)
-
+            self._step("Setup complete", 100)
+            self.setup_complete.emit(True, (
+                "The local database is ready.\n\n"
+                "Sign in with the account your hospital gave you; accounts come from HQ.\n\n"
+                f"PostgreSQL: {self.db_config['port']}   "
+                f"Redis: {self.port_manager.get_port('redis')}   "
+                f"Django: {self.port_manager.get_port('django')}"))
         except Exception as e:
             import traceback
-            error_detail = traceback.format_exc()
-            logger.error(f"Setup error: {error_detail}")
-            self.setup_complete.emit(False, f"Setup error: {str(e)}\n\nCheck logs at:\n{LOG_FILE}")
+            logger.error(f"Setup error: {traceback.format_exc()}")
+            self._fail(f"{type(e).__name__}: {e}")
+        finally:
+            if server is not None:
+                self._stop(server)
+            if log_handle:
+                log_handle.close()
 
-    def _generate_binary_error_report(self):
-        """Generate detailed error report for missing binaries"""
-        report = ["PostgreSQL binaries not found!", ""]
-        report.append(f"Expected location: {self.pg_dir}")
-        report.append(f"Runtime dir exists: {self.runtime_dir.exists()}")
-        report.append(f"PostgreSQL dir exists: {self.pg_dir.exists()}")
-        report.append("")
+    def _fail(self, message):
+        logger.error(f"[setup] failed: {message}")
+        self.setup_complete.emit(False, f"{message}\n\nLogs: {DATA_PATH / 'logs'}")
 
-        if self.runtime_dir.exists():
-            report.append("Runtime directory contents:")
-            for item in self.runtime_dir.iterdir():
-                report.append(f"  â€¢ {item.name}")
-        else:
-            report.append("âš ï¸ Runtime directory does not exist!")
-            report.append(f"   Expected at: {self.runtime_dir}")
-
-        return "\n".join(report)
-
-    def _check_postgres_binaries(self):
-        """Check if PostgreSQL binaries exist"""
-        if sys.platform == 'win32':
-            pg_bin = self.pg_dir / 'bin' / 'postgres.exe'
-            initdb = self.pg_dir / 'bin' / 'initdb.exe'
-        else:
-            pg_bin = self.pg_dir / 'bin' / 'postgres'
-            initdb = self.pg_dir / 'bin' / 'initdb'
-
-        return pg_bin.exists() and initdb.exists()
-
-    def _configure_postgres(self):
-        """Configure PostgreSQL settings with dynamic port"""
+    def _log_tail(self, name, chars=1500):
         try:
-            pg_hba = self.pg_data / 'pg_hba.conf'
-            postgresql_conf = self.pg_data / 'postgresql.conf'
-            port = self.db_config['port']
+            return (self.pg_logs / name).read_text(encoding='utf-8', errors='replace')[-chars:]
+        except OSError:
+            return ''
 
-            # Update pg_hba.conf
-            if pg_hba.exists():
-                content = pg_hba.read_text()
-                if 'host    all             all             127.0.0.1/32            md5' not in content:
-                    content += '\n# Local connections with password\n'
-                    content += 'host    all             all             127.0.0.1/32            md5\n'
-                    pg_hba.write_text(content)
+    def _initdb(self):
+        """None when the cluster was made, else why not. A failed or
+        interrupted earlier attempt leaves files without PG_VERSION, and
+        initdb refuses a non-empty folder, so those are moved aside first."""
+        if self.pg_data.exists() and any(self.pg_data.iterdir()):
+            aside = self.pg_data.with_name(f"postgres.unfinished-{time.strftime('%Y%m%d-%H%M%S')}")
+            logger.warning(f"[setup] Moving an unfinished database folder aside: {aside}")
+            self.pg_data.rename(aside)
+        self.pg_data.mkdir(parents=True, exist_ok=True)
+        fix_data_dir_mode(self.pg_data)
 
-            # Set custom port
-            if postgresql_conf.exists():
-                content = postgresql_conf.read_text()
-                import re
-                content = re.sub(r'#?port\s*=\s*\d+', f'port = {port}', content)
-                postgresql_conf.write_text(content)
-                logger.info(f"Configured PostgreSQL on port {port}")
-
-        except Exception as e:
-            logger.warning(f"PostgreSQL configuration warning: {e}")
-
-    def _initialize_database(self):
-        """
-        Initialize PostgreSQL database cluster
-        FIXED: Proper initialization with user creation and share file verification
-        """
-        import time  # CRITICAL: Import time
-
+        pwfile = DATA_PATH / 'temp' / 'initdb.pw'
+        pwfile.parent.mkdir(exist_ok=True)
         try:
-            if sys.platform == 'win32':
-                initdb = self.pg_dir / 'bin' / 'initdb.exe'
-                postgres_bin = self.pg_dir / 'bin' / 'postgres.exe'
-                psql_bin = self.pg_dir / 'bin' / 'psql.exe'
-            else:
-                initdb = self.pg_dir / 'bin' / 'initdb'
-                postgres_bin = self.pg_dir / 'bin' / 'postgres'
-                psql_bin = self.pg_dir / 'bin' / 'psql'
-
-            if not initdb.exists():
-                logger.error(f"initdb not found at: {initdb}")
-                return False
-
-            # ====================================================================
-            # CRITICAL: Verify PostgreSQL share files exist
-            # ====================================================================
-            pg_share = self.pg_dir / 'share'
-            postgres_bki = None
-
-            # Search for postgres.bki in share directory
-            if pg_share.exists():
-                for bki_file in pg_share.rglob('postgres.bki'):
-                    postgres_bki = bki_file
-                    break
-
-            if not postgres_bki or not postgres_bki.exists():
-                logger.error("âŒ CRITICAL: postgres.bki not found in PostgreSQL share directory!")
-                logger.error(f"   Searched in: {pg_share}")
-                logger.error("   This file is required for database initialization.")
-                logger.error("   PostgreSQL installation is incomplete.")
-                return False
-
-            logger.info(f"âœ… Found postgres.bki: {postgres_bki}")
-
-            import tempfile
-
-            # ====================================================================
-            # STEP 1: Initialize database cluster with current user
-            # ====================================================================
-            logger.info("Initializing PostgreSQL cluster...")
-
-            # Get current username
+            pwfile.write_text(self.db_config['password'] + '\n', encoding='utf-8')
             try:
-                import pwd
-                current_user = pwd.getpwuid(os.getuid()).pw_name
-            except Exception:
-                try:
-                    current_user = os.getlogin()
-                except Exception:
-                    current_user = os.getenv('USER', 'postgres')
-
-            logger.info(f"Using superuser: {current_user}")
-
-            fd, pwfile_path = tempfile.mkstemp(text=True, suffix='.pwd')
-
-            try:
-                # Use a temporary password for initialization
-                with os.fdopen(fd, 'w') as pwfile:
-                    pwfile.write("temp_init_password\n")
-
-                # Set up environment for PostgreSQL
-                env = os.environ.copy()
-                pg_lib = self.pg_dir / 'lib'
-                if pg_lib.exists() and sys.platform != 'win32':
-                    current_ld = env.get('LD_LIBRARY_PATH', '')
-                    env['LD_LIBRARY_PATH'] = f"{pg_lib}:{current_ld}" if current_ld else str(pg_lib)
-
-                cmd = [
-                    str(initdb),
-                    '-D', str(self.pg_data),
-                    '-U', current_user,
-                    '--pwfile', pwfile_path,
-                    '--encoding=UTF8',
-                    '--locale=C',
-                    '--auth=trust'  # Use trust initially for setup
-                ]
-
-                logger.info(f"Running initdb command...")
-                logger.info(f"  User: {current_user}")
-                logger.info(f"  Data dir: {self.pg_data}")
-
-                result = subprocess.run(
-                    cmd,
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                    timeout=120,
-                    env=env
-                )
-
-                logger.info("âœ… Database cluster initialized")
-                if result.stdout:
-                    logger.debug(f"initdb output: {result.stdout[:500]}")
-
-            finally:
-                try:
-                    if os.path.exists(pwfile_path):
-                        os.unlink(pwfile_path)
-                except Exception:
-                    pass
-
-            # ====================================================================
-            # STEP 2: Configure pg_hba.conf for trust authentication
-            # ====================================================================
-            logger.info("Configuring pg_hba.conf for trust authentication...")
-
-            pg_hba = self.pg_data / 'pg_hba.conf'
-
-            hba_content = f"""# TYPE  DATABASE        USER            ADDRESS                 METHOD
-
-    # Trust authentication for setup
-    local   all             {current_user}                          trust
-    local   all             all                                     trust
-
-    # IPv4 local connections
-    host    all             {current_user}  127.0.0.1/32            trust
-    host    all             all             127.0.0.1/32            trust
-
-    # IPv6 local connections
-    host    all             all             ::1/128                 trust
-    """
-            pg_hba.write_text(hba_content)
-            logger.info("âœ… pg_hba.conf configured for trust authentication")
-
-            # ====================================================================
-            # STEP 3: Configure postgresql.conf with proper port
-            # ====================================================================
-            logger.info("Configuring postgresql.conf...")
-
-            postgresql_conf = self.pg_data / 'postgresql.conf'
-            port = self.db_config['port']
-
-            if postgresql_conf.exists():
-                with open(postgresql_conf, 'r') as f:
-                    lines = f.readlines()
-
-                updated_lines = []
-                port_set = False
-
-                for line in lines:
-                    if line.strip().startswith('port') or line.strip().startswith('#port'):
-                        updated_lines.append(f"port = {port}\n")
-                        port_set = True
-                    else:
-                        updated_lines.append(line)
-
-                if not port_set:
-                    updated_lines.append(f"\nport = {port}\n")
-
-                with open(postgresql_conf, 'w') as f:
-                    f.writelines(updated_lines)
-
-                logger.info(f"âœ… Configured port: {port}")
-
-            # ====================================================================
-            # STEP 4: Start PostgreSQL temporarily
-            # ====================================================================
-            logger.info("Starting PostgreSQL temporarily to create users...")
-
-            (self.pg_logs / 'postgres_init.log').write_text('')
-
-            # Set up environment
-            env = os.environ.copy()
-            if pg_lib.exists() and sys.platform != 'win32':
-                current_ld = env.get('LD_LIBRARY_PATH', '')
-                env['LD_LIBRARY_PATH'] = f"{pg_lib}:{current_ld}" if current_ld else str(pg_lib)
-
-            # pg_process.start: on Windows with admin rights, through pg_ctl.
-            from .pg_process import start as start_pg_server
-
-            pg_process, log_file = start_pg_server(
-                postgres_bin, self.pg_data, ['-k', str(self.pg_data)],
-                self.pg_logs / 'postgres_init.log', env)
-
-            # Wait for PostgreSQL to be ready
-            logger.info("Waiting for PostgreSQL to start...")
-
-            pg_ready = False
-            for i in range(40):  # 20 seconds max
-                try:
-                    import psycopg2
-
-                    conn = psycopg2.connect(
-                        host='127.0.0.1',
-                        port=port,
-                        database='postgres',
-                        user=current_user,
-                        connect_timeout=2
-                    )
-                    conn.close()
-
-                    pg_ready = True
-                    logger.info(f"âœ… PostgreSQL is ready (attempt {i+1})")
-                    break
-
-                except Exception:
-                    time.sleep(0.5)
-
-            if not pg_ready:
-                logger.error("âŒ PostgreSQL failed to start for user creation")
-                pg_process.terminate()
-                pg_process.wait()
-                if log_file:
-                    log_file.close()
-
-                # Show log
-                try:
-                    with open(self.pg_logs / 'postgres_init.log', 'r') as f:
-                        lines = f.readlines()
-                        if lines:
-                            logger.error("Last 20 lines of log:")
-                            for line in lines[-20:]:
-                                logger.error(f"  {line.rstrip()}")
-                except Exception:
-                    pass
-
-                return False
-
-            # ====================================================================
-            # STEP 5: Create application user (cirqen1)
-            # ====================================================================
-            try:
-                logger.info(f"Creating PostgreSQL user: {self.db_config['user']}")
-
-                import psycopg2
-                from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
-
-                conn = psycopg2.connect(
-                    host='127.0.0.1',
-                    port=port,
-                    database='postgres',
-                    user=current_user
-                )
-                conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
-                cursor = conn.cursor()
-
-                # Check if user exists
-                cursor.execute(
-                    "SELECT 1 FROM pg_roles WHERE rolname = %s",
-                    (self.db_config['user'],)
-                )
-
-                if not cursor.fetchone():
-                    # Create user with password
-                    cursor.execute(f"""
-                        CREATE ROLE {self.db_config['user']}
-                        WITH LOGIN PASSWORD %s
-                        CREATEDB CREATEROLE SUPERUSER
-                    """, (self.db_config['password'],))
-
-                    logger.info(f"âœ… Created user: {self.db_config['user']}")
-                else:
-                    logger.info(f"User {self.db_config['user']} already exists")
-
-                cursor.close()
-                conn.close()
-
-            except Exception as e:
-                logger.error(f"Failed to create user: {e}")
-                pg_process.terminate()
-                pg_process.wait()
-                if log_file:
-                    log_file.close()
-                return False
-
-            # ====================================================================
-            # STEP 6: Update pg_hba.conf for password authentication
-            # ====================================================================
-            logger.info("Updating pg_hba.conf for password authentication...")
-
-            hba_content = f"""# TYPE  DATABASE        USER            ADDRESS                 METHOD
-
-    # System superuser (trust)
-    local   all             {current_user}                          trust
-    host    all             {current_user}  127.0.0.1/32            trust
-
-    # Application users (password)
-    local   all             all                                     md5
-    host    all             all             127.0.0.1/32            md5
-    host    all             all             ::1/128                 md5
-    """
-            pg_hba.write_text(hba_content)
-            logger.info("âœ… Updated pg_hba.conf for md5 authentication")
-
-            # ====================================================================
-            # STEP 7: Reload PostgreSQL configuration
-            # ====================================================================
-            logger.info("Reloading PostgreSQL configuration...")
-
-            try:
-                conn = psycopg2.connect(
-                    host='127.0.0.1',
-                    port=port,
-                    database='postgres',
-                    user=current_user
-                )
-                conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
-                cursor = conn.cursor()
-                cursor.execute("SELECT pg_reload_conf()")
-                cursor.close()
-                conn.close()
-                logger.info("âœ… Configuration reloaded")
-            except Exception as e:
-                logger.warning(f"Could not reload config: {e}")
-
-            # ====================================================================
-            # STEP 8: Stop PostgreSQL
-            # ====================================================================
-            logger.info("Stopping temporary PostgreSQL...")
-            pg_process.terminate()
-            try:
-                pg_process.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                pg_process.kill()
-                pg_process.wait()
-
-            if log_file:
-                log_file.close()
-            time.sleep(2)
-
-            logger.info("âœ… Database initialization complete")
-            return True
-
-        except Exception as e:
-            logger.error(f"âŒ Database initialization failed: {e}")
-            detail = (getattr(e, "stderr", "") or getattr(e, "stdout", "") or "").strip()
-            if detail:
-                logger.error(f"   PostgreSQL said: {detail[-1500:]}")
-            import traceback
-            logger.error(traceback.format_exc())
-            return False
-
-    def _start_postgres(self):
-        """Start PostgreSQL temporarily for setup"""
-        try:
-            if sys.platform == 'win32':
-                pg_bin = self.pg_dir / 'bin' / 'postgres.exe'
-            else:
-                pg_bin = self.pg_dir / 'bin' / 'postgres'
-
-            port = self.db_config['port']
-            from .pg_process import start as start_pg_server
-
-            process, _log = start_pg_server(
-                pg_bin, self.pg_data, ['-p', str(port), '-k', str(self.pg_data)],
-                self.pg_logs / 'postgres_setup.log')
-
-            # Wait for ready
-            for i in range(40):
-                try:
-                    import psycopg2
-                    conn = psycopg2.connect(
-                        host=self.db_config['host'],
-                        port=port,
-                        database='postgres',
-                        user=self.db_config['user'],
-                        password=self.db_config['password'],
-                        connect_timeout=3
-                    )
-                    conn.close()
-                    logger.info(f"PostgreSQL ready on port {port}")
-                    return process
-                except Exception:
-                    time.sleep(0.5)
-
-            return process
-
-        except Exception as e:
-            logger.error(f"Failed to start PostgreSQL: {e}")
-            return None
-
-    def _stop_postgres(self, process):
-        """Stop PostgreSQL"""
-        try:
-            if sys.platform == 'win32':
-                pg_ctl = self.pg_dir / 'bin' / 'pg_ctl.exe'
-            else:
-                pg_ctl = self.pg_dir / 'bin' / 'pg_ctl'
-
-            subprocess.run([
-                str(pg_ctl), '-D', str(self.pg_data),
-                'stop', '-m', 'fast'
-            ], capture_output=True, check=False, timeout=30)
-
-            time.sleep(2)
-
-        except Exception as e:
-            logger.warning(f"Error stopping PostgreSQL: {e}")
-
-    def _create_database(self):
-        """Create application database"""
-        try:
-            import psycopg2
-            from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
-
-            conn = psycopg2.connect(
-                host=self.db_config['host'],
-                port=self.db_config['port'],
-                database='postgres',
-                user=self.db_config['user'],
-                password=self.db_config['password']
-            )
-            conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
-            cursor = conn.cursor()
-
-            cursor.execute("SELECT 1 FROM pg_database WHERE datname = %s", (self.db_config['database'],))
-
-            if not cursor.fetchone():
-                cursor.execute(f"CREATE DATABASE {self.db_config['database']}")
-                logger.info(f"Created database: {self.db_config['database']}")
-
-            cursor.close()
-            conn.close()
-            return True
-
-        except Exception as e:
-            logger.error(f"Failed to create database: {e}")
-            return False
-
-    def _run_migrations(self):
-        """
-        Run Django migrations on the local database. HQ's schema is not
-        changed from here: HQ applies its own migrations.
-        """
-        manage_py = APPLICATION_PATH / 'manage.py'
-        if not manage_py.exists():
-            logger.error(f"manage.py not found at: {manage_py}")
-            return False
-
-        # Base env — skip instance lock, pass local DB creds
-        base_env = os.environ.copy()
-        base_env['CIRQEN_SKIP_INSTANCE_LOCK'] = '1'
-        base_env['CIRQEN_MIGRATION_MODE'] = '1'
-        base_env['POSTGRES_LOCAL_HOST']     = str(self.db_config['host'])
-        base_env['POSTGRES_LOCAL_PORT']     = str(self.db_config['port'])
-        base_env['POSTGRES_LOCAL_DATABASE'] = str(self.db_config['database'])
-        base_env['POSTGRES_LOCAL_USER']     = str(self.db_config['user'])
-        base_env['POSTGRES_LOCAL_PASSWORD'] = str(self.db_config['password'])
-
-        # ── 1. Local database (default) ──────────────────────────────────
-        logger.info("=" * 60)
-        logger.info("RUNNING MIGRATIONS — local database")
-        logger.info("=" * 60)
-        # Output to a file, not pipes: anything the child starts would inherit
-        # the pipes and keep them open, and reading them then never ends (on
-        # Windows the timeout can't end it either). logs/migrations.log keeps it.
-        migrations_log = self.pg_logs / 'migrations.log'
-
-        def _tail():
-            try:
-                return migrations_log.read_text(encoding='utf-8', errors='replace')[-3000:]
-            except OSError:
-                return ''
-
-        try:
-            with open(migrations_log, 'w', encoding='utf-8') as out:
-                subprocess.run(
-                    [sys.executable, str(manage_py), 'migrate', '--noinput'],
-                    stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT,
-                    cwd=str(APPLICATION_PATH), env=base_env,
-                    check=True, timeout=300,
-                )
-            logger.info("Local migrations completed")
-            logger.debug(f"Output:\n{_tail()}")
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Local migration failed (exit {e.returncode})")
-            logger.error(f"Output:\n{_tail()}")
-            return False
-        except subprocess.TimeoutExpired:
-            logger.error("Local migration timeout (>5 min)")
-            logger.error(f"Output so far:\n{_tail()}")
-            return False
-        except Exception as e:
-            logger.error(f"Local migration error: {e}")
-            import traceback; logger.error(traceback.format_exc())
-            return False
-
-        return True
-
-
-    def _create_hod_user(self):
-        """
-        Create HOD user WITHOUT starting a new instance
-        FIXED: Use direct database connection instead of subprocess
-        """
-        try:
-            logger.info("Creating HOD user via direct database connection...")
-
-            # Setup Django in-process (no subprocess)
-            import django
-            os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'Equiper.settings')
-
-            # Add application path to Python path
-            sys.path.insert(0, str(APPLICATION_PATH))
-
-            django.setup()
-
-            from django.contrib.auth import get_user_model
-
-            # Import UserProfile - handle if it doesn't exist yet
-            try:
-                from users.models import UserProfile
-                has_user_profile = True
-            except ImportError:
-                logger.warning("UserProfile model not found - will create basic user only")
-                has_user_profile = False
-
-            User = get_user_model()
-
-            # One first HOD per installation. Earlier builds created the same
-            # named superuser with the same published password on every
-            # machine; now each install gets its own random one-time password,
-            # shown once in the setup dialog and kept in first_login.txt
-            # (owner-only) until the HOD changes it at first login.
-            self.first_login = None
-            if has_user_profile and UserProfile.objects.filter(role='HOD').exists():
-                logger.info("An HOD account already exists")
-                return True
-            if not has_user_profile and User.objects.filter(username='hod').exists():
-                return True
-
-            import secrets
-            password = secrets.token_urlsafe(12)
-            user = User.objects.create_user(
-                username='hod',
-                password=password,
-                is_staff=True,
-                is_superuser=False,
-            )
-            logger.info(f"Created user: {user.username}")
-
-            if has_user_profile:
-                UserProfile.objects.update_or_create(user=user, defaults={
-                    'role': 'HOD',
-                    'must_change_password': True,
-                    'has_uploaded_signature': False,
-                    'is_approved': True,
-                })
-
-            self.first_login = {'username': user.username, 'password': password}
-            note = DATA_PATH / 'first_login.txt'
-            note.write_text(
-                "Cirqen first login (delete this file after signing in)\n"
-                f"Username: {user.username}\nOne-time password: {password}\n"
-                "You will be asked to choose a new password and draw your signature.\n"
-            )
-            try:
-                note.chmod(0o600)
+                pwfile.chmod(0o600)
             except OSError:
                 pass
-            logger.info("HOD user creation complete")
-            return True
+            # On Windows initdb drops admin rights itself, like pg_ctl does.
+            result = subprocess.run(
+                [str(tool(self.pg_dir, 'initdb')), '-D', str(self.pg_data),
+                 '-U', self.db_config['user'], f'--pwfile={pwfile}',
+                 '--auth=scram-sha-256', '--encoding=UTF8', '--locale=C'],
+                stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                timeout=300, env=pg_env(self.pg_dir))
+        except subprocess.TimeoutExpired:
+            return "initdb did not finish in 5 minutes."
+        finally:
+            pwfile.unlink(missing_ok=True)
 
-        except Exception as e:
-            logger.error(f"âŒ Failed to create HOD user: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-            return False
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout or '').strip()[-1500:]
+            logger.error(f"[setup] initdb failed ({result.returncode}): {detail}")
+            shutil.rmtree(self.pg_data, ignore_errors=True)
+            self.pg_data.mkdir(exist_ok=True)
+            return f"Creating the database failed:\n{detail}"
+        logger.info(f"[setup] Cluster created in {self.pg_data} (superuser {self.db_config['user']})")
+        return None
 
+    def _start(self):
+        (self.pg_logs / 'postgres_setup.log').write_text('')
+        return start_pg_server(tool(self.pg_dir, 'postgres'), self.pg_data,
+                               server_options(self.db_config['port']),
+                               self.pg_logs / 'postgres_setup.log', pg_env(self.pg_dir))
+
+    def _connect(self, database='postgres'):
+        import psycopg2
+        return psycopg2.connect(host='127.0.0.1', port=self.db_config['port'], dbname=database,
+                                user=self.db_config['user'], password=self.db_config['password'],
+                                connect_timeout=3)
+
+    def _wait_ready(self, server, timeout=90):
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if server.poll() is not None:
+                return False
+            try:
+                self._connect().close()
+                return True
+            except Exception:
+                time.sleep(0.5)
+        return False
+
+    def _create_database(self):
+        conn = self._connect()
+        conn.autocommit = True
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (self.db_config['database'],))
+                if not cur.fetchone():
+                    from psycopg2 import sql
+                    cur.execute(sql.SQL("CREATE DATABASE {} ENCODING 'UTF8' TEMPLATE template0")
+                                .format(sql.Identifier(self.db_config['database'])))
+                    logger.info(f"[setup] Created database {self.db_config['database']}")
+        finally:
+            conn.close()
+
+    def _stop(self, server):
+        try:
+            server.terminate()
+            server.wait(timeout=30)
+        except Exception:
+            try:
+                server.kill()
+                server.wait(timeout=10)
+            except Exception as e:
+                logger.warning(f"[setup] Could not stop PostgreSQL: {e}")
+
+    def _run_migrations(self):
+        """None when the local database is migrated, else why not. HQ applies
+        its own migrations. Output goes to logs/migrations.log, not pipes:
+        anything the child starts would inherit pipes and keep them open."""
+        manage_py = APPLICATION_PATH / 'manage.py'
+        if not manage_py.exists():
+            return f"manage.py not found at {manage_py}"
+
+        env = os.environ.copy()
+        env['CIRQEN_SKIP_INSTANCE_LOCK'] = '1'
+        env['CIRQEN_MIGRATION_MODE'] = '1'
+        for key in ('host', 'port', 'database', 'user', 'password'):
+            env[f'POSTGRES_LOCAL_{key.upper()}'] = str(self.db_config[key])
+
+        log_path = self.pg_logs / 'migrations.log'
+        try:
+            with open(log_path, 'w', encoding='utf-8') as out:
+                result = subprocess.run(
+                    [sys.executable, str(manage_py), 'migrate', '--noinput'],
+                    stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT,
+                    cwd=str(APPLICATION_PATH), env=env, timeout=600)
+        except subprocess.TimeoutExpired:
+            return "Migrations did not finish in 10 minutes.\n" + self._log_tail('migrations.log')
+        if result.returncode != 0:
+            return (f"Database migrations failed (exit {result.returncode}):\n"
+                    + self._log_tail('migrations.log'))
+        logger.info("[setup] Migrations applied")
+        return None
