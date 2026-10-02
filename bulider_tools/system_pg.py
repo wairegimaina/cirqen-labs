@@ -351,9 +351,12 @@ def _install_windows(runtime_dir: Path, root: Path, log) -> str | None:
                        "log_directory = 'log'\n")
     port = _port_from_conf(data) or 5432
 
-    # Only the service account, SYSTEM and Administrators may touch the data.
-    _run(["icacls", data, "/inheritance:r", "/grant:r", "*S-1-5-18:(OI)(CI)F", "*S-1-5-32-544:(OI)(CI)F",
-          f"{NETWORK_SERVICE_SID}:(OI)(CI)F", "/T", "/C", "/Q"], log)
+    # The service account needs full control of the data (as the PostgreSQL
+    # installer does it). Only adds: removing the inherited permissions
+    # (/inheritance:r) left postgres "Permission denied" on its own files.
+    result = _run(["icacls", data, "/grant", f"{NETWORK_SERVICE_SID}:(OI)(CI)F", "/T", "/C", "/Q"], log)
+    if result.returncode != 0:
+        return f"Could not give the database service access to {data}: {(result.stderr or result.stdout).strip()}"
 
     if not service_exists:
         result = _run([pg_dir / "bin" / "pg_ctl.exe", "register", "-N", SERVICE_NAME,
@@ -406,6 +409,7 @@ def _diagnose_windows(pg_dir: Path, data: Path, log, env) -> None:
     for pg_log in sorted((data / "log").glob("*"))[-2:]:
         log.write(f"--- {pg_log}\n{pg_log.read_text(encoding='utf-8', errors='replace')[-3000:]}\n")
     _run(["icacls", data], log)
+    _run(["icacls", data / "postgresql.conf"], log)
     _run(["icacls", pg_dir / "bin" / "postgres.exe"], log)
     trial = data.parent / "trial_start.log"
     _run([pg_dir / "bin" / "pg_ctl.exe", "start", "-D", data, "-l", trial, "-w", "-t", "30"], log, env=env,
