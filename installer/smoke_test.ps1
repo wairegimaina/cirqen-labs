@@ -45,7 +45,7 @@ if ($started) {
 
 if (-not ($started -and $pong -and $dbReady)) {
     foreach ($log in (Join-Path $programData "setup.log"), (Get-ChildItem (Join-Path $programData "postgres\log") -ErrorAction SilentlyContinue | Sort-Object LastWriteTime | Select-Object -Last 1 -ExpandProperty FullName)) {
-        if ($log -and (Test-Path $log)) { Write-Host "--- $log"; Get-Content $log -Tail 60 }
+        if ($log -and (Test-Path $log)) { Write-Host "--- $log"; Get-Content $log -Tail 400 }
     }
     foreach ($log in "launcher.log", "cirqen_app.log", "postgres_setup.log", "django.log", "postgres.log", "postgres_init.log", "redis.log", "celery.log") {
         $path = Join-Path $data "logs\$log"

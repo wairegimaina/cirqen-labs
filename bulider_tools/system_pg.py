@@ -373,7 +373,8 @@ def _install_windows(runtime_dir: Path, root: Path, log) -> str | None:
     if error and "password authentication failed" in error:
         error = _reset_password_windows(pg_dir, data, cfg, log, env)
     if error:
-        return f"The database service did not answer: {error} (log: {data / 'log'})"
+        _diagnose_windows(pg_dir, data, log, env)
+        return f"The database service did not answer: {error} (details: {root / 'setup.log'})"
 
     conn = connect(cfg, "postgres")
     conn.autocommit = True
@@ -391,6 +392,27 @@ def _install_windows(runtime_dir: Path, root: Path, log) -> str | None:
     os.replace(tmp, target)
     log.write(f"ready: {SERVICE_NAME} on port {port}; settings in {target}\n")
     return None
+
+
+def _diagnose_windows(pg_dir: Path, data: Path, log, env) -> None:
+    """Why the service won't run, into setup.log: its state, what Windows and
+    PostgreSQL logged, and whether PostgreSQL runs outside the service."""
+    _run(["sc", "queryex", SERVICE_NAME], log)
+    _run(["sc", "qc", SERVICE_NAME], log)
+    _run(["wevtutil", "qe", "Application", "/q:*[System[Provider[@Name='PostgreSQL']]]", "/c:15", "/rd:true",
+          "/f:text"], log)
+    _run(["wevtutil", "qe", "System", "/q:*[System[Provider[@Name='Service Control Manager']]]", "/c:8",
+          "/rd:true", "/f:text"], log)
+    for pg_log in sorted((data / "log").glob("*"))[-2:]:
+        log.write(f"--- {pg_log}\n{pg_log.read_text(encoding='utf-8', errors='replace')[-3000:]}\n")
+    _run(["icacls", data], log)
+    _run(["icacls", pg_dir / "bin" / "postgres.exe"], log)
+    trial = data.parent / "trial_start.log"
+    _run([pg_dir / "bin" / "pg_ctl.exe", "start", "-D", data, "-l", trial, "-w", "-t", "30"], log, env=env,
+         timeout=60)
+    if trial.exists():
+        log.write(f"--- {trial}\n{trial.read_text(encoding='utf-8', errors='replace')[-3000:]}\n")
+    _run([pg_dir / "bin" / "pg_ctl.exe", "stop", "-D", data, "-m", "fast", "-w"], log, env=env, timeout=60)
 
 
 def _reset_password_windows(pg_dir: Path, data: Path, cfg: dict, log, env) -> str | None:
