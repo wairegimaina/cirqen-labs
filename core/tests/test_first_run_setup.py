@@ -227,6 +227,28 @@ class SystemDatabaseTests(TestCase):
             self.assertEqual(self.system_pg.load(), {"host": "127.0.0.1", "port": 5433, "database": "cirqen1",
                                                      "user": "cirqen1", "password": "x"})
 
+    def test_vc_runtime_is_put_next_to_postgres(self):
+        """The service can't use the copies in Cirqen's folder (error 1053 on
+        PCs without the Visual C++ redistributable)."""
+        import io
+
+        from bulider_tools import system_pg
+
+        with tempfile.TemporaryDirectory() as tmp:
+            app, bin_dir = Path(tmp, "app"), Path(tmp, "bin")
+            (app / "_internal" / "PySide6").mkdir(parents=True)
+            bin_dir.mkdir()
+            (app / "_internal" / "VCRUNTIME140.dll").write_text("vc")
+            (app / "_internal" / "VCRUNTIME140_1.dll").write_text("vc1")
+            (app / "_internal" / "PySide6" / "MSVCP140.dll").write_text("cp")
+            (bin_dir / "msvcp140_1.dll").write_text("kept")
+            log = io.StringIO()
+            system_pg._copy_vc_runtime(app, bin_dir, log)
+            self.assertEqual((bin_dir / "vcruntime140.dll").read_text(), "vc")
+            self.assertEqual((bin_dir / "vcruntime140_1.dll").read_text(), "vc1")
+            self.assertEqual((bin_dir / "msvcp140.dll").read_text(), "cp")
+            self.assertEqual((bin_dir / "msvcp140_1.dll").read_text(), "kept")
+
     def test_newer_dump_settings_are_dropped(self):
         self.assertFalse(self.system_pg.strip_unsupported("SET transaction_timeout = 0;\n"))
         self.assertTrue(self.system_pg.strip_unsupported("SET statement_timeout = 0;\n"))

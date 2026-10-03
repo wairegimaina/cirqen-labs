@@ -272,6 +272,29 @@ def _run(cmd, log, **kw):
     return result
 
 
+VC_RUNTIME = ("vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll", "msvcp140_1.dll")
+
+
+def _copy_vc_runtime(app_dir: Path, bin_dir: Path, log) -> None:
+    """PostgreSQL needs the Visual C++ runtime, which many PCs don't have
+    installed. Run from Cirqen it found the copies in Cirqen's folder; as a
+    service it doesn't, and Windows hangs it on a "DLL not found" box no one
+    sees (sc start: error 1053). So they go next to postgres.exe."""
+    found = {}
+    for path in sorted(Path(app_dir).rglob("*.dll"), key=lambda p: len(p.parts)):
+        name = path.name.lower()
+        if name in VC_RUNTIME and name not in found:
+            found[name] = path
+    for name in VC_RUNTIME:
+        if (bin_dir / name).exists():
+            continue
+        if name not in found:
+            log.write(f"{name} not found in {app_dir}\n")
+            continue
+        shutil.copy2(found[name], bin_dir / name)
+        log.write(f"copied {found[name]} -> {bin_dir}\n")
+
+
 def _wait_stopped(log, seconds: int = 60) -> None:
     deadline = time.monotonic() + seconds
     while time.monotonic() < deadline:
@@ -341,6 +364,7 @@ def _install_windows(runtime_dir: Path, root: Path, log) -> str | None:
         shutil.copytree(src, pg_dir, dirs_exist_ok=True)
     elif not (pg_dir / "bin" / "postgres.exe").exists():
         return f"PostgreSQL is missing from the app ({src})"
+    _copy_vc_runtime(runtime_dir.parent, pg_dir / "bin", log)
     env = _env(pg_dir, None)
 
     if not (data / "PG_VERSION").exists():
