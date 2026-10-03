@@ -414,7 +414,7 @@ def _install_windows(runtime_dir: Path, root: Path, log) -> str | None:
     _run(["sc", "start", SERVICE_NAME], log)
 
     cfg = {"host": "127.0.0.1", "port": port, "database": DATABASE, "user": ROLE, "password": password}
-    error = wait_until_up({**cfg, "database": "postgres"}, 120)
+    error = wait_until_up({**cfg, "database": "postgres"}, 300)  # slow disks: 100s+ of crash recovery
     if error and "password authentication failed" in error:
         error = _reset_password_windows(pg_dir, data, cfg, log, env)
     if error:
@@ -453,12 +453,13 @@ def _diagnose_windows(pg_dir: Path, data: Path, log, env) -> None:
     _run(["icacls", data], log)
     _run(["icacls", data / "postgresql.conf"], log)
     _run(["icacls", pg_dir / "bin" / "postgres.exe"], log)
-    trial = data.parent / "trial_start.log"
-    _run([pg_dir / "bin" / "pg_ctl.exe", "start", "-D", data, "-l", trial, "-w", "-t", "30"], log, env=env,
-         timeout=60)
-    if trial.exists():
-        log.write(f"--- {trial}\n{trial.read_text(encoding='utf-8', errors='replace')[-3000:]}\n")
-    _run([pg_dir / "bin" / "pg_ctl.exe", "stop", "-D", data, "-m", "fast", "-w"], log, env=env, timeout=60)
+    # No trial start of PostgreSQL from here: it inherits Cirqen's DLL folder
+    # so it runs when the service can't, its server held the output pipes so
+    # setup never finished, and it was killed mid-run (slow crash recovery).
+    system32 = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32"
+    missing = [name for name in VC_RUNTIME
+               if not (pg_dir / "bin" / name).exists() and not (system32 / name).exists()]
+    log.write(f"Visual C++ runtime missing for the service: {', '.join(missing) or 'none'}\n")
 
 
 def _reset_password_windows(pg_dir: Path, data: Path, cfg: dict, log, env) -> str | None:
