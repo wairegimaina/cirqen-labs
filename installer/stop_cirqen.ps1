@@ -6,7 +6,11 @@
 # name, so another PostgreSQL or Redis on the PC is left alone. The database
 # is stopped cleanly with pg_ctl first; anything left is then ended.
 # What it did is in %TEMP%\cirqen_stop.log.
-param([Parameter(Mandatory = $true)][string]$AppDir, [switch]$Elevated)
+#
+# Paths come from Windows' process list (WMI), not Get-Process: a 32-bit
+# PowerShell (what a 32-bit installer starts by default) gets no path for
+# 64-bit programs, and Cirqen went unnoticed.
+param([Parameter(Mandatory = $true)][string]$AppDir)
 $ErrorActionPreference = "Continue"
 $log = Join-Path $env:TEMP "cirqen_stop.log"
 function Say([string]$text) { Add-Content -Path $log -Value "$(Get-Date -Format 'HH:mm:ss') $text" }
@@ -22,34 +26,26 @@ function Long([string]$path) {
     return $path
 }
 $prefixes = @($AppDir, (Long $AppDir)) | ForEach-Object { $_.TrimEnd('\') + '\' } | Select-Object -Unique
-Say "AppDir $AppDir -> $($prefixes -join ' | ')"
+Say "AppDir $AppDir -> $($prefixes -join ' | ') (64-bit PowerShell: $([Environment]::Is64BitProcess))"
 
 # Never this script or the uninstaller (its unins000.exe is in the app folder).
 function Get-Ours([bool]$IncludePostgres) {
-    Get-Process | Where-Object {
-        $path = $_.Path
-        $path -and $_.Id -ne $PID -and $_.ProcessName -notlike "unins*" -and
+    Get-CimInstance Win32_Process | Where-Object {
+        $path = $_.ExecutablePath
+        $path -and $_.ProcessId -ne $PID -and $_.Name -notlike "unins*" -and
         ($prefixes | Where-Object { $path.StartsWith($_, [StringComparison]::OrdinalIgnoreCase) }) -and
-        ($IncludePostgres -or $_.ProcessName -notlike "postgres*")
+        ($IncludePostgres -or $_.Name -notlike "postgres*")
     }
 }
-
-# A Cirqen started with "Run as administrator" is hidden from a script without
-# those rights: Windows gives no path for it and won't let it be ended.
-function Get-Hidden { Get-Process Cirqen -ErrorAction SilentlyContinue | Where-Object { -not $_.Path } }
-$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
-    [Security.Principal.WindowsBuiltInRole]::Administrator)
-Say "running as administrator: $isAdmin"
 
 function End-All($procs) {
     foreach ($p in $procs) {
         try {
-            Stop-Process -Id $p.Id -Force -ErrorAction Stop
-            Say "ended $($p.ProcessName) $($p.Id)"
+            Stop-Process -Id $p.ProcessId -Force -ErrorAction Stop
+            Say "ended $($p.Name) $($p.ProcessId)"
         } catch {
-            Say "Stop-Process $($p.ProcessName) $($p.Id): $($_.Exception.Message); trying taskkill"
-            $out = & taskkill.exe /F /T /PID $p.Id 2>&1
-            Say "taskkill: $out"
+            $out = & taskkill.exe /F /T /PID $p.ProcessId 2>&1
+            Say "Stop-Process $($p.Name) $($p.ProcessId): $($_.Exception.Message); taskkill: $out"
         }
     }
 }
@@ -74,17 +70,7 @@ if ((Test-Path $pgCtl) -and (Test-Path $dbRoot)) {
 # lived in %APPDATA%\cirqen\postgres and is ended here).
 End-All (Get-Ours $true)
 for ($i = 0; $i -lt 20 -and (Get-Ours $true); $i++) { Start-Sleep -Milliseconds 500 }
-# 4. A Cirqen this script can't see: do it all again with administrator rights
-# (one Windows prompt, only in this case).
-if ((Get-Hidden) -and -not $isAdmin -and -not $Elevated) {
-    Say "Cirqen runs with administrator rights; asking for them to stop it"
-    try {
-        Start-Process powershell.exe -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList @(
-            "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "`"$PSCommandPath`"",
-            "-AppDir", "`"$AppDir`"", "-Elevated")
-    } catch { Say "not given administrator rights: $($_.Exception.Message)" }
-}
-$left = @(Get-Ours $true) + @(Get-Hidden)
-if ($left) { Say "STILL RUNNING: $(($left | ForEach-Object { "$($_.ProcessName) $($_.Id)" }) -join ', ')" }
+$left = Get-Ours $true
+if ($left) { Say "STILL RUNNING: $(($left | ForEach-Object { "$($_.Name) $($_.ProcessId)" }) -join ', ')" }
 else { Say "nothing of Cirqen running" }
 exit 0

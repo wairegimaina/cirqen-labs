@@ -103,7 +103,9 @@ var
   Verb: String;
 begin
   if Elevated then Verb := 'runas' else Verb := '';
-  Result := ShellExec(Verb, 'powershell.exe',
+  // {sysnative}: the 64-bit PowerShell. This installer is 32-bit, and a plain
+  // powershell.exe would be the 32-bit one.
+  Result := ShellExec(Verb, ExpandConstant('{sysnative}\WindowsPowerShell\v1.0\powershell.exe'),
     '-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + Script + '" ' + Params,
     '', SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
   if not Result then
