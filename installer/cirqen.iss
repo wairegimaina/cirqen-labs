@@ -68,5 +68,57 @@ Name: "{autoprograms}\Cirqen"; Filename: "{app}\Cirqen.exe"; WorkingDir: "{app}"
 Name: "{autodesktop}\Cirqen"; Filename: "{app}\Cirqen.exe"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\Cirqen.exe"; Parameters: "system-postgres"; Verb: "runas"; Flags: shellexec waituntilterminated runhidden; StatusMsg: "Setting up the Cirqen database service..."
 Filename: "{app}\Cirqen.exe"; Description: "Start Cirqen"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+// The database service (system_pg.py) needs admin rights: a UAC prompt. Its
+// result is checked here, not in [Run], so a failure is shown with the
+// reason and can be retried instead of the installer finishing "successfully".
+
+function DatabaseSetupError(): String;
+var
+  Lines: TArrayOfString;
+  I: Integer;
+begin
+  Result := '';
+  if LoadStringsFromFile(ExpandConstant('{commonappdata}\Cirqen\setup.log'), Lines) then
+    for I := GetArrayLength(Lines) - 1 downto 0 do
+      if Pos('result: ', Lines[I]) = 1 then
+      begin
+        Result := Copy(Lines[I], 9, Length(Lines[I]));
+        Exit;
+      end;
+end;
+
+procedure SetUpDatabase();
+var
+  ResultCode: Integer;
+  Reason: String;
+begin
+  repeat
+    WizardForm.StatusLabel.Caption := 'Setting up the Cirqen database service...';
+    if ShellExec('runas', ExpandConstant('{app}\Cirqen.exe'), 'system-postgres', ExpandConstant('{app}'),
+                 SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+    begin
+      if ResultCode = 0 then
+        Exit;
+      Reason := DatabaseSetupError();
+      if Reason = '' then
+        Reason := 'it stopped with code ' + IntToStr(ResultCode);
+    end
+    else if ResultCode = 1223 then
+      Reason := 'administrator permission was not given (the Windows prompt was declined)'
+    else
+      Reason := SysErrorMessage(ResultCode);
+    Log('Database setup failed: ' + Reason);
+  until SuppressibleMsgBox('The Cirqen database service could not be set up: ' + Reason + #13#10#13#10 +
+          'Details are in ' + ExpandConstant('{commonappdata}\Cirqen\setup.log') + '.' + #13#10#13#10 +
+          'Retry now? (An administrator''s password is needed.) If you cancel, Cirqen will ask again ' +
+          'when it starts.', mbError, MB_RETRYCANCEL, IDCANCEL) <> IDRETRY;
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+    SetUpDatabase();
+end;

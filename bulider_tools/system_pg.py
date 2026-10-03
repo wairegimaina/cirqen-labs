@@ -272,6 +272,17 @@ def _run(cmd, log, **kw):
     return result
 
 
+def _wait_stopped(log, seconds: int = 60) -> None:
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        state = subprocess.run(["sc", "query", SERVICE_NAME], stdin=subprocess.DEVNULL, capture_output=True,
+                               text=True).stdout
+        if "STOPPED" in state:
+            return
+        time.sleep(1)
+    log.write(f"{SERVICE_NAME} did not stop within {seconds}s\n")
+
+
 def _port_from_conf(data: Path) -> int | None:
     import re
 
@@ -317,15 +328,20 @@ def _install_windows(runtime_dir: Path, root: Path, log) -> str | None:
     old = load() or {}
     password = old.get("password") or secrets.token_urlsafe(24)
 
-    if not (pg_dir / "bin" / "postgres.exe").exists():
-        if not (src / "bin" / "postgres.exe").exists():
-            return f"PostgreSQL is missing from the app ({src})"
-        log.write(f"copying {src} -> {pg_dir}\n")
-        shutil.copytree(src, pg_dir, dirs_exist_ok=True)
-    env = _env(pg_dir, None)
-
     service = _run(["sc", "query", SERVICE_NAME], log)
     service_exists = service.returncode == 0
+
+    # Copied on every install, so an earlier copy that was cut short is
+    # completed; the service is stopped so its files are not in use.
+    if (src / "bin" / "postgres.exe").exists():
+        if service_exists:
+            _run(["sc", "stop", SERVICE_NAME], log)
+            _wait_stopped(log)
+        log.write(f"copying {src} -> {pg_dir}\n")
+        shutil.copytree(src, pg_dir, dirs_exist_ok=True)
+    elif not (pg_dir / "bin" / "postgres.exe").exists():
+        return f"PostgreSQL is missing from the app ({src})"
+    env = _env(pg_dir, None)
 
     if not (data / "PG_VERSION").exists():
         if service_exists:
@@ -352,8 +368,10 @@ def _install_windows(runtime_dir: Path, root: Path, log) -> str | None:
     port = _port_from_conf(data) or 5432
 
     # The service account needs full control of the data (as the PostgreSQL
-    # installer does it). Only adds: removing the inherited permissions
-    # (/inheritance:r) left postgres "Permission denied" on its own files.
+    # installer does it). Removing the inherited permissions (/inheritance:r)
+    # left postgres "Permission denied" on its own files, and installers
+    # before 1.6.2's last build did that: /reset puts them back first.
+    _run(["icacls", data, "/reset", "/T", "/C", "/Q"], log)
     result = _run(["icacls", data, "/grant", f"{NETWORK_SERVICE_SID}:(OI)(CI)F", "/T", "/C", "/Q"], log)
     if result.returncode != 0:
         return f"Could not give the database service access to {data}: {(result.stderr or result.stdout).strip()}"
