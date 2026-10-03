@@ -17,6 +17,11 @@ $programData = Join-Path $env:ProgramData "Cirqen"
 $service = Get-Service CirqenPostgreSQL -ErrorAction SilentlyContinue
 $dbReady = $service -and $service.Status -eq "Running" -and (Test-Path (Join-Path $programData "local_db.json"))
 if ($service) { Write-Host "database service: $($service.Status) ($($service.StartType))" } else { Write-Host "database service: MISSING" }
+# This runner has the VC++ redistributable, so a missing DLL wouldn't stop the
+# service here: check the ones PostgreSQL ships with (build.py bundle_vc_runtime).
+$pgBin = Join-Path $env:ProgramFiles "Cirqen\PostgreSQL\bin"
+$vcMissing = @("vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll", "msvcp140_1.dll") | Where-Object { -not (Test-Path (Join-Path $pgBin $_)) }
+if ($vcMissing) { Write-Host "VC++ RUNTIME MISSING next to postgres.exe: $($vcMissing -join ', ')"; $dbReady = $false } else { Write-Host "VC++ runtime: next to postgres.exe" }
 
 $env:CIRQEN_UNATTENDED = "1"          # no one is here to click OK
 $env:CIRQEN_LOG_LEVEL = "INFO"         # the full story in cirqen_app.log if it fails

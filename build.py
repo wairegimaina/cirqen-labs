@@ -792,7 +792,41 @@ def copy_system_postgresql():
             return True
 
 
+# The Visual C++ runtime PostgreSQL is built against. Many PCs don't have it
+# installed, and the CirqenPostgreSQL service can't use the copies in
+# Cirqen's own folder (sc start: 1053), so they ship in PostgreSQL's bin.
+VC_RUNTIME_DLLS = ("vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll", "msvcp140_1.dll")
+
+
+def bundle_vc_runtime(pg_bin: Path) -> bool:
+    """Windows: copy the build machine's VC++ runtime (System32, from the
+    Microsoft redistributable) next to postgres.exe. False if any is missing."""
+    system32 = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32"
+    missing = []
+    for name in VC_RUNTIME_DLLS:
+        src = system32 / name
+        if not src.exists():
+            missing.append(name)
+            continue
+        shutil.copy2(src, pg_bin / name)
+    if missing:
+        logger.error(f"❌ Visual C++ runtime missing on this build machine: {', '.join(missing)}. "
+                     "Install the Microsoft Visual C++ Redistributable (x64) and build again.")
+        return False
+    logger.info(f"✅ Visual C++ runtime bundled with PostgreSQL ({', '.join(VC_RUNTIME_DLLS)})")
+    return True
+
+
 def setup_postgresql():
+    """PostgreSQL in runtime/postgresql; on Windows with the VC++ runtime."""
+    if not _fetch_postgresql():
+        return False
+    if IS_WINDOWS:
+        return bundle_vc_runtime(RUNTIME_DIR / "postgresql" / "bin")
+    return True
+
+
+def _fetch_postgresql():
     """Setup PostgreSQL with multiple download sources"""
     print_banner("Setting up PostgreSQL")
 
