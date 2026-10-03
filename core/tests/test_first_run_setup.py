@@ -264,6 +264,24 @@ class SystemDatabaseTests(TestCase):
         self.assertEqual(len(list((data / "backups").glob("before-system-postgres-*.sql"))), 1)
         self.assertEqual(list((data / "backups").glob("*.restore.sql")), [])
 
+    def test_an_old_folder_from_a_failed_first_run_is_set_aside(self):
+        """initdb timed out on the first run: the cluster exists (OS user as
+        superuser) but cirqen1 was never created, so there is nothing to copy."""
+        import getpass
+        import subprocess
+
+        data = self.tmp / "data"
+        (data / "logs").mkdir(parents=True)
+        subprocess.run([str(PG_BIN / "initdb"), "-D", str(data / "postgres"), "-U", getpass.getuser(),
+                        "-A", "trust", "--locale=C"], check=True, capture_output=True)
+        old = {"host": "127.0.0.1", "port": free_port(), "database": "cirqen1", "user": "cirqen1",
+               "password": "old-pass"}
+        self.assertIsNone(self.system_pg.copy_bundled_data(data / "postgres", old, self.system, PG_BIN.parent,
+                                                           data / "backups"))
+        self.assertFalse((data / "postgres").exists())
+        self.assertEqual(len(list(data.glob("postgres.never-used-*"))), 1)
+        self.assertEqual(list((data / "backups").glob("*.sql")), [])
+
     def test_a_database_already_in_use_is_not_overwritten(self):
         data, old = self._old_bundled_database()
         conn = self.system_pg.connect(self.system)

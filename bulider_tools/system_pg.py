@@ -200,9 +200,13 @@ def copy_bundled_data(old_data: Path, old_cfg: dict, target: dict, pg_dir: Path,
             pass
         import psycopg2
 
+        # A first run that failed part-way (initdb timed out) leaves a cluster
+        # with no cirqen1 database: nothing to copy. Recovery after an unclean
+        # stop can fsync for minutes on a slow disk, hence the long wait.
         login = None
-        deadline = time.monotonic() + 90
-        while login is None and time.monotonic() < deadline:
+        never_used = False
+        deadline = time.monotonic() + 300
+        while login is None and not never_used and time.monotonic() < deadline:
             if server is not None and server.poll() is not None:
                 return "The old database did not start (logs/postgres_old_copy.log)"
             for user, password in logins:
@@ -212,20 +216,37 @@ def copy_bundled_data(old_data: Path, old_cfg: dict, target: dict, pg_dir: Path,
                     login = (user, password)
                     break
                 except psycopg2.OperationalError:
+                    pass
+                try:
+                    conn = psycopg2.connect(host="127.0.0.1", port=port, dbname="postgres", user=user,
+                                            password=password, connect_timeout=3)
+                except psycopg2.OperationalError:
                     continue
+                try:
+                    with conn.cursor() as cur:
+                        cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (old_cfg["database"],))
+                        never_used = cur.fetchone() is None
+                finally:
+                    conn.close()
+                if never_used:
+                    break
             else:
                 time.sleep(1)
-        if login is None:
+        if never_used:
+            dump = None
+        elif login is None:
             return "Could not log in to the old database to copy it"
 
-        backups.mkdir(parents=True, exist_ok=True)
-        dump = backups / f"before-system-postgres-{time.strftime('%Y%m%d-%H%M%S')}.sql"
-        result = subprocess.run(
-            [_tool(pg_dir, "pg_dump"), "-h", "127.0.0.1", "-p", str(port), "-U", login[0],
-             "-d", old_cfg["database"], "--no-owner", "--no-privileges", "-f", str(dump)],
-            env=_env(pg_dir, login[1]), stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=1800)
-        if result.returncode != 0:
-            return f"Copying the old database failed (pg_dump): {result.stderr.strip()[-800:]}"
+        else:
+            backups.mkdir(parents=True, exist_ok=True)
+            dump = backups / f"before-system-postgres-{time.strftime('%Y%m%d-%H%M%S')}.sql"
+            result = subprocess.run(
+                [_tool(pg_dir, "pg_dump"), "-h", "127.0.0.1", "-p", str(port), "-U", login[0],
+                 "-d", old_cfg["database"], "--no-owner", "--no-privileges", "-f", str(dump)],
+                env=_env(pg_dir, login[1]), stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                timeout=1800)
+            if result.returncode != 0:
+                return f"Copying the old database failed (pg_dump): {result.stderr.strip()[-800:]}"
     finally:
         if server is not None:
             try:
@@ -235,6 +256,12 @@ def copy_bundled_data(old_data: Path, old_cfg: dict, target: dict, pg_dir: Path,
                 server.kill()
         if log:
             log.close()
+
+    if dump is None:
+        moved = old_data.with_name(f"postgres.never-used-{time.strftime('%Y%m%d-%H%M%S')}")
+        old_data.rename(moved)
+        logger.info(f"[system-pg] The old database folder had no Cirqen database; nothing copied, kept in {moved}")
+        return None
 
     restore = dump.with_suffix(".restore.sql")
     with open(dump, encoding="utf-8") as src, open(restore, "w", encoding="utf-8") as out:
