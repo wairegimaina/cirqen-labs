@@ -71,9 +71,13 @@ if (-not $ok) {
 $uninstaller = Get-ChildItem $appDir -Filter "unins*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($uninstaller) {
     Write-Host "Uninstalling (Cirqen still running)"
-    Start-Process $uninstaller.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait
+    $uninstallLog = Join-Path $env:TEMP "cirqen_uninstall.log"
+    Start-Process $uninstaller.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/LOG=`"$uninstallLog`"" -Wait
     Start-Sleep -Seconds 5          # the uninstaller finishes from a temporary copy
 } else { Write-Host "UNINSTALLER NOT FOUND" }
+foreach ($log in (Join-Path $env:TEMP "cirqen_stop.log"), $uninstallLog) {
+    if ($log -and (Test-Path $log)) { Write-Host "--- $log"; Get-Content $log -Tail 60 }
+}
 $left = @($appDir, $data, (Join-Path $env:LOCALAPPDATA "Cirqen"), $shortcut) | Where-Object { Test-Path $_ }
 $running = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$appDir\*" }
 if ($left) { Write-Host "LEFT AFTER UNINSTALL: $($left -join ', ')"; $ok = $false }
