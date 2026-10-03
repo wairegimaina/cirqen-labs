@@ -156,6 +156,17 @@ def main():
 
             logger.debug(traceback.format_exc())
 
+        # Files Cirqen can't write (left by a run with sudo) make PostgreSQL
+        # and the logs fail all over; say so once, plainly, instead.
+        from .embedded_pg import data_folder_problem
+        problem = data_folder_problem(DATA_PATH)
+        if problem:
+            splash.close()
+            _themed_dialog("error", "Cirqen can’t use its data folder", problem.split("\n")[0], problem)
+            logger.error(f"Data folder problem: {problem}")
+            cleanup_on_exit()
+            return 1
+
         first_run_setup = FirstRunSetup(port_manager)
 
         if first_run_setup.is_first_run():

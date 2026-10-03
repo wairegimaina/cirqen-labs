@@ -557,7 +557,8 @@ def copy_system_postgresql():
         logger.info(f"  Target: {pg_lib}")
 
         for item in src_lib.rglob("*"):
-            if item.is_file():
+            # bitcode/ is for JIT, which the app turns off (embedded_pg.py): 25 MB unused.
+            if item.is_file() and "bitcode" not in item.relative_to(src_lib).parts:
                 rel_path = item.relative_to(src_lib)
                 dest = pg_lib / rel_path
                 dest.parent.mkdir(parents=True, exist_ok=True)
@@ -792,7 +793,41 @@ def copy_system_postgresql():
             return True
 
 
+# The Visual C++ runtime PostgreSQL is built against. Many PCs don't have it
+# installed, so it ships next to postgres.exe, where Windows looks first:
+# the embedded database never depends on what else the PC has.
+VC_RUNTIME_DLLS = ("vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll", "msvcp140_1.dll")
+
+
+def bundle_vc_runtime(pg_bin: Path) -> bool:
+    """Windows: copy the build machine's VC++ runtime (System32, from the
+    Microsoft redistributable) next to postgres.exe. False if any is missing."""
+    system32 = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32"
+    missing = []
+    for name in VC_RUNTIME_DLLS:
+        src = system32 / name
+        if not src.exists():
+            missing.append(name)
+            continue
+        shutil.copy2(src, pg_bin / name)
+    if missing:
+        logger.error(f"❌ Visual C++ runtime missing on this build machine: {', '.join(missing)}. "
+                     "Install the Microsoft Visual C++ Redistributable (x64) and build again.")
+        return False
+    logger.info(f"✅ Visual C++ runtime bundled with PostgreSQL ({', '.join(VC_RUNTIME_DLLS)})")
+    return True
+
+
 def setup_postgresql():
+    """PostgreSQL in runtime/postgresql; on Windows with the VC++ runtime."""
+    if not _fetch_postgresql():
+        return False
+    if IS_WINDOWS:
+        return bundle_vc_runtime(RUNTIME_DIR / "postgresql" / "bin")
+    return True
+
+
+def _fetch_postgresql():
     """Setup PostgreSQL with multiple download sources"""
     print_banner("Setting up PostgreSQL")
 
@@ -851,7 +886,7 @@ def setup_postgresql():
             pgsql.rmdir()
         # EDB's zip also carries pgAdmin, StackBuilder, docs and debug symbols
         # (hundreds of MB the app never uses).
-        for extra in ("pgAdmin 4", "StackBuilder", "doc", "symbols", "include"):
+        for extra in ("pgAdmin 4", "StackBuilder", "doc", "symbols", "include", "installer"):
             shutil.rmtree(pg_dir / extra, ignore_errors=True)
 
         # Make binaries executable on Linux
@@ -2017,7 +2052,7 @@ def generate_spec():
     'django.conf',
     'django.conf.urls',
     'django.conf.urls.static',
-    'psutil'
+    'psutil',
 
     # ===== SYNC MODULE =====
     'sync',
@@ -2033,6 +2068,8 @@ def generate_spec():
     'bulider_tools.services',
     'bulider_tools.ui',
     'bulider_tools.database',
+    'bulider_tools.embedded_pg',
+    'bulider_tools.shutdown',
     'bulider_tools.setup_ui',
 
     # ===== UPDATE SYSTEM =====
@@ -2950,7 +2987,9 @@ def copy_runtime_to_dist():
         logger.info("  Copying files...")
         # symlinks=True: runtime/postgresql/bin is a link into the relocatable
         # layout (relocatable_postgres_layout); copying through it would undo that.
-        shutil.copytree(src_pg, dest_pg, symlinks=True)
+        # Not shipped: JIT bitcode (JIT is off, embedded_pg.py) and the
+        # extension-building kit (pgxs); neither is used at run time.
+        shutil.copytree(src_pg, dest_pg, symlinks=True, ignore=shutil.ignore_patterns("bitcode", "pgxs"))
 
         # Count files
         file_count = sum(1 for _ in dest_pg.rglob('*') if _.is_file())
@@ -3271,13 +3310,11 @@ Built: Auto-configured with all Django apps
   1. {start_instruction}
   2. Wait for services to start (~10-15 seconds)
   3. Application window opens automatically
-  4. Login with HOD credentials
+  4. Sign in with the account your hospital gave you
 
 🔐 FIRST LOGIN:
-  The setup screen shows the head of department's username (hod) and a
-  one-time password made for this installation. It is also saved in
-  first_login.txt in the data folder. You choose your own password and
-  draw your signature at first login; delete first_login.txt afterwards.
+  First run only creates the local database. Accounts come from HQ:
+  sign in with the account your hospital set up for you.
 
 ══════════════════════════════════════════════════════════════════════
 
@@ -3388,9 +3425,8 @@ For help, contact:
    You'll see a splash screen with progress
 
 3️⃣  LOGIN
-   First run creates the head of department account (username: hod)
-   with a one-time password shown on screen and saved in first_login.txt.
-   You choose your own password at first login.
+   Sign in with the account your hospital set up for you (accounts come
+   from HQ).
 
 4️⃣  WORK
    Application works online or offline

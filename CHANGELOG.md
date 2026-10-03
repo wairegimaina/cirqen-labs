@@ -85,8 +85,19 @@ using the new version for certificates.
 - Bulk user import from a spreadsheet.
 - Sign-in security events are deleted after 365 days
   (`CIRQEN_SECURITY_LOG_DAYS`; 0 keeps them).
+- The desktop database is embedded in the app: Cirqen creates it in the
+  user's folder and starts and stops it itself. Installing needs no
+  administrator, no Windows service and no PostgreSQL from Ubuntu.
+- Uninstalling removes everything Cirqen kept on the PC: the app, its
+  settings, logs, media and database (Windows uninstaller, `apt remove`,
+  `uninstall.sh`).
 
 ### Upgrade notes
+- Desktops start with a new, empty database and fill it from HQ; nothing is
+  copied from the 1.6.x database. Let each PC finish syncing before
+  upgrading. The Windows installer offers to remove the old
+  CirqenPostgreSQL service (with its data); on Ubuntu the old `cirqen1`
+  database in the system PostgreSQL is dropped when Cirqen is removed.
 - HQ must be updated first: it now creates the tables and columns sites
   used to create with `migrate --database=hq`
   (`migrations/2026_add_scheduling_warranty_checklists.sql`). Add

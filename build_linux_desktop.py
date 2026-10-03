@@ -410,7 +410,7 @@ def _check_no_dev_data() -> bool:
     """Refuse to package a bundle that carries this machine's own instance
     data (live database, config.json with HQ credentials, secret.key)."""
     leaked = [p for p in (DIST_APP / "_internal" / "data", DIST_APP / "data")
-              if (p / "config.json").exists() or (p / "postgres").exists()
+              if (p / "config.json").exists() or (p / "postgres").exists() or (p / "db").exists()
               or (p / "secret.key").exists()]
     if leaked:
         for p in leaked:
@@ -1022,9 +1022,18 @@ def step_create_uninstall_script() -> bool:
         # from the install dir: a bare "cirqen" pattern also hits anything
         # under a home dir like /home/cirqen, and an unanchored path would
         # match this script's own command line and kill it.
+        # The database first and cleanly (bulider_tools/embedded_pg.py): each
+        # user's cluster is in ~/.local/share/cirqen/db.
         echo "  Stopping running Cirqen processes …"
+        PG_CTL="$INSTALL_DIR/runtime/postgresql/bin/pg_ctl"
+        for DATA in /home/*/.local/share/cirqen/db/pg* /root/.local/share/cirqen/db/pg*; do
+            [ -f "$DATA/postmaster.pid" ] && [ -x "$PG_CTL" ] || continue
+            runuser -u "$(stat -c %U "$DATA")" -- env LD_LIBRARY_PATH="$INSTALL_DIR/runtime/postgresql/lib" \\
+                "$PG_CTL" stop -D "$DATA" -m fast -w -t 30 >/dev/null 2>&1 || true
+        done
         pkill -f "^$INSTALL_DIR/(Cirqen|runtime/)" 2>/dev/null || true
         sleep 1
+        pkill -9 -f "^$INSTALL_DIR/(Cirqen|runtime/)" 2>/dev/null || true
         ok "Processes stopped"
 
         # Remove application files
@@ -1046,7 +1055,6 @@ def step_create_uninstall_script() -> bool:
         rm -f "/usr/share/applications/$APP_ID.desktop"
         rm -f "/usr/share/pixmaps/$APP_ID.png"
         rm -f "$BIN_LINK"
-        rm -f /etc/tmpfiles.d/cirqen-postgresql.conf
         ok "Removed desktop entry, pixmap and symlink"
 
         # Refresh caches
@@ -1057,14 +1065,15 @@ def step_create_uninstall_script() -> bool:
         command -v gtk4-update-icon-cache &>/dev/null && \\
             gtk4-update-icon-cache -f "$HICOLOR_ROOT" 2>/dev/null || true
 
+        # Every user's settings, logs, media and database, and Qt's web cache.
+        for HOME_DIR in /home/* /root; do
+            rm -rf "$HOME_DIR/.local/share/cirqen" \\
+                   "$HOME_DIR/.local/share/B12 Technologies/Cirqen" "$HOME_DIR/.cache/B12 Technologies/Cirqen"
+        done
+        ok "Removed every user's Cirqen data (~/.local/share/cirqen)"
+
         echo ""
         ok "$APP_NAME uninstalled."
-        echo ""
-        echo "  ℹ️   User data was NOT removed."
-        echo "      To remove it for the current user:"
-        echo "        rm -rf ~/.local/share/cirqen"
-        echo "      To remove it for ALL users:"
-        echo "        for d in /home/*; do rm -rf \"\\$d/.local/share/cirqen\"; done"
         echo ""
     """))
 
@@ -1439,7 +1448,7 @@ def step_create_readme(distro: dict) -> bool:
         DATA STORAGE  (~/.local/share/cirqen/)
         ──────────────────────────────────────────────────────────────────────
 
-          postgres/          PostgreSQL database files
+          db/                PostgreSQL database (embedded; started and stopped by Cirqen)
           redis/             Redis cache files
           logs/              Application log files
           media/             User-uploaded files

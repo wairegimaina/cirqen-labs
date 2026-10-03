@@ -1,20 +1,30 @@
-# Install Cirqen-Setup-*.exe silently on this (clean) Windows, start Cirqen and
-# check that it opens its window and that its background-task worker answers.
+# Install Cirqen-Setup-*.exe silently on this (clean) Windows, start Cirqen,
+# check that it opens its window, that its embedded database and background
+# worker run, then uninstall it and check that nothing of Cirqen is left.
 # Run by .github/workflows/windows-build.yml; exits non-zero on failure.
 $ErrorActionPreference = "Stop"
 $setup = Get-ChildItem dist\Cirqen-Setup-*.exe | Where-Object { $_.Name -notmatch "-CH" } | Select-Object -First 1
 Write-Host "Installing $($setup.Name)"
 Start-Process $setup.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CURRENTUSER" -Wait
 
-$app = Join-Path $env:LOCALAPPDATA "Programs\Cirqen\Cirqen.exe"
+$appDir = Join-Path $env:LOCALAPPDATA "Programs\Cirqen"
+$app = Join-Path $appDir "Cirqen.exe"
 $data = Join-Path $env:APPDATA "cirqen"
+$dbRoot = Join-Path $env:LOCALAPPDATA "Cirqen\db"
 if (-not (Test-Path $app)) { throw "Cirqen.exe not installed at $app" }
 $shortcut = Join-Path ([Environment]::GetFolderPath("Programs")) "Cirqen.lnk"
 Write-Host "Start menu shortcut: $(Test-Path $shortcut)"
 
+# This runner has the VC++ redistributable, so a missing DLL wouldn't show
+# here: check the ones PostgreSQL ships with (build.py bundle_vc_runtime).
+$pgBin = Join-Path $appDir "runtime\postgresql\bin"
+$vcMissing = @("vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll", "msvcp140_1.dll") | Where-Object { -not (Test-Path (Join-Path $pgBin $_)) }
+$vcOk = -not $vcMissing
+if ($vcOk) { Write-Host "VC++ runtime: next to postgres.exe" } else { Write-Host "VC++ RUNTIME MISSING next to postgres.exe: $($vcMissing -join ', ')" }
+
 $env:CIRQEN_UNATTENDED = "1"          # no one is here to click OK
 $env:CIRQEN_LOG_LEVEL = "INFO"         # the full story in cirqen_app.log if it fails
-$proc = Start-Process $app -WorkingDirectory (Split-Path $app) -PassThru
+$proc = Start-Process $app -WorkingDirectory $appDir -PassThru
 $started = $false
 for ($i = 0; $i -lt 180; $i++) {
     Start-Sleep -Seconds 2
@@ -23,8 +33,16 @@ for ($i = 0; $i -lt 180; $i++) {
 }
 
 $pong = $false
+$dbOk = $false
 if ($started) {
     Write-Host "STARTED: Cirqen $(Get-Content (Join-Path $data 'full_update_ok')) opened its window"
+    $pg = Get-Process postgres -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$appDir\*" }
+    $cluster = Get-ChildItem $dbRoot -Directory -Filter "pg*" -ErrorAction SilentlyContinue | Select-Object -First 1
+    $dbOk = $pg -and $cluster -and (Test-Path (Join-Path $dbRoot "ready"))
+    if ($dbOk) { Write-Host "database: embedded, $($pg.Count) processes from the app, cluster $($cluster.FullName)" }
+    else { Write-Host "DATABASE NOT EMBEDDED AS EXPECTED (processes: $($pg.Count), cluster: $cluster)" }
+    if (Get-Service CirqenPostgreSQL -ErrorAction SilentlyContinue) { Write-Host "A DATABASE SERVICE EXISTS"; $dbOk = $false }
+
     $env:CELERY_BROKER_URL = "redis://127.0.0.1:7788/2"
     $env:CELERY_RESULT_BACKEND = "redis://127.0.0.1:7788/2"
     for ($i = 0; $i -lt 20 -and -not $pong; $i++) {
@@ -37,8 +55,9 @@ if ($started) {
     Write-Host "DID NOT START within 360s"
 }
 
-if (-not ($started -and $pong)) {
-    foreach ($log in "launcher.log", "cirqen_app.log", "postgres_setup.log", "django.log", "postgres.log", "postgres_init.log", "redis.log", "celery.log") {
+$ok = $started -and $pong -and $dbOk -and $vcOk
+if (-not $ok) {
+    foreach ($log in "launcher.log", "cirqen_app.log", "pg_ctl.log", "postgres.log", "migrations.log", "django.log", "redis.log", "celery.log") {
         $path = Join-Path $data "logs\$log"
         if (Test-Path $path) { Write-Host "--- $log"; Get-Content $path -Tail 40 }
     }
@@ -46,5 +65,24 @@ if (-not ($started -and $pong)) {
     New-Item -ItemType Directory -Force dist\app-logs | Out-Null
     Copy-Item (Join-Path $data "logs\*") dist\app-logs -ErrorAction SilentlyContinue
 }
-Get-Process Cirqen -ErrorAction SilentlyContinue | Stop-Process -Force
-if (-not ($started -and $pong)) { exit 1 }
+
+# Uninstall while Cirqen is still running, as a user would: the uninstaller
+# must stop it (database included) and leave nothing behind.
+$uninstaller = Get-ChildItem $appDir -Filter "unins*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($uninstaller) {
+    Write-Host "Uninstalling (Cirqen still running)"
+    $uninstallLog = Join-Path $env:TEMP "cirqen_uninstall.log"
+    Start-Process $uninstaller.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/LOG=`"$uninstallLog`"" -Wait
+    Start-Sleep -Seconds 5          # the uninstaller finishes from a temporary copy
+} else { Write-Host "UNINSTALLER NOT FOUND" }
+foreach ($log in (Join-Path $env:TEMP "cirqen_stop.log"), $uninstallLog) {
+    if ($log -and (Test-Path $log)) { Write-Host "--- $log"; Get-Content $log -Tail 60 }
+}
+$left = @($appDir, $data, (Join-Path $env:LOCALAPPDATA "Cirqen"), $shortcut) | Where-Object { Test-Path $_ }
+$running = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$appDir\*" }
+if ($left) { Write-Host "LEFT AFTER UNINSTALL: $($left -join ', ')"; $ok = $false }
+if ($running) { Write-Host "STILL RUNNING AFTER UNINSTALL: $(($running | ForEach-Object { $_.ProcessName }) -join ', ')"; $ok = $false }
+if (-not $left -and -not $running) { Write-Host "uninstall: nothing left" }
+
+Get-Process Cirqen, postgres, redis-server -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$appDir\*" } | Stop-Process -Force
+if (-not ($ok -and $uninstaller)) { exit 1 }

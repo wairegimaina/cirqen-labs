@@ -61,6 +61,12 @@ if __name__ == '__main__':
         execute_from_command_line([sys.argv[0], *sys.argv[2:]])
         sys.exit(0)
 
+    # Installer and uninstaller: stop everything this Cirqen runs (its
+    # database included) before files are replaced or removed.
+    if len(sys.argv) > 1 and sys.argv[1] == 'shutdown':
+        from bulider_tools.shutdown import main as shutdown
+        sys.exit(shutdown())
+
     # The installed app has no separate Python with Celery in it: the
     # services start the worker and beat as `<this binary> celery ...`
     # (bulider_tools/services.py _celery_command).

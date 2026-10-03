@@ -80,7 +80,10 @@ def restore(db, src):
         )
         if to_sql.returncode != 0:
             raise SnapshotError(f"pg_restore failed: {to_sql.stderr.strip()[:500]}")
-        body = sql_path.read_text()
+        # The system PostgreSQL can be older than the bundled pg_restore
+        # (Ubuntu 24.04 ships 16): drop settings an older server rejects.
+        body = "".join(line for line in sql_path.read_text().splitlines(keepends=True)
+                       if not line.startswith("SET transaction_timeout"))
         # A --schema=public dump normally recreates the schema itself.
         create = "" if "CREATE SCHEMA public;" in body else "CREATE SCHEMA public;\n"
         script = "DROP SCHEMA IF EXISTS public CASCADE;\n" + create + body

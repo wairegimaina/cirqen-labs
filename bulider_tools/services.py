@@ -2,29 +2,14 @@
 from PySide6.QtCore import QObject, QThread, QTimer, Signal
 
 from .runtime import *
+from .embedded_pg import DatabaseError
 
-def _superuser_candidates(app_user: str) -> list:
-    """Who may be the local cluster's superuser, most likely first: the OS user
-    who ran initdb (bulider_tools/database.py), found without os.getlogin(),
-    which fails with no login terminal (started from the desktop menu)."""
-    names = []
+
+def _log_tail(path, chars=1500):
     try:
-        import pwd
-        names.append(pwd.getpwuid(os.getuid()).pw_name)
-    except (ImportError, KeyError):
-        pass
-    try:
-        import getpass
-        names.append(getpass.getuser())
-    except Exception:  # noqa: BLE001
-        pass
-    try:
-        names.append(os.getlogin())
+        return Path(path).read_text(encoding='utf-8', errors='replace')[-chars:]
     except OSError:
-        pass
-    names += ['postgres', app_user]
-    return list(dict.fromkeys(n for n in names if n))
-
+        return ''
 
 class SetupThread(QThread):
     """Thread for first-run setup"""
@@ -71,14 +56,7 @@ class ServiceManager(QObject):
         self.stop_event = threading.Event()
         self.db_config = setup_environment(port_manager)
 
-        # ---- systemd PostgreSQL manager ----
-        _pg_d = RUNTIME_DIR / 'postgresql'
-        self._pg_systemd = PostgresSystemdManager(
-            port      = port_manager.get_port('postgresql_local'),
-            pg_binary = _pg_d / 'bin' / 'postgres',
-            pg_data   = DATA_PATH / 'postgres',
-            pg_lib    = _pg_d / 'lib',
-        )
+        self.db = local_database()
 
         # Update manager — initialised here, started in start_services()
         self._update_manager = None
@@ -169,13 +147,10 @@ class ServiceManager(QObject):
             logger.info("📊 [1/7] Starting PostgreSQL Local...")
 
             if not self.start_postgresql():
-                raise Exception("PostgreSQL Local startup failed")
+                raise Exception("The database did not start. Details: " + str(DATA_PATH / 'logs' / 'postgres.log'))
 
             logger.info("✅ PostgreSQL Local started successfully")
-            # start_postgresql() already polls a real psycopg2 connection until
-            # ready (see _ensure_pg_user_and_db_safe), so no extra wait is needed
-            # here beyond a brief settle margin.
-            time.sleep(0.5)
+            # start_postgresql() returns once Cirqen has logged in.
 
             # ============================================================
             # SERVICE 3: Redis (REQUIRED)
@@ -612,240 +587,26 @@ class ServiceManager(QObject):
             logger.debug(f"Could not report critical failure to HQ ({failure_type}): {e}")
 
     def start_postgresql(self):
-        """
-        Start the local embedded PostgreSQL instance on port 2215.
-
-        Strategy (in order):
-          1. systemd service active and accepting connections -> reuse as-is.
-          2. systemd service installed but inactive           -> start it, wait.
-          3. postgres already listening on the port          -> reuse as-is.
-          4. Nothing running                                  -> direct process start.
-
-        Systemd check is performed FIRST so a system-managed PostgreSQL
-        on the correct port is always reused even when the embedded
-        binary path differs.
-
-        After confirming postgres is up we ensure the app user and database
-        exist, then return True.  Any failure returns False.
-        """
-        import time as _time
-        import psycopg2
-        from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
-
-        pg_dir  = self.runtime_dir / 'postgresql'
-        pg_data = DATA_PATH / 'postgres'
-        pg_log  = DATA_PATH / 'logs' / 'postgres.log'
-        port    = self.port_manager.get_port('postgresql_local')
-
-        logger.info(f"[PG] Starting PostgreSQL local on port {port}...")
-
-        # ------------------------------------------------------------------
-        # PRIORITY CHECK: systemd/existing instance (before binary check)
-        # This ensures a system-managed postgres on port 2215 is always
-        # detected and reused, even if the embedded binary path differs.
-        # ------------------------------------------------------------------
-        if self._pg_systemd.ensure(timeout=90):
-            logger.info("[PG] Reusing existing PostgreSQL instance.")
-            result = self._ensure_pg_user_and_db_safe(port, pg_dir)
-            if result:
-                logger.info(f"[PG] ✅ PostgreSQL Local ready (systemd-managed, port {port}).")
-            else:
-                logger.error("[PG] Systemd instance running but user/db setup failed.")
-            return result
-
-        # ------------------------------------------------------------------
-        # Fallback: need to start the embedded binary directly
-        # ------------------------------------------------------------------
-        pg_bin = pg_dir / 'bin' / ('postgres.exe' if sys.platform == 'win32' else 'postgres')
-        if not pg_bin.exists():
-            logger.error(f"[PG] Binary not found: {pg_bin}")
-            logger.error("[PG] Cannot start PostgreSQL — no systemd service and no embedded binary.")
-            return False
-
-        # ------------------------------------------------------------------
-        # Direct start — clean up any stale postmaster.pid first
-        # ------------------------------------------------------------------
-        postmaster_pid_file = pg_data / 'postmaster.pid'
-        if postmaster_pid_file.exists():
-            logger.warning("[PG] Found stale postmaster.pid — cleaning up...")
-            try:
-                old_pid = int(postmaster_pid_file.read_text().splitlines()[0])
-                if psutil.pid_exists(old_pid):
-                    proc = psutil.Process(old_pid)
-                    if 'postgres' in proc.name().lower():
-                        proc.terminate()
-                        try:
-                            proc.wait(timeout=8)
-                        except psutil.TimeoutExpired:
-                            proc.kill()
-                            proc.wait(timeout=3)
-                        _time.sleep(1)
-            except Exception as e:
-                logger.debug(f"[PG] postmaster.pid cleanup: {e}")
-            # Remove stale state files regardless
-            for fname in ('postmaster.pid', 'postmaster.opts',
-                          f'.s.PGSQL.{port}', f'.s.PGSQL.{port}.lock'):
-                try:
-                    (pg_data / fname).unlink(missing_ok=True)
-                except Exception:
-                    pass
-
-        # Build environment with correct library path
-        env = os.environ.copy()
-        pg_lib = pg_dir / 'lib'
-        if pg_lib.exists() and sys.platform != 'win32':
-            ld = env.get('LD_LIBRARY_PATH', '')
-            env['LD_LIBRARY_PATH'] = f"{pg_lib}:{ld}" if ld else str(pg_lib)
-
-        rotate_log_if_large(pg_log)
-        # On Windows with admin rights postgres.exe refuses to run; pg_ctl
-        # starts it with a restricted token (pg_process.py).
-        from .pg_process import start as start_pg_server
-
-        process, log_fh = start_pg_server(pg_bin, pg_data, ['-p', str(port), '-k', str(pg_data)], pg_log, env)
-        self.processes.append(('postgres_local', process, log_fh))
-        logger.info(f"[PG] Process started (PID {process.pid}), waiting for ready...")
-
-        # ------------------------------------------------------------------
-        # Wait up to 45 s for postgres to accept connections
-        # ------------------------------------------------------------------
-        postgres_ready   = False
-        superuser_name   = None
-        # The cluster's superuser is the OS user who ran initdb (database.py),
-        # trusted locally. os.getlogin() fails without a login terminal (an
-        # app started from the desktop menu, a service), so ask the user
-        # database first; otherwise only password users are left and this
-        # waits out its whole timeout on a server that is up.
-        candidate_users = _superuser_candidates(self.db_config['user'])
-
-        for attempt in range(240):          # 240 x 0.5 s = 120 s max
-            if process.poll() is not None:
-                logger.error(f"[PG] Process died (exit {process.poll()}). Check {pg_log}")
-                return False
-
-            for uname in candidate_users:
-                try:
-                    conn = psycopg2.connect(
-                        host='127.0.0.1', port=port,
-                        database='postgres', user=uname,
-                        connect_timeout=3
-                    )
-                    conn.close()
-                    superuser_name = uname
-                    postgres_ready = True
-                    break
-                except psycopg2.OperationalError as exc:
-                    err = str(exc)
-                    if 'does not exist' in err or 'authentication failed' in err:
-                        # Server is up, just wrong user — still counts
-                        superuser_name = uname
-                        postgres_ready = True
-                        break
-                    # else: still starting up
-            if postgres_ready:
-                break
-            _time.sleep(0.5)
-
-        if not postgres_ready:
-            logger.error(f"[PG] Timed out waiting for PostgreSQL on port {port}. Check {pg_log}")
-            return False
-
-        logger.info(f"[PG] Ready on port {port} (connected as '{superuser_name}')")
-        return self._ensure_pg_user_and_db_safe(port, pg_dir)
-
-    def _ensure_pg_user_and_db_safe(self, port: int, pg_dir):
-        """
-        Idempotently create the app user and database if they don't exist.
-
-        FIX: success log/return is now INSIDE the try block so a
-        psycopg2 error in the finally (cur/conn close) can never
-        swallow a True result.  cur is initialised to None before the
-        try so the finally never hits NameError.
-        """
-        import psycopg2
-        from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
-
-        candidate_superusers = _superuser_candidates(self.db_config['user'])
-
-        # --- connect as any superuser ---
-        conn = None
-        for uname in candidate_superusers:
-            try:
-                conn = psycopg2.connect(
-                    host='127.0.0.1', port=port,
-                    database='postgres', user=uname,
-                    connect_timeout=5
-                )
-                logger.info(f"[PG] Superuser connection established as '{uname}'.")
-                break
-            except psycopg2.OperationalError as exc:
-                logger.debug(f"[PG] Could not connect as '{uname}': {exc}")
-                continue
-
-        if conn is None:
-            logger.error("[PG] Could not connect as any superuser to verify user/db.")
-            return False
-
-        # --- cur is None-initialised so the finally never hits NameError ---
-        cur = None
-        success = False
+        """Start Cirqen's own database (embedded_pg.py), or use it if it is
+        already running, and point Django and the workers at it."""
         try:
-            conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
-            cur = conn.cursor()
-
-            # Ensure app user exists
-            cur.execute(
-                "SELECT 1 FROM pg_roles WHERE rolname = %s",
-                (self.db_config['user'],)
-            )
-            if not cur.fetchone():
-                logger.info(f"[PG] Creating user '{self.db_config['user']}'...")
-                cur.execute(
-                    f"CREATE ROLE {self.db_config['user']} "
-                    f"WITH LOGIN PASSWORD %s CREATEDB CREATEROLE SUPERUSER",
-                    (self.db_config['password'],)
-                )
-                logger.info(f"[PG] User '{self.db_config['user']}' created.")
-            else:
-                logger.info(f"[PG] User '{self.db_config['user']}' exists.")
-
-            # Ensure app database exists
-            cur.execute(
-                "SELECT 1 FROM pg_database WHERE datname = %s",
-                (self.db_config['database'],)
-            )
-            if not cur.fetchone():
-                logger.info(f"[PG] Creating database '{self.db_config['database']}'...")
-                cur.execute(
-                    f"CREATE DATABASE {self.db_config['database']} "
-                    f"ENCODING 'UTF8' LC_COLLATE 'C' LC_CTYPE 'C' TEMPLATE template0"
-                )
-                logger.info(f"[PG] Database '{self.db_config['database']}' created.")
-            else:
-                logger.info(f"[PG] Database '{self.db_config['database']}' exists.")
-
-            # Mark success BEFORE the finally block closes resources
-            logger.info(f"[PG] PostgreSQL local is ready on port {port}.")
-            success = True
-
+            port = self.db.start(
+                self.port_manager.get_port('postgresql_local'),
+                on_wait=lambda s: s and s % 15 == 0 and self.progress_update.emit(
+                    f"Starting the database (the disk is slow, {s}s)...", 12))
+            self.port_manager.ports['postgresql_local'] = port
+            self.port_manager.save_session()
+            self.db_config = setup_environment(self.port_manager)
+            self.db.ensure_database(port)
+        except DatabaseError as exc:
+            logger.error(f"[PG] {exc}")
+            return False
         except Exception as exc:
-            logger.error(f"[PG] Error during user/db verification: {exc}")
-            success = False
-
-        finally:
-            # Safely close cursor and connection — never let these raise
-            if cur is not None:
-                try:
-                    cur.close()
-                except Exception:
-                    pass
-            if conn is not None:
-                try:
-                    conn.close()
-                except Exception:
-                    pass
-
-        return success
+            logger.error(f"[PG] Could not start the database: {type(exc).__name__}: {exc}")
+            return False
+        self.processes.append(('postgres_local', self.db, None))
+        logger.info(f"[PG] Ready on port {port}")
+        return True
 
     def start_redis(self):
         """Start Redis"""
@@ -1707,16 +1468,10 @@ daemonize no
             try:
                 logger.info(f"Stopping {name}...")
 
-                # Leave PostgreSQL running if managed by systemd
+                # Last to stop (first started): everything else has let go of it.
                 if name == 'postgres_local':
-                    self._pg_systemd.stop()  # logs intent, actual no-op
-                    if self._pg_systemd.is_installed:
-                        logger.info("   postgres_local left running (systemd)")
-                        if log_file:
-                            try: log_file.close()
-                            except Exception: pass
-                        continue
-
+                    process.stop()
+                    continue
 
                 # Special handling for sync agent (thread-based)
                 if name == 'sync_agent':

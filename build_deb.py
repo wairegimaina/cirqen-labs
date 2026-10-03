@@ -9,7 +9,8 @@
                                                # a hospital's .deb from a tested one, no rebuild
 
 Install on a PC:   sudo apt install ./cirqen_1.6.2_amd64.deb
-Remove:            sudo apt remove cirqen      (users' records and settings stay)
+Remove:            sudo apt remove cirqen      (stops Cirqen and deletes it for every
+                                                user: app, settings, logs, database)
 
 Runs on Ubuntu 24.04 and every newer release. A PyInstaller app runs only on
 the glibc it was built against or newer, so the app is built inside an Ubuntu
@@ -17,6 +18,10 @@ the glibc it was built against or newer, so the app is built inside an Ubuntu
 Redis 8 from packages.redis.io); the databases' own libraries go into the
 app (build.py bundle_native_libs). --from-dist skips that: the .deb then runs
 only on this machine's Ubuntu release and newer.
+
+The database is embedded (bulider_tools/embedded_pg.py): PostgreSQL ships in
+the app and Cirqen runs it for each user, in their own folder. The .deb needs
+no PostgreSQL from Ubuntu and sets nothing up while installing.
 
 What it installs:
   /opt/cirqen/                 the app, as installed (root-owned)
@@ -27,8 +32,8 @@ What it installs:
 Each user runs their own copy (~/.local/share/cirqen-app/Cirqen), made from
 /opt/cirqen on first start and again whenever apt installs a newer .deb.
 That copy belongs to the user, so Cirqen's own updates (code packages and
-full-app swaps) work without admin rights. Records and settings stay in
-~/.local/share/cirqen, as with the portable build.
+full-app swaps) work without admin rights. Settings and logs are in
+~/.local/share/cirqen, the database in ~/.local/share/cirqen/db.
 """
 from __future__ import annotations
 
@@ -121,11 +126,53 @@ fi
 exit 0
 """
 
-POSTRM = """#!/bin/sh
+# Every user's Cirqen: their copy of the app and their data (embedded_pg.py).
+FOR_EACH_HOME = """getent passwd | cut -d: -f6 | sort -u | while IFS= read -r home; do
+  [ -n "$home" ] && [ "$home" != / ] && [ -d "$home/.local/share" ] || continue
+"""
+
+PRERM = r"""#!/bin/sh
+# Removing Cirqen: stop it for every user, database first (cleanly), then the
+# rest. Only programs run from a user's cirqen-app copy are touched.
+set -e
+if [ "$1" = "remove" ]; then
+""" + FOR_EACH_HOME + r"""  app="$home/.local/share/cirqen-app/Cirqen"
+  for data in "$home"/.local/share/cirqen/db/pg*; do
+    [ -f "$data/postmaster.pid" ] && [ -x "$app/runtime/postgresql/bin/pg_ctl" ] || continue
+    runuser -u "$(stat -c %U "$data")" -- env LD_LIBRARY_PATH="$app/runtime/postgresql/lib" \
+      "$app/runtime/postgresql/bin/pg_ctl" stop -D "$data" -m fast -w -t 30 >/dev/null 2>&1 || true
+  done
+done
+  # Programs run from a cirqen-app copy (the path is the command itself, not
+  # an argument, so a shell that merely mentions it is left alone).
+  pkill -TERM -f "^[^ ]*/\.local/share/cirqen-app/Cirqen/" 2>/dev/null || true
+  sleep 2
+  pkill -KILL -f "^[^ ]*/\.local/share/cirqen-app/Cirqen/" 2>/dev/null || true
+fi
+exit 0
+"""
+
+POSTRM = r"""#!/bin/sh
+# Removing Cirqen removes all of it, for every user: their app copy, settings,
+# logs, media and database, and Qt's web cache.
 set -e
 update-desktop-database -q /usr/share/applications 2>/dev/null || true
 gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor 2>/dev/null || true
-if [ "$1" = "purge" ]; then rm -rf /etc/cirqen; fi
+if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
+""" + FOR_EACH_HOME + r"""  rm -rf "$home/.local/share/cirqen" "$home/.local/share/cirqen-app" \
+         "$home/.local/share/B12 Technologies/Cirqen" "$home/.cache/B12 Technologies/Cirqen"
+  rmdir "$home/.local/share/B12 Technologies" "$home/.cache/B12 Technologies" 2>/dev/null || true
+done
+  # Cirqen 1.6.x kept its database in the system PostgreSQL: drop it too.
+  if [ -f /etc/cirqen/local_db.json ] && command -v psql >/dev/null 2>&1 && id postgres >/dev/null 2>&1; then
+    port=$(sed -n 's/.*"port": *\([0-9]*\).*/\1/p' /etc/cirqen/local_db.json)
+    if [ -n "$port" ]; then
+      runuser -u postgres -- psql -X -q -p "$port" -c 'DROP DATABASE IF EXISTS cirqen1 WITH (FORCE)' 2>/dev/null &&
+        runuser -u postgres -- psql -X -q -p "$port" -c 'DROP ROLE IF EXISTS cirqen1' 2>/dev/null || true
+    fi
+  fi
+  rm -rf /etc/cirqen /usr/lib/cirqen
+fi
 exit 0
 """
 
@@ -198,7 +245,7 @@ def make_deb(app: Path, out_dir: Path, provisioning: Path | None = None) -> Path
         (debian / "control").write_text("\n".join(control) + "\n")
         if provisioning:
             (debian / "conffiles").write_text(f"/etc/{PACKAGE}/provisioning.json\n")
-        for script, body in (("postinst", POSTINST), ("postrm", POSTRM)):
+        for script, body in (("postinst", POSTINST), ("prerm", PRERM), ("postrm", POSTRM)):
             (debian / script).write_text(body)
             (debian / script).chmod(0o755)
         for path in root.rglob("*"):                     # dpkg wants 0755 dirs, no group/world write
@@ -308,6 +355,7 @@ missing=$(find /opt/cirqen -type f \( -name '*.so*' -o -perm -u+x \) -exec sh -c
 missing=$(echo "$missing" | grep -v -e "libtiff.so.5" -e "\.libs/" | grep . || true)
 if [ -n "$missing" ]; then echo "MISSING LIBRARIES:"; echo "$missing" | head -30; fi
 test -f /usr/share/applications/cirqen.desktop && echo "menu entry: ok"
+if dpkg -l 'postgresql*' 2>/dev/null | grep -q '^ii'; then echo "SYSTEM POSTGRESQL WAS INSTALLED"; exit 4; fi
 useradd -m tester
 # Is the Celery worker (background tasks) answering? Ask it, through the app.
 cat > /usr/local/bin/ping_worker <<'PING'
@@ -324,12 +372,24 @@ if [ $status -eq 0 ]; then
   else echo "BACKGROUND TASKS DID NOT ANSWER"; grep -v "^  \. " $L/celery.log | tail -15; status=3; fi
 fi
 if [ $status -eq 0 ]; then echo "STARTED: Cirqen $(cat /home/tester/.local/share/cirqen/full_update_ok) opened its window"
+  # The database server: the user's own process, running the app's postgres.
+  pg=$(pgrep -u tester -o -x postgres)
+  cmd=$([ -n "$pg" ] && tr '\0' ' ' < "/proc/$pg/cmdline")
+  if echo "$cmd" | grep -q "/cirqen-app/Cirqen/runtime/postgresql/.*-D /home/tester/.local/share/cirqen/db/pg" && \
+     [ -f /home/tester/.local/share/cirqen/db/ready ]; then echo "database: embedded, run by the user: $cmd"
+  else echo "DATABASE NOT EMBEDDED AS EXPECTED (pid ${pg:-none}: $cmd)"; ls -la /home/tester/.local/share/cirqen/db; status=4; fi
 elif [ $status -eq 3 ]; then :
 else echo "DID NOT START within $((WAIT*2))s"; echo "--- output"; tail -30 /tmp/cirqen.out
   for f in /home/tester/.local/share/cirqen/logs/launcher.log /home/tester/.local/share/cirqen/logs/django.log \
            /home/tester/.local/share/cirqen/logs/postgres.log; do
     [ -f "$f" ] && { echo "--- $f"; grep -v "^\s*$" "$f" | tail -30; }; done
   ls -la /home/tester/.local/share/cirqen /home/tester/.local/share/cirqen-app 2>&1 | head -30; fi
+# Removing it must stop it and leave nothing of it.
+apt-get remove -y -qq cirqen >/dev/null 2>&1 || { echo "APT REMOVE FAILED"; status=5; }
+left=$(ls -d /opt/cirqen /home/tester/.local/share/cirqen /home/tester/.local/share/cirqen-app /etc/cirqen 2>/dev/null)
+running=$(pgrep -af "^[^ ]*/\.local/share/cirqen-app/Cirqen/"; pgrep -u tester -ax postgres || true)
+if [ -n "$left$running" ]; then echo "LEFT AFTER REMOVE: $left $running"; [ $status -eq 0 ] && status=5
+else echo "remove: nothing left"; fi
 exit $status
 """
 
