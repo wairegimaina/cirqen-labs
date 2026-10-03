@@ -158,7 +158,7 @@ def main():
 
         # Files Cirqen can't write (left by a run with sudo) make PostgreSQL
         # and the logs fail all over; say so once, plainly, instead.
-        from .pg_process import data_folder_problem
+        from .embedded_pg import data_folder_problem
         problem = data_folder_problem(DATA_PATH)
         if problem:
             splash.close()

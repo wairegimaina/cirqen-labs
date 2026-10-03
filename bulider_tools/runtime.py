@@ -256,8 +256,7 @@ class PortManager:
 
         Uses three approaches in order so it works without root privileges:
           1. /proc/net/tcp + /proc/net/tcp6  (Linux, no privileges needed)
-          2. systemctl is-active cirqen-postgres  (our own service)
-          3. psutil connections  (fallback, may need privileges)
+          2. psutil connections  (fallback, may need privileges)
         """
         # --- Approach 1: /proc/net/tcp (works as any user on Linux) ---
         try:
@@ -292,18 +291,7 @@ class PortManager:
         except Exception:
             pass
 
-        # --- Approach 2: our own systemd service ---
-        try:
-            r = subprocess.run(
-                ['systemctl', 'is-active', 'cirqen-postgres'],
-                capture_output=True, text=True, timeout=3
-            )
-            if r.stdout.strip() == 'active':
-                return True
-        except Exception:
-            pass
-
-        # --- Approach 3: psutil (may silently fail without root) ---
+        # --- Approach 2: psutil (may silently fail without root) ---
         try:
             for proc in psutil.process_iter(['pid', 'name']):
                 try:
@@ -470,7 +458,6 @@ else:
 
 # Create data directories
 DATA_PATH.mkdir(parents=True, exist_ok=True)
-(DATA_PATH / 'postgres').mkdir(exist_ok=True)
 (DATA_PATH / 'redis').mkdir(exist_ok=True)
 (DATA_PATH / 'logs').mkdir(exist_ok=True)
 (DATA_PATH / 'media').mkdir(exist_ok=True)
@@ -502,306 +489,27 @@ if not logger.handlers:
                       else _RotFH(LOG_FILE, maxBytes=5*1024*1024, backupCount=3))
 logger.setLevel(_LOG_LEVEL)
 
+# Cirqen's own PostgreSQL (embedded_pg.py). Its cluster is kept out of the
+# roaming %APPDATA% on Windows: a database must never follow a user around.
+if getattr(sys, 'frozen', False) and sys.platform == 'win32':
+    DB_ROOT = Path(os.getenv('LOCALAPPDATA') or (Path.home() / 'AppData' / 'Local')) / 'Cirqen' / 'db'
+else:
+    DB_ROOT = DATA_PATH / 'db'
+
+
+def local_database():
+    from .embedded_pg import EmbeddedPostgres
+    return EmbeddedPostgres(RUNTIME_DIR / 'postgresql', DB_ROOT, DATA_PATH / 'logs')
+
+
 def own_postgres_port():
-    """Port of the postgres running on this install's own data dir, or None."""
-    try:
-        lines = (DATA_PATH / 'postgres' / 'postmaster.pid').read_text().splitlines()
-        if psutil.pid_exists(int(lines[0])):
-            return int(lines[3])
-    except (OSError, ValueError, IndexError):
-        pass
-    return None
+    """Port of this install's own database server if it is running, else None."""
+    return local_database().running_port()
 
 
 # Initialize port manager
 SESSION_FILE = DATA_PATH / 'session.json'
 port_manager = PortManager(SESSION_FILE)
-
-# ============================================================
-# POSTGRESQL SYSTEMD SERVICE MANAGER (BUILT-IN FIRST-RUN)
-# On Linux, installs the embedded postgres binary as a
-# persistent systemd service so it survives app restarts.
-# Eliminates all stale postmaster.pid errors permanently.
-# ============================================================
-
-class PostgresSystemdManager:
-    SERVICE_NAME = "cirqen-postgres"
-    SERVICE_FILE = Path(f"/etc/systemd/system/{SERVICE_NAME}.service")
-
-    def __init__(self, port: int, pg_binary: Path, pg_data: Path, pg_lib: Path):
-        self.port      = port
-        self.pg_binary = pg_binary
-        self.pg_data   = pg_data
-        self.pg_lib    = pg_lib
-        self.log_file  = DATA_PATH / 'logs' / 'postgres.log'
-        self._log      = logging.getLogger('PostgresSystemd')
-        try:
-            self._user = os.getlogin()
-        except OSError:
-            import pwd
-            self._user = pwd.getpwuid(os.getuid()).pw_name
-
-    @property
-    def is_installed(self) -> bool:
-        """True only for a unit that serves this install's data dir. A unit
-        left by another checkout or an old install runs a different cluster;
-        starting or reusing it would hand this app someone else's database."""
-        if not self.SERVICE_FILE.exists():
-            return False
-        try:
-            r = subprocess.run(['systemctl', 'show', self.SERVICE_NAME, '-p', 'ExecStart', '--value'],
-                               capture_output=True, text=True, timeout=5)
-        except (OSError, subprocess.SubprocessError):
-            return False
-        return f"-D {self.pg_data} " in r.stdout
-
-    @property
-    def is_active(self) -> bool:
-        try:
-            r = subprocess.run(['systemctl', 'is-active', self.SERVICE_NAME],
-                               capture_output=True, text=True)
-            return r.stdout.strip() == 'active'
-        except FileNotFoundError:
-            return False
-
-    def is_accepting_connections(self) -> bool:
-        """Return True if PostgreSQL is up and accepting TCP connections on self.port."""
-        # Quick TCP probe first — cheapest check
-        try:
-            with socket.create_connection(('127.0.0.1', self.port), timeout=3):
-                pass
-        except OSError:
-            return False
-
-        # TCP port is open — confirm it is actually PostgreSQL
-        try:
-            import psycopg2
-            for user in ['postgres', self._user]:
-                conn = None
-                try:
-                    conn = psycopg2.connect(
-                        host='127.0.0.1', port=self.port,
-                        database='postgres', user=user,
-                        connect_timeout=5
-                    )
-                    return True
-                except psycopg2.OperationalError as exc:
-                    err = str(exc)
-                    # Server is up but wrong user/db — still counts as accepting connections
-                    if 'does not exist' in err or 'authentication failed' in err:
-                        return True
-                    # Any other error (role missing, pg_hba, etc.) — try next user
-                    continue
-                finally:
-                    if conn is not None:
-                        try:
-                            conn.close()
-                        except Exception:
-                            pass
-        except ImportError:
-            # psycopg2 not available — TCP open is good enough
-            return True
-
-        return False
-
-    def install(self) -> bool:
-        """Write unit file and enable+start service. Called once at first run."""
-        if sys.platform != 'linux':
-            return False
-        if os.environ.get('APPIMAGE'):
-            # The binary sits in the AppImage's per-launch mount, so a unit
-            # pointing at it breaks as soon as the app exits.
-            self._log.info("Running as AppImage — systemd service not installed.")
-            return False
-        if not self.pg_binary.exists():
-            self._log.warning(f"Binary not found: {self.pg_binary}")
-            return False
-
-        self._log.info("=" * 60)
-        self._log.info("INSTALLING CIRQEN-POSTGRES SYSTEMD SERVICE")
-        self._log.info(f"  binary : {self.pg_binary}")
-        self._log.info(f"  data   : {self.pg_data}")
-        self._log.info(f"  port   : {self.port}")
-        self._log.info(f"  user   : {self._user}")
-        self._log.info("=" * 60)
-
-        content = self._unit_file()
-        written = self._write_direct(content) if os.geteuid() == 0 else self._write_sudo(content)
-        if not written:
-            self._log.warning("No root access — systemd service not installed.")
-            return False
-        try:
-            subprocess.run(['systemctl', 'daemon-reload'], check=True, capture_output=True)
-            subprocess.run(['systemctl', 'enable', self.SERVICE_NAME], check=True, capture_output=True)
-            subprocess.run(['systemctl', 'start',  self.SERVICE_NAME], check=True, capture_output=True)
-            self._log.info(f"Service '{self.SERVICE_NAME}' installed and started.")
-            return True
-        except (subprocess.CalledProcessError, FileNotFoundError) as e:
-            self._log.error(f"systemctl error: {e}")
-            return False
-
-    def port_owner_is_postgres(self) -> bool:
-        """
-        Return True when something listening on self.port looks like a postgres
-        process.  Uses psutil when available, falls back to /proc/net/tcp on
-        Linux, and returns True (optimistic / don't-kill) on any other failure.
-        """
-        # ---- psutil path (preferred) ----
-        try:
-            import psutil
-            for proc in psutil.process_iter(['pid', 'name', 'connections']):
-                try:
-                    for conn in proc.connections(kind='tcp'):
-                        if conn.laddr.port == self.port and conn.status in ('LISTEN', 'ESTABLISHED'):
-                            if 'postgres' in (proc.info.get('name') or '').lower():
-                                return True
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    continue
-            return False
-        except ImportError:
-            pass
-
-        # ---- /proc/net/tcp fallback (Linux only) ----
-        try:
-            hex_port = format(self.port, '04X')
-            for path in ('/proc/net/tcp', '/proc/net/tcp6'):
-                try:
-                    for line in Path(path).read_text().splitlines()[1:]:
-                        parts = line.split()
-                        if len(parts) > 3 and parts[3] == '0A':   # LISTEN
-                            _, lport = parts[1].split(':')
-                            if lport.upper() == hex_port:
-                                return True  # something is listening; assume postgres
-                except FileNotFoundError:
-                    pass
-        except Exception:
-            pass
-
-        # Cannot inspect — optimistic: don't kill whatever is there
-        return True
-
-    def ensure(self, timeout: int = 30) -> bool:
-        """
-        Ensure postgres is running and accepting connections.
-
-        Priority:
-          1. systemd service installed AND active  → wait for it / reuse
-          2. systemd service installed but inactive → start it, then wait
-          3. Service file absent but port already owned by postgres → reuse
-          4. Nothing running → return False so caller falls back to direct start
-        """
-        import time as _t
-
-        # Fast path: already accepting connections (covers all cases)
-        if self.is_accepting_connections():
-            self._log.info("[PG] Already running via systemd.")
-            return True
-
-        # Case 1 & 2: service file present
-        if self.is_installed:
-            if not self.is_active:
-                self._log.info(f"[PG] Service installed but inactive — starting {self.SERVICE_NAME}...")
-                try:
-                    subprocess.run(['systemctl', 'start', self.SERVICE_NAME],
-                                   capture_output=True, check=False)
-                except FileNotFoundError:
-                    pass
-
-            self._log.info(f"[PG] Waiting up to {timeout}s for port {self.port}...")
-            end = _t.time() + timeout
-            last_log = _t.time()
-            while _t.time() < end:
-                if self.is_accepting_connections():
-                    self._log.info("[PG] PostgreSQL ready (systemd).")
-                    return True
-                _t.sleep(0.5)
-                # Log progress every 10 seconds so it's clear we're still waiting
-                now = _t.time()
-                if now - last_log >= 10:
-                    elapsed = int(now - (end - timeout))
-                    remaining = int(end - now)
-                    self._log.info(
-                        f"[PG] Still waiting for PostgreSQL on port {self.port}... "
-                        f"({elapsed}s elapsed, {remaining}s remaining)"
-                    )
-                    last_log = now
-            self._log.error(f"[PG] Timeout after {timeout}s waiting for PostgreSQL on port {self.port}.")
-            return False
-
-        # Case 3: no service file, but the port is already owned by postgres
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as _s:
-            _s.settimeout(1)
-            port_in_use = _s.connect_ex(('127.0.0.1', self.port)) == 0
-
-        if port_in_use and self.port_owner_is_postgres():
-            self._log.info(
-                f"[PG] No systemd service file, but postgres is already listening "
-                f"on port {self.port} — reusing existing instance."
-            )
-            return True
-
-        # Case 4: nothing suitable running
-        return False
-
-    def stop(self):
-        """Intentional no-op — leave PostgreSQL running after app closes."""
-        if self.is_installed:
-            self._log.info(f"[PG] Managed by systemd — staying alive after app exit. "
-                           f"(sudo systemctl stop {self.SERVICE_NAME} to stop manually)")
-
-    def _unit_file(self) -> str:
-        return (
-            "[Unit]\n"
-            f"Description=Cirqen PostgreSQL (port {self.port})\n"
-            "After=network.target\n"
-            "Wants=network.target\n\n"
-            "[Service]\n"
-            "Type=simple\n"
-            f"User={self._user}\n"
-            f"Environment=LD_LIBRARY_PATH={self.pg_lib}\n"
-            # Remove stale postmaster.pid before each start to avoid startup failures
-            f"ExecStartPre=/bin/bash -c 'rm -f {self.pg_data}/postmaster.pid'\n"
-            # Explicitly pass -p PORT so postgres always binds to port 2215
-            # -k: keep the socket/lock file in the data dir; the bundled binary
-            # defaults to /var/run/postgresql, which normal users can't write.
-            f"ExecStart={self.pg_binary} -D {self.pg_data} -p {self.port} -k {self.pg_data}\n"
-            "Restart=on-failure\n"
-            "RestartSec=5\n"
-            "KillMode=process\n"
-            "TimeoutStartSec=60\n"
-            "TimeoutStopSec=30\n"
-            f"StandardOutput=append:{self.log_file}\n"
-            f"StandardError=append:{self.log_file}\n\n"
-            "[Install]\n"
-            "WantedBy=multi-user.target\n"
-        )
-
-    def _write_direct(self, content: str) -> bool:
-        try:
-            self.SERVICE_FILE.write_text(content)
-            return True
-        except PermissionError:
-            return False
-
-    def _write_sudo(self, content: str) -> bool:
-        import tempfile
-        fd, tmp = tempfile.mkstemp(suffix='.service', text=True)
-        try:
-            with os.fdopen(fd, 'w') as f:
-                f.write(content)
-            for cmd in (['sudo', '-n', 'cp', tmp, str(self.SERVICE_FILE)],
-                        ['pkexec',      'cp', tmp, str(self.SERVICE_FILE)]):
-                try:
-                    r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-                    if r.returncode == 0:
-                        self._log.info(f"Unit file written via {cmd[0]}.")
-                        return True
-                except Exception:
-                    continue
-            return False
-        finally:
-            try: os.unlink(tmp)
-            except Exception: pass
 
 
 # ============================
@@ -1056,11 +764,12 @@ def setup_environment(port_manager: PortManager):
             'password': os.getenv('POSTGRES_LOCAL_PASSWORD', ''),
         }
 
-    # ── The system PostgreSQL (system_pg.py), when this PC has it ────────────
-    from .system_pg import load as _load_system_db
-    _system = _load_system_db()
-    if _system:
-        DB_CONFIG = _system
+    # ── Cirqen's own database: its login comes with the cluster ──────────────
+    from .embedded_pg import DatabaseError as _DatabaseError
+    try:
+        DB_CONFIG.update(local_database().credentials())
+    except _DatabaseError:
+        pass                                   # not created yet (first run)
 
     # ── Publish env-vars for Django settings / subprocesses ───────────────────
     for key, value in DB_CONFIG.items():

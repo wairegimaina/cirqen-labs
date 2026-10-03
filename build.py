@@ -557,7 +557,8 @@ def copy_system_postgresql():
         logger.info(f"  Target: {pg_lib}")
 
         for item in src_lib.rglob("*"):
-            if item.is_file():
+            # bitcode/ is for JIT, which the app turns off (embedded_pg.py): 25 MB unused.
+            if item.is_file() and "bitcode" not in item.relative_to(src_lib).parts:
                 rel_path = item.relative_to(src_lib)
                 dest = pg_lib / rel_path
                 dest.parent.mkdir(parents=True, exist_ok=True)
@@ -793,8 +794,8 @@ def copy_system_postgresql():
 
 
 # The Visual C++ runtime PostgreSQL is built against. Many PCs don't have it
-# installed, and the CirqenPostgreSQL service can't use the copies in
-# Cirqen's own folder (sc start: 1053), so they ship in PostgreSQL's bin.
+# installed, so it ships next to postgres.exe, where Windows looks first:
+# the embedded database never depends on what else the PC has.
 VC_RUNTIME_DLLS = ("vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll", "msvcp140_1.dll")
 
 
@@ -885,7 +886,7 @@ def _fetch_postgresql():
             pgsql.rmdir()
         # EDB's zip also carries pgAdmin, StackBuilder, docs and debug symbols
         # (hundreds of MB the app never uses).
-        for extra in ("pgAdmin 4", "StackBuilder", "doc", "symbols", "include"):
+        for extra in ("pgAdmin 4", "StackBuilder", "doc", "symbols", "include", "installer"):
             shutil.rmtree(pg_dir / extra, ignore_errors=True)
 
         # Make binaries executable on Linux
@@ -2051,7 +2052,7 @@ def generate_spec():
     'django.conf',
     'django.conf.urls',
     'django.conf.urls.static',
-    'psutil'
+    'psutil',
 
     # ===== SYNC MODULE =====
     'sync',
@@ -2067,6 +2068,8 @@ def generate_spec():
     'bulider_tools.services',
     'bulider_tools.ui',
     'bulider_tools.database',
+    'bulider_tools.embedded_pg',
+    'bulider_tools.shutdown',
     'bulider_tools.setup_ui',
 
     # ===== UPDATE SYSTEM =====
@@ -2984,7 +2987,9 @@ def copy_runtime_to_dist():
         logger.info("  Copying files...")
         # symlinks=True: runtime/postgresql/bin is a link into the relocatable
         # layout (relocatable_postgres_layout); copying through it would undo that.
-        shutil.copytree(src_pg, dest_pg, symlinks=True)
+        # Not shipped: JIT bitcode (JIT is off, embedded_pg.py) and the
+        # extension-building kit (pgxs); neither is used at run time.
+        shutil.copytree(src_pg, dest_pg, symlinks=True, ignore=shutil.ignore_patterns("bitcode", "pgxs"))
 
         # Count files
         file_count = sum(1 for _ in dest_pg.rglob('*') if _.is_file())

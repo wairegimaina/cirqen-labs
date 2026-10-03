@@ -1,35 +1,20 @@
-# First run on a PC: get the local database ready and apply the migrations.
+# First run on a PC: make Cirqen's own database and apply the migrations.
 # Nothing else: user accounts come down from HQ through sync
 # (`manage.py create_hod` exists for a PC that has to start without HQ).
 #
-# The installed app uses PostgreSQL installed in the system (system_pg.py).
-# Running from source without that, Cirqen still makes and runs its own
-# cluster in the data folder (the "bundled" path below).
-import json
-import shutil
-
+# The database is embedded (embedded_pg.py): Cirqen makes it in the user's
+# folder and runs it itself. Nothing is copied from older setups; a new PC,
+# or one moving to this version, fills its database from HQ.
 from PySide6.QtCore import QObject, Signal
 
-from . import system_pg
-from .pg_process import fix_data_dir_mode, pg_env, server_options, start as start_pg_server, tool
+from .embedded_pg import DatabaseError
 from .runtime import *
-
-SYSTEM_DB_READY = DATA_PATH / 'system_db_ready'
-
-
-def uses_system_db() -> bool:
-    return bool(getattr(sys, 'frozen', False)) or system_pg.load() is not None
 
 
 class FirstRunSetup(QObject):
-    """Creates the local database the first time Cirqen starts on a PC.
-
-    The cluster's superuser is the app's own role (config.json local_db.user,
-    normally cirqen1) with config.json's password, set by initdb itself. So
-    there is no second role to create, no trust stage and no pg_hba.conf
-    rewriting, and the OS login name (spaces, capitals, no login terminal)
-    never matters.
-    """
+    """Creates and migrates the local database. Every step can be repeated, so
+    a setup that was interrupted simply runs again on the next start. The
+    server is left running for ServiceManager, which finds and uses it."""
 
     progress_update = Signal(str, int)
     setup_complete = Signal(bool, str)
@@ -38,16 +23,11 @@ class FirstRunSetup(QObject):
     def __init__(self, port_manager: PortManager):
         super().__init__()
         self.port_manager = port_manager
-        self.pg_data = DATA_PATH / 'postgres'
+        self.db = local_database()
         self.pg_logs = DATA_PATH / 'logs'
-        self.pg_dir = RUNTIME_DIR / 'postgresql'
-        self.db_config = setup_environment(port_manager)
 
     def is_first_run(self):
-        if uses_system_db():
-            is_first = not SYSTEM_DB_READY.exists()
-        else:
-            is_first = not (self.pg_data / 'PG_VERSION').exists()
+        is_first = not self.db.is_ready()
         logger.info(f"First run check: {is_first}")
         return is_first
 
@@ -60,108 +40,41 @@ class FirstRunSetup(QObject):
         if not self.is_first_run():
             self.setup_complete.emit(True, "Already configured")
             return
-        if uses_system_db():
-            return self._run_system_setup()
-        server = log_handle = None
         try:
-            self._step("Checking the installation...", 5)
-            if not self.db_config.get('password'):
-                return self._fail(f"config.json in {DATA_PATH} has no local database password "
-                                  "(local_db.password). Delete config.json and start Cirqen again.")
-            missing = [tool(self.pg_dir, n) for n in ('initdb', 'postgres', 'pg_ctl')
-                       if not tool(self.pg_dir, n).exists()]
-            if missing:
-                return self._fail("PostgreSQL is missing from this installation:\n"
-                                  + "\n".join(f"  {p}" for p in missing)
-                                  + "\nReinstall Cirqen.")
+            if not self.db.exists():
+                self._step("Creating your database...", 15)
+                self.db.initialize()
 
-            self._step("Creating the database cluster...", 20)
-            error = self._initdb()
+            self._step("Starting the database...", 40)
+            port = self.db.start(
+                self.port_manager.get_port('postgresql_local'),
+                on_wait=lambda s: s and s % 10 == 0 and self._step(
+                    f"Starting the database (the disk is slow, {s}s)...", 45))
+            self.port_manager.ports['postgresql_local'] = port
+            db_config = setup_environment(self.port_manager)
+            self.db.ensure_database(port)
+
+            self._step("Applying database migrations (this can take a few minutes)...", 60)
+            error = self._run_migrations(db_config)
             if error:
                 return self._fail(error)
 
-            self._step("Starting PostgreSQL...", 45)
-            server, log_handle = self._start()
-            if not self._wait_ready(server):
-                return self._fail("PostgreSQL did not start.\n" + self._log_tail('postgres_setup.log'))
-
-            self._step("Creating the Cirqen database...", 60)
-            self._create_database()
-
-            self._step("Applying database migrations (this can take a few minutes)...", 70)
-            error = self._run_migrations()
-            if error:
-                return self._fail(error)
-
+            self.db.mark_ready(self._app_version())
             self._step("Setup complete", 100)
             self.setup_complete.emit(True, (
                 "The local database is ready.\n\n"
-                "Sign in with the account your hospital gave you; accounts come from HQ.\n\n"
-                f"PostgreSQL: {self.db_config['port']}   "
-                f"Redis: {self.port_manager.get_port('redis')}   "
-                f"Django: {self.port_manager.get_port('django')}"))
-        except Exception as e:
-            import traceback
-            logger.error(f"Setup error: {traceback.format_exc()}")
-            self._fail(f"{type(e).__name__}: {e}")
-        finally:
-            if server is not None:
-                self._stop(server)
-            if log_handle:
-                log_handle.close()
-
-    # ── the system PostgreSQL ───────────────────────────────────────────────
-    def _run_system_setup(self):
-        try:
-            cfg = system_pg.load()
-            if cfg is None and sys.platform == 'win32':
-                self._step("Setting up the database service (Windows will ask for permission)...", 10)
-                system_pg.run_elevated_setup()
-                cfg = system_pg.load()
-            if cfg is None:
-                return self._fail("The Cirqen database isn't set up on this PC.\n" + system_pg.fix_hint())
-            self.db_config = setup_environment(self.port_manager)
-
-            self._step("Connecting to the database...", 25)
-            error = system_pg.wait_until_up(cfg, 90)
-            if error:
-                return self._fail(f"Cirqen could not connect to its database (port {cfg['port']}):\n"
-                                  f"{error}\n\n{system_pg.fix_hint()}")
-
-            if (self.pg_data / 'PG_VERSION').exists():
-                self._step("Copying your existing records into the new database...", 40)
-                error = system_pg.copy_bundled_data(self.pg_data, self._old_local_db(), cfg, self.pg_dir,
-                                                    DATA_PATH / 'backups')
-                if error:
-                    return self._fail(error)
-
-            self._step("Applying database migrations (this can take a few minutes)...", 70)
-            error = self._run_migrations()
-            if error:
-                return self._fail(error)
-
-            SYSTEM_DB_READY.write_text(json.dumps({'port': cfg['port'], 'at': time.strftime('%Y-%m-%d %H:%M:%S')}))
-            self._step("Setup complete", 100)
-            self.setup_complete.emit(True, (
-                "The database is ready.\n\n"
                 "Sign in with the account your hospital gave you; accounts come from HQ."))
+        except DatabaseError as e:
+            self._fail(str(e))
         except Exception as e:
             import traceback
             logger.error(f"Setup error: {traceback.format_exc()}")
             self._fail(f"{type(e).__name__}: {e}")
-
-    def _old_local_db(self):
-        """How this PC logged in to the database Cirqen used to run itself."""
-        try:
-            local = json.loads((DATA_PATH / 'config.json').read_text(encoding='utf-8')).get('local_db') or {}
-        except (OSError, ValueError):
-            local = {}
-        return {'user': local.get('user') or 'cirqen1', 'database': local.get('database') or 'cirqen1',
-                'password': local.get('password') or ''}
 
     def _fail(self, message):
         logger.error(f"[setup] failed: {message}")
-        self.setup_complete.emit(False, f"{message}\n\nLogs: {DATA_PATH / 'logs'}")
+        self.db.stop()
+        self.setup_complete.emit(False, f"{message}\n\nLogs: {self.pg_logs}")
 
     def _log_tail(self, name, chars=1500):
         try:
@@ -169,96 +82,14 @@ class FirstRunSetup(QObject):
         except OSError:
             return ''
 
-    def _initdb(self):
-        """None when the cluster was made, else why not. A failed or
-        interrupted earlier attempt leaves files without PG_VERSION, and
-        initdb refuses a non-empty folder, so those are moved aside first."""
-        if self.pg_data.exists() and any(self.pg_data.iterdir()):
-            aside = self.pg_data.with_name(f"postgres.unfinished-{time.strftime('%Y%m%d-%H%M%S')}")
-            logger.warning(f"[setup] Moving an unfinished database folder aside: {aside}")
-            self.pg_data.rename(aside)
-        self.pg_data.mkdir(parents=True, exist_ok=True)
-        fix_data_dir_mode(self.pg_data)
+    @staticmethod
+    def _app_version():
+        for version_file in (APPLICATION_PATH / '_internal' / 'version.txt', APPLICATION_PATH / 'version.txt'):
+            if version_file.is_file():
+                return version_file.read_text().strip()
+        return ''
 
-        pwfile = DATA_PATH / 'temp' / 'initdb.pw'
-        pwfile.parent.mkdir(exist_ok=True)
-        try:
-            pwfile.write_text(self.db_config['password'] + '\n', encoding='utf-8')
-            try:
-                pwfile.chmod(0o600)
-            except OSError:
-                pass
-            # On Windows initdb drops admin rights itself, like pg_ctl does.
-            result = subprocess.run(
-                [str(tool(self.pg_dir, 'initdb')), '-D', str(self.pg_data),
-                 '-U', self.db_config['user'], f'--pwfile={pwfile}',
-                 '--auth=scram-sha-256', '--encoding=UTF8', '--locale=C'],
-                stdin=subprocess.DEVNULL, capture_output=True, text=True,
-                timeout=300, env=pg_env(self.pg_dir))
-        except subprocess.TimeoutExpired:
-            return "initdb did not finish in 5 minutes."
-        finally:
-            pwfile.unlink(missing_ok=True)
-
-        if result.returncode != 0:
-            detail = (result.stderr or result.stdout or '').strip()[-1500:]
-            logger.error(f"[setup] initdb failed ({result.returncode}): {detail}")
-            shutil.rmtree(self.pg_data, ignore_errors=True)
-            self.pg_data.mkdir(exist_ok=True)
-            return f"Creating the database failed:\n{detail}"
-        logger.info(f"[setup] Cluster created in {self.pg_data} (superuser {self.db_config['user']})")
-        return None
-
-    def _start(self):
-        (self.pg_logs / 'postgres_setup.log').write_text('')
-        return start_pg_server(tool(self.pg_dir, 'postgres'), self.pg_data,
-                               server_options(self.db_config['port']),
-                               self.pg_logs / 'postgres_setup.log', pg_env(self.pg_dir))
-
-    def _connect(self, database='postgres'):
-        import psycopg2
-        return psycopg2.connect(host='127.0.0.1', port=self.db_config['port'], dbname=database,
-                                user=self.db_config['user'], password=self.db_config['password'],
-                                connect_timeout=3)
-
-    def _wait_ready(self, server, timeout=90):
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            if server.poll() is not None:
-                return False
-            try:
-                self._connect().close()
-                return True
-            except Exception:
-                time.sleep(0.5)
-        return False
-
-    def _create_database(self):
-        conn = self._connect()
-        conn.autocommit = True
-        try:
-            with conn.cursor() as cur:
-                cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (self.db_config['database'],))
-                if not cur.fetchone():
-                    from psycopg2 import sql
-                    cur.execute(sql.SQL("CREATE DATABASE {} ENCODING 'UTF8' TEMPLATE template0")
-                                .format(sql.Identifier(self.db_config['database'])))
-                    logger.info(f"[setup] Created database {self.db_config['database']}")
-        finally:
-            conn.close()
-
-    def _stop(self, server):
-        try:
-            server.terminate()
-            server.wait(timeout=30)
-        except Exception:
-            try:
-                server.kill()
-                server.wait(timeout=10)
-            except Exception as e:
-                logger.warning(f"[setup] Could not stop PostgreSQL: {e}")
-
-    def _run_migrations(self):
+    def _run_migrations(self, db_config):
         """None when the local database is migrated, else why not. HQ applies
         its own migrations. Output goes to logs/migrations.log, not pipes:
         anything the child starts would inherit pipes and keep them open."""
@@ -270,17 +101,18 @@ class FirstRunSetup(QObject):
         env['CIRQEN_SKIP_INSTANCE_LOCK'] = '1'
         env['CIRQEN_MIGRATION_MODE'] = '1'
         for key in ('host', 'port', 'database', 'user', 'password'):
-            env[f'POSTGRES_LOCAL_{key.upper()}'] = str(self.db_config[key])
+            env[f'POSTGRES_LOCAL_{key.upper()}'] = str(db_config[key])
 
         log_path = self.pg_logs / 'migrations.log'
+        kwargs = {'creationflags': subprocess.CREATE_NO_WINDOW} if sys.platform == 'win32' else {}
         try:
             with open(log_path, 'w', encoding='utf-8') as out:
                 result = subprocess.run(
                     [sys.executable, str(manage_py), 'migrate', '--noinput'],
                     stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT,
-                    cwd=str(APPLICATION_PATH), env=env, timeout=600)
+                    cwd=str(APPLICATION_PATH), env=env, timeout=1200, **kwargs)
         except subprocess.TimeoutExpired:
-            return "Migrations did not finish in 10 minutes.\n" + self._log_tail('migrations.log')
+            return "Migrations did not finish in 20 minutes.\n" + self._log_tail('migrations.log')
         if result.returncode != 0:
             return (f"Database migrations failed (exit {result.returncode}):\n"
                     + self._log_tail('migrations.log'))

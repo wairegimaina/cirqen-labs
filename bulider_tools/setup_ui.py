@@ -316,50 +316,8 @@ def perform_startup_cleanup():
     except Exception as e:
         logger.debug(f"Lock cleanup error: {e}")
 
-    # 2. Kill stale PostgreSQL processes
-    # IMPORTANT: Never kill a process that is managed by the cirqen-postgres
-    # systemd service — it would be restarted by systemd immediately anyway,
-    # and killing it mid-startup causes the next startup to see the port as
-    # briefly unavailable, making the pg-reuse logic unreliable.
-    try:
-        _pg_svc_active = False
-        try:
-            import subprocess as _sp
-            _r = _sp.run(['systemctl', 'is-active', '--quiet', 'cirqen-postgres'],
-                         timeout=3, check=False)
-            _pg_svc_active = (_r.returncode == 0)
-        except Exception:
-            pass
-
-        if _pg_svc_active:
-            logger.info("[cleanup] cirqen-postgres systemd service is active — skipping postgres kill.")
-        else:
-            pg_killed = False
-            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-                try:
-                    proc_name = proc.info['name'].lower()
-                    cmdline = ' '.join(proc.info['cmdline'] or []).lower()
-                    if 'postgres' in proc_name and str(DATA_PATH) in cmdline:
-                        proc.terminate()
-                        try:
-                            proc.wait(timeout=3)
-                        except psutil.TimeoutExpired:
-                            proc.kill()
-                            proc.wait()
-                        pg_killed = True
-                        cleanup_actions.append(f"✓ Killed stale PostgreSQL (PID: {proc.info['pid']})")
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    continue
-
-            # Only clean PID file if postgres is NOT systemd-managed
-            pg_data = DATA_PATH / 'postgres'
-            postmaster_pid = pg_data / 'postmaster.pid'
-            if postmaster_pid.exists() and not _pg_svc_active:
-                postmaster_pid.unlink()
-                cleanup_actions.append("✓ Removed stale PostgreSQL postmaster.pid")
-
-    except Exception as e:
-        logger.debug(f"PostgreSQL cleanup error: {e}")
+    # 2. The database is left alone: if Cirqen's own server is still running
+    # from a session that crashed, it is simply used again (embedded_pg.py).
 
     # 3. Kill stale Redis processes
     try:
@@ -402,31 +360,13 @@ def perform_startup_cleanup():
         logger.debug(f"Django/Celery cleanup error: {e}")
 
     # 5. Free up ports by killing processes using them
-    # PostgreSQL ports (2215, 5432) are excluded when the systemd service is
-    # active — killing them would disrupt a perfectly healthy managed instance.
     try:
-        _pg_ports_protected = set()
-        try:
-            import subprocess as _sp2
-            _r2 = _sp2.run(['systemctl', 'is-active', '--quiet', 'cirqen-postgres'],
-                           timeout=3, check=False)
-            if _r2.returncode == 0:
-                _pg_ports_protected = {2215, 5432}
-                logger.info("[cleanup] Protecting postgres ports 2215/5432 (systemd-managed).")
-        except Exception:
-            pass
-
-        default_ports = [7788, 8000, 59999]   # postgres ports handled separately above
+        default_ports = [7788, 8000, 59999]
         for port in default_ports:
-            if port in _pg_ports_protected:
-                continue
             for proc in psutil.process_iter(['pid', 'name', 'connections']):
                 try:
                     for conn in proc.connections():
                         if conn.laddr.port == port and proc.pid != os.getpid():
-                            proc_name = (proc.name() or '').lower()
-                            if 'postgres' in proc_name and port in _pg_ports_protected:
-                                break   # Never kill a postgres process on a protected port
                             proc.terminate()
                             try:
                                 proc.wait(timeout=2)
